@@ -7,8 +7,11 @@
    Uso no template:
      {% set mig_titulo = 'Vendas Migradas' %}
      {% set mig_icone  = 'bi-receipt' %}
-     {% set mig_acoes %}   (opcional)
-       <a class="mig-btn" href="...">...</a>
+     {% set mig_selos %}   (opcional — SO contadores/selos)
+       <span class="mig-pill"><i class="bi bi-rulers"></i> 60 leituras</span>
+     {% endset %}
+     {% set mig_barra %}   (opcional — botoes de acao)
+       <button class="mig-btn mig-btn--ok">...</button>
      {% endset %}
      {% set aba_ativa = 'vendas' %}
      {% include 'includes/nav_migracoes.html' %}
@@ -17,8 +20,10 @@
                          'conciliacao' | 'tempo_real' | 'pendente'
    A aba da tela atual fica destacada (azul #1D63A5) e NÃO é clicável.
 
-   As acoes vao SEMPRE no bloco da direita (.mig-acoes) — nunca soltas em cima
-   do nome. Use .mig-btn (neutro), .mig-btn--primary, .mig-btn--ok ou .mig-pill.
+   REGRA DO CABECALHO: ao lado do titulo entra SO informacao (contadores em
+   .mig-pill). Botao que dispara acao NAO vai ai — ele muda de tamanho quando
+   o texto muda ("Capturar agora" -> "Capturando...") e desalinha o titulo.
+   Acao vai em mig_barra, que sai numa faixa propria abaixo da navegacao.
 
    SOMENTE apresentacao/navegacao — nao altera dados, filtros nem queries.
    =========================================================================== #}
@@ -35,10 +40,14 @@
     background:linear-gradient(135deg,#e8f1fb,#dbe9f8);
     box-shadow:inset 0 0 0 1px rgba(16,45,80,.06); }
   .mig-title__t{ min-width:0; }
-  /* Bloco da direita: acoes e contadores. Quebra para baixo antes de espremer
-     o titulo — nunca fica "em cima" do nome. */
-  .mig-acoes,.mig-counters{ display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+  /* Bloco da direita do titulo: SO contadores/selos. Quebra para baixo antes
+     de espremer o titulo — nunca fica "em cima" do nome. */
+  .mig-selos{ display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
   @media (min-width:768px){ .mig-title{ font-size:1.45rem; } }
+
+  /* Faixa de acoes: fora do cabecalho, abaixo da navegacao. Botao que muda de
+     texto ("Capturar agora" -> "Capturando...") mexe aqui, longe do titulo. */
+  .mig-barra{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; margin:0 0 1rem; }
 
   /* --- Botao padrao das telas de migracao --- */
   .mig-btn{ display:inline-flex; align-items:center; gap:.35rem; border-radius:9px;
@@ -90,9 +99,9 @@
     <span class="mig-ico"><i class="bi {{ mig_icone|default('bi-diagram-3') }}"></i></span>
     <span class="mig-title__t">{{ mig_titulo }}</span>
   </h1>
-  {# A caixa das acoes existe sempre (vazia quando a tela nao tem nenhuma):
-     assim a estrutura do topo e literalmente a mesma nas 7 telas. #}
-  <div class="mig-acoes">{{ mig_acoes if mig_acoes is defined else '' }}</div>
+  {# A caixa dos selos existe sempre (vazia quando a tela nao tem nenhum):
+     assim a estrutura do cabecalho e literalmente a mesma nas 7 telas. #}
+  <div class="mig-selos">{{ mig_selos if mig_selos is defined else '' }}</div>
 </div>
 {% endif %}
 
@@ -120,3 +129,7 @@
   </li>
   {% endfor %}
 </ul>
+
+{% if mig_barra is defined and mig_barra|trim %}
+<div class="mig-barra">{{ mig_barra }}</div>
+{% endif %}

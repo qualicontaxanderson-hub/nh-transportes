@@ -48,10 +48,14 @@ h1{font-size:1.15rem;margin:0 0 .2rem;color:#07569C}
     background:linear-gradient(135deg,#e8f1fb,#dbe9f8);
     box-shadow:inset 0 0 0 1px rgba(16,45,80,.06); }
   .mig-title__t{ min-width:0; }
-  /* Bloco da direita: acoes e contadores. Quebra para baixo antes de espremer
-     o titulo — nunca fica "em cima" do nome. */
-  .mig-acoes,.mig-counters{ display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+  /* Bloco da direita do titulo: SO contadores/selos. Quebra para baixo antes
+     de espremer o titulo — nunca fica "em cima" do nome. */
+  .mig-selos{ display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
   @media (min-width:768px){ .mig-title{ font-size:1.45rem; } }
+
+  /* Faixa de acoes: fora do cabecalho, abaixo da navegacao. Botao que muda de
+     texto ("Capturar agora" -> "Capturando...") mexe aqui, longe do titulo. */
+  .mig-barra{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; margin:0 0 1rem; }
 
   /* --- Botao padrao das telas de migracao --- */
   .mig-btn{ display:inline-flex; align-items:center; gap:.35rem; border-radius:9px;
@@ -100,18 +104,14 @@ h1{font-size:1.15rem;margin:0 0 .2rem;color:#07569C}
 <h1>Prova — topo padrão das telas de Migração</h1>
 <p class="sub">Cada bloco abaixo foi <b>renderizado a partir do template real</b> (Jinja), com o CSS real
 de <code>includes/nav_migracoes.html</code>. Nenhum HTML foi escrito à mão para esta página.</p>
-<div class="ver ok"><b>As 7 telas produzem exatamente a mesma estrutura de topo.</b><br>Trocando título, ícone e ações por marcadores, o HTML das 7 vira a mesma string — mesma assinatura <code>ec012775f165</code>:<pre>&lt;div class="mig-head"> &lt;h1 class="mig-title"> &lt;span class="mig-ico">&lt;i class="bi @ICONE@">&lt;/i>&lt;/span>&lt;span class="mig-title__t">@TITULO@&lt;/span> &lt;/h1> &lt;div class="mig-acoes">@ACOES@&lt;/div> &lt;/div> </pre></div>
+<div class="ver ok"><b>As 7 telas produzem exatamente o mesmo cabeçalho.</b><br>Trocando título, ícone e selos por marcadores, o HTML das 7 vira a mesma string — mesma assinatura <code>9a73740d1885</code>:<pre>&lt;div class="mig-head"> &lt;h1 class="mig-title"> &lt;span class="mig-ico">&lt;i class="bi @ICONE@">&lt;/i>&lt;/span>&lt;span class="mig-title__t">@TITULO@&lt;/span> &lt;/h1> &lt;div class="mig-selos">@SELOS@&lt;/div> &lt;/div></pre>Ao lado do título só entram <b>selos</b> (contadores). Botão de ação sai numa faixa própria abaixo da navegação — texto de botão muda de tamanho e desalinharia o título.</div>
 <section class="tela"><div class="tela__rot">Vendas<code>templates/vendas/index.html</code></div><div class="fone"><div class="fone__tela"><div class="mig-head">
   <h1 class="mig-title">
     <span class="mig-ico"><i class="bi bi-receipt"></i></span>
     <span class="mig-title__t">Vendas Migradas</span>
   </h1>
   
-  <div class="mig-acoes">
-  <a href="/vendas/classificar" class="mig-btn">
-    <i class="bi bi-tags"></i> Classificar produtos
-  </a>
-</div>
+  <div class="mig-selos"></div>
 </div>
 
 
@@ -174,20 +174,22 @@ de <code>includes/nav_migracoes.html</code>. Nenhum HTML foi escrito à mão par
     
   </li>
   
-</ul></div></div><div class="assin">assinatura da estrutura: <b>ec012775f165</b></div></section>
+</ul>
+
+
+<div class="mig-barra">
+  <a href="/vendas/classificar" class="mig-btn">
+    <i class="bi bi-tags"></i> Classificar produtos
+  </a>
+</div>
+</div></div><div class="assin">assinatura da estrutura: <b>9a73740d1885</b></div></section>
 <section class="tela"><div class="tela__rot">Compras<code>templates/dfe_compras/index.html</code></div><div class="fone"><div class="fone__tela"><div class="mig-head">
   <h1 class="mig-title">
     <span class="mig-ico"><i class="bi bi-tags"></i></span>
     <span class="mig-title__t">Classificação de Compras — DFe</span>
   </h1>
   
-  <div class="mig-acoes">
-  <span id="capturaMsg" class="small text-muted"></span>
-  <button id="btnCapturar" class="mig-btn mig-btn--ok" onclick="capturarAgora()">
-    <i class="bi bi-cloud-download"></i> Capturar agora
-  </button>
-  <span class="mig-pill">Serviço isolado</span>
-</div>
+  <div class="mig-selos"></div>
 </div>
 
 
@@ -250,14 +252,25 @@ de <code>includes/nav_migracoes.html</code>. Nenhum HTML foi escrito à mão par
     
   </li>
   
-</ul></div></div><div class="assin">assinatura da estrutura: <b>ec012775f165</b></div></section>
+</ul>
+
+
+<div class="mig-barra">
+  <button id="btnCapturar" class="mig-btn mig-btn--ok" onclick="capturarAgora()">
+    <i class="bi bi-cloud-download"></i> Capturar agora
+  </button>
+  <span class="mig-pill" title="a captura roda num serviço separado do site">
+    <i class="bi bi-hdd-network"></i> Serviço isolado</span>
+  <span id="capturaMsg" class="small text-muted"></span>
+</div>
+</div></div><div class="assin">assinatura da estrutura: <b>9a73740d1885</b></div></section>
 <section class="tela"><div class="tela__rot">CT-e<code>templates/dfe_ctes/index.html</code></div><div class="fone"><div class="fone__tela"><div class="mig-head">
   <h1 class="mig-title">
     <span class="mig-ico"><i class="bi bi-truck"></i></span>
     <span class="mig-title__t">CT-e Migrados</span>
   </h1>
   
-  <div class="mig-acoes"></div>
+  <div class="mig-selos"></div>
 </div>
 
 
@@ -320,14 +333,16 @@ de <code>includes/nav_migracoes.html</code>. Nenhum HTML foi escrito à mão par
     
   </li>
   
-</ul></div></div><div class="assin">assinatura da estrutura: <b>ec012775f165</b></div></section>
+</ul>
+
+</div></div><div class="assin">assinatura da estrutura: <b>9a73740d1885</b></div></section>
 <section class="tela"><div class="tela__rot">Estoque<code>templates/estoque/index.html</code></div><div class="fone"><div class="fone__tela"><div class="mig-head">
   <h1 class="mig-title">
     <span class="mig-ico"><i class="bi bi-box-seam"></i></span>
     <span class="mig-title__t">Estoque Migrados</span>
   </h1>
   
-  <div class="mig-acoes">
+  <div class="mig-selos">
     <span class="mig-pill"><i class="bi bi-rulers"></i> 60 leituras</span>
     <span class="mig-pill"><i class="bi bi-truck"></i> 53 descargas</span>
   </div>
@@ -393,14 +408,16 @@ de <code>includes/nav_migracoes.html</code>. Nenhum HTML foi escrito à mão par
     
   </li>
   
-</ul></div></div><div class="assin">assinatura da estrutura: <b>ec012775f165</b></div></section>
+</ul>
+
+</div></div><div class="assin">assinatura da estrutura: <b>9a73740d1885</b></div></section>
 <section class="tela"><div class="tela__rot">Conciliação<code>templates/estoque/conciliacao.html</code></div><div class="fone"><div class="fone__tela"><div class="mig-head">
   <h1 class="mig-title">
     <span class="mig-ico"><i class="bi bi-clipboard-data"></i></span>
     <span class="mig-title__t">Conciliação de Estoque</span>
   </h1>
   
-  <div class="mig-acoes"></div>
+  <div class="mig-selos"></div>
 </div>
 
 
@@ -463,14 +480,16 @@ de <code>includes/nav_migracoes.html</code>. Nenhum HTML foi escrito à mão par
     
   </li>
   
-</ul></div></div><div class="assin">assinatura da estrutura: <b>ec012775f165</b></div></section>
+</ul>
+
+</div></div><div class="assin">assinatura da estrutura: <b>9a73740d1885</b></div></section>
 <section class="tela"><div class="tela__rot">Tempo Real<code>templates/estoque/tempo_real.html</code></div><div class="fone"><div class="fone__tela"><div class="mig-head">
   <h1 class="mig-title">
     <span class="mig-ico"><i class="bi bi-speedometer2"></i></span>
     <span class="mig-title__t">Estoque em Tempo Real</span>
   </h1>
   
-  <div class="mig-acoes">
+  <div class="mig-selos">
   <span class="mig-pill"><i class="bi bi-building"></i>
     Todas as empresas</span>
   <span class="mig-pill"><i class="bi bi-clock"></i> atualizado 22:58</span>
@@ -537,14 +556,16 @@ de <code>includes/nav_migracoes.html</code>. Nenhum HTML foi escrito à mão par
     
   </li>
   
-</ul></div></div><div class="assin">assinatura da estrutura: <b>ec012775f165</b></div></section>
+</ul>
+
+</div></div><div class="assin">assinatura da estrutura: <b>9a73740d1885</b></div></section>
 <section class="tela"><div class="tela__rot">Pendente<code>templates/estoque/pendente_descer.html</code></div><div class="fone"><div class="fone__tela"><div class="mig-head">
   <h1 class="mig-title">
     <span class="mig-ico"><i class="bi bi-hourglass-split"></i></span>
     <span class="mig-title__t">Pendente pra Descer</span>
   </h1>
   
-  <div class="mig-acoes"></div>
+  <div class="mig-selos"></div>
 </div>
 
 
@@ -607,4 +628,6 @@ de <code>includes/nav_migracoes.html</code>. Nenhum HTML foi escrito à mão par
     
   </li>
   
-</ul></div></div><div class="assin">assinatura da estrutura: <b>ec012775f165</b></div></section>
+</ul>
+
+</div></div><div class="assin">assinatura da estrutura: <b>9a73740d1885</b></div></section>

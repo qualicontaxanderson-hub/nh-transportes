@@ -87,12 +87,13 @@
 {% block content %}
 {% set mig_titulo = 'Classificação de Compras — DFe' %}
 {% set mig_icone = 'bi-tags' %}
-{% set mig_acoes %}
-  <span id="capturaMsg" class="small text-muted"></span>
+{% set mig_barra %}
   <button id="btnCapturar" class="mig-btn mig-btn--ok" onclick="capturarAgora()">
     <i class="bi bi-cloud-download"></i> Capturar agora
   </button>
-  <span class="mig-pill">Serviço isolado</span>
+  <span class="mig-pill" title="a captura roda num serviço separado do site">
+    <i class="bi bi-hdd-network"></i> Serviço isolado</span>
+  <span id="capturaMsg" class="small text-muted"></span>
 {% endset %}
 {% set aba_ativa = 'compras' %}
 {% include 'includes/nav_migracoes.html' %}

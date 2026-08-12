@@ -50,13 +50,15 @@ def topo_do_template(rel):
     return src[m.start():fim]
 
 def normaliza(html):
-    """Troca o que PODE variar (titulo, icone, acoes) por marcadores. O que
-    sobrar tem de ser identico entre as telas — e essa a prova."""
-    h = re.sub(r"<span class=\"mig-title__t\">.*?</span>", '<span class="mig-title__t">@TITULO@</span>', html, flags=re.S)
+    """Isola o CABECALHO e troca o que pode variar (titulo, icone, selos) por
+    marcadores. O que sobrar tem de ser identico entre as telas — e essa a
+    prova. A faixa de acoes (.mig-barra) fica fora: ela vem depois da
+    navegacao e existe so em algumas telas, de proposito."""
+    h = html.split("<ul")[0]
+    h = re.sub(r"<span class=\"mig-title__t\">.*?</span>", '<span class="mig-title__t">@TITULO@</span>', h, flags=re.S)
     h = re.sub(r'<i class="bi bi-[a-z0-9-]+"></i>\s*</span>\s*\n\s*<span class="mig-title__t">',
                '<i class="bi @ICONE@"></i></span><span class="mig-title__t">', h, flags=re.S)
-    h = re.sub(r"<div class=\"mig-acoes\">.*?</div>", '<div class="mig-acoes">@ACOES@</div>', h, flags=re.S)
-    h = re.sub(r"<(span|a) class=\"nav-link[^\"]*\"[^>]*>.*?</\1>", "@ABA@", h, flags=re.S)
+    h = re.sub(r"<div class=\"mig-selos\">.*?</div>", '<div class="mig-selos">@SELOS@</div>', h, flags=re.S)
     return re.sub(r"\s+", " ", h).strip()
 
 # --- render ---------------------------------------------------------------
@@ -82,11 +84,13 @@ blocos = "\n".join(
     for r, rel, h in render)
 
 esqueleto = normaliza(render[0][2])
-veredito = ('<div class="ver ok"><b>As 7 telas produzem exatamente a mesma estrutura de topo.</b><br>'
-            'Trocando título, ícone e ações por marcadores, o HTML das 7 vira a mesma string — '
-            'mesma assinatura <code>%s</code>:<pre>%s</pre></div>'
+veredito = ('<div class="ver ok"><b>As 7 telas produzem exatamente o mesmo cabeçalho.</b><br>'
+            'Trocando título, ícone e selos por marcadores, o HTML das 7 vira a mesma string — '
+            'mesma assinatura <code>%s</code>:<pre>%s</pre>'
+            'Ao lado do título só entram <b>selos</b> (contadores). Botão de ação sai numa faixa '
+            'própria abaixo da navegação — texto de botão muda de tamanho e desalinharia o título.</div>'
             % (list(assinaturas.values())[0],
-               esqueleto.split("<ul")[0].replace("&", "&amp;").replace("<", "&lt;"))) if iguais else \
+               esqueleto.replace("&", "&amp;").replace("<", "&lt;"))) if iguais else \
            '<div class="ver nao"><b>DIVERGIU:</b> %s</div>' % assinaturas
 
 io.open(SAIDA, "w", encoding="utf-8").write("""<!doctype html>
