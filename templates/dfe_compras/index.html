@@ -85,9 +85,9 @@
 {% endmacro %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
   <h3 class="mb-0"><i class="bi bi-tags"></i> Classificação de Compras — DFe</h3>
-  <div class="d-flex align-items-center gap-2">
+  <div class="d-flex align-items-center flex-wrap gap-2">
     <span id="capturaMsg" class="small text-muted"></span>
     <button id="btnCapturar" class="btn btn-sm btn-success" onclick="capturarAgora()">
       <i class="bi bi-cloud-download"></i> Capturar agora
@@ -426,6 +426,41 @@
     #pane-classificar .cls-controls .form-select{ width:100%; min-width:0; }
     #pane-classificar .cls-btns{ margin-left:0; }
     #pane-classificar .btn-mem,#pane-classificar .btn-once{ flex:1; justify-content:center; }
+  }
+</style>
+
+<style>
+  /* ===== Aba AGUARDANDO XML: tabela no desktop, cards no celular (mesmo padrao
+     da aba Compras). Escopado em #pane-aguardando -> nao vaza. ===== */
+  #pane-aguardando{ --line-2:#dde3ec; --muted:#6b7280; --shadow:0 1px 3px rgba(16,45,80,.08); }
+  /* A chave tem 44 digitos: quebra em qualquer lugar pra nao estourar a largura. */
+  #pane-aguardando .ag-chave{ font-size:.7rem; color:var(--muted); word-break:break-all; }
+  /* Situacao: pilula (verde autorizado / vermelho o resto). */
+  #pane-aguardando .ag-sit{ font-size:.72rem; font-weight:700; border-radius:6px;
+    padding:.1rem .45rem; white-space:nowrap; }
+  #pane-aguardando .ag-sit--ok{ background:#e8f5e9; color:#2e6b32; }
+  #pane-aguardando .ag-sit--no{ background:#fcebeb; color:#a32d2d; }
+  /* Cards do mobile */
+  #pane-aguardando .ag-mcard{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+    box-shadow:var(--shadow); padding:.7rem .8rem; margin-bottom:.6rem; }
+  #pane-aguardando .ag-mcard__top{ display:flex; justify-content:space-between;
+    align-items:flex-start; gap:.5rem; }
+  #pane-aguardando .min-w-0{ min-width:0; }
+  #pane-aguardando .ag-mcard__forn{ font-weight:700; font-size:.88rem; line-height:1.25; }
+  #pane-aguardando .ag-mcard__cnpj{ font-size:.75rem; color:var(--muted); margin-top:1px; }
+  #pane-aguardando .ag-mcard__vals{ display:flex; gap:.35rem 1rem; flex-wrap:wrap;
+    margin:.5rem 0 .4rem; font-size:.83rem; }
+  #pane-aguardando .ag-mcard__vals .k{ color:var(--muted); }
+  #pane-aguardando .ag-mcard__chave{ border-top:1px solid var(--line-2); padding-top:.4rem;
+    margin-bottom:.55rem; }
+  #pane-aguardando .ag-mcard__chave .k{ color:var(--muted); font-size:.72rem;
+    display:block; margin-bottom:.1rem; }
+  /* Busca por chave avulsa: no celular o botao vira linha de baixo (input inteiro). */
+  @media (max-width:575.98px){
+    #pane-aguardando .ag-busca{ flex-wrap:wrap; gap:.4rem; }
+    #pane-aguardando .ag-busca .form-control{ border-radius:.375rem !important; width:100%; }
+    #pane-aguardando .ag-busca .btn{ border-radius:.375rem !important; width:100%; }
+    #pane-aguardando .ag-busca .form-control{ font-size:.8rem; }
   }
 </style>
 
@@ -785,7 +820,7 @@
           <strong>Buscar</strong>. Traz o XML completo na hora pela chave (consChNFe),
           mesmo que a nota nunca tenha passado pela captura.
         </p>
-        <div class="input-group">
+        <div class="input-group ag-busca">
           <input type="text" id="chaveAvulsa" class="form-control font-monospace"
                  maxlength="54" inputmode="numeric" autocomplete="off"
                  placeholder="Chave de 44 dígitos">
@@ -801,42 +836,74 @@
       <div class="alert alert-success"><i class="bi bi-check2-circle"></i>
         Nenhuma nota aguardando XML completo.</div>
     {% else %}
-      <table class="table table-sm table-striped align-middle">
-        <thead class="table-light">
-          <tr>
-            <th>Emissão</th>
-            <th>Fornecedor</th>
-            <th class="text-center">NF</th>
-            <th class="text-end">Valor</th>
-            <th>Situação</th>
-            <th>Chave</th>
-            <th class="text-end">Ação</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in resumos %}
-          <tr id="resumo-{{ r.id }}">
-            <td>{{ r.dh_emissao.strftime('%d/%m/%Y %H:%M') if r.dh_emissao else '—' }}</td>
-            <td><strong>{{ r.emit_nome or '(sem nome)' }}</strong><br>
-                <small class="text-muted">CNPJ {{ r.emit_cnpj or '—' }}</small></td>
-            <td class="text-center">{{ r.numero or '—' }}{% if r.serie %}/{{ r.serie }}{% endif %}</td>
-            <td class="text-end">{{ (r.valor_total or 0) | formatar_moeda }}</td>
-            <td>
-              {% if r.situacao and r.situacao != 'autorizado' %}
-                <span class="text-danger">{{ r.situacao }}</span>
-              {% else %}{{ r.situacao or '—' }}{% endif %}
-            </td>
-            <td><small class="text-muted"><code>{{ r.chave }}</code></small></td>
-            <td class="text-end">
-              <button class="btn btn-sm btn-primary" onclick="buscarXml(this, {{ r.id }})"
-                      title="Consulta a nota pela chave (consChNFe) e traz o XML completo">
-                <i class="bi bi-cloud-download"></i> Buscar XML
-              </button>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      {# ===== DESKTOP: tabela ===== #}
+      <div class="table-responsive d-none d-md-block">
+        <table class="table table-sm table-striped align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Emissão</th>
+              <th>Fornecedor</th>
+              <th class="text-center">NF</th>
+              <th class="text-end">Valor</th>
+              <th>Situação</th>
+              <th>Chave</th>
+              <th class="text-end">Ação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in resumos %}
+            <tr id="resumo-{{ r.id }}">
+              <td class="text-nowrap">{{ r.dh_emissao.strftime('%d/%m/%Y %H:%M') if r.dh_emissao else '—' }}</td>
+              <td><strong>{{ r.emit_nome or '(sem nome)' }}</strong><br>
+                  <small class="text-muted">CNPJ {{ r.emit_cnpj or '—' }}</small></td>
+              <td class="text-center">{{ r.numero or '—' }}{% if r.serie %}/{{ r.serie }}{% endif %}</td>
+              <td class="text-end text-nowrap">{{ (r.valor_total or 0) | formatar_moeda }}</td>
+              <td>
+                <span class="ag-sit {{ 'ag-sit--no' if (r.situacao and r.situacao != 'autorizado') else 'ag-sit--ok' }}">{{ r.situacao or '—' }}</span>
+              </td>
+              <td><code class="ag-chave">{{ r.chave }}</code></td>
+              <td class="text-end">
+                <button class="btn btn-sm btn-primary text-nowrap" onclick="buscarXml(this, {{ r.id }})"
+                        title="Consulta a nota pela chave (consChNFe) e traz o XML completo">
+                  <i class="bi bi-cloud-download"></i> Buscar XML
+                </button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {# ===== MOBILE: um card por nota (sem rolagem lateral) ===== #}
+      <div class="d-md-none">
+        {% for r in resumos %}
+        <div class="ag-mcard" id="resumo-m-{{ r.id }}">
+          <div class="ag-mcard__top">
+            <div class="min-w-0">
+              <div class="ag-mcard__forn">{{ r.emit_nome or '(sem nome)' }}</div>
+              <div class="ag-mcard__cnpj">CNPJ {{ r.emit_cnpj or '—' }}</div>
+            </div>
+            <span class="ag-sit {{ 'ag-sit--no' if (r.situacao and r.situacao != 'autorizado') else 'ag-sit--ok' }}">{{ r.situacao or '—' }}</span>
+          </div>
+          <div class="ag-mcard__vals">
+            <span><span class="k">Emissão:</span>
+              <b>{{ r.dh_emissao.strftime('%d/%m/%Y %H:%M') if r.dh_emissao else '—' }}</b></span>
+            <span><span class="k">NF:</span>
+              <b>{{ r.numero or '—' }}{% if r.serie %}/{{ r.serie }}{% endif %}</b></span>
+            <span><span class="k">Valor:</span>
+              <b>{{ (r.valor_total or 0) | formatar_moeda }}</b></span>
+          </div>
+          <div class="ag-mcard__chave">
+            <span class="k">Chave</span>
+            <code class="ag-chave">{{ r.chave }}</code>
+          </div>
+          <button class="btn btn-sm btn-primary w-100" onclick="buscarXml(this, {{ r.id }})">
+            <i class="bi bi-cloud-download"></i> Buscar XML
+          </button>
+        </div>
+        {% endfor %}
+      </div>
+
       <p class="text-muted small mb-0">
         <i class="bi bi-info-circle"></i> Estas notas <strong>não</strong> são manifestadas
         pelo app — a manifestação é feita pelo SGA. O XML completo chega sozinho numa próxima
