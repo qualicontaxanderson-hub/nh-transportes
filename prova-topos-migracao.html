@@ -1,0 +1,610 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prova — topo padrão das telas de Migração</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:16px;background:#eef2f7;color:#1f2937;
+     font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+h1{font-size:1.15rem;margin:0 0 .2rem;color:#07569C}
+.sub{color:#6b7280;font-size:.85rem;margin:0 0 1rem;line-height:1.5}
+.ver{border-radius:12px;padding:.8rem .9rem;margin-bottom:1.1rem;font-size:.88rem;line-height:1.5}
+.ver.ok{background:#e8f5e9;border:1px solid #bcdcbe;color:#2e6b32}
+.ver.nao{background:#fcebeb;border:1px solid #eebfbf;color:#a32d2d}
+.ver pre{background:#fff;border:1px solid #cfe3d0;border-radius:8px;padding:.55rem .6rem;
+  margin:.5rem 0 0;font-size:.68rem;line-height:1.5;color:#2f4f33;overflow-x:auto;white-space:pre-wrap;
+  word-break:break-word}
+.tela{margin-bottom:1.1rem}
+.tela__rot{font-size:.8rem;font-weight:700;color:#07569C;margin-bottom:.35rem;
+  display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.tela__rot code{font-size:.72rem;font-weight:500;color:#6b7280;background:#fff;
+  border:1px solid #dde3ec;border-radius:6px;padding:.05rem .35rem}
+.fone{background:#fff;border:1px solid #dde3ec;border-radius:14px;
+  box-shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06);overflow:hidden}
+.fone__tela{padding:14px}
+.assin{font-size:.72rem;color:#6b7280;margin-top:.3rem}
+.assin b{font-family:ui-monospace,monospace;color:#1D63A5}
+/* Guia vermelha no ponto onde o TEXTO do titulo comeca (14px de padding +
+   2.1rem do icone + .6rem do gap). Se os 7 titulos nascem no mesmo x, a guia
+   encosta em todos no mesmo lugar. */
+.fone__tela{position:relative}
+.fone__tela::after{content:"";position:absolute;top:0;bottom:0;
+  left:calc(14px + 2.1rem + .6rem);width:0;border-left:1px dashed rgba(200,40,40,.55);
+  pointer-events:none}
+/* reset minimo do Bootstrap para .nav (o app ja carrega o Bootstrap inteiro) */
+.nav{display:flex;flex-wrap:wrap;padding-left:0;margin-bottom:0;list-style:none}
+.nav-link{display:block;text-decoration:none}
+/* ---- daqui pra baixo: CSS REAL, copiado de includes/nav_migracoes.html ---- */
+
+  /* --- Cabecalho: mesmo tamanho, mesma cor e mesmo alinhamento em toda tela.
+     Cores literais (sem var) de proposito: as telas que nao carregam o design
+     system .mig tambem precisam ficar identicas. --- */
+  .mig-head{ display:flex; align-items:center; justify-content:space-between;
+    gap:.5rem .75rem; flex-wrap:wrap; margin:0 0 1rem; }
+  .mig-title{ display:flex; align-items:center; gap:.6rem; margin:0; min-width:0;
+    font-size:1.25rem; font-weight:700; line-height:1.25; color:#07569C; }
+  .mig-title .mig-ico{ flex:0 0 auto; display:inline-grid; place-items:center;
+    width:2.1rem; height:2.1rem; border-radius:10px; font-size:1.05rem; color:#1D63A5;
+    background:linear-gradient(135deg,#e8f1fb,#dbe9f8);
+    box-shadow:inset 0 0 0 1px rgba(16,45,80,.06); }
+  .mig-title__t{ min-width:0; }
+  /* Bloco da direita: acoes e contadores. Quebra para baixo antes de espremer
+     o titulo — nunca fica "em cima" do nome. */
+  .mig-acoes,.mig-counters{ display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+  @media (min-width:768px){ .mig-title{ font-size:1.45rem; } }
+
+  /* --- Botao padrao das telas de migracao --- */
+  .mig-btn{ display:inline-flex; align-items:center; gap:.35rem; border-radius:9px;
+    padding:.4rem .8rem; font-size:.85rem; font-weight:600; line-height:1.25;
+    border:1px solid #dde3ec; background:#fff; color:#1D63A5; text-decoration:none;
+    white-space:nowrap; cursor:pointer; }
+  .mig-btn:hover{ background:#eef5fd; border-color:#1D63A5; color:#07569C; }
+  .mig-btn--primary{ background:#1D63A5; border-color:#1D63A5; color:#fff; }
+  .mig-btn--primary:hover{ background:#17538c; border-color:#17538c; color:#fff; }
+  .mig-btn--ok{ background:#2f7d32; border-color:#2f7d32; color:#fff; }
+  .mig-btn--ok:hover{ background:#276a2a; border-color:#276a2a; color:#fff; }
+  .mig-btn:disabled{ opacity:.55; cursor:not-allowed; }
+
+  /* --- Pilula (contadores / selos do cabecalho) --- */
+  .mig-pill{ display:inline-flex; align-items:center; gap:.3rem; border-radius:999px;
+    padding:.2rem .7rem; font-size:12px; font-weight:600; line-height:1.5;
+    white-space:nowrap; background:#f5f8fc; color:#6b7280; border:1px solid #dde3ec; }
+  .mig-pill-strong{ background:#1D63A5; color:#fff; border-color:#1D63A5; }
+
+  /* --- Totalizadores: um so componente para todas as telas --- */
+  .mig-stats{ display:flex; gap:.75rem; margin-bottom:1rem; flex-wrap:wrap; }
+  .mig-stat{ flex:1 1 160px; background:#fff; border:1px solid #dde3ec; border-radius:12px;
+    box-shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06);
+    padding:.7rem 1rem; }
+  .mig-stat .rot{ font-size:10.5px; text-transform:uppercase; letter-spacing:.03em;
+    color:#6b7280; font-weight:700; }
+  .mig-stat .val{ font-size:1.35rem; font-weight:800; font-variant-numeric:tabular-nums;
+    color:#1f2937; line-height:1.25; }
+  .mig-stat .val.blue{ color:#07569C; }
+  .mig-stat .val.green,.mig-stat .val.ok{ color:#27500a; }
+  .mig-stat .val.red{ color:#a32d2d; }
+  .mig-stat .val.amber{ color:#B45309; }
+
+  /* --- Navegacao: segmented control. Quebra em varias linhas no celular em vez
+     de rolar de lado (aba cortada pela metade era o efeito antigo). --- */
+  .nav-migracoes{ display:flex; flex-wrap:wrap; gap:2px; margin:0 0 1rem;
+    background:#eef2f7; border:1px solid #dde3ec; border-radius:12px; padding:4px; }
+  .nav-migracoes .nav-link{ border:0; border-radius:9px; color:#6b7280; font-weight:600;
+    font-size:.88rem; padding:.42rem .9rem; white-space:nowrap;
+    transition:background .15s, color .15s; }
+  .nav-migracoes .nav-link:hover{ color:#1D63A5; background:#fff; }
+  .nav-migracoes .nav-link.active{ background:#1D63A5; color:#fff; cursor:default;
+    box-shadow:0 1px 2px rgba(16,24,40,.18); }
+
+</style>
+<h1>Prova — topo padrão das telas de Migração</h1>
+<p class="sub">Cada bloco abaixo foi <b>renderizado a partir do template real</b> (Jinja), com o CSS real
+de <code>includes/nav_migracoes.html</code>. Nenhum HTML foi escrito à mão para esta página.</p>
+<div class="ver ok"><b>As 7 telas produzem exatamente a mesma estrutura de topo.</b><br>Trocando título, ícone e ações por marcadores, o HTML das 7 vira a mesma string — mesma assinatura <code>ec012775f165</code>:<pre>&lt;div class="mig-head"> &lt;h1 class="mig-title"> &lt;span class="mig-ico">&lt;i class="bi @ICONE@">&lt;/i>&lt;/span>&lt;span class="mig-title__t">@TITULO@&lt;/span> &lt;/h1> &lt;div class="mig-acoes">@ACOES@&lt;/div> &lt;/div> </pre></div>
+<section class="tela"><div class="tela__rot">Vendas<code>templates/vendas/index.html</code></div><div class="fone"><div class="fone__tela"><div class="mig-head">
+  <h1 class="mig-title">
+    <span class="mig-ico"><i class="bi bi-receipt"></i></span>
+    <span class="mig-title__t">Vendas Migradas</span>
+  </h1>
+  
+  <div class="mig-acoes">
+  <a href="/vendas/classificar" class="mig-btn">
+    <i class="bi bi-tags"></i> Classificar produtos
+  </a>
+</div>
+</div>
+
+
+
+<ul class="nav nav-pills nav-migracoes">
+  
+  <li class="nav-item">
+    
+    <span class="nav-link active" aria-current="page">
+      <i class="bi bi-receipt"></i> Vendas
+    </span>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/dfe/compras">
+      <i class="bi bi-file-earmark-arrow-down"></i> Compras
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/dfe/ctes">
+      <i class="bi bi-truck"></i> CT-e
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque">
+      <i class="bi bi-box-seam"></i> Estoque
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/conciliacao">
+      <i class="bi bi-clipboard-data"></i> Conciliação
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/tempo-real">
+      <i class="bi bi-speedometer2"></i> Tempo Real
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/pendente-descer">
+      <i class="bi bi-hourglass-split"></i> Pendente
+    </a>
+    
+  </li>
+  
+</ul></div></div><div class="assin">assinatura da estrutura: <b>ec012775f165</b></div></section>
+<section class="tela"><div class="tela__rot">Compras<code>templates/dfe_compras/index.html</code></div><div class="fone"><div class="fone__tela"><div class="mig-head">
+  <h1 class="mig-title">
+    <span class="mig-ico"><i class="bi bi-tags"></i></span>
+    <span class="mig-title__t">Classificação de Compras — DFe</span>
+  </h1>
+  
+  <div class="mig-acoes">
+  <span id="capturaMsg" class="small text-muted"></span>
+  <button id="btnCapturar" class="mig-btn mig-btn--ok" onclick="capturarAgora()">
+    <i class="bi bi-cloud-download"></i> Capturar agora
+  </button>
+  <span class="mig-pill">Serviço isolado</span>
+</div>
+</div>
+
+
+
+<ul class="nav nav-pills nav-migracoes">
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/vendas">
+      <i class="bi bi-receipt"></i> Vendas
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <span class="nav-link active" aria-current="page">
+      <i class="bi bi-file-earmark-arrow-down"></i> Compras
+    </span>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/dfe/ctes">
+      <i class="bi bi-truck"></i> CT-e
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque">
+      <i class="bi bi-box-seam"></i> Estoque
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/conciliacao">
+      <i class="bi bi-clipboard-data"></i> Conciliação
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/tempo-real">
+      <i class="bi bi-speedometer2"></i> Tempo Real
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/pendente-descer">
+      <i class="bi bi-hourglass-split"></i> Pendente
+    </a>
+    
+  </li>
+  
+</ul></div></div><div class="assin">assinatura da estrutura: <b>ec012775f165</b></div></section>
+<section class="tela"><div class="tela__rot">CT-e<code>templates/dfe_ctes/index.html</code></div><div class="fone"><div class="fone__tela"><div class="mig-head">
+  <h1 class="mig-title">
+    <span class="mig-ico"><i class="bi bi-truck"></i></span>
+    <span class="mig-title__t">CT-e Migrados</span>
+  </h1>
+  
+  <div class="mig-acoes"></div>
+</div>
+
+
+
+<ul class="nav nav-pills nav-migracoes">
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/vendas">
+      <i class="bi bi-receipt"></i> Vendas
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/dfe/compras">
+      <i class="bi bi-file-earmark-arrow-down"></i> Compras
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <span class="nav-link active" aria-current="page">
+      <i class="bi bi-truck"></i> CT-e
+    </span>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque">
+      <i class="bi bi-box-seam"></i> Estoque
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/conciliacao">
+      <i class="bi bi-clipboard-data"></i> Conciliação
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/tempo-real">
+      <i class="bi bi-speedometer2"></i> Tempo Real
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/pendente-descer">
+      <i class="bi bi-hourglass-split"></i> Pendente
+    </a>
+    
+  </li>
+  
+</ul></div></div><div class="assin">assinatura da estrutura: <b>ec012775f165</b></div></section>
+<section class="tela"><div class="tela__rot">Estoque<code>templates/estoque/index.html</code></div><div class="fone"><div class="fone__tela"><div class="mig-head">
+  <h1 class="mig-title">
+    <span class="mig-ico"><i class="bi bi-box-seam"></i></span>
+    <span class="mig-title__t">Estoque Migrados</span>
+  </h1>
+  
+  <div class="mig-acoes">
+    <span class="mig-pill"><i class="bi bi-rulers"></i> 60 leituras</span>
+    <span class="mig-pill"><i class="bi bi-truck"></i> 53 descargas</span>
+  </div>
+</div>
+
+
+
+<ul class="nav nav-pills nav-migracoes">
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/vendas">
+      <i class="bi bi-receipt"></i> Vendas
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/dfe/compras">
+      <i class="bi bi-file-earmark-arrow-down"></i> Compras
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/dfe/ctes">
+      <i class="bi bi-truck"></i> CT-e
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <span class="nav-link active" aria-current="page">
+      <i class="bi bi-box-seam"></i> Estoque
+    </span>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/conciliacao">
+      <i class="bi bi-clipboard-data"></i> Conciliação
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/tempo-real">
+      <i class="bi bi-speedometer2"></i> Tempo Real
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/pendente-descer">
+      <i class="bi bi-hourglass-split"></i> Pendente
+    </a>
+    
+  </li>
+  
+</ul></div></div><div class="assin">assinatura da estrutura: <b>ec012775f165</b></div></section>
+<section class="tela"><div class="tela__rot">Conciliação<code>templates/estoque/conciliacao.html</code></div><div class="fone"><div class="fone__tela"><div class="mig-head">
+  <h1 class="mig-title">
+    <span class="mig-ico"><i class="bi bi-clipboard-data"></i></span>
+    <span class="mig-title__t">Conciliação de Estoque</span>
+  </h1>
+  
+  <div class="mig-acoes"></div>
+</div>
+
+
+
+<ul class="nav nav-pills nav-migracoes">
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/vendas">
+      <i class="bi bi-receipt"></i> Vendas
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/dfe/compras">
+      <i class="bi bi-file-earmark-arrow-down"></i> Compras
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/dfe/ctes">
+      <i class="bi bi-truck"></i> CT-e
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque">
+      <i class="bi bi-box-seam"></i> Estoque
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <span class="nav-link active" aria-current="page">
+      <i class="bi bi-clipboard-data"></i> Conciliação
+    </span>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/tempo-real">
+      <i class="bi bi-speedometer2"></i> Tempo Real
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/pendente-descer">
+      <i class="bi bi-hourglass-split"></i> Pendente
+    </a>
+    
+  </li>
+  
+</ul></div></div><div class="assin">assinatura da estrutura: <b>ec012775f165</b></div></section>
+<section class="tela"><div class="tela__rot">Tempo Real<code>templates/estoque/tempo_real.html</code></div><div class="fone"><div class="fone__tela"><div class="mig-head">
+  <h1 class="mig-title">
+    <span class="mig-ico"><i class="bi bi-speedometer2"></i></span>
+    <span class="mig-title__t">Estoque em Tempo Real</span>
+  </h1>
+  
+  <div class="mig-acoes">
+  <span class="mig-pill"><i class="bi bi-building"></i>
+    Todas as empresas</span>
+  <span class="mig-pill"><i class="bi bi-clock"></i> atualizado 22:58</span>
+</div>
+</div>
+
+
+
+<ul class="nav nav-pills nav-migracoes">
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/vendas">
+      <i class="bi bi-receipt"></i> Vendas
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/dfe/compras">
+      <i class="bi bi-file-earmark-arrow-down"></i> Compras
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/dfe/ctes">
+      <i class="bi bi-truck"></i> CT-e
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque">
+      <i class="bi bi-box-seam"></i> Estoque
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/conciliacao">
+      <i class="bi bi-clipboard-data"></i> Conciliação
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <span class="nav-link active" aria-current="page">
+      <i class="bi bi-speedometer2"></i> Tempo Real
+    </span>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/pendente-descer">
+      <i class="bi bi-hourglass-split"></i> Pendente
+    </a>
+    
+  </li>
+  
+</ul></div></div><div class="assin">assinatura da estrutura: <b>ec012775f165</b></div></section>
+<section class="tela"><div class="tela__rot">Pendente<code>templates/estoque/pendente_descer.html</code></div><div class="fone"><div class="fone__tela"><div class="mig-head">
+  <h1 class="mig-title">
+    <span class="mig-ico"><i class="bi bi-hourglass-split"></i></span>
+    <span class="mig-title__t">Pendente pra Descer</span>
+  </h1>
+  
+  <div class="mig-acoes"></div>
+</div>
+
+
+
+<ul class="nav nav-pills nav-migracoes">
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/vendas">
+      <i class="bi bi-receipt"></i> Vendas
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/dfe/compras">
+      <i class="bi bi-file-earmark-arrow-down"></i> Compras
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/dfe/ctes">
+      <i class="bi bi-truck"></i> CT-e
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque">
+      <i class="bi bi-box-seam"></i> Estoque
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/conciliacao">
+      <i class="bi bi-clipboard-data"></i> Conciliação
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <a class="nav-link" href="/estoque/tempo-real">
+      <i class="bi bi-speedometer2"></i> Tempo Real
+    </a>
+    
+  </li>
+  
+  <li class="nav-item">
+    
+    <span class="nav-link active" aria-current="page">
+      <i class="bi bi-hourglass-split"></i> Pendente
+    </span>
+    
+  </li>
+  
+</ul></div></div><div class="assin">assinatura da estrutura: <b>ec012775f165</b></div></section>

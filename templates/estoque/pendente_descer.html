@@ -6,11 +6,7 @@
   /* ===== /estoque/pendente-descer no visual .mig (paleta hardcoded) ===== */
   #pend{ --line-2:#dde3ec; --surface-1:#f1f4f8; --muted:#6b7280; --blue:#1D63A5; --blue-deep:#07569C;
     --shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06); --amber:#B45309; }
-  #pend .stats{ display:flex; gap:.75rem; margin-bottom:1rem; flex-wrap:wrap; }
-  #pend .stat{ flex:1 1 170px; background:#fff; border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); padding:.7rem 1rem; }
-  #pend .stat .rot{ font-size:10.5px; text-transform:uppercase; color:var(--muted); font-weight:700; letter-spacing:.03em; }
-  #pend .stat .val{ font-size:1.35rem; font-weight:800; font-variant-numeric:tabular-nums; }
-  #pend .stat .blue{ color:var(--blue-deep); } #pend .stat .amber{ color:var(--amber); }
+  /* Totalizadores: .mig-stats/.mig-stat vem de includes/nav_migracoes.html. */
   #pend .filtros{ background:#fff; border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); padding:.7rem 1rem; margin-bottom:1rem; }
   #pend .filtros>summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:.5rem; font-weight:700; color:var(--blue-deep); }
   #pend .filtros>summary::-webkit-details-marker{ display:none; }
@@ -52,20 +48,16 @@
 
 {% block content %}
 <div id="pend">
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h3 class="mb-0"><i class="bi bi-hourglass-split"></i> Pendente pra Descer</h3>
-  <a href="{{ url_for('estoque.index') }}" class="btn btn-sm btn-outline-secondary">
-    <i class="bi bi-box-seam"></i> Estoque
-  </a>
-</div>
+{% set mig_titulo = 'Pendente pra Descer' %}
+{% set mig_icone = 'bi-hourglass-split' %}
 
 {% set aba_ativa = 'pendente' %}
 {% include 'includes/nav_migracoes.html' %}
 
 {# =================== TOTALIZADORES =================== #}
-<div class="stats">
-  <div class="stat"><div class="rot">Notas pendentes</div><div class="val blue">{{ totais.notas }}</div></div>
-  <div class="stat"><div class="rot">Litros pra descer</div><div class="val amber">{{ totais.litros | fmtnum(0) }}</div></div>
+<div class="mig-stats">
+  <div class="mig-stat"><div class="rot">Notas pendentes</div><div class="val blue">{{ totais.notas }}</div></div>
+  <div class="mig-stat"><div class="rot">Litros pra descer</div><div class="val amber">{{ totais.litros | fmtnum(0) }}</div></div>
 </div>
 
 {# =================== FILTROS =================== #}

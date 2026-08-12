@@ -11,15 +11,13 @@
   {% set ICO_PROD = {'gas':'bi-fuel-pump', 'eta':'bi-flower1', 's500':'bi-truck',
                      's10':'bi-truck', 'diesel':'bi-truck', 'outro':'bi-droplet'} %}
 
-  {# =================== CABECALHO =================== #}
-  <div class="mig-head">
-    <h3 class="mig-title"><span class="mig-ico"><i class="bi bi-box-seam"></i></span> Estoque Migrados</h3>
-    <div class="mig-counters">
-      <span class="mig-pill"><i class="bi bi-rulers"></i> {{ totais.leituras }} leituras</span>
-      <span class="mig-pill"><i class="bi bi-truck"></i> {{ totais.descargas }} descargas</span>
-    </div>
-  </div>
-
+  {# =================== CABECALHO + NAVEGACAO (topo padrao) =================== #}
+  {% set mig_titulo = 'Estoque Migrados' %}
+  {% set mig_icone = 'bi-box-seam' %}
+  {% set mig_acoes %}
+    <span class="mig-pill"><i class="bi bi-rulers"></i> {{ totais.leituras }} leituras</span>
+    <span class="mig-pill"><i class="bi bi-truck"></i> {{ totais.descargas }} descargas</span>
+  {% endset %}
   {% set aba_ativa = 'estoque' %}
   {% include 'includes/nav_migracoes.html' %}
 

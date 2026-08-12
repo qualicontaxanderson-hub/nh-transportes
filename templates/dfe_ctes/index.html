@@ -7,12 +7,7 @@
      tokens do design system). ===== */
   #ctes{ --line-2:#dde3ec; --surface-1:#f1f4f8; --muted:#6b7280; --blue:#1D63A5; --blue-deep:#07569C;
     --shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06); }
-  #ctes .cte-stats{ display:flex; gap:.75rem; margin-bottom:1rem; flex-wrap:wrap; }
-  #ctes .cte-stat{ flex:1 1 160px; background:#fff; border:1px solid var(--line-2); border-radius:12px;
-    box-shadow:var(--shadow); padding:.7rem 1rem; }
-  #ctes .cte-stat .rot{ font-size:10.5px; text-transform:uppercase; color:var(--muted); font-weight:700; letter-spacing:.03em; }
-  #ctes .cte-stat .val{ font-size:1.35rem; font-weight:800; font-variant-numeric:tabular-nums; }
-  #ctes .cte-stat .green{ color:#27500a; } #ctes .cte-stat .blue{ color:var(--blue-deep); }
+  /* Totalizadores: .mig-stats/.mig-stat vem de includes/nav_migracoes.html. */
   /* Filtro recolhido */
   #ctes .cte-filtros{ background:#fff; border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow);
     padding:.7rem 1rem; margin-bottom:1rem; }
@@ -66,17 +61,15 @@
 
 {% block content %}
 <div id="ctes">
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h3 class="mb-0"><i class="bi bi-truck"></i> CT-e Migrados</h3>
-</div>
-
+{% set mig_titulo = 'CT-e Migrados' %}
+{% set mig_icone = 'bi-truck' %}
 {% set aba_ativa = 'ctes' %}
 {% include 'includes/nav_migracoes.html' %}
 
 {# =================== TOTALIZADORES =================== #}
-<div class="cte-stats">
-  <div class="cte-stat"><div class="rot">CT-e</div><div class="val blue">{{ totais.ctes }}</div></div>
-  <div class="cte-stat"><div class="rot">Soma do frete</div><div class="val green">{{ (totais.frete or 0) | formatar_moeda }}</div></div>
+<div class="mig-stats">
+  <div class="mig-stat"><div class="rot">CT-e</div><div class="val blue">{{ totais.ctes }}</div></div>
+  <div class="mig-stat"><div class="rot">Soma do frete</div><div class="val green">{{ (totais.frete or 0) | formatar_moeda }}</div></div>
 </div>
 
 {# =================== FILTROS (recolhido) =================== #}

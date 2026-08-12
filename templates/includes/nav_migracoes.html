@@ -1,28 +1,100 @@
 {# ===========================================================================
-   Navegação entre as telas de Migração (nav-pills Bootstrap).
+   TOPO PADRAO das telas de Migração: cabeçalho (título + ações) + navegação.
+
+   FONTE UNICA. Nenhuma tela desenha o proprio cabecalho — todas passam por
+   aqui, entao e impossivel uma ficar diferente da outra.
 
    Uso no template:
+     {% set mig_titulo = 'Vendas Migradas' %}
+     {% set mig_icone  = 'bi-receipt' %}
+     {% set mig_acoes %}   (opcional)
+       <a class="mig-btn" href="...">...</a>
+     {% endset %}
      {% set aba_ativa = 'vendas' %}
      {% include 'includes/nav_migracoes.html' %}
 
-   Valores de aba_ativa: 'vendas' | 'compras' | 'ctes' | 'estoque' | 'conciliacao' | 'tempo_real' | 'pendente'
+   Valores de aba_ativa: 'vendas' | 'compras' | 'ctes' | 'estoque' |
+                         'conciliacao' | 'tempo_real' | 'pendente'
    A aba da tela atual fica destacada (azul #1D63A5) e NÃO é clicável.
 
-   SOMENTE navegação — não altera dados, filtros nem queries.
+   As acoes vao SEMPRE no bloco da direita (.mig-acoes) — nunca soltas em cima
+   do nome. Use .mig-btn (neutro), .mig-btn--primary, .mig-btn--ok ou .mig-pill.
+
+   SOMENTE apresentacao/navegacao — nao altera dados, filtros nem queries.
    =========================================================================== #}
 <style>
-  .nav-migracoes { gap: .4rem; }
-  .nav-migracoes::-webkit-scrollbar { height: 4px; }
-  .nav-migracoes .nav-link {
-    padding: .35rem .85rem; font-size: .9rem; white-space: nowrap;
-    border: 1px solid #dee2e6; color: #6c757d;
-  }
-  .nav-migracoes .nav-link:hover { color: #1D63A5; border-color: #1D63A5; }
-  .nav-migracoes .nav-link.active {
-    background-color: #1D63A5; border-color: #1D63A5; color: #fff;
-    cursor: default;
-  }
+  /* --- Cabecalho: mesmo tamanho, mesma cor e mesmo alinhamento em toda tela.
+     Cores literais (sem var) de proposito: as telas que nao carregam o design
+     system .mig tambem precisam ficar identicas. --- */
+  .mig-head{ display:flex; align-items:center; justify-content:space-between;
+    gap:.5rem .75rem; flex-wrap:wrap; margin:0 0 1rem; }
+  .mig-title{ display:flex; align-items:center; gap:.6rem; margin:0; min-width:0;
+    font-size:1.25rem; font-weight:700; line-height:1.25; color:#07569C; }
+  .mig-title .mig-ico{ flex:0 0 auto; display:inline-grid; place-items:center;
+    width:2.1rem; height:2.1rem; border-radius:10px; font-size:1.05rem; color:#1D63A5;
+    background:linear-gradient(135deg,#e8f1fb,#dbe9f8);
+    box-shadow:inset 0 0 0 1px rgba(16,45,80,.06); }
+  .mig-title__t{ min-width:0; }
+  /* Bloco da direita: acoes e contadores. Quebra para baixo antes de espremer
+     o titulo — nunca fica "em cima" do nome. */
+  .mig-acoes,.mig-counters{ display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+  @media (min-width:768px){ .mig-title{ font-size:1.45rem; } }
+
+  /* --- Botao padrao das telas de migracao --- */
+  .mig-btn{ display:inline-flex; align-items:center; gap:.35rem; border-radius:9px;
+    padding:.4rem .8rem; font-size:.85rem; font-weight:600; line-height:1.25;
+    border:1px solid #dde3ec; background:#fff; color:#1D63A5; text-decoration:none;
+    white-space:nowrap; cursor:pointer; }
+  .mig-btn:hover{ background:#eef5fd; border-color:#1D63A5; color:#07569C; }
+  .mig-btn--primary{ background:#1D63A5; border-color:#1D63A5; color:#fff; }
+  .mig-btn--primary:hover{ background:#17538c; border-color:#17538c; color:#fff; }
+  .mig-btn--ok{ background:#2f7d32; border-color:#2f7d32; color:#fff; }
+  .mig-btn--ok:hover{ background:#276a2a; border-color:#276a2a; color:#fff; }
+  .mig-btn:disabled{ opacity:.55; cursor:not-allowed; }
+
+  /* --- Pilula (contadores / selos do cabecalho) --- */
+  .mig-pill{ display:inline-flex; align-items:center; gap:.3rem; border-radius:999px;
+    padding:.2rem .7rem; font-size:12px; font-weight:600; line-height:1.5;
+    white-space:nowrap; background:#f5f8fc; color:#6b7280; border:1px solid #dde3ec; }
+  .mig-pill-strong{ background:#1D63A5; color:#fff; border-color:#1D63A5; }
+
+  /* --- Totalizadores: um so componente para todas as telas --- */
+  .mig-stats{ display:flex; gap:.75rem; margin-bottom:1rem; flex-wrap:wrap; }
+  .mig-stat{ flex:1 1 160px; background:#fff; border:1px solid #dde3ec; border-radius:12px;
+    box-shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06);
+    padding:.7rem 1rem; }
+  .mig-stat .rot{ font-size:10.5px; text-transform:uppercase; letter-spacing:.03em;
+    color:#6b7280; font-weight:700; }
+  .mig-stat .val{ font-size:1.35rem; font-weight:800; font-variant-numeric:tabular-nums;
+    color:#1f2937; line-height:1.25; }
+  .mig-stat .val.blue{ color:#07569C; }
+  .mig-stat .val.green,.mig-stat .val.ok{ color:#27500a; }
+  .mig-stat .val.red{ color:#a32d2d; }
+  .mig-stat .val.amber{ color:#B45309; }
+
+  /* --- Navegacao: segmented control. Quebra em varias linhas no celular em vez
+     de rolar de lado (aba cortada pela metade era o efeito antigo). --- */
+  .nav-migracoes{ display:flex; flex-wrap:wrap; gap:2px; margin:0 0 1rem;
+    background:#eef2f7; border:1px solid #dde3ec; border-radius:12px; padding:4px; }
+  .nav-migracoes .nav-link{ border:0; border-radius:9px; color:#6b7280; font-weight:600;
+    font-size:.88rem; padding:.42rem .9rem; white-space:nowrap;
+    transition:background .15s, color .15s; }
+  .nav-migracoes .nav-link:hover{ color:#1D63A5; background:#fff; }
+  .nav-migracoes .nav-link.active{ background:#1D63A5; color:#fff; cursor:default;
+    box-shadow:0 1px 2px rgba(16,24,40,.18); }
 </style>
+
+{% if mig_titulo is defined %}
+<div class="mig-head">
+  <h1 class="mig-title">
+    <span class="mig-ico"><i class="bi {{ mig_icone|default('bi-diagram-3') }}"></i></span>
+    <span class="mig-title__t">{{ mig_titulo }}</span>
+  </h1>
+  {# A caixa das acoes existe sempre (vazia quando a tela nao tem nenhuma):
+     assim a estrutura do topo e literalmente a mesma nas 7 telas. #}
+  <div class="mig-acoes">{{ mig_acoes if mig_acoes is defined else '' }}</div>
+</div>
+{% endif %}
 
 {% set _abas = [
     ('vendas',  'Vendas',  'bi-receipt',                 url_for('vendas.index')),
@@ -33,7 +105,7 @@
     ('tempo_real', 'Tempo Real', 'bi-speedometer2',      url_for('estoque.tempo_real')),
     ('pendente', 'Pendente', 'bi-hourglass-split',       url_for('estoque.pendente_descer'))
 ] %}
-<ul class="nav nav-pills flex-nowrap overflow-auto mb-3 nav-migracoes">
+<ul class="nav nav-pills nav-migracoes">
   {% for _chave, _rotulo, _icone, _destino in _abas %}
   <li class="nav-item">
     {% if _chave == aba_ativa %}

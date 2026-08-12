@@ -24,34 +24,20 @@
   color:var(--ink);
 }
 
-/* ---------- Cabecalho ---------- */
-.mig-head{ display:flex; align-items:center; justify-content:space-between; gap:.75rem;
-  margin-bottom:1rem; flex-wrap:wrap; }
-.mig-title{ display:flex; align-items:center; gap:.6rem; margin:0; font-size:1.3rem;
-  font-weight:700; color:var(--blue-deep); }
-.mig-title .mig-ico{ display:inline-grid; place-items:center; width:2.1rem; height:2.1rem;
-  border-radius:10px; background:linear-gradient(135deg,#e8f1fb,#dbe9f8); color:var(--blue); font-size:1.05rem; }
-.mig-counters{ display:flex; gap:.4rem; flex-wrap:wrap; }
+/* ---------- Cabecalho, pills, totalizadores e sub-nav ----------
+   Vivem em includes/nav_migracoes.html (fonte unica do topo, carregada por
+   TODAS as telas de migracao — inclusive as que nao usam este design system).
+   Nao redefina .mig-head / .mig-title / .mig-ico / .mig-pill / .mig-stat /
+   .nav-migracoes aqui: duplicar e o que fazia cada tela ficar diferente. */
 
-/* ---------- Pills / badges ---------- */
-.mig-pill,.mig-badge{ display:inline-flex; align-items:center; gap:.3rem; border-radius:999px;
+/* ---------- Badges ---------- */
+.mig-badge{ display:inline-flex; align-items:center; gap:.3rem; border-radius:999px;
   padding:.2rem .7rem; font-size:12px; font-weight:600; line-height:1.5; white-space:nowrap; }
-.mig-pill{ background:var(--soft); color:var(--muted); border:1px solid var(--line-2); }
-.mig-pill-strong{ background:var(--blue); color:#fff; border:0; }
 .mig-badge--ok{ background:var(--ok-bg); color:var(--ok); }
 .mig-badge--pend{ background:var(--pend-bg); color:var(--pend); }
 .mig-badge--ign{ background:var(--ign-bg); color:var(--ign); }
 .mig-badge--info{ background:var(--info-bg); color:var(--info); }
 .mig-badge--danger{ background:var(--danger-bg); color:var(--danger); }
-
-/* ---------- Sub-nav entre migracoes: vira SEGMENTED CONTROL dentro de .mig ----------
-   Sobrescreve o estilo de includes/nav_migracoes.html apenas quando dentro de .mig,
-   entao as telas ainda nao migradas mantem as pills antigas. */
-.mig .nav-migracoes{ background:#eef2f7; border:1px solid var(--line-2); border-radius:12px; padding:4px; gap:2px; }
-.mig .nav-migracoes .nav-link{ border:0; border-radius:9px; color:var(--muted); font-weight:600;
-  padding:.42rem .9rem; transition:background .15s, color .15s; }
-.mig .nav-migracoes .nav-link:hover{ color:var(--blue); background:#fff; border-color:transparent; }
-.mig .nav-migracoes .nav-link.active{ background:var(--blue); color:#fff; box-shadow:0 1px 2px rgba(16,24,40,.18); }
 
 /* ---------- Filtros (recolhivel via <details>; aberto por padrao) ---------- */
 .mig-filtros{ background:var(--surface); border:1px solid var(--line-2); border-radius:var(--radius);
@@ -67,14 +53,6 @@
 .mig-filtros[open] .mig-filtros__n{ display:none; }
 .mig-filtros label{ font-size:11px; text-transform:uppercase; letter-spacing:.03em;
   color:var(--muted); font-weight:600; margin-bottom:2px; }
-
-/* ---------- Totais ---------- */
-.mig-stats{ display:flex; gap:.75rem; margin-bottom:1rem; flex-wrap:wrap; }
-.mig-stat{ flex:1 1 140px; background:var(--surface); border:1px solid var(--line-2);
-  border-radius:var(--radius); box-shadow:var(--shadow); padding:.7rem 1rem; text-align:center; }
-.mig-stat .rot{ font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); font-weight:600; }
-.mig-stat .val{ font-size:1.35rem; font-weight:700; color:var(--ink); }
-.mig-stat .val.ok{ color:var(--ok); }
 
 /* ---------- Sub-abas internas (underline) ---------- */
 .mig-subtabs{ border:0; gap:.25rem; margin-bottom:1rem; border-bottom:2px solid var(--line);
@@ -397,8 +375,9 @@
    define o contorno sem pesar. (As cores ja vem dos tokens acima.) */
 .mig-badge{ box-shadow:inset 0 0 0 1px rgba(16,45,80,.05); }
 
-/* Icones em quadradinho (titulo + combustivel) ganham anel interno = relevo. */
-.mig-title .mig-ico, .mig-dia__ico{ box-shadow:inset 0 0 0 1px rgba(16,45,80,.06); }
+/* Icones em quadradinho de combustivel ganham anel interno = relevo (o do
+   titulo ja vem pronto de nav_migracoes.html). */
+.mig-dia__ico{ box-shadow:inset 0 0 0 1px rgba(16,45,80,.06); }
 
 /* Hover com vida: cards "sobem" um tico e a sombra cresce; linhas destacam.
    So em dispositivos com hover real -> no celular nada muda (sem jitter). */

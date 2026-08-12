@@ -6,10 +6,7 @@
   /* ===== /estoque/tempo-real no visual .mig (paleta hardcoded) ===== */
   #treal{ --line-2:#dde3ec; --surface-1:#f1f4f8; --muted:#6b7280; --blue:#1D63A5; --blue-deep:#07569C;
     --shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06); --red:#a32d2d; --green:#27500a; }
-  #treal .head{ display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin-bottom:.5rem; }
-  #treal .head .emp{ font-weight:800; color:var(--blue-deep); font-size:1rem; }
-  #treal .head .atual{ margin-left:auto; font-size:.76rem; color:var(--muted); }
-  #treal .head .atual b{ color:#42506a; font-variant-numeric:tabular-nums; }
+  /* Empresa e "atualizado HH:MM" agora sao pills no cabecalho padrao. */
   #treal .aprox{ font-size:.76rem; color:var(--muted); background:#fff; border:1px solid var(--line-2); border-left:3px solid var(--blue);
     border-radius:8px; padding:.4rem .6rem; margin-bottom:1rem; }
   #treal .filtro{ background:#fff; border:1px solid var(--line-2); border-radius:10px; box-shadow:var(--shadow);
@@ -48,21 +45,15 @@
 
 {% block content %}
 <div id="treal">
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h3 class="mb-0"><i class="bi bi-speedometer2"></i> Estoque em Tempo Real</h3>
-  <a href="{{ url_for('estoque.index') }}" class="btn btn-sm btn-outline-secondary">
-    <i class="bi bi-box-seam"></i> Estoque
-  </a>
-</div>
-
+{% set mig_titulo = 'Estoque em Tempo Real' %}
+{% set mig_icone = 'bi-speedometer2' %}
+{% set mig_acoes %}
+  <span class="mig-pill"><i class="bi bi-building"></i>
+    {{ empresa_nome if um_empresa else 'Todas as empresas' }}</span>
+  <span class="mig-pill"><i class="bi bi-clock"></i> atualizado {{ agora_hm }}</span>
+{% endset %}
 {% set aba_ativa = 'tempo_real' %}
 {% include 'includes/nav_migracoes.html' %}
-
-<div class="head">
-  <span class="emp"><i class="bi bi-speedometer2"></i>
-    {{ empresa_nome if um_empresa else 'Todas as empresas' }}</span>
-  <span class="atual">atualizado <b>{{ agora_hm }}</b></span>
-</div>
 
 <form method="GET" action="{{ url_for('estoque.tempo_real') }}" class="filtro">
   <label>Empresa</label>

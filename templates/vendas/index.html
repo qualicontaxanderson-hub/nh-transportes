@@ -8,14 +8,7 @@
      (_detalhe_conteudo.html) e o motor de PDF/WhatsApp ficam intactos. ===== */
   #vendas{ --line-2:#dde3ec; --surface-1:#f1f4f8; --muted:#6b7280; --blue:#1D63A5; --blue-deep:#07569C;
     --shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06); }
-  /* Totalizadores */
-  #vendas .venda-stats{ display:flex; gap:.75rem; margin-bottom:1rem; flex-wrap:wrap; }
-  #vendas .venda-stat{ flex:1 1 160px; background:#fff; border:1px solid var(--line-2); border-radius:12px;
-    box-shadow:var(--shadow); padding:.7rem 1rem; }
-  #vendas .venda-stat .rot{ font-size:10.5px; text-transform:uppercase; color:var(--muted); font-weight:700; letter-spacing:.03em; }
-  #vendas .venda-stat .val{ font-size:1.35rem; font-weight:800; font-variant-numeric:tabular-nums; }
-  #vendas .venda-stat .green{ color:#27500a; } #vendas .venda-stat .blue{ color:var(--blue-deep); }
-  #vendas .venda-stat .red{ color:#a32d2d; }
+  /* Totalizadores: .mig-stats/.mig-stat vem de includes/nav_migracoes.html. */
   /* Filtro recolhido */
   #vendas .venda-filtros{ background:#fff; border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow);
     padding:.7rem 1rem; margin-bottom:1rem; }
@@ -80,21 +73,22 @@
   'Crédito APP':'#7c3aed','Crédito Manual':'#8b5cf6','Dinheiro':'#059669','Cheque':'#475569',
   'Prazo':'#d97706','Transferência':'#0891b2','Combo':'#64748b','Outros':'#64748b'} %}
 <div id="vendas">
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h3 class="mb-0"><i class="bi bi-receipt"></i> Vendas Migradas</h3>
-  <a href="{{ url_for('vendas.classificar') }}" class="btn btn-sm btn-outline-primary">
+{% set mig_titulo = 'Vendas Migradas' %}
+{% set mig_icone = 'bi-receipt' %}
+{% set mig_acoes %}
+  <a href="{{ url_for('vendas.classificar') }}" class="mig-btn">
     <i class="bi bi-tags"></i> Classificar produtos
   </a>
-</div>
+{% endset %}
 
 {% set aba_ativa = 'vendas' %}
 {% include 'includes/nav_migracoes.html' %}
 
 {# =================== TOTALIZADORES =================== #}
-<div class="venda-stats">
-  <div class="venda-stat"><div class="rot">Notas</div><div class="val blue">{{ totais.notas }}</div></div>
-  <div class="venda-stat"><div class="rot">Valor (autorizadas)</div><div class="val green">{{ (totais.valor or 0) | formatar_moeda }}</div></div>
-  <div class="venda-stat"><div class="rot">Canceladas</div><div class="val {% if totais.canceladas %}red{% endif %}">{{ totais.canceladas }}</div></div>
+<div class="mig-stats">
+  <div class="mig-stat"><div class="rot">Notas</div><div class="val blue">{{ totais.notas }}</div></div>
+  <div class="mig-stat"><div class="rot">Valor (autorizadas)</div><div class="val green">{{ (totais.valor or 0) | formatar_moeda }}</div></div>
+  <div class="mig-stat"><div class="rot">Canceladas</div><div class="val {% if totais.canceladas %}red{% endif %}">{{ totais.canceladas }}</div></div>
 </div>
 
 {# =================== FILTROS (recolhido) =================== #}
