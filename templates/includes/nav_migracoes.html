@@ -91,6 +91,10 @@
   .nav-migracoes .nav-link:hover{ color:#1D63A5; background:#fff; }
   .nav-migracoes .nav-link.active{ background:#1D63A5; color:#fff; cursor:default;
     box-shadow:0 1px 2px rgba(16,24,40,.18); }
+  /* No celular aperta um tico: sao 7 abas — assim cabem em 2 linhas, nao 3. */
+  @media (max-width:575.98px){
+    .nav-migracoes .nav-link{ font-size:.82rem; padding:.38rem .6rem; }
+  }
 </style>
 
 {% if mig_titulo is defined %}

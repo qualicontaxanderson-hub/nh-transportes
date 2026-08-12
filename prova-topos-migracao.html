@@ -4,8 +4,12 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <style>
 *{box-sizing:border-box}
-body{margin:0;padding:16px;background:#eef2f7;color:#1f2937;
+html,body{max-width:100%;overflow-x:hidden}
+/* 430px = largura de um celular. Preso aqui pra a pagina ser lida do mesmo
+   jeito no desktop e na captura de tela. */
+body{margin:0 auto;padding:16px;max-width:430px;background:#eef2f7;color:#1f2937;
      font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+code{overflow-wrap:anywhere}
 h1{font-size:1.15rem;margin:0 0 .2rem;color:#07569C}
 .sub{color:#6b7280;font-size:.85rem;margin:0 0 1rem;line-height:1.5}
 .ver{border-radius:12px;padding:.8rem .9rem;margin-bottom:1.1rem;font-size:.88rem;line-height:1.5}
@@ -99,6 +103,10 @@ h1{font-size:1.15rem;margin:0 0 .2rem;color:#07569C}
   .nav-migracoes .nav-link:hover{ color:#1D63A5; background:#fff; }
   .nav-migracoes .nav-link.active{ background:#1D63A5; color:#fff; cursor:default;
     box-shadow:0 1px 2px rgba(16,24,40,.18); }
+  /* No celular aperta um tico: sao 7 abas — assim cabem em 2 linhas, nao 3. */
+  @media (max-width:575.98px){
+    .nav-migracoes .nav-link{ font-size:.82rem; padding:.38rem .6rem; }
+  }
 
 </style>
 <h1>Prova — topo padrão das telas de Migração</h1>

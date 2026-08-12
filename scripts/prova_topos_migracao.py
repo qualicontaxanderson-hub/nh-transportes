@@ -99,8 +99,12 @@ io.open(SAIDA, "w", encoding="utf-8").write("""<!doctype html>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <style>
 *{box-sizing:border-box}
-body{margin:0;padding:16px;background:#eef2f7;color:#1f2937;
+html,body{max-width:100%%;overflow-x:hidden}
+/* 430px = largura de um celular. Preso aqui pra a pagina ser lida do mesmo
+   jeito no desktop e na captura de tela. */
+body{margin:0 auto;padding:16px;max-width:430px;background:#eef2f7;color:#1f2937;
      font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+code{overflow-wrap:anywhere}
 h1{font-size:1.15rem;margin:0 0 .2rem;color:#07569C}
 .sub{color:#6b7280;font-size:.85rem;margin:0 0 1rem;line-height:1.5}
 .ver{border-radius:12px;padding:.8rem .9rem;margin-bottom:1.1rem;font-size:.88rem;line-height:1.5}
