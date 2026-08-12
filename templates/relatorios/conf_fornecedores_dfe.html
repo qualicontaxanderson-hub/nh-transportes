@@ -93,6 +93,15 @@
   #cfd .vazio{ text-align:center; color:var(--muted); padding:2.2rem 1rem; background:#fff;
     border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); }
   #cfd .vazio .bi{ font-size:1.6rem; display:block; margin-bottom:.4rem; opacity:.5; }
+  /* Aviso do corte: fica sempre visível, é a premissa do número */
+  #cfd .corte{ display:flex; gap:.6rem; align-items:flex-start; background:#fff;
+    border:1px solid var(--line-2); border-left:4px solid var(--blue);
+    border-radius:10px; padding:.6rem .75rem; margin-bottom:1rem;
+    font-size:11.5px; color:var(--muted); line-height:1.5; }
+  #cfd .corte .bi{ color:var(--blue); font-size:1rem; flex:0 0 auto; margin-top:.05rem; }
+  #cfd .corte b{ color:var(--ink); }
+  #cfd .corte__j{ display:block; margin-top:.25rem; }
+  #cfd .corte__erro{ display:block; margin-top:.25rem; color:var(--danger); font-weight:600; }
   #cfd .chev{ transition:transform .2s; }
   #cfd .forn.aberto .chev{ transform:rotate(180deg); }
 </style>
@@ -114,6 +123,32 @@
     <div class="flex-grow-1" style="min-width:0">
       <h4 class="mb-0 fw-bold">Fornecedores × Compras DFe</h4>
       <p class="mb-0 opacity-75 small">A dívida sai da nota que a SEFAZ entregou; o pagamento, do OFX que você concilia</p>
+    </div>
+  </div>
+
+  {# ---------- Corte: sem isto o saldo mente ---------- #}
+  {% set corte_br = corte[8:10] ~ '/' ~ corte[5:7] ~ '/' ~ corte[0:4] %}
+  <div class="corte">
+    <i class="bi bi-scissors"></i>
+    <div>
+      <b>Tudo aqui começa em {{ corte_br }}.</b>
+      A captura da SEFAZ só tem nota desta data em diante, e o OFX tem pagamento
+      de muito antes. Os <b>dois</b> lados são cortados na mesma data — se só o
+      pagamento antigo entrasse, todo fornecedor apareceria com um adiantamento
+      que não existe.
+      {% if janela and janela.primeira %}
+        <span class="corte__j">Notas capturadas: {{ janela.notas }}, de
+          {{ janela.primeira.strftime('%d/%m/%Y') }} a {{ janela.ultima.strftime('%d/%m/%Y') }}.</span>
+        {% if janela.primeira.strftime('%Y-%m-%d') > corte %}
+        <span class="corte__erro">A nota mais antiga é de
+          {{ janela.primeira.strftime('%d/%m/%Y') }} — depois do corte. Pagamento entre
+          {{ corte_br }} e essa data entra sem nota do outro lado e vira dívida falsa.</span>
+        {% endif %}
+      {% endif %}
+      {% if puxou_pro_corte %}
+        <span class="corte__erro">A data inicial que você pediu é anterior ao corte;
+          usei {{ corte_br }}.</span>
+      {% endif %}
     </div>
   </div>
 

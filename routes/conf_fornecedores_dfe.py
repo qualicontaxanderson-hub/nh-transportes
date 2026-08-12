@@ -57,10 +57,20 @@ _FILTRO_NOTA = """
         )
 """
 
+# ─── CORTE ────────────────────────────────────────────────────────────────────
+# A captura DFe só tem nota desta data em diante; o OFX tem pagamento de muito
+# antes. Sem corte, o saldo acumulado somaria meses de pagamento contra ZERO
+# nota e todo fornecedor apareceria com um adiantamento gigante e falso.
+# Os DOIS lados são cortados aqui — nota e pagamento — pra a conta fechar.
+# É o mesmo corte da tela "Pendente pra Descer" (estoque.DATA_CORTE_PENDENTE).
+# Ajuste aqui se a captura for reprocessada mais para trás.
+DATA_CORTE_DFE = '2026-08-01'
+
 
 def _periodo_padrao():
+    """Mês corrente — mas nunca começando antes do corte."""
     hoje = date.today()
-    return hoje.replace(day=1).isoformat(), hoje.isoformat()
+    return max(hoje.replace(day=1).isoformat(), DATA_CORTE_DFE), hoje.isoformat()
 
 
 def _ids(chave):
@@ -114,9 +124,9 @@ def _cnpjs_duplicados(conn):
 
 
 def _notas_anteriores(conn, data_ini, empresa_ids, fornecedor_ids):
-    """Soma das notas de cada fornecedor ANTES do período (saldo de trás)."""
-    where = [_FILTRO_NOTA, "d.dh_emissao < %s"]
-    params = [data_ini + " 00:00:00"]
+    """Notas entre o CORTE e o início do período (é o saldo de trás)."""
+    where = [_FILTRO_NOTA, "d.dh_emissao >= %s", "d.dh_emissao < %s"]
+    params = [DATA_CORTE_DFE + " 00:00:00", data_ini + " 00:00:00"]
     _em("d.cliente_id", empresa_ids, where, params)
     _em("f.id", fornecedor_ids, where, params)
 
@@ -135,8 +145,8 @@ def _notas_anteriores(conn, data_ini, empresa_ids, fornecedor_ids):
 
 def _pagamentos_anteriores(conn, data_ini, empresa_ids, fornecedor_ids):
     where = ["bt.tipo = 'DEBIT'", "bt.fornecedor_id IS NOT NULL",
-             "bt.data_transacao < %s"]
-    params = [data_ini]
+             "bt.data_transacao >= %s", "bt.data_transacao < %s"]
+    params = [DATA_CORTE_DFE, data_ini]
     _em("ba.cliente_id", empresa_ids, where, params)
     _em("bt.fornecedor_id", fornecedor_ids, where, params)
 
@@ -204,6 +214,22 @@ def _pagamentos_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids):
     rows = cur.fetchall()
     cur.close()
     return rows
+
+
+def _janela_captura(conn):
+    """Primeira e última nota que a captura DFe tem. Serve pra conferir se o
+    corte está no lugar certo — se a 1ª nota for depois do corte, o corte está
+    solto e vai deixar pagamento sem nota do outro lado."""
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT MIN(d.dh_emissao) AS primeira, MAX(d.dh_emissao) AS ultima,
+               COUNT(*) AS notas
+          FROM dfe_documentos d
+         WHERE d.tipo = 'NFe' AND d.situacao = 'autorizado'
+    """)
+    row = cur.fetchone() or {}
+    cur.close()
+    return row
 
 
 def _notas_sem_fornecedor(conn, data_ini, data_fim, empresa_ids):
@@ -344,11 +370,19 @@ def conf_fornecedores_dfe():
     empresa_ids = _ids('cliente_ids[]')
     fornecedor_ids = _ids('fornecedor_ids[]')
 
+    # Pedir data antes do corte não é erro do usuário — mas antes do corte só
+    # existe um dos lados (pagamento), então o começo é puxado pro corte e a
+    # tela diz que fez isso.
+    puxou_pro_corte = data_ini < DATA_CORTE_DFE
+    if puxou_pro_corte:
+        data_ini = DATA_CORTE_DFE
+
     conn = get_db_connection()
     try:
         empresas = _empresas(conn)
         fornecedores = _fornecedores(conn)
         duplicados = _cnpjs_duplicados(conn)
+        janela = _janela_captura(conn)
 
         notas_ant = _notas_anteriores(conn, data_ini, empresa_ids, fornecedor_ids)
         pagos_ant = _pagamentos_anteriores(conn, data_ini, empresa_ids, fornecedor_ids)
@@ -377,4 +411,5 @@ def conf_fornecedores_dfe():
         empresas=empresas, fornecedores=fornecedores,
         data_inicio=data_ini, data_fim=data_fim,
         cliente_ids=empresa_ids, fornecedor_ids=fornecedor_ids,
+        corte=DATA_CORTE_DFE, puxou_pro_corte=puxou_pro_corte, janela=janela,
     )

@@ -96,6 +96,15 @@
   #cfd .vazio{ text-align:center; color:var(--muted); padding:2.2rem 1rem; background:#fff;
     border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); }
   #cfd .vazio .bi{ font-size:1.6rem; display:block; margin-bottom:.4rem; opacity:.5; }
+  /* Aviso do corte: fica sempre visível, é a premissa do número */
+  #cfd .corte{ display:flex; gap:.6rem; align-items:flex-start; background:#fff;
+    border:1px solid var(--line-2); border-left:4px solid var(--blue);
+    border-radius:10px; padding:.6rem .75rem; margin-bottom:1rem;
+    font-size:11.5px; color:var(--muted); line-height:1.5; }
+  #cfd .corte .bi{ color:var(--blue); font-size:1rem; flex:0 0 auto; margin-top:.05rem; }
+  #cfd .corte b{ color:var(--ink); }
+  #cfd .corte__j{ display:block; margin-top:.25rem; }
+  #cfd .corte__erro{ display:block; margin-top:.25rem; color:var(--danger); font-weight:600; }
   #cfd .chev{ transition:transform .2s; }
   #cfd .forn.aberto .chev{ transform:rotate(180deg); }
 </style>
@@ -115,6 +124,25 @@
     <div class="flex-grow-1" style="min-width:0">
       <h4 class="mb-0 fw-bold">Fornecedores × Compras DFe</h4>
       <p class="mb-0 opacity-75 small">A dívida sai da nota que a SEFAZ entregou; o pagamento, do OFX que você concilia</p>
+    </div>
+  </div>
+
+  
+  
+  <div class="corte">
+    <i class="bi bi-scissors"></i>
+    <div>
+      <b>Tudo aqui começa em 01/08/2026.</b>
+      A captura da SEFAZ só tem nota desta data em diante, e o OFX tem pagamento
+      de muito antes. Os <b>dois</b> lados são cortados na mesma data — se só o
+      pagamento antigo entrasse, todo fornecedor apareceria com um adiantamento
+      que não existe.
+      
+        <span class="corte__j">Notas capturadas: 43, de
+          01/08/2026 a 11/08/2026.</span>
+        
+      
+      
     </div>
   </div>
 
@@ -183,11 +211,11 @@
   
   <div class="stats">
     <div class="stat"><div class="rot">Comprado (notas)</div>
-      <div class="val blue">R$ 77.502,00</div></div>
+      <div class="val blue">R$ 81.802,00</div></div>
     <div class="stat"><div class="rot">Pago (OFX)</div>
       <div class="val green">R$ 80.000,00</div></div>
     <div class="stat"><div class="rot">Saldo acumulado</div>
-      <div class="val green">R$ 4.198,00</div></div>
+      <div class="val red">R$ -1.802,00</div></div>
     <div class="stat"><div class="rot">Nota sem fornecedor</div>
       <div class="val amber">R$ 13.890,50</div></div>
   </div>
@@ -232,7 +260,7 @@
           <div class="forn__cnpj">CNPJ 11.111.111/0001-11</div>
         </div>
         <div class="selo selo--cred">
-          <div class="v">R$ 10.500,00</div>
+          <div class="v">R$ 2.500,00</div>
           <div class="r">adiantado
             <i class="bi bi-chevron-down chev"></i></div>
         </div>
@@ -246,9 +274,6 @@
       </div>
 
       <div class="forn__corpo" style="display:none">
-        
-        <div class="ant">Saldo anterior a 01/08/2026:
-          <b>R$ 8.000,00</b></div>
         
 
         
@@ -264,7 +289,7 @@
           </div>
           <div class="lin__m">TED TT WORK SERVICOS</div>
           <div class="lin__v">+R$ 50.000,00</div>
-          <div class="lin__s">saldo R$ 58.000,00</div>
+          <div class="lin__s">saldo R$ 50.000,00</div>
         </div>
         
         <div class="lin lin--nf">
@@ -277,7 +302,7 @@
           </div>
           <div class="lin__m">POSTO NOVO HORIZONTE GOIATUBA</div>
           <div class="lin__v">−R$ 50.000,00</div>
-          <div class="lin__s">saldo R$ 8.000,00</div>
+          <div class="lin__s">saldo R$ 0,00</div>
         </div>
         
         <div class="lin lin--pg">
@@ -290,7 +315,7 @@
           </div>
           <div class="lin__m">TED TT WORK SERVICOS</div>
           <div class="lin__v">+R$ 30.000,00</div>
-          <div class="lin__s">saldo R$ 38.000,00</div>
+          <div class="lin__s">saldo R$ 30.000,00</div>
         </div>
         
         <div class="lin lin--nf">
@@ -303,7 +328,51 @@
           </div>
           <div class="lin__m">POSTO NOVO HORIZONTE GOIATUBA</div>
           <div class="lin__v">−R$ 27.500,00</div>
-          <div class="lin__s">saldo R$ 10.500,00</div>
+          <div class="lin__s">saldo R$ 2.500,00</div>
+        </div>
+        
+      </div>
+    </div>
+    
+    
+    
+    <div class="forn" id="forn-21">
+      <div class="forn__head" onclick="cfdToggle(this)">
+        <div style="min-width:0">
+          <div class="forn__nome">AUTO POSTO IRMAOS SILVA LTDA</div>
+          <div class="forn__cnpj">CNPJ 09.222.333/0001-70</div>
+        </div>
+        <div class="selo selo--deve">
+          <div class="v">R$ -4.300,00</div>
+          <div class="r">a pagar
+            <i class="bi bi-chevron-down chev"></i></div>
+        </div>
+      </div>
+
+      <div class="forn__nums">
+        <span><span class="k">Comprado:</span> <b>R$ 4.300,00</b></span>
+        <span><span class="k">Pago:</span> <b>R$ 0,00</b></span>
+        <span><span class="k">Diferença no período:</span>
+          <b>R$ -4.300,00</b></span>
+      </div>
+
+      <div class="forn__corpo" style="display:none">
+        
+
+        
+
+        
+        <div class="lin lin--nf">
+          <span class="lin__ico">
+            <i class="bi bi-receipt"></i></span>
+          <div class="lin__t">
+            <span class="data">08/08</span>
+            NF-e nº 8812/1
+            
+          </div>
+          <div class="lin__m">NH TRANSPORTES</div>
+          <div class="lin__v">−R$ 4.300,00</div>
+          <div class="lin__s">saldo R$ -4.300,00</div>
         </div>
         
       </div>
@@ -349,42 +418,6 @@
           <div class="lin__v">−R$ 2,00</div>
           <div class="lin__s">saldo R$ -2,00</div>
         </div>
-        
-      </div>
-    </div>
-    
-    
-    
-    <div class="forn" id="forn-21">
-      <div class="forn__head" onclick="cfdToggle(this)">
-        <div style="min-width:0">
-          <div class="forn__nome">AUTO POSTO IRMAOS SILVA LTDA</div>
-          <div class="forn__cnpj">CNPJ 09.222.333/0001-70</div>
-        </div>
-        <div class="selo selo--deve">
-          <div class="v">R$ -4.300,00</div>
-          <div class="r">a pagar
-            <i class="bi bi-chevron-down chev"></i></div>
-        </div>
-      </div>
-
-      <div class="forn__nums">
-        <span><span class="k">Comprado:</span> <b>R$ 0,00</b></span>
-        <span><span class="k">Pago:</span> <b>R$ 0,00</b></span>
-        <span><span class="k">Diferença no período:</span>
-          <b>R$ 0,00</b></span>
-      </div>
-
-      <div class="forn__corpo" style="display:none">
-        
-        <div class="ant">Saldo anterior a 01/08/2026:
-          <b>R$ -4.300,00</b></div>
-        
-
-        
-          <div class="ant">Sem nota e sem pagamento no período — só o saldo de trás.</div>
-        
-
         
       </div>
     </div>
