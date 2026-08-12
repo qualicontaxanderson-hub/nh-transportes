@@ -86,6 +86,19 @@
   /* Nota conferida esmaece: o que sobra colorido é o que ainda falta olhar. */
   #cfd .lin--ok{ background:#fbfdf9; }
   #cfd .lin--ok .lin__t,#cfd .lin--ok .lin__v{ opacity:.6; }
+  /* Pagamento anterior ao corte: informa, não entra na conta. Âmbar de
+     propósito — é "olhe isto", não é erro nem acerto. */
+  #cfd .antes{ margin:.4rem .8rem .6rem; border:1px solid #f0dcae; background:#fffaf0;
+    border-radius:10px; overflow:hidden; }
+  #cfd .antes__h{ padding:.45rem .65rem; font-size:11.5px; font-weight:700; color:var(--pend);
+    background:var(--pend-bg); }
+  #cfd .antes__p{ padding:.45rem .65rem; font-size:11px; color:var(--muted); line-height:1.5; }
+  #cfd .antes__p b{ color:var(--ink); }
+  #cfd .antes__l{ display:flex; align-items:baseline; gap:.5rem; padding:.3rem .65rem;
+    border-top:1px dashed #f0dcae; font-size:11.5px; }
+  #cfd .antes__l .d{ flex:1; min-width:0; color:var(--muted);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #cfd .antes__l .v{ font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
   /* Contador de conferência no cabeçalho do fornecedor */
   #cfd .conf-cnt{ font-size:10px; font-weight:700; border-radius:999px;
     padding:.08rem .45rem; background:var(--pend-bg); color:var(--pend); white-space:nowrap; }
@@ -159,6 +172,9 @@
           01/08/2026 a 11/08/2026.</span>
         
       
+      <span class="corte__j">Fornecedor que aparecer devendo mas tiver pagamento
+        logo antes de 01/08/2026 ganha um aviso dentro do card — é o caso do
+        pagamento antigo que quitou nota nova.</span>
       
     </div>
   </div>
@@ -229,17 +245,17 @@
   
   <div class="stats">
     <div class="stat"><div class="rot">Comprado (notas)</div>
-      <div class="val blue">R$ 81.802,00</div></div>
+      <div class="val blue">R$ 109.132,00</div></div>
     <div class="stat"><div class="rot">Pago (OFX)</div>
-      <div class="val green">R$ 80.000,00</div></div>
+      <div class="val green">R$ 88.430,00</div></div>
     <div class="stat"><div class="rot">Saldo acumulado</div>
-      <div class="val red">R$ -1.802,00</div></div>
+      <div class="val red">R$ -20.702,00</div></div>
     <div class="stat"><div class="rot">Nota sem fornecedor</div>
       <div class="val amber">R$ 13.890,50</div></div>
     <div class="stat"><div class="rot">Compras conferidas</div>
       <div class="val amber"
-           id="conf-geral" data-tot="4">
-        1/4</div></div>
+           id="conf-geral" data-tot="6">
+        4/6</div></div>
   </div>
 
   <p class="small text-muted">
@@ -294,6 +310,7 @@
         <span><span class="k">Diferença no período:</span>
           <b>R$ 2.500,00</b></span>
         
+        
         <span class="conf-cnt"
               data-forn="7" data-tot="2">
           <i class="bi bi-check2-square"></i>
@@ -305,6 +322,9 @@
       <div class="forn__corpo" style="display:none">
         
 
+        
+
+        
         
 
         
@@ -387,29 +407,33 @@
     
     
     
-    <div class="forn" id="forn-21">
+    <div class="forn" id="forn-5">
       <div class="forn__head" onclick="cfdToggle(this)">
         <div style="min-width:0">
-          <div class="forn__nome">AUTO POSTO IRMAOS SILVA LTDA</div>
-          <div class="forn__cnpj">CNPJ 09.222.333/0001-70</div>
+          <div class="forn__nome">DISTRIBUIDORA TABOCAO LTDA - EM RECUPERACAO JUDICIAL</div>
+          <div class="forn__cnpj">CNPJ 02.284.585/0001-44</div>
         </div>
         <div class="selo selo--deve">
-          <div class="v">R$ -4.300,00</div>
+          <div class="v">R$ -23.200,00</div>
           <div class="r">a pagar
             <i class="bi bi-chevron-down chev"></i></div>
         </div>
       </div>
 
       <div class="forn__nums">
-        <span><span class="k">Comprado:</span> <b>R$ 4.300,00</b></span>
-        <span><span class="k">Pago:</span> <b>R$ 0,00</b></span>
+        <span><span class="k">Comprado:</span> <b>R$ 31.630,00</b></span>
+        <span><span class="k">Pago:</span> <b>R$ 8.430,00</b></span>
         <span><span class="k">Diferença no período:</span>
-          <b>R$ -4.300,00</b></span>
+          <b>R$ -23.200,00</b></span>
         
-        <span class="conf-cnt"
-              data-forn="21" data-tot="1">
+        <span class="conf-cnt" title="há pagamento anterior ao corte que pode ser destas notas">
+          <i class="bi bi-clock-history"></i> talvez pago antes do corte</span>
+        
+        
+        <span class="conf-cnt conf-cnt--ok"
+              data-forn="5" data-tot="3">
           <i class="bi bi-check2-square"></i>
-          <span class="n">0</span>/1 conferida
+          <span class="n">3</span>/3 conferidas
         </span>
         
       </div>
@@ -420,24 +444,111 @@
         
 
         
-        <div class="lin lin--nf"
+        
+        <div class="antes">
+          <div class="antes__h"><i class="bi bi-clock-history"></i>
+            2 pagamentos
+            antes do corte, somando <b>R$ 23.200,00</b></div>
+          <div class="antes__p">
+            Estes <b>não entram</b> no saldo — são anteriores a 01/08/2026 e a captura
+            não tem as notas da época pra confrontar. Mas a compra costuma ser paga antes da
+            nota sair, então talvez sejam destas notas. Se forem todos,
+            o saldo real seria <b>R$ 0,00</b>.
+          </div>
+          
+          <div class="antes__l">
+            <span class="data">30/07/2026</span>
+            <span class="d">PIX DISTRIBUIDORA TABOCAO</span>
+            <span class="v">R$ 8.700,00</span>
+          </div>
+          
+          <div class="antes__l">
+            <span class="data">28/07/2026</span>
+            <span class="d">PIX DISTRIBUIDORA TABOCAO</span>
+            <span class="v">R$ 14.500,00</span>
+          </div>
+          
+        </div>
+        
+
+        
+        <div class="lin lin--nf lin--ok"
              id="doc-5">
           <span class="lin__ico">
             <i class="bi bi-receipt"></i></span>
           <div class="lin__t">
-            <span class="data">08/08</span>
-            NF-e nº 8812/1
+            <span class="data">01/08</span>
+            NF-e nº 838/2
             
           </div>
-          <div class="lin__m">NH TRANSPORTES</div>
-          <div class="lin__v">−R$ 4.300,00</div>
-          <div class="lin__s">saldo R$ -4.300,00</div>
+          <div class="lin__m">POSTO NOVO HORIZONTE GOIATUBA</div>
+          <div class="lin__v">−R$ 8.700,00</div>
+          <div class="lin__s">saldo R$ -8.700,00</div>
           
-          <button type="button" class="ok-btn"
+          <button type="button" class="ok-btn ok-btn--on"
                   onclick="cfdConferir(this, 5)"
                   title="visto de quem conferiu esta compra">
-            <i class="bi bi-circle"></i>
-            <span class="t">dar OK</span>
+            <i class="bi bi-check-circle-fill"></i>
+            <span class="t">conferida</span>
+          </button>
+          
+        </div>
+        
+        <div class="lin lin--nf lin--ok"
+             id="doc-6">
+          <span class="lin__ico">
+            <i class="bi bi-receipt"></i></span>
+          <div class="lin__t">
+            <span class="data">01/08</span>
+            NF-e nº 847/2
+            
+          </div>
+          <div class="lin__m">POSTO NOVO HORIZONTE GOIATUBA</div>
+          <div class="lin__v">−R$ 14.500,00</div>
+          <div class="lin__s">saldo R$ -23.200,00</div>
+          
+          <button type="button" class="ok-btn ok-btn--on"
+                  onclick="cfdConferir(this, 6)"
+                  title="visto de quem conferiu esta compra">
+            <i class="bi bi-check-circle-fill"></i>
+            <span class="t">conferida</span>
+          </button>
+          
+        </div>
+        
+        <div class="lin lin--pg"
+             >
+          <span class="lin__ico">
+            <i class="bi bi-cash-coin"></i></span>
+          <div class="lin__t">
+            <span class="data">10/08</span>
+            Pagamento
+            
+          </div>
+          <div class="lin__m">Pagamento Pix 02.284.585 0001-44</div>
+          <div class="lin__v">+R$ 8.430,00</div>
+          <div class="lin__s">saldo R$ -14.770,00</div>
+          
+        </div>
+        
+        <div class="lin lin--nf lin--ok"
+             id="doc-8">
+          <span class="lin__ico">
+            <i class="bi bi-receipt"></i></span>
+          <div class="lin__t">
+            <span class="data">10/08</span>
+            NF-e nº 1047/2
+            
+          </div>
+          <div class="lin__m">POSTO NOVO HORIZONTE GOIATUBA</div>
+          <div class="lin__v">−R$ 8.430,00</div>
+          <div class="lin__s">saldo R$ -23.200,00</div>
+          
+          <button type="button" class="ok-btn ok-btn--on"
+                  onclick="cfdConferir(this, 8)"
+                  title="visto de quem conferiu esta compra">
+            <i class="bi bi-check-circle-fill"></i>
+            <span class="t">conferida</span>
           </button>
           
         </div>
@@ -466,6 +577,7 @@
         <span><span class="k">Diferença no período:</span>
           <b>R$ -2,00</b></span>
         
+        
         <span class="conf-cnt"
               data-forn="12" data-tot="1">
           <i class="bi bi-check2-square"></i>
@@ -480,8 +592,11 @@
         
 
         
+        
+
+        
         <div class="lin lin--nf"
-             id="doc-6">
+             id="doc-9">
           <span class="lin__ico">
             <i class="bi bi-receipt"></i></span>
           <div class="lin__t">
@@ -494,7 +609,7 @@
           <div class="lin__s">saldo R$ -2,00</div>
           
           <button type="button" class="ok-btn"
-                  onclick="cfdConferir(this, 6)"
+                  onclick="cfdConferir(this, 9)"
                   title="visto de quem conferiu esta compra">
             <i class="bi bi-circle"></i>
             <span class="t">dar OK</span>
@@ -595,6 +710,6 @@ document.querySelectorAll('#cfd .periodo-btn').forEach(function (b) {
 </script>
 <script>
   /* So no preview: abre o 1o fornecedor pra a linha do tempo aparecer na foto. */
-  var _p = document.querySelector('#cfd .forn');
+  var _p = document.querySelectorAll('#cfd .forn')[1];
   if (_p) { _p.querySelector('.forn__corpo').style.display = 'block'; _p.classList.add('aberto'); }
 </script>

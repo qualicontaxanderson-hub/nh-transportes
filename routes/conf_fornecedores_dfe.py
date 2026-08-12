@@ -21,7 +21,7 @@ Rota:
   GET /relatorios/conf_fornecedores_dfe
 """
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from flask import Blueprint, jsonify, render_template, request
 from flask_login import login_required
@@ -65,6 +65,13 @@ _FILTRO_NOTA = """
 # É o mesmo corte da tela "Pendente pra Descer" (estoque.DATA_CORTE_PENDENTE).
 # Ajuste aqui se a captura for reprocessada mais para trás.
 DATA_CORTE_DFE = '2026-08-01'
+
+# Quantos dias ANTES do corte olhar em busca de pagamento que provavelmente
+# cobre nota de depois do corte (a casa paga e a nota sai dias à frente).
+# Esses pagamentos NÃO entram no saldo — entrariam sem a nota correspondente
+# do outro lado e o erro só inverteria de sinal. Aparecem como aviso no card
+# do fornecedor, pra quem confere bater no olho e decidir.
+JANELA_ANTES_CORTE = 60
 
 
 def _periodo_padrao():
@@ -220,6 +227,44 @@ def _pagamentos_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids):
     return rows
 
 
+def _pagamentos_antes_do_corte(conn, empresa_ids, fornecedor_ids):
+    """Pagamentos na janela imediatamente ANTES do corte, por fornecedor.
+
+    Não entram no saldo — só respondem a pergunta que sempre aparece: "esse
+    fornecedor está devendo ou já pagamos isso no mês passado?".
+    """
+    inicio = (date.fromisoformat(DATA_CORTE_DFE)
+              - timedelta(days=JANELA_ANTES_CORTE)).isoformat()
+    where = ["bt.tipo = 'DEBIT'", "bt.fornecedor_id IS NOT NULL",
+             "bt.data_transacao >= %s", "bt.data_transacao < %s"]
+    params = [inicio, DATA_CORTE_DFE]
+    _em("ba.cliente_id", empresa_ids, where, params)
+    _em("bt.fornecedor_id", fornecedor_ids, where, params)
+
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT bt.fornecedor_id, bt.data_transacao, bt.descricao,
+               COALESCE(bt.valor,0) AS valor
+          FROM bank_transactions bt
+          JOIN bank_accounts ba ON ba.id = bt.account_id
+         WHERE %s
+         ORDER BY bt.data_transacao DESC, bt.id DESC
+    """ % " AND ".join(where), params)
+    rows = cur.fetchall()
+    cur.close()
+
+    por_forn = defaultdict(lambda: {'total': 0.0, 'lancamentos': []})
+    for r in rows:
+        alvo = por_forn[r['fornecedor_id']]
+        alvo['total'] += float(r['valor'] or 0)
+        alvo['lancamentos'].append({
+            'data': _dia(r['data_transacao']),
+            'valor': float(r['valor'] or 0),
+            'descricao': (r['descricao'] or '')[:60],
+        })
+    return dict(por_forn), inicio
+
+
 def _janela_captura(conn):
     """Primeira e última nota que a captura DFe tem. Serve pra conferir se o
     corte está no lugar certo — se a 1ª nota for depois do corte, o corte está
@@ -279,7 +324,7 @@ def _dia(v):
     return date.min
 
 
-def _monta(notas, pagamentos, notas_ant, pagos_ant):
+def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None):
     """Uma linha do tempo por fornecedor, com saldo corrente.
 
     Ordem: por data; empatou, pagamento antes da nota — é a sequência real
@@ -348,6 +393,13 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant):
             continue                      # zerado e parado: não polui a tela
 
         notas_lin = [l for l in linhas if l['tipo'] == 'nota']
+
+        # Pagamento de antes do corte só interessa quando o fornecedor aparece
+        # DEVENDO: é a suspeita de "isso já foi pago no mês passado".
+        antes = (pre_corte or {}).get(fid)
+        if antes and saldo >= -0.005:
+            antes = None
+
         saida.append({
             'fornecedor_id': fid,
             'nome': f['nome'] or '(fornecedor %s)' % fid,
@@ -359,6 +411,10 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant):
             'linhas': linhas,
             'notas_total': len(notas_lin),
             'notas_ok': sum(1 for l in notas_lin if l['conferido']),
+            'antes': antes,
+            # Quanto sobraria da dívida se esses pagamentos de antes do corte
+            # forem mesmo destas notas. Só uma hipótese — o saldo não muda.
+            'saldo_com_antes': (saldo + antes['total']) if antes else None,
         })
 
     # Quem tem a maior diferença primeiro — é o que precisa de olho.
@@ -398,10 +454,12 @@ def conf_fornecedores_dfe():
         notas = _notas_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids)
         pagamentos = _pagamentos_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids)
         orfas = _notas_sem_fornecedor(conn, data_ini, data_fim, empresa_ids)
+        pre_corte, pre_corte_ini = _pagamentos_antes_do_corte(
+            conn, empresa_ids, fornecedor_ids)
     finally:
         conn.close()
 
-    dados = _monta(notas, pagamentos, notas_ant, pagos_ant)
+    dados = _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte)
 
     totais = {
         'comprado': sum(d['comprado'] for d in dados),
@@ -423,6 +481,7 @@ def conf_fornecedores_dfe():
         data_inicio=data_ini, data_fim=data_fim,
         cliente_ids=empresa_ids, fornecedor_ids=fornecedor_ids,
         corte=DATA_CORTE_DFE, puxou_pro_corte=puxou_pro_corte, janela=janela,
+        pre_corte_ini=pre_corte_ini,
     )
 
 

@@ -83,6 +83,19 @@
   /* Nota conferida esmaece: o que sobra colorido é o que ainda falta olhar. */
   #cfd .lin--ok{ background:#fbfdf9; }
   #cfd .lin--ok .lin__t,#cfd .lin--ok .lin__v{ opacity:.6; }
+  /* Pagamento anterior ao corte: informa, não entra na conta. Âmbar de
+     propósito — é "olhe isto", não é erro nem acerto. */
+  #cfd .antes{ margin:.4rem .8rem .6rem; border:1px solid #f0dcae; background:#fffaf0;
+    border-radius:10px; overflow:hidden; }
+  #cfd .antes__h{ padding:.45rem .65rem; font-size:11.5px; font-weight:700; color:var(--pend);
+    background:var(--pend-bg); }
+  #cfd .antes__p{ padding:.45rem .65rem; font-size:11px; color:var(--muted); line-height:1.5; }
+  #cfd .antes__p b{ color:var(--ink); }
+  #cfd .antes__l{ display:flex; align-items:baseline; gap:.5rem; padding:.3rem .65rem;
+    border-top:1px dashed #f0dcae; font-size:11.5px; }
+  #cfd .antes__l .d{ flex:1; min-width:0; color:var(--muted);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #cfd .antes__l .v{ font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
   /* Contador de conferência no cabeçalho do fornecedor */
   #cfd .conf-cnt{ font-size:10px; font-weight:700; border-radius:999px;
     padding:.08rem .45rem; background:var(--pend-bg); color:var(--pend); white-space:nowrap; }
@@ -162,6 +175,9 @@
           {{ corte_br }} e essa data entra sem nota do outro lado e vira dívida falsa.</span>
         {% endif %}
       {% endif %}
+      <span class="corte__j">Fornecedor que aparecer devendo mas tiver pagamento
+        logo antes de {{ corte_br }} ganha um aviso dentro do card — é o caso do
+        pagamento antigo que quitou nota nova.</span>
       {% if puxou_pro_corte %}
         <span class="corte__erro">A data inicial que você pediu é anterior ao corte;
           usei {{ corte_br }}.</span>
@@ -306,6 +322,10 @@
         <span><span class="k">Pago:</span> <b>{{ d.pago | formatar_moeda }}</b></span>
         <span><span class="k">Diferença no período:</span>
           <b>{{ (d.pago - d.comprado) | formatar_moeda }}</b></span>
+        {% if d.antes %}
+        <span class="conf-cnt" title="há pagamento anterior ao corte que pode ser destas notas">
+          <i class="bi bi-clock-history"></i> talvez pago antes do corte</span>
+        {% endif %}
         {% if d.notas_total %}
         <span class="conf-cnt{{ ' conf-cnt--ok' if d.notas_ok == d.notas_total }}"
               data-forn="{{ d.fornecedor_id }}" data-tot="{{ d.notas_total }}">
@@ -323,6 +343,29 @@
 
         {% if not d.linhas %}
           <div class="ant">Sem nota e sem pagamento no período — só o saldo de trás.</div>
+        {% endif %}
+
+        {# Aparece só em fornecedor DEVENDO que tem pagamento antes do corte:
+           é a suspeita de "isso já foi pago antes da captura começar". #}
+        {% if d.antes %}
+        <div class="antes">
+          <div class="antes__h"><i class="bi bi-clock-history"></i>
+            {{ d.antes.lancamentos|length }} pagamento{{ '' if d.antes.lancamentos|length == 1 else 's' }}
+            antes do corte, somando <b>{{ d.antes.total | formatar_moeda }}</b></div>
+          <div class="antes__p">
+            Estes <b>não entram</b> no saldo — são anteriores a {{ corte_br }} e a captura
+            não tem as notas da época pra confrontar. Mas a compra costuma ser paga antes da
+            nota sair, então talvez sejam destas notas. Se forem todos,
+            o saldo real seria <b>{{ d.saldo_com_antes | formatar_moeda }}</b>.
+          </div>
+          {% for p in d.antes.lancamentos %}
+          <div class="antes__l">
+            <span class="data">{{ p.data.strftime('%d/%m/%Y') }}</span>
+            <span class="d">{{ p.descricao or '—' }}</span>
+            <span class="v">{{ p.valor | formatar_moeda }}</span>
+          </div>
+          {% endfor %}
+        </div>
         {% endif %}
 
         {% for l in d.linhas %}
