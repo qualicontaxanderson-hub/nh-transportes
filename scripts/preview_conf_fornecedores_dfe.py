@@ -27,9 +27,14 @@ def bloco(src, nome):
 
 
 # ---------- dados de exemplo (o caso que o Anderson descreveu) ----------
-def linha(tipo, dia, rotulo, detalhe, valor, saldo, resumo=False):
+_SEQ = [0]
+
+
+def linha(tipo, dia, rotulo, detalhe, valor, saldo, resumo=False, conferido=False):
+    _SEQ[0] += 1
     return dict(tipo=tipo, data=date(2026, 8, dia), rotulo=rotulo, detalhe=detalhe,
-                valor=valor, saldo=saldo, resumo=resumo)
+                valor=valor, saldo=saldo, resumo=resumo, id=_SEQ[0],
+                conferido=(conferido if tipo == 'nota' else None))
 
 
 # O periodo do exemplo comeca no proprio corte, entao ninguem tem saldo
@@ -37,26 +42,27 @@ def linha(tipo, dia, rotulo, detalhe, valor, saldo, resumo=False):
 DADOS = [
     dict(fornecedor_id=7, nome="TDC DISTRIBUIDORA DE COMBUSTIVEIS LTDA",
          cnpj="11.111.111/0001-11", saldo_anterior=0.0,
-         comprado=77500.0, pago=80000.0, saldo_final=2500.0,
+         comprado=77500.0, pago=80000.0, saldo_final=2500.0, notas_total=2, notas_ok=1,
          linhas=[
              linha("pagamento", 3, "Pagamento", "TED TT WORK SERVICOS", 50000, 50000),
-             linha("nota", 3, "NF-e nº 1047/1", "POSTO NOVO HORIZONTE GOIATUBA", 50000, 0),
+             linha("nota", 3, "NF-e nº 1047/1", "POSTO NOVO HORIZONTE GOIATUBA", 50000, 0, conferido=True),
              linha("pagamento", 10, "Pagamento", "TED TT WORK SERVICOS", 30000, 30000),
              linha("nota", 12, "NF-e nº 1090/1", "POSTO NOVO HORIZONTE GOIATUBA", 27500, 2500, True),
          ]),
     dict(fornecedor_id=21, nome="AUTO POSTO IRMAOS SILVA LTDA",
          cnpj="09.222.333/0001-70", saldo_anterior=0.0,
-         comprado=4300.0, pago=0.0, saldo_final=-4300.0,
+         comprado=4300.0, pago=0.0, saldo_final=-4300.0, notas_total=1, notas_ok=0,
          linhas=[linha("nota", 8, "NF-e nº 8812/1", "NH TRANSPORTES", 4300, -4300)]),
     dict(fornecedor_id=12, nome="ZILLI COMERCIO DE PNEUS LTDA",
          cnpj="18.910.548/0001-34", saldo_anterior=0.0,
-         comprado=2.0, pago=0.0, saldo_final=-2.0,
+         comprado=2.0, pago=0.0, saldo_final=-2.0, notas_total=1, notas_ok=0,
          linhas=[linha("nota", 11, "NF-e nº 215772/1", "POSTO NOVO HORIZONTE GOIATUBA", 2, -2)]),
 ]
 
 CTX = dict(
     dados=DADOS,
-    totais=dict(comprado=81802.0, pago=80000.0, saldo=-1802.0, orfas=13890.5),
+    totais=dict(comprado=81802.0, pago=80000.0, saldo=-1802.0, orfas=13890.5,
+                notas=4, notas_ok=1),
     orfas=[dict(emit_cnpj="44248274000114", emit_nome="DISTRIBUIDORA EXEMPLO S/A",
                 notas=2, total=13890.5, ultima=datetime(2026, 8, 11, 9, 2))],
     duplicados=[],

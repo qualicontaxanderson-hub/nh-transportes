@@ -23,7 +23,7 @@ Rota:
 from collections import defaultdict
 from datetime import date, datetime
 
-from flask import Blueprint, render_template, request
+from flask import Blueprint, jsonify, render_template, request
 from flask_login import login_required
 
 from routes.auth import admin_required
@@ -68,9 +68,13 @@ DATA_CORTE_DFE = '2026-08-01'
 
 
 def _periodo_padrao():
-    """Mês corrente — mas nunca começando antes do corte."""
-    hoje = date.today()
-    return max(hoje.replace(day=1).isoformat(), DATA_CORTE_DFE), hoje.isoformat()
+    """Do corte até hoje — "de agosto em diante".
+
+    Não é o mês corrente de propósito: como se paga antes da nota sair, fechar
+    no dia 1º cortaria o pagamento de um lado e a nota do outro. Enquanto a
+    captura for curta, ver tudo de uma vez é o que dá o controle real.
+    """
+    return DATA_CORTE_DFE, date.today().isoformat()
 
 
 def _ids(chave):
@@ -177,7 +181,7 @@ def _notas_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids):
                d.id                                       AS doc_id,
                d.chave, d.numero, d.serie, d.dh_emissao,
                COALESCE(d.valor_total,0)                  AS valor,
-               d.resumo,
+               d.resumo, d.conferido,
                COALESCE(emp.nome_fantasia, emp.razao_social) AS empresa_nome
           FROM dfe_documentos d
           JOIN fornecedores f ON %s = %s
@@ -297,6 +301,7 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant):
                                         ('/%s' % n['serie']) if n['serie'] else ''),
             'detalhe': n['empresa_nome'] or '',
             'resumo': bool(n['resumo']),
+            'conferido': bool(n['conferido']),
             'chave': n['chave'],
         })
 
@@ -313,6 +318,7 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant):
             'rotulo': 'Pagamento',
             'detalhe': (p['descricao'] or '')[:60],
             'resumo': False,
+            'conferido': None,          # o OK é da nota; pagamento não tem
             'chave': None,
         })
 
@@ -341,6 +347,7 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant):
         if not linhas and abs(saldo_anterior) < 0.005:
             continue                      # zerado e parado: não polui a tela
 
+        notas_lin = [l for l in linhas if l['tipo'] == 'nota']
         saida.append({
             'fornecedor_id': fid,
             'nome': f['nome'] or '(fornecedor %s)' % fid,
@@ -350,6 +357,8 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant):
             'pago': pago,
             'saldo_final': saldo,
             'linhas': linhas,
+            'notas_total': len(notas_lin),
+            'notas_ok': sum(1 for l in notas_lin if l['conferido']),
         })
 
     # Quem tem a maior diferença primeiro — é o que precisa de olho.
@@ -399,6 +408,8 @@ def conf_fornecedores_dfe():
         'pago':     sum(d['pago'] for d in dados),
         'saldo':    sum(d['saldo_final'] for d in dados),
         'orfas':    sum(float(o['total'] or 0) for o in orfas),
+        'notas':    sum(d['notas_total'] for d in dados),
+        'notas_ok': sum(d['notas_ok'] for d in dados),
     }
 
     # Sem CNPJ no cadastro o fornecedor nunca casa com nota nenhuma.
@@ -413,3 +424,35 @@ def conf_fornecedores_dfe():
         cliente_ids=empresa_ids, fornecedor_ids=fornecedor_ids,
         corte=DATA_CORTE_DFE, puxou_pro_corte=puxou_pro_corte, janela=janela,
     )
+
+
+@bp.route('/conf_fornecedores_dfe/conferir', methods=['POST'])
+@login_required
+@admin_required
+def conferir():
+    """Marca/desmarca o "OK" de UMA nota (dfe_documentos.conferido).
+
+    A coluna já existia na tabela desde a criação e estava sem uso — nada de
+    migração. É só o visto de quem olhou a compra; não altera valor nem saldo.
+    """
+    dados = request.get_json(silent=True) or {}
+    try:
+        doc_id = int(dados.get('doc_id'))
+    except (TypeError, ValueError):
+        return jsonify(ok=False, erro='documento inválido'), 400
+    marcar = 1 if dados.get('ok') else 0
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE dfe_documentos SET conferido = %s WHERE id = %s",
+                    (marcar, doc_id))
+        if cur.rowcount == 0:
+            cur.close()
+            return jsonify(ok=False, erro='nota não encontrada'), 404
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+    return jsonify(ok=True, conferido=bool(marcar))

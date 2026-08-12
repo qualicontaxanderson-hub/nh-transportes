@@ -70,6 +70,23 @@
     color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
   #cfd .data{ font-variant-numeric:tabular-nums; color:var(--muted); font-weight:600;
     font-size:11.5px; }
+
+  /* "OK" da compra: linha 3 da grade, encostado à direita. Alvo de toque
+     grande — no celular isso é marcado com o polegar, nota a nota. */
+  #cfd .ok-btn{ grid-column:2 / span 2; grid-row:3; justify-self:end; margin-top:.3rem;
+    display:inline-flex; align-items:center; gap:.35rem; cursor:pointer;
+    border:1px solid var(--line-2); background:#fff; color:var(--muted);
+    border-radius:8px; padding:.3rem .6rem; font-size:11.5px; font-weight:700; }
+  #cfd .ok-btn:hover{ border-color:var(--ok); color:var(--ok); }
+  #cfd .ok-btn--on{ background:var(--ok-bg); border-color:#bcd6a2; color:var(--ok); }
+  #cfd .ok-btn:disabled{ opacity:.5; cursor:wait; }
+  /* Nota conferida esmaece: o que sobra colorido é o que ainda falta olhar. */
+  #cfd .lin--ok{ background:#fbfdf9; }
+  #cfd .lin--ok .lin__t,#cfd .lin--ok .lin__v{ opacity:.6; }
+  /* Contador de conferência no cabeçalho do fornecedor */
+  #cfd .conf-cnt{ font-size:10px; font-weight:700; border-radius:999px;
+    padding:.08rem .45rem; background:var(--pend-bg); color:var(--pend); white-space:nowrap; }
+  #cfd .conf-cnt--ok{ background:var(--ok-bg); color:var(--ok); }
   #cfd .tag{ font-size:10px; font-weight:700; border-radius:5px; padding:.05rem .35rem;
     background:var(--pend-bg); color:var(--pend); }
   #cfd .ant{ padding:.45rem .8rem; font-size:11.5px; color:var(--muted);
@@ -210,9 +227,10 @@
         </div>
         <div class="mt-2 d-flex gap-1 flex-wrap">
           <span class="text-muted small me-1 align-self-center">Período:</span>
+          <button type="button" class="btn btn-outline-primary btn-sm periodo-btn" data-p="corte"
+                  data-corte="{{ corte }}">Tudo desde {{ corte_br }}</button>
           <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-p="mes">Mês atual</button>
           <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-p="ant">Mês anterior</button>
-          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-p="ano">Ano atual</button>
         </div>
       </form>
     </div>
@@ -228,6 +246,10 @@
       <div class="val {{ 'green' if totais.saldo >= 0 else 'red' }}">{{ totais.saldo | formatar_moeda }}</div></div>
     <div class="stat"><div class="rot">Nota sem fornecedor</div>
       <div class="val {{ 'amber' if totais.orfas else '' }}">{{ totais.orfas | formatar_moeda }}</div></div>
+    <div class="stat"><div class="rot">Compras conferidas</div>
+      <div class="val {{ 'green' if totais.notas and totais.notas_ok == totais.notas else 'amber' }}"
+           id="conf-geral" data-tot="{{ totais.notas }}">
+        {{ totais.notas_ok }}/{{ totais.notas }}</div></div>
   </div>
 
   <p class="small text-muted">
@@ -284,6 +306,13 @@
         <span><span class="k">Pago:</span> <b>{{ d.pago | formatar_moeda }}</b></span>
         <span><span class="k">Diferença no período:</span>
           <b>{{ (d.pago - d.comprado) | formatar_moeda }}</b></span>
+        {% if d.notas_total %}
+        <span class="conf-cnt{{ ' conf-cnt--ok' if d.notas_ok == d.notas_total }}"
+              data-forn="{{ d.fornecedor_id }}" data-tot="{{ d.notas_total }}">
+          <i class="bi bi-check2-square"></i>
+          <span class="n">{{ d.notas_ok }}</span>/{{ d.notas_total }} conferida{{ '' if d.notas_total == 1 else 's' }}
+        </span>
+        {% endif %}
       </div>
 
       <div class="forn__corpo" style="display:none">
@@ -297,7 +326,8 @@
         {% endif %}
 
         {% for l in d.linhas %}
-        <div class="lin lin--{{ 'pg' if l.tipo == 'pagamento' else 'nf' }}">
+        <div class="lin lin--{{ 'pg' if l.tipo == 'pagamento' else 'nf' }}{{ ' lin--ok' if l.conferido }}"
+             {% if l.tipo == 'nota' %}id="doc-{{ l.id }}"{% endif %}>
           <span class="lin__ico">
             <i class="bi {{ 'bi-cash-coin' if l.tipo == 'pagamento' else 'bi-receipt' }}"></i></span>
           <div class="lin__t">
@@ -308,6 +338,14 @@
           <div class="lin__m">{{ l.detalhe or '—' }}</div>
           <div class="lin__v">{{ '+' if l.tipo == 'pagamento' else '−' }}{{ l.valor | formatar_moeda }}</div>
           <div class="lin__s">saldo {{ l.saldo | formatar_moeda }}</div>
+          {% if l.tipo == 'nota' %}
+          <button type="button" class="ok-btn{{ ' ok-btn--on' if l.conferido }}"
+                  onclick="cfdConferir(this, {{ l.id }})"
+                  title="visto de quem conferiu esta compra">
+            <i class="bi {{ 'bi-check-circle-fill' if l.conferido else 'bi-circle' }}"></i>
+            <span class="t">{{ 'conferida' if l.conferido else 'dar OK' }}</span>
+          </button>
+          {% endif %}
         </div>
         {% endfor %}
       </div>
@@ -327,25 +365,74 @@ function cfdToggle(el) {
   card.classList.toggle('aberto', !aberto);
 }
 
+// "OK" da compra: grava na hora e ajusta o contador do fornecedor, sem
+// recarregar — quem está conferindo nota a nota não pode perder a posição da
+// lista a cada clique. O base.html injeta o X-CSRFToken no fetch.
+function cfdConferir(btn, docId) {
+  var ligar = !btn.classList.contains('ok-btn--on');
+  btn.disabled = true;
+
+  fetch('{{ url_for("conf_fornecedores_dfe.conferir") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ doc_id: docId, ok: ligar })
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  .then(function (res) {
+    btn.disabled = false;
+    if (!res.ok || !res.j.ok) {
+      alert((res.j && res.j.erro) ? res.j.erro : 'não consegui gravar o OK');
+      return;
+    }
+    var on = res.j.conferido;
+    btn.classList.toggle('ok-btn--on', on);
+    btn.querySelector('i').className = 'bi ' + (on ? 'bi-check-circle-fill' : 'bi-circle');
+    btn.querySelector('.t').textContent = on ? 'conferida' : 'dar OK';
+    btn.closest('.lin').classList.toggle('lin--ok', on);
+
+    // Contadores: o do fornecedor e o do topo.
+    var card = btn.closest('.forn');
+    var cnt = card.querySelector('.conf-cnt');
+    if (cnt) {
+      var n = card.querySelectorAll('.lin--ok').length;
+      cnt.querySelector('.n').textContent = n;
+      cnt.classList.toggle('conf-cnt--ok', n === parseInt(cnt.dataset.tot, 10));
+    }
+    var geral = document.querySelectorAll('#cfd .lin--ok').length;
+    var topo = document.getElementById('conf-geral');
+    if (topo) {
+      topo.textContent = geral + '/' + topo.dataset.tot;
+      topo.classList.toggle('green', geral === parseInt(topo.dataset.tot, 10));
+      topo.classList.toggle('amber', geral !== parseInt(topo.dataset.tot, 10));
+    }
+  })
+  .catch(function (e) { btn.disabled = false; alert('Erro de rede: ' + e); });
+}
+
 // Períodos rápidos: preenche as datas e envia.
 document.querySelectorAll('#cfd .periodo-btn').forEach(function (b) {
   b.addEventListener('click', function () {
     var hoje = new Date(), ini, fim;
-    if (b.dataset.p === 'mes') {
-      ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-      fim = hoje;
-    } else if (b.dataset.p === 'ant') {
-      ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
-      fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
-    } else {
-      ini = new Date(hoje.getFullYear(), 0, 1);
-      fim = hoje;
-    }
     var iso = function (d) {
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
              '-' + String(d.getDate()).padStart(2, '0');
     };
     var f = document.getElementById('form-filtros');
+
+    if (b.dataset.p === 'corte') {
+      // Nada de calcular: o corte é do servidor, quem manda é ele.
+      f.querySelector('[name=data_inicio]').value = b.dataset.corte;
+      f.querySelector('[name=data_fim]').value = iso(hoje);
+      f.submit();
+      return;
+    }
+    if (b.dataset.p === 'mes') {
+      ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+      fim = hoje;
+    } else {
+      ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+      fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+    }
     f.querySelector('[name=data_inicio]').value = iso(ini);
     f.querySelector('[name=data_fim]').value = iso(fim);
     f.submit();
