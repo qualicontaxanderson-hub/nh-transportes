@@ -86,6 +86,25 @@
   /* Nota conferida esmaece: o que sobra colorido é o que ainda falta olhar. */
   #cfd .lin--ok{ background:#fbfdf9; }
   #cfd .lin--ok .lin__t,#cfd .lin--ok .lin__v{ opacity:.6; }
+  /* Estado de cobertura da nota (alocação por data) */
+  #cfd .cob{ font-size:10px; font-weight:700; border-radius:5px; padding:.05rem .35rem; }
+  #cfd .cob--ok{ background:var(--ok-bg); color:var(--ok); }
+  #cfd .cob--pa{ background:var(--pend-bg); color:var(--pend); }
+  #cfd .cob--no{ background:var(--danger-bg); color:var(--danger); }
+  #cfd .fifo-h{ padding:.4rem .8rem; font-size:10.5px; color:var(--muted); line-height:1.45;
+    background:#fbfdff; border-bottom:1px solid var(--line); }
+  #cfd .fifo-h .bi{ color:var(--blue); }
+  /* Fecho do card: o que sobrou de dinheiro e o que sobrou de nota */
+  #cfd .fecho{ display:flex; gap:.5rem; flex-wrap:wrap; padding:.55rem .8rem;
+    border-top:1px solid var(--line-2); background:var(--surface-1); }
+  #cfd .fecho__i{ flex:1 1 150px; border-radius:9px; padding:.4rem .6rem; background:#fff;
+    border:1px solid var(--line-2); }
+  #cfd .fecho__i .r{ display:block; font-size:10px; text-transform:uppercase;
+    letter-spacing:.03em; font-weight:700; color:var(--muted); }
+  #cfd .fecho__i b{ font-size:.95rem; font-variant-numeric:tabular-nums; }
+  #cfd .fecho__i--no b{ color:var(--danger); }
+  #cfd .fecho__i--ok b{ color:var(--ok); }
+
   /* Pagamento anterior ao corte: informa, não entra na conta. Âmbar de
      propósito — é "olhe isto", não é erro nem acerto. */
   #cfd .antes{ margin:.4rem .8rem .6rem; border:1px solid #f0dcae; background:#fffaf0;
@@ -311,6 +330,7 @@
           <b>R$ 2.500,00</b></span>
         
         
+        
         <span class="conf-cnt"
               data-forn="7" data-tot="2">
           <i class="bi bi-check2-square"></i>
@@ -326,6 +346,10 @@
 
         
         
+
+        <div class="fifo-h"><i class="bi bi-diagram-2"></i>
+          Cada pagamento foi aplicado nas notas mais antigas primeiro (por data).
+          Não há amarração de pagamento com nota no sistema — isto é leitura, não cadastro.</div>
 
         
         <div class="lin lin--pg"
@@ -354,7 +378,7 @@
           </div>
           <div class="lin__m">POSTO NOVO HORIZONTE GOIATUBA</div>
           <div class="lin__v">−R$ 50.000,00</div>
-          <div class="lin__s">saldo R$ 0,00</div>
+          <div class="lin__s"><span class="cob cob--ok">coberta</span></div>
           
           <button type="button" class="ok-btn ok-btn--on"
                   onclick="cfdConferir(this, 2)"
@@ -391,7 +415,7 @@
           </div>
           <div class="lin__m">POSTO NOVO HORIZONTE GOIATUBA</div>
           <div class="lin__v">−R$ 27.500,00</div>
-          <div class="lin__s">saldo R$ 2.500,00</div>
+          <div class="lin__s"><span class="cob cob--ok">coberta</span></div>
           
           <button type="button" class="ok-btn"
                   onclick="cfdConferir(this, 4)"
@@ -399,6 +423,16 @@
             <i class="bi bi-circle"></i>
             <span class="t">dar OK</span>
           </button>
+          
+        </div>
+        
+
+        
+        <div class="fecho">
+          
+          
+          <span class="fecho__i fecho__i--ok"><span class="r">Sobra do pagamento</span>
+            <b>R$ 2.500,00</b></span>
           
         </div>
         
@@ -425,6 +459,10 @@
         <span><span class="k">Pago:</span> <b>R$ 8.430,00</b></span>
         <span><span class="k">Diferença no período:</span>
           <b>R$ -23.200,00</b></span>
+        
+        <span class="conf-cnt" title="notas que a alocação por data não conseguiu cobrir">
+          <i class="bi bi-exclamation-circle"></i> 3 notas em aberto</span>
+        
         
         <span class="conf-cnt" title="há pagamento anterior ao corte que pode ser destas notas">
           <i class="bi bi-clock-history"></i> talvez pago antes do corte</span>
@@ -471,6 +509,10 @@
         </div>
         
 
+        <div class="fifo-h"><i class="bi bi-diagram-2"></i>
+          Cada pagamento foi aplicado nas notas mais antigas primeiro (por data).
+          Não há amarração de pagamento com nota no sistema — isto é leitura, não cadastro.</div>
+
         
         <div class="lin lin--nf lin--ok"
              id="doc-5">
@@ -483,7 +525,7 @@
           </div>
           <div class="lin__m">POSTO NOVO HORIZONTE GOIATUBA</div>
           <div class="lin__v">−R$ 8.700,00</div>
-          <div class="lin__s">saldo R$ -8.700,00</div>
+          <div class="lin__s"><span class="cob cob--pa">falta R$ 270,00</span></div>
           
           <button type="button" class="ok-btn ok-btn--on"
                   onclick="cfdConferir(this, 5)"
@@ -505,7 +547,7 @@
           </div>
           <div class="lin__m">POSTO NOVO HORIZONTE GOIATUBA</div>
           <div class="lin__v">−R$ 14.500,00</div>
-          <div class="lin__s">saldo R$ -23.200,00</div>
+          <div class="lin__s"><span class="cob cob--no">descoberta</span></div>
           
           <button type="button" class="ok-btn ok-btn--on"
                   onclick="cfdConferir(this, 6)"
@@ -542,7 +584,7 @@
           </div>
           <div class="lin__m">POSTO NOVO HORIZONTE GOIATUBA</div>
           <div class="lin__v">−R$ 8.430,00</div>
-          <div class="lin__s">saldo R$ -23.200,00</div>
+          <div class="lin__s"><span class="cob cob--no">descoberta</span></div>
           
           <button type="button" class="ok-btn ok-btn--on"
                   onclick="cfdConferir(this, 8)"
@@ -550,6 +592,16 @@
             <i class="bi bi-check-circle-fill"></i>
             <span class="t">conferida</span>
           </button>
+          
+        </div>
+        
+
+        
+        <div class="fecho">
+          
+          <span class="fecho__i fecho__i--no"><span class="r">Nota descoberta</span>
+            <b>R$ 23.200,00</b></span>
+          
           
         </div>
         
@@ -577,6 +629,10 @@
         <span><span class="k">Diferença no período:</span>
           <b>R$ -2,00</b></span>
         
+        <span class="conf-cnt" title="notas que a alocação por data não conseguiu cobrir">
+          <i class="bi bi-exclamation-circle"></i> 1 nota em aberto</span>
+        
+        
         
         <span class="conf-cnt"
               data-forn="12" data-tot="1">
@@ -594,6 +650,10 @@
         
         
 
+        <div class="fifo-h"><i class="bi bi-diagram-2"></i>
+          Cada pagamento foi aplicado nas notas mais antigas primeiro (por data).
+          Não há amarração de pagamento com nota no sistema — isto é leitura, não cadastro.</div>
+
         
         <div class="lin lin--nf"
              id="doc-9">
@@ -606,7 +666,7 @@
           </div>
           <div class="lin__m">POSTO NOVO HORIZONTE GOIATUBA</div>
           <div class="lin__v">−R$ 2,00</div>
-          <div class="lin__s">saldo R$ -2,00</div>
+          <div class="lin__s"><span class="cob cob--no">descoberta</span></div>
           
           <button type="button" class="ok-btn"
                   onclick="cfdConferir(this, 9)"
@@ -614,6 +674,16 @@
             <i class="bi bi-circle"></i>
             <span class="t">dar OK</span>
           </button>
+          
+        </div>
+        
+
+        
+        <div class="fecho">
+          
+          <span class="fecho__i fecho__i--no"><span class="r">Nota descoberta</span>
+            <b>R$ 2,00</b></span>
+          
           
         </div>
         

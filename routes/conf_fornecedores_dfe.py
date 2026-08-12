@@ -324,6 +324,56 @@ def _dia(v):
     return date.min
 
 
+def _aloca_fifo(linhas, saldo_anterior):
+    """Aplica cada pagamento nas notas em aberto mais ANTIGAS primeiro.
+
+    Não existe amarração de pagamento com nota em lugar nenhum do sistema — o
+    usuário paga o fornecedor, não a nota. Então a ordem de data é o palpite
+    honesto: serve pra enxergar o que ainda está descoberto, e é isso que faz
+    o caso "paguei R$ 180 a mais" se resolver sozinho quando a próxima nota
+    entrar (a sobra come o pedaço que faltar).
+
+    Marca cada nota com `falta` (0 = coberta) e devolve (sobra, descoberto).
+    Invariante: sobra − descoberto == saldo do período + saldo anterior.
+    """
+    # Saldo anterior positivo é dinheiro disponível; negativo é nota velha em
+    # aberto que não está na lista (fora do período), mas precisa continuar
+    # contando — senão a sobra apareceria maior do que é.
+    caixa = max(saldo_anterior, 0.0)
+    descoberto_antigo = max(-saldo_anterior, 0.0)
+
+    abertas = []
+    for l in linhas:
+        if l['tipo'] == 'pagamento':
+            caixa += l['valor']
+            # Primeiro tapa o buraco velho, depois as notas em aberto.
+            usa = min(caixa, descoberto_antigo)
+            caixa -= usa
+            descoberto_antigo -= usa
+            for n in abertas:
+                if caixa <= 0.005:
+                    break
+                usa = min(caixa, n['falta'])
+                n['falta'] -= usa
+                caixa -= usa
+            abertas = [n for n in abertas if n['falta'] > 0.005]
+        else:
+            l['falta'] = l['valor']
+            usa = min(caixa, l['falta'])
+            l['falta'] -= usa
+            caixa -= usa
+            if l['falta'] > 0.005:
+                abertas.append(l)
+
+    for l in linhas:
+        if l['tipo'] == 'nota':
+            l['coberta'] = l['falta'] <= 0.005
+            l['parcial'] = (not l['coberta']) and l['falta'] < l['valor'] - 0.005
+
+    descoberto = descoberto_antigo + sum(n['falta'] for n in abertas)
+    return caixa, descoberto
+
+
 def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None):
     """Uma linha do tempo por fornecedor, com saldo corrente.
 
@@ -392,6 +442,7 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None):
         if not linhas and abs(saldo_anterior) < 0.005:
             continue                      # zerado e parado: não polui a tela
 
+        sobra, descoberto = _aloca_fifo(linhas, saldo_anterior)
         notas_lin = [l for l in linhas if l['tipo'] == 'nota']
 
         # Pagamento de antes do corte só interessa quando o fornecedor aparece
@@ -411,6 +462,9 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None):
             'linhas': linhas,
             'notas_total': len(notas_lin),
             'notas_ok': sum(1 for l in notas_lin if l['conferido']),
+            'sobra': sobra,
+            'descoberto': descoberto,
+            'notas_abertas': sum(1 for l in notas_lin if not l['coberta']),
             'antes': antes,
             # Quanto sobraria da dívida se esses pagamentos de antes do corte
             # forem mesmo destas notas. Só uma hipótese — o saldo não muda.
@@ -468,6 +522,8 @@ def conf_fornecedores_dfe():
         'orfas':    sum(float(o['total'] or 0) for o in orfas),
         'notas':    sum(d['notas_total'] for d in dados),
         'notas_ok': sum(d['notas_ok'] for d in dados),
+        'descoberto': sum(d['descoberto'] for d in dados),
+        'sobra':      sum(d['sobra'] for d in dados),
     }
 
     # Sem CNPJ no cadastro o fornecedor nunca casa com nota nenhuma.

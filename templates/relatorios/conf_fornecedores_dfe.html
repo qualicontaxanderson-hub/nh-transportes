@@ -83,6 +83,25 @@
   /* Nota conferida esmaece: o que sobra colorido é o que ainda falta olhar. */
   #cfd .lin--ok{ background:#fbfdf9; }
   #cfd .lin--ok .lin__t,#cfd .lin--ok .lin__v{ opacity:.6; }
+  /* Estado de cobertura da nota (alocação por data) */
+  #cfd .cob{ font-size:10px; font-weight:700; border-radius:5px; padding:.05rem .35rem; }
+  #cfd .cob--ok{ background:var(--ok-bg); color:var(--ok); }
+  #cfd .cob--pa{ background:var(--pend-bg); color:var(--pend); }
+  #cfd .cob--no{ background:var(--danger-bg); color:var(--danger); }
+  #cfd .fifo-h{ padding:.4rem .8rem; font-size:10.5px; color:var(--muted); line-height:1.45;
+    background:#fbfdff; border-bottom:1px solid var(--line); }
+  #cfd .fifo-h .bi{ color:var(--blue); }
+  /* Fecho do card: o que sobrou de dinheiro e o que sobrou de nota */
+  #cfd .fecho{ display:flex; gap:.5rem; flex-wrap:wrap; padding:.55rem .8rem;
+    border-top:1px solid var(--line-2); background:var(--surface-1); }
+  #cfd .fecho__i{ flex:1 1 150px; border-radius:9px; padding:.4rem .6rem; background:#fff;
+    border:1px solid var(--line-2); }
+  #cfd .fecho__i .r{ display:block; font-size:10px; text-transform:uppercase;
+    letter-spacing:.03em; font-weight:700; color:var(--muted); }
+  #cfd .fecho__i b{ font-size:.95rem; font-variant-numeric:tabular-nums; }
+  #cfd .fecho__i--no b{ color:var(--danger); }
+  #cfd .fecho__i--ok b{ color:var(--ok); }
+
   /* Pagamento anterior ao corte: informa, não entra na conta. Âmbar de
      propósito — é "olhe isto", não é erro nem acerto. */
   #cfd .antes{ margin:.4rem .8rem .6rem; border:1px solid #f0dcae; background:#fffaf0;
@@ -322,6 +341,10 @@
         <span><span class="k">Pago:</span> <b>{{ d.pago | formatar_moeda }}</b></span>
         <span><span class="k">Diferença no período:</span>
           <b>{{ (d.pago - d.comprado) | formatar_moeda }}</b></span>
+        {% if d.notas_abertas %}
+        <span class="conf-cnt" title="notas que a alocação por data não conseguiu cobrir">
+          <i class="bi bi-exclamation-circle"></i> {{ d.notas_abertas }} nota{{ '' if d.notas_abertas == 1 else 's' }} em aberto</span>
+        {% endif %}
         {% if d.antes %}
         <span class="conf-cnt" title="há pagamento anterior ao corte que pode ser destas notas">
           <i class="bi bi-clock-history"></i> talvez pago antes do corte</span>
@@ -368,6 +391,10 @@
         </div>
         {% endif %}
 
+        <div class="fifo-h"><i class="bi bi-diagram-2"></i>
+          Cada pagamento foi aplicado nas notas mais antigas primeiro (por data).
+          Não há amarração de pagamento com nota no sistema — isto é leitura, não cadastro.</div>
+
         {% for l in d.linhas %}
         <div class="lin lin--{{ 'pg' if l.tipo == 'pagamento' else 'nf' }}{{ ' lin--ok' if l.conferido }}"
              {% if l.tipo == 'nota' %}id="doc-{{ l.id }}"{% endif %}>
@@ -380,7 +407,13 @@
           </div>
           <div class="lin__m">{{ l.detalhe or '—' }}</div>
           <div class="lin__v">{{ '+' if l.tipo == 'pagamento' else '−' }}{{ l.valor | formatar_moeda }}</div>
-          <div class="lin__s">saldo {{ l.saldo | formatar_moeda }}</div>
+          <div class="lin__s">
+            {%- if l.tipo == 'nota' -%}
+              {%- if l.coberta -%}<span class="cob cob--ok">coberta</span>
+              {%- elif l.parcial -%}<span class="cob cob--pa">falta {{ l.falta | formatar_moeda }}</span>
+              {%- else -%}<span class="cob cob--no">descoberta</span>{%- endif -%}
+            {%- else -%}saldo {{ l.saldo | formatar_moeda }}{%- endif -%}
+          </div>
           {% if l.tipo == 'nota' %}
           <button type="button" class="ok-btn{{ ' ok-btn--on' if l.conferido }}"
                   onclick="cfdConferir(this, {{ l.id }})"
@@ -391,6 +424,19 @@
           {% endif %}
         </div>
         {% endfor %}
+
+        {% if d.sobra > 0.005 or d.descoberto > 0.005 %}
+        <div class="fecho">
+          {% if d.descoberto > 0.005 %}
+          <span class="fecho__i fecho__i--no"><span class="r">Nota descoberta</span>
+            <b>{{ d.descoberto | formatar_moeda }}</b></span>
+          {% endif %}
+          {% if d.sobra > 0.005 %}
+          <span class="fecho__i fecho__i--ok"><span class="r">Sobra do pagamento</span>
+            <b>{{ d.sobra | formatar_moeda }}</b></span>
+          {% endif %}
+        </div>
+        {% endif %}
       </div>
     </div>
     {% endfor %}
