@@ -874,8 +874,12 @@ function cfdConferir(btn, docId) {
 
     // Contadores: o do fornecedor e o do topo.
     var card = btn.closest('.forn');
-    var cnt = card.querySelector('.conf-cnt');
-    if (cnt) {
+    // Tem de ser O contador de conferidas, não o primeiro selo do card: os
+    // selos "notas em aberto", "talvez pago antes do corte" e "juntar" usam a
+    // mesma classe e NÃO têm o .n dentro — pegar o primeiro dava
+    // "null is not an object" e abortava a atualização.
+    var cnt = card.querySelector('.conf-cnt[data-forn]');
+    if (cnt && cnt.querySelector('.n')) {
       var n = card.querySelectorAll('.lin--ok').length;
       cnt.querySelector('.n').textContent = n;
       cnt.classList.toggle('conf-cnt--ok', n === parseInt(cnt.dataset.tot, 10));
