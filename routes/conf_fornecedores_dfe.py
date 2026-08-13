@@ -24,7 +24,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 
 from flask import Blueprint, jsonify, render_template, request
-from flask_login import login_required
+from flask_login import current_user, login_required
 
 from routes.auth import admin_required
 from utils.db import get_db_connection
@@ -227,6 +227,95 @@ def _pagamentos_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids):
     return rows
 
 
+def _tem_tabela_vinculo(conn):
+    """A tabela nasce por script (scripts/alter_dfe_pagamento_nota.py) e o
+    deploy chega antes dele. Sem esta checagem o relatório inteiro quebraria
+    nesse intervalo — melhor degradar para "só o automático"."""
+    cur = conn.cursor()
+    cur.execute("""SELECT COUNT(*) FROM information_schema.tables
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'dfe_pagamento_nota'""")
+    ok = bool(cur.fetchone()[0])
+    cur.close()
+    return ok
+
+
+def _vinculos(conn, doc_ids):
+    """Vínculos manuais das notas em tela: doc_id -> lista de pagamentos.
+
+    Também devolve quanto de cada pagamento já está comprometido, pra não
+    deixar amarrar o mesmo dinheiro em duas notas.
+    """
+    if not doc_ids:
+        return {}, {}
+    ph = ','.join(['%s'] * len(doc_ids))
+
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT v.id, v.documento_id, v.transacao_id, v.valor,
+               bt.data_transacao, bt.descricao,
+               COALESCE(bt.valor,0) AS valor_pagamento
+          FROM dfe_pagamento_nota v
+          JOIN bank_transactions bt ON bt.id = v.transacao_id
+         WHERE v.documento_id IN (%s)
+         ORDER BY bt.data_transacao, v.id
+    """ % ph, list(doc_ids))
+    rows = cur.fetchall()
+
+    # O comprometido é de TODAS as notas, não só das que estão em tela — senão
+    # um pagamento já usado noutro período apareceria livre.
+    cur.execute("SELECT transacao_id, SUM(valor) AS usado "
+                "FROM dfe_pagamento_nota GROUP BY transacao_id")
+    usado = {r['transacao_id']: float(r['usado'] or 0) for r in cur.fetchall()}
+    cur.close()
+
+    por_doc = defaultdict(list)
+    for r in rows:
+        por_doc[r['documento_id']].append({
+            'id': r['id'],
+            'transacao_id': r['transacao_id'],
+            'valor': float(r['valor'] or 0),
+            'data': _dia(r['data_transacao']),
+            'descricao': (r['descricao'] or '')[:60],
+        })
+    return dict(por_doc), usado
+
+
+def _pagamentos_vinculados_fora(conn, doc_ids, data_ini, data_fim):
+    """Pagamentos amarrados a estas notas mas com data FORA do período.
+
+    É o coração do caso "paguei em julho, a nota saiu em agosto": sem trazer
+    esse pagamento para dentro, a nota ficaria coberta mas o fornecedor
+    continuaria aparecendo devendo.
+    """
+    if not doc_ids:
+        return []
+    ph = ','.join(['%s'] * len(doc_ids))
+    params = list(doc_ids) + [data_ini, data_fim]
+
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT DISTINCT bt.id, bt.fornecedor_id, bt.data_transacao, bt.descricao,
+               COALESCE(bt.valor,0)                          AS valor,
+               f.razao_social                                AS fornecedor_nome,
+               f.cnpj                                        AS fornecedor_cnpj,
+               COALESCE(emp.nome_fantasia, emp.razao_social) AS empresa_nome
+          FROM dfe_pagamento_nota v
+          JOIN bank_transactions bt ON bt.id = v.transacao_id
+          JOIN bank_accounts ba     ON ba.id = bt.account_id
+          JOIN fornecedores f       ON f.id = bt.fornecedor_id
+          LEFT JOIN clientes emp    ON emp.id = ba.cliente_id
+         WHERE v.documento_id IN (%s)
+           AND (bt.data_transacao < %s OR bt.data_transacao > %s)
+         ORDER BY bt.data_transacao, bt.id
+    """ % ph, params)
+    rows = cur.fetchall()
+    cur.close()
+    for r in rows:
+        r['fora_periodo'] = True
+    return rows
+
+
 def _pagamentos_antes_do_corte(conn, empresa_ids, fornecedor_ids):
     """Pagamentos na janela imediatamente ANTES do corte, por fornecedor.
 
@@ -345,7 +434,9 @@ def _aloca_fifo(linhas, saldo_anterior):
     abertas = []
     for l in linhas:
         if l['tipo'] == 'pagamento':
-            caixa += l['valor']
+            # Só a parte LIVRE do pagamento entra no rateio automático: o que
+            # já foi amarrado à mão tem dono.
+            caixa += max(l['valor'] - l.get('usado', 0.0), 0.0)
             # Primeiro tapa o buraco velho, depois as notas em aberto.
             usa = min(caixa, descoberto_antigo)
             caixa -= usa
@@ -358,7 +449,8 @@ def _aloca_fifo(linhas, saldo_anterior):
                 caixa -= usa
             abertas = [n for n in abertas if n['falta'] > 0.005]
         else:
-            l['falta'] = l['valor']
+            # A nota já entra abatida do que foi vinculado à mão.
+            l['falta'] = max(l['valor'] - l.get('vinc_total', 0.0), 0.0)
             usa = min(caixa, l['falta'])
             l['falta'] -= usa
             caixa -= usa
@@ -374,12 +466,15 @@ def _aloca_fifo(linhas, saldo_anterior):
     return caixa, descoberto
 
 
-def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None):
+def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None,
+           vinculos=None, usado=None):
     """Uma linha do tempo por fornecedor, com saldo corrente.
 
     Ordem: por data; empatou, pagamento antes da nota — é a sequência real
     (paga de manhã, nota sai à tarde) e deixa o saldo do dia legível.
     """
+    vinculos = vinculos or {}
+    usado = usado or {}
     por_forn = defaultdict(lambda: {'nome': '', 'cnpj': '', 'eventos': []})
 
     for n in notas:
@@ -398,6 +493,8 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None):
             'resumo': bool(n['resumo']),
             'conferido': bool(n['conferido']),
             'chave': n['chave'],
+            'vinculos': vinculos.get(n['doc_id'], []),
+            'vinc_total': sum(v['valor'] for v in vinculos.get(n['doc_id'], [])),
         })
 
     for p in pagamentos:
@@ -415,6 +512,8 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None):
             'resumo': False,
             'conferido': None,          # o OK é da nota; pagamento não tem
             'chave': None,
+            'usado': usado.get(p['id'], 0.0),
+            'fora_periodo': bool(p.get('fora_periodo')),
         })
 
     # Fornecedor que só tem saldo de trás (nenhum movimento no período) também
@@ -510,10 +609,20 @@ def conf_fornecedores_dfe():
         orfas = _notas_sem_fornecedor(conn, data_ini, data_fim, empresa_ids)
         pre_corte, pre_corte_ini = _pagamentos_antes_do_corte(
             conn, empresa_ids, fornecedor_ids)
+
+        doc_ids = [n['doc_id'] for n in notas]
+        vinculo_pronto = _tem_tabela_vinculo(conn)
+        vinculos, usado = ({}, {})
+        if vinculo_pronto:
+            vinculos, usado = _vinculos(conn, doc_ids)
+            # Pagamento amarrado a uma destas notas mas de outra data entra na
+            # conta assim mesmo — é o que fecha o caso "paguei antes do corte".
+            pagamentos += _pagamentos_vinculados_fora(conn, doc_ids, data_ini, data_fim)
     finally:
         conn.close()
 
-    dados = _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte)
+    dados = _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte,
+                   vinculos, usado)
 
     totais = {
         'comprado': sum(d['comprado'] for d in dados),
@@ -537,8 +646,180 @@ def conf_fornecedores_dfe():
         data_inicio=data_ini, data_fim=data_fim,
         cliente_ids=empresa_ids, fornecedor_ids=fornecedor_ids,
         corte=DATA_CORTE_DFE, puxou_pro_corte=puxou_pro_corte, janela=janela,
-        pre_corte_ini=pre_corte_ini,
+        pre_corte_ini=pre_corte_ini, vinculo_pronto=vinculo_pronto,
     )
+
+
+@bp.route('/conf_fornecedores_dfe/candidatos/<int:doc_id>')
+@login_required
+@admin_required
+def candidatos(doc_id):
+    """Pagamentos do MESMO fornecedor que ainda têm dinheiro livre.
+
+    Sem recorte de data de propósito: o pagamento que fecha a conta costuma
+    ser de antes do corte da captura — é justamente esse que o automático não
+    alcança. Os mais próximos da data da nota vêm primeiro.
+    """
+    conn = get_db_connection()
+    try:
+        if not _tem_tabela_vinculo(conn):
+            return jsonify(ok=False, erro='falta rodar scripts/alter_dfe_pagamento_nota.py'), 409
+        cur = conn.cursor(dictionary=True)
+        cur.execute("""
+            SELECT d.id, d.numero, d.serie, d.dh_emissao, d.emit_cnpj,
+                   COALESCE(d.valor_total,0) AS valor,
+                   COALESCE((SELECT SUM(v.valor) FROM dfe_pagamento_nota v
+                              WHERE v.documento_id = d.id), 0) AS vinculado
+              FROM dfe_documentos d WHERE d.id = %s
+        """, (doc_id,))
+        nota = cur.fetchone()
+        if not nota:
+            cur.close()
+            return jsonify(ok=False, erro='nota não encontrada'), 404
+
+        cur.execute("""
+            SELECT bt.id, bt.data_transacao, bt.descricao,
+                   COALESCE(bt.valor,0) AS valor,
+                   COALESCE((SELECT SUM(v.valor) FROM dfe_pagamento_nota v
+                              WHERE v.transacao_id = bt.id), 0) AS usado
+              FROM bank_transactions bt
+              JOIN fornecedores f ON f.id = bt.fornecedor_id
+             WHERE bt.tipo = 'DEBIT'
+               AND bt.fornecedor_id IS NOT NULL
+               AND %s = LPAD(%s,14,'0')
+             ORDER BY ABS(DATEDIFF(bt.data_transacao, %s)), bt.data_transacao DESC
+             LIMIT 40
+        """ % (_CNPJ_FORN, '%s', '%s'),
+            (nota['emit_cnpj'] or '', nota['dh_emissao']))
+        pagos = cur.fetchall()
+        cur.close()
+    finally:
+        conn.close()
+
+    livres = []
+    for p in pagos:
+        livre = float(p['valor'] or 0) - float(p['usado'] or 0)
+        if livre <= 0.005:
+            continue
+        livres.append({
+            'id': p['id'],
+            'data': _dia(p['data_transacao']).strftime('%d/%m/%Y'),
+            'descricao': (p['descricao'] or '')[:60],
+            'valor': float(p['valor'] or 0),
+            'livre': livre,
+        })
+
+    falta = float(nota['valor'] or 0) - float(nota['vinculado'] or 0)
+    return jsonify(ok=True, falta=round(max(falta, 0.0), 2),
+                   nota='NF-e nº %s%s' % (nota['numero'] or '—',
+                                          ('/%s' % nota['serie']) if nota['serie'] else ''),
+                   candidatos=livres)
+
+
+@bp.route('/conf_fornecedores_dfe/vincular', methods=['POST'])
+@login_required
+@admin_required
+def vincular():
+    """Amarra um pagamento a uma nota, por um valor.
+
+    Recusa passar do que falta na nota ou do que sobra no pagamento — deixar
+    amarrar o mesmo dinheiro duas vezes transformaria o relatório em ficção.
+    """
+    dados = request.get_json(silent=True) or {}
+    try:
+        doc_id = int(dados.get('doc_id'))
+        tx_id = int(dados.get('transacao_id'))
+        valor = round(float(dados.get('valor')), 2)
+    except (TypeError, ValueError):
+        return jsonify(ok=False, erro='dados inválidos'), 400
+    if valor <= 0:
+        return jsonify(ok=False, erro='o valor tem de ser maior que zero'), 400
+
+    conn = get_db_connection()
+    try:
+        if not _tem_tabela_vinculo(conn):
+            return jsonify(ok=False, erro='falta rodar scripts/alter_dfe_pagamento_nota.py'), 409
+        cur = conn.cursor(dictionary=True)
+
+        cur.execute("""
+            SELECT COALESCE(d.valor_total,0) AS valor, d.emit_cnpj,
+                   COALESCE((SELECT SUM(v.valor) FROM dfe_pagamento_nota v
+                              WHERE v.documento_id = d.id AND v.transacao_id <> %s), 0) AS outros
+              FROM dfe_documentos d WHERE d.id = %s
+        """, (tx_id, doc_id))
+        nota = cur.fetchone()
+        if not nota:
+            cur.close()
+            return jsonify(ok=False, erro='nota não encontrada'), 404
+
+        cur.execute("""
+            SELECT COALESCE(bt.valor,0) AS valor, bt.fornecedor_id,
+                   COALESCE((SELECT SUM(v.valor) FROM dfe_pagamento_nota v
+                              WHERE v.transacao_id = bt.id AND v.documento_id <> %s), 0) AS outros,
+                   %s AS cnpj_forn
+              FROM bank_transactions bt
+              JOIN fornecedores f ON f.id = bt.fornecedor_id
+             WHERE bt.id = %%s AND bt.tipo = 'DEBIT'
+        """ % ('%s', _CNPJ_FORN), (doc_id, tx_id))
+        pg = cur.fetchone()
+        if not pg:
+            cur.close()
+            return jsonify(ok=False, erro='pagamento não encontrado'), 404
+
+        # O pagamento tem de ser do fornecedor da nota — o usuário já concilia
+        # o lançamento no fornecedor certo, então isto é só uma trava.
+        if (pg['cnpj_forn'] or '') != (nota['emit_cnpj'] or '').rjust(14, '0'):
+            cur.close()
+            return jsonify(ok=False,
+                           erro='esse pagamento está conciliado noutro fornecedor'), 400
+
+        falta = float(nota['valor']) - float(nota['outros'])
+        livre = float(pg['valor']) - float(pg['outros'])
+        if valor > falta + 0.005:
+            cur.close()
+            return jsonify(ok=False, erro='a nota só tem R$ %.2f em aberto' % falta), 400
+        if valor > livre + 0.005:
+            cur.close()
+            return jsonify(ok=False, erro='esse pagamento só tem R$ %.2f livre' % livre), 400
+
+        cur.close()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO dfe_pagamento_nota (documento_id, transacao_id, valor, criado_por)
+                 VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE valor = VALUES(valor), criado_por = VALUES(criado_por)
+        """, (doc_id, tx_id, valor, getattr(current_user, 'id', None)))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+    return jsonify(ok=True)
+
+
+@bp.route('/conf_fornecedores_dfe/desvincular', methods=['POST'])
+@login_required
+@admin_required
+def desvincular():
+    dados = request.get_json(silent=True) or {}
+    try:
+        vinc_id = int(dados.get('vinculo_id'))
+    except (TypeError, ValueError):
+        return jsonify(ok=False, erro='vínculo inválido'), 400
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM dfe_pagamento_nota WHERE id = %s", (vinc_id,))
+        conn.commit()
+        apagou = cur.rowcount
+        cur.close()
+    finally:
+        conn.close()
+
+    if not apagou:
+        return jsonify(ok=False, erro='vínculo não encontrado'), 404
+    return jsonify(ok=True)
 
 
 @bp.route('/conf_fornecedores_dfe/conferir', methods=['POST'])

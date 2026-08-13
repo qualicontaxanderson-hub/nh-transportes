@@ -30,13 +30,15 @@ def bloco(src, nome):
 _SEQ = [0]
 
 
-def linha(tipo, dia, rotulo, detalhe, valor, saldo, resumo=False, conferido=False, falta=0.0):
+def linha(tipo, dia, rotulo, detalhe, valor, saldo, resumo=False, conferido=False,
+          falta=0.0, vinculos=None, fora=False, mes=8):
     _SEQ[0] += 1
-    return dict(tipo=tipo, data=date(2026, 8, dia), rotulo=rotulo, detalhe=detalhe,
+    return dict(tipo=tipo, data=date(2026, mes, dia), rotulo=rotulo, detalhe=detalhe,
                 valor=valor, saldo=saldo, resumo=resumo, id=_SEQ[0],
                 conferido=(conferido if tipo == 'nota' else None),
                 falta=falta, coberta=(falta <= 0.005),
-                parcial=(0.005 < falta < valor - 0.005))
+                parcial=(0.005 < falta < valor - 0.005),
+                vinculos=(vinculos or []), fora_periodo=fora)
 
 
 # O periodo do exemplo comeca no proprio corte, entao ninguem tem saldo
@@ -54,17 +56,23 @@ DADOS = [
          ]),
     dict(fornecedor_id=5, nome="DISTRIBUIDORA TABOCAO LTDA - EM RECUPERACAO JUDICIAL",
          cnpj="02.284.585/0001-44", saldo_anterior=0.0,
-         comprado=31630.0, pago=8430.0, saldo_final=-23200.0, notas_total=3, notas_ok=3,
-         sobra=0.0, descoberto=23200.0, notas_abertas=3,
-         antes=dict(total=23200.0, lancamentos=[
+         comprado=31630.0, pago=31630.0, saldo_final=0.0, notas_total=3, notas_ok=3,
+         sobra=0.0, descoberto=0.0, notas_abertas=0,
+         antes=None, _antes_desativado=dict(total=23200.0, lancamentos=[
              dict(data=date(2026, 7, 30), valor=8700.0, descricao="PIX DISTRIBUIDORA TABOCAO"),
              dict(data=date(2026, 7, 28), valor=14500.0, descricao="PIX DISTRIBUIDORA TABOCAO")]),
-         saldo_com_antes=0.0,
+         saldo_com_antes=None,
          linhas=[
-             linha("nota", 1, "NF-e nº 838/2", "POSTO NOVO HORIZONTE GOIATUBA", 8700, -8700, conferido=True, falta=270),
-             linha("nota", 1, "NF-e nº 847/2", "POSTO NOVO HORIZONTE GOIATUBA", 14500, -23200, conferido=True, falta=14500),
-             linha("pagamento", 10, "Pagamento", "Pagamento Pix 02.284.585 0001-44", 8430, -14770),
-             linha("nota", 10, "NF-e nº 1047/2", "POSTO NOVO HORIZONTE GOIATUBA", 8430, -23200, conferido=True, falta=8430),
+             linha("pagamento", 28, "Pagamento", "PIX DISTRIBUIDORA TABOCAO", 14500, 14500, fora=True, mes=7),
+             linha("pagamento", 30, "Pagamento", "PIX DISTRIBUIDORA TABOCAO", 8700, 23200, fora=True, mes=7),
+             linha("nota", 1, "NF-e nº 838/2", "POSTO NOVO HORIZONTE GOIATUBA", 8700, 14500, conferido=True,
+                   vinculos=[dict(id=101, data=date(2026, 7, 30), valor=8700.0,
+                                  descricao="PIX DISTRIBUIDORA TABOCAO")]),
+             linha("nota", 1, "NF-e nº 847/2", "POSTO NOVO HORIZONTE GOIATUBA", 14500, 0, conferido=True,
+                   vinculos=[dict(id=102, data=date(2026, 7, 28), valor=14500.0,
+                                  descricao="PIX DISTRIBUIDORA TABOCAO")]),
+             linha("pagamento", 10, "Pagamento", "Pagamento Pix 02.284.585 0001-44", 8430, 8430),
+             linha("nota", 10, "NF-e nº 1047/2", "POSTO NOVO HORIZONTE GOIATUBA", 8430, 0, conferido=True),
          ]),
     dict(fornecedor_id=12, nome="ZILLI COMERCIO DE PNEUS LTDA",
          cnpj="18.910.548/0001-34", saldo_anterior=0.0,
@@ -75,8 +83,8 @@ DADOS = [
 
 CTX = dict(
     dados=DADOS,
-    totais=dict(comprado=109132.0, pago=88430.0, saldo=-20702.0, orfas=13890.5,
-                notas=6, notas_ok=4, descoberto=23202.0, sobra=2500.0),
+    totais=dict(comprado=109132.0, pago=111630.0, saldo=2498.0, orfas=13890.5,
+                notas=6, notas_ok=4, descoberto=2.0, sobra=2500.0),
     orfas=[dict(emit_cnpj="44248274000114", emit_nome="DISTRIBUIDORA EXEMPLO S/A",
                 notas=2, total=13890.5, ultima=datetime(2026, 8, 11, 9, 2))],
     duplicados=[],
@@ -86,7 +94,7 @@ CTX = dict(
                   dict(id=12, razao_social="ZILLI COMERCIO DE PNEUS LTDA")],
     data_inicio="2026-08-01", data_fim="2026-08-12",
     cliente_ids=[], fornecedor_ids=[],
-    corte="2026-08-01", puxou_pro_corte=False, pre_corte_ini="2026-06-02",
+    corte="2026-08-01", puxou_pro_corte=False, vinculo_pronto=True, pre_corte_ini="2026-06-02",
     janela=dict(primeira=datetime(2026, 8, 1, 7, 40),
                 ultima=datetime(2026, 8, 11, 15, 15), notas=43),
 )

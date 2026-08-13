@@ -86,6 +86,63 @@
   /* Nota conferida esmaece: o que sobra colorido é o que ainda falta olhar. */
   #cfd .lin--ok{ background:#fbfdf9; }
   #cfd .lin--ok .lin__t,#cfd .lin--ok .lin__v{ opacity:.6; }
+  /* Vínculo manual: botão na linha da nota + a lista do que já foi amarrado */
+  #cfd .lin__acoes{ grid-column:2 / span 2; grid-row:3; justify-self:end; margin-top:.3rem;
+    display:flex; gap:.35rem; flex-wrap:wrap; justify-content:flex-end; }
+  #cfd .vinc-btn{ display:inline-flex; align-items:center; gap:.3rem; cursor:pointer;
+    border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:8px; padding:.3rem .6rem; font-size:11.5px; font-weight:700; }
+  #cfd .vinc-btn:hover{ background:#dfeaf8; border-color:var(--blue); }
+  #cfd .vinc{ display:flex; align-items:center; gap:.4rem; font-size:11px;
+    padding:.25rem .8rem .25rem 3.1rem; color:var(--ok); background:#f6faf2; }
+  #cfd .vinc .d{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; color:var(--muted); }
+  #cfd .vinc .v{ font-weight:700; font-variant-numeric:tabular-nums; }
+  #cfd .vinc .x{ border:0; background:none; color:#b9c2ce; cursor:pointer; padding:0 .1rem;
+    font-size:10px; }
+  #cfd .vinc .x:hover{ color:var(--danger); }
+  #cfd .cob--fp{ background:#e6f1fb; color:var(--blue-deep); }
+
+  /* Modal de vínculo */
+  #cfd-modal{ position:fixed; inset:0; z-index:1080; display:none;
+    background:rgba(16,45,80,.45); padding:12px; overflow-y:auto; }
+  #cfd-modal.on{ display:block; }
+  #cfd-modal .cx{ background:#fff; border-radius:14px; max-width:430px; margin:2vh auto;
+    overflow:hidden; box-shadow:0 12px 40px rgba(16,45,80,.35); }
+  #cfd-modal .cx__h{ padding:.7rem .85rem; background:var(--surface-1);
+    border-bottom:1px solid var(--line-2); display:flex; align-items:center; gap:.5rem; }
+  #cfd-modal .cx__h b{ font-size:.9rem; color:var(--blue-deep); }
+  #cfd-modal .cx__h .fechar{ margin-left:auto; border:0; background:none; font-size:1.1rem;
+    color:var(--muted); cursor:pointer; }
+  #cfd-modal .cx__b{ padding:.7rem .85rem; }
+  #cfd-modal .falta{ font-size:12px; color:var(--muted); margin-bottom:.6rem; }
+  #cfd-modal .falta b{ color:var(--danger); font-size:1rem; }
+  #cfd-modal .cand{ display:flex; gap:.55rem; align-items:flex-start; cursor:pointer;
+    border:1px solid var(--line-2); border-radius:10px; padding:.5rem .6rem; margin-bottom:.45rem; }
+  #cfd-modal .cand--on{ border-color:var(--blue); background:#eef5fd;
+    box-shadow:0 0 0 2px rgba(29,99,165,.12); }
+  #cfd-modal .cand input{ margin-top:.2rem; accent-color:var(--blue); flex:0 0 auto; }
+  #cfd-modal .cand__c{ min-width:0; flex:1; }
+  #cfd-modal .cand__d{ font-weight:700; font-size:.85rem; font-variant-numeric:tabular-nums; }
+  #cfd-modal .cand__m{ font-size:11px; color:var(--muted);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #cfd-modal .cand__v{ flex:0 0 auto; text-align:right; }
+  #cfd-modal .cand__v .l{ font-weight:800; font-variant-numeric:tabular-nums; font-size:.85rem; }
+  #cfd-modal .cand__v .s{ font-size:10.5px; color:var(--muted); }
+  #cfd-modal .campo{ border-top:1px solid var(--line); margin-top:.5rem; padding-top:.6rem; }
+  #cfd-modal .campo label{ font-size:10.5px; text-transform:uppercase; letter-spacing:.03em;
+    color:var(--muted); font-weight:700; display:block; margin-bottom:.2rem; }
+  #cfd-modal .campo input{ width:100%; border:1px solid var(--line-2); border-radius:8px;
+    padding:.4rem .55rem; font-size:.95rem; font-variant-numeric:tabular-nums; }
+  #cfd-modal .cx__f{ display:flex; gap:.5rem; padding:.7rem .85rem;
+    border-top:1px solid var(--line-2); background:var(--surface-1); }
+  #cfd-modal .cx__f button{ flex:1; border-radius:9px; padding:.5rem; font-weight:700;
+    font-size:.85rem; border:1px solid var(--line-2); background:#fff; color:var(--muted);
+    cursor:pointer; }
+  #cfd-modal .cx__f .ok{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #cfd-modal .cx__f .ok:disabled{ opacity:.5; cursor:not-allowed; }
+  #cfd-modal .vazio-c{ font-size:12px; color:var(--muted); text-align:center; padding:1.2rem .5rem; }
+
   /* Estado de cobertura da nota (alocação por data) */
   #cfd .cob{ font-size:10px; font-weight:700; border-radius:5px; padding:.05rem .35rem; }
   #cfd .cob--ok{ background:var(--ok-bg); color:var(--ok); }
@@ -199,6 +256,8 @@
   </div>
 
   
+
+  
   
 
   
@@ -266,9 +325,9 @@
     <div class="stat"><div class="rot">Comprado (notas)</div>
       <div class="val blue">R$ 109.132,00</div></div>
     <div class="stat"><div class="rot">Pago (OFX)</div>
-      <div class="val green">R$ 88.430,00</div></div>
+      <div class="val green">R$ 111.630,00</div></div>
     <div class="stat"><div class="rot">Saldo acumulado</div>
-      <div class="val red">R$ -20.702,00</div></div>
+      <div class="val green">R$ 2.498,00</div></div>
     <div class="stat"><div class="rot">Nota sem fornecedor</div>
       <div class="val amber">R$ 13.890,50</div></div>
     <div class="stat"><div class="rot">Compras conferidas</div>
@@ -348,8 +407,9 @@
         
 
         <div class="fifo-h"><i class="bi bi-diagram-2"></i>
-          Cada pagamento foi aplicado nas notas mais antigas primeiro (por data).
-          Não há amarração de pagamento com nota no sistema — isto é leitura, não cadastro.</div>
+          O que você vinculou à mão vale primeiro e fica gravado. O resto o sistema
+          aplica sozinho nas notas mais antigas (por data) — isso é só leitura, refeita
+          a cada abertura da tela.</div>
 
         
         <div class="lin lin--pg"
@@ -366,6 +426,8 @@
           <div class="lin__s">saldo R$ 50.000,00</div>
           
         </div>
+
+        
         
         <div class="lin lin--nf lin--ok"
              id="doc-2">
@@ -380,14 +442,19 @@
           <div class="lin__v">−R$ 50.000,00</div>
           <div class="lin__s"><span class="cob cob--ok">coberta</span></div>
           
-          <button type="button" class="ok-btn ok-btn--on"
-                  onclick="cfdConferir(this, 2)"
-                  title="visto de quem conferiu esta compra">
-            <i class="bi bi-check-circle-fill"></i>
-            <span class="t">conferida</span>
-          </button>
+          <div class="lin__acoes">
+            
+            <button type="button" class="ok-btn ok-btn--on"
+                    onclick="cfdConferir(this, 2)"
+                    title="visto de quem conferiu esta compra">
+              <i class="bi bi-check-circle-fill"></i>
+              <span class="t">conferida</span>
+            </button>
+          </div>
           
         </div>
+
+        
         
         <div class="lin lin--pg"
              >
@@ -403,6 +470,8 @@
           <div class="lin__s">saldo R$ 30.000,00</div>
           
         </div>
+
+        
         
         <div class="lin lin--nf"
              id="doc-4">
@@ -417,14 +486,19 @@
           <div class="lin__v">−R$ 27.500,00</div>
           <div class="lin__s"><span class="cob cob--ok">coberta</span></div>
           
-          <button type="button" class="ok-btn"
-                  onclick="cfdConferir(this, 4)"
-                  title="visto de quem conferiu esta compra">
-            <i class="bi bi-circle"></i>
-            <span class="t">dar OK</span>
-          </button>
+          <div class="lin__acoes">
+            
+            <button type="button" class="ok-btn"
+                    onclick="cfdConferir(this, 4)"
+                    title="visto de quem conferiu esta compra">
+              <i class="bi bi-circle"></i>
+              <span class="t">dar OK</span>
+            </button>
+          </div>
           
         </div>
+
+        
         
 
         
@@ -447,25 +521,19 @@
           <div class="forn__nome">DISTRIBUIDORA TABOCAO LTDA - EM RECUPERACAO JUDICIAL</div>
           <div class="forn__cnpj">CNPJ 02.284.585/0001-44</div>
         </div>
-        <div class="selo selo--deve">
-          <div class="v">R$ -23.200,00</div>
-          <div class="r">a pagar
+        <div class="selo selo--zero">
+          <div class="v">R$ 0,00</div>
+          <div class="r">quitado
             <i class="bi bi-chevron-down chev"></i></div>
         </div>
       </div>
 
       <div class="forn__nums">
         <span><span class="k">Comprado:</span> <b>R$ 31.630,00</b></span>
-        <span><span class="k">Pago:</span> <b>R$ 8.430,00</b></span>
+        <span><span class="k">Pago:</span> <b>R$ 31.630,00</b></span>
         <span><span class="k">Diferença no período:</span>
-          <b>R$ -23.200,00</b></span>
+          <b>R$ 0,00</b></span>
         
-        <span class="conf-cnt" title="notas que a alocação por data não conseguiu cobrir">
-          <i class="bi bi-exclamation-circle"></i> 3 notas em aberto</span>
-        
-        
-        <span class="conf-cnt" title="há pagamento anterior ao corte que pode ser destas notas">
-          <i class="bi bi-clock-history"></i> talvez pago antes do corte</span>
         
         
         <span class="conf-cnt conf-cnt--ok"
@@ -483,39 +551,49 @@
 
         
         
-        <div class="antes">
-          <div class="antes__h"><i class="bi bi-clock-history"></i>
-            2 pagamentos
-            antes do corte, somando <b>R$ 23.200,00</b></div>
-          <div class="antes__p">
-            Estes <b>não entram</b> no saldo — são anteriores a 01/08/2026 e a captura
-            não tem as notas da época pra confrontar. Mas a compra costuma ser paga antes da
-            nota sair, então talvez sejam destas notas. Se forem todos,
-            o saldo real seria <b>R$ 0,00</b>.
-          </div>
-          
-          <div class="antes__l">
-            <span class="data">30/07/2026</span>
-            <span class="d">PIX DISTRIBUIDORA TABOCAO</span>
-            <span class="v">R$ 8.700,00</span>
-          </div>
-          
-          <div class="antes__l">
-            <span class="data">28/07/2026</span>
-            <span class="d">PIX DISTRIBUIDORA TABOCAO</span>
-            <span class="v">R$ 14.500,00</span>
-          </div>
-          
-        </div>
-        
 
         <div class="fifo-h"><i class="bi bi-diagram-2"></i>
-          Cada pagamento foi aplicado nas notas mais antigas primeiro (por data).
-          Não há amarração de pagamento com nota no sistema — isto é leitura, não cadastro.</div>
+          O que você vinculou à mão vale primeiro e fica gravado. O resto o sistema
+          aplica sozinho nas notas mais antigas (por data) — isso é só leitura, refeita
+          a cada abertura da tela.</div>
 
         
+        <div class="lin lin--pg"
+             >
+          <span class="lin__ico">
+            <i class="bi bi-cash-coin"></i></span>
+          <div class="lin__t">
+            <span class="data">28/07</span>
+            Pagamento
+            
+          </div>
+          <div class="lin__m">PIX DISTRIBUIDORA TABOCAO</div>
+          <div class="lin__v">+R$ 14.500,00</div>
+          <div class="lin__s">saldo R$ 14.500,00<br><span class="cob cob--fp">fora do período, vinculado</span></div>
+          
+        </div>
+
+        
+        
+        <div class="lin lin--pg"
+             >
+          <span class="lin__ico">
+            <i class="bi bi-cash-coin"></i></span>
+          <div class="lin__t">
+            <span class="data">30/07</span>
+            Pagamento
+            
+          </div>
+          <div class="lin__m">PIX DISTRIBUIDORA TABOCAO</div>
+          <div class="lin__v">+R$ 8.700,00</div>
+          <div class="lin__s">saldo R$ 23.200,00<br><span class="cob cob--fp">fora do período, vinculado</span></div>
+          
+        </div>
+
+        
+        
         <div class="lin lin--nf lin--ok"
-             id="doc-5">
+             id="doc-7">
           <span class="lin__ico">
             <i class="bi bi-receipt"></i></span>
           <div class="lin__t">
@@ -525,19 +603,32 @@
           </div>
           <div class="lin__m">POSTO NOVO HORIZONTE GOIATUBA</div>
           <div class="lin__v">−R$ 8.700,00</div>
-          <div class="lin__s"><span class="cob cob--pa">falta R$ 270,00</span></div>
+          <div class="lin__s"><span class="cob cob--ok">coberta</span></div>
           
-          <button type="button" class="ok-btn ok-btn--on"
-                  onclick="cfdConferir(this, 5)"
-                  title="visto de quem conferiu esta compra">
-            <i class="bi bi-check-circle-fill"></i>
-            <span class="t">conferida</span>
-          </button>
+          <div class="lin__acoes">
+            
+            <button type="button" class="ok-btn ok-btn--on"
+                    onclick="cfdConferir(this, 7)"
+                    title="visto de quem conferiu esta compra">
+              <i class="bi bi-check-circle-fill"></i>
+              <span class="t">conferida</span>
+            </button>
+          </div>
           
         </div>
+
+        
+        <div class="vinc">
+          <i class="bi bi-link-45deg"></i>
+          <span class="d">30/07/2026 · PIX DISTRIBUIDORA TABOCAO</span>
+          <span class="v">R$ 8.700,00</span>
+          <button type="button" class="x" onclick="cfdDesvincular(this, 101)"
+                  title="desfazer este vínculo"><i class="bi bi-x-lg"></i></button>
+        </div>
+        
         
         <div class="lin lin--nf lin--ok"
-             id="doc-6">
+             id="doc-8">
           <span class="lin__ico">
             <i class="bi bi-receipt"></i></span>
           <div class="lin__t">
@@ -547,16 +638,29 @@
           </div>
           <div class="lin__m">POSTO NOVO HORIZONTE GOIATUBA</div>
           <div class="lin__v">−R$ 14.500,00</div>
-          <div class="lin__s"><span class="cob cob--no">descoberta</span></div>
+          <div class="lin__s"><span class="cob cob--ok">coberta</span></div>
           
-          <button type="button" class="ok-btn ok-btn--on"
-                  onclick="cfdConferir(this, 6)"
-                  title="visto de quem conferiu esta compra">
-            <i class="bi bi-check-circle-fill"></i>
-            <span class="t">conferida</span>
-          </button>
+          <div class="lin__acoes">
+            
+            <button type="button" class="ok-btn ok-btn--on"
+                    onclick="cfdConferir(this, 8)"
+                    title="visto de quem conferiu esta compra">
+              <i class="bi bi-check-circle-fill"></i>
+              <span class="t">conferida</span>
+            </button>
+          </div>
           
         </div>
+
+        
+        <div class="vinc">
+          <i class="bi bi-link-45deg"></i>
+          <span class="d">28/07/2026 · PIX DISTRIBUIDORA TABOCAO</span>
+          <span class="v">R$ 14.500,00</span>
+          <button type="button" class="x" onclick="cfdDesvincular(this, 102)"
+                  title="desfazer este vínculo"><i class="bi bi-x-lg"></i></button>
+        </div>
+        
         
         <div class="lin lin--pg"
              >
@@ -569,12 +673,14 @@
           </div>
           <div class="lin__m">Pagamento Pix 02.284.585 0001-44</div>
           <div class="lin__v">+R$ 8.430,00</div>
-          <div class="lin__s">saldo R$ -14.770,00</div>
+          <div class="lin__s">saldo R$ 8.430,00</div>
           
         </div>
+
+        
         
         <div class="lin lin--nf lin--ok"
-             id="doc-8">
+             id="doc-10">
           <span class="lin__ico">
             <i class="bi bi-receipt"></i></span>
           <div class="lin__t">
@@ -584,26 +690,23 @@
           </div>
           <div class="lin__m">POSTO NOVO HORIZONTE GOIATUBA</div>
           <div class="lin__v">−R$ 8.430,00</div>
-          <div class="lin__s"><span class="cob cob--no">descoberta</span></div>
+          <div class="lin__s"><span class="cob cob--ok">coberta</span></div>
           
-          <button type="button" class="ok-btn ok-btn--on"
-                  onclick="cfdConferir(this, 8)"
-                  title="visto de quem conferiu esta compra">
-            <i class="bi bi-check-circle-fill"></i>
-            <span class="t">conferida</span>
-          </button>
+          <div class="lin__acoes">
+            
+            <button type="button" class="ok-btn ok-btn--on"
+                    onclick="cfdConferir(this, 10)"
+                    title="visto de quem conferiu esta compra">
+              <i class="bi bi-check-circle-fill"></i>
+              <span class="t">conferida</span>
+            </button>
+          </div>
           
         </div>
-        
 
         
-        <div class="fecho">
-          
-          <span class="fecho__i fecho__i--no"><span class="r">Nota descoberta</span>
-            <b>R$ 23.200,00</b></span>
-          
-          
-        </div>
+        
+
         
       </div>
     </div>
@@ -651,12 +754,13 @@
         
 
         <div class="fifo-h"><i class="bi bi-diagram-2"></i>
-          Cada pagamento foi aplicado nas notas mais antigas primeiro (por data).
-          Não há amarração de pagamento com nota no sistema — isto é leitura, não cadastro.</div>
+          O que você vinculou à mão vale primeiro e fica gravado. O resto o sistema
+          aplica sozinho nas notas mais antigas (por data) — isso é só leitura, refeita
+          a cada abertura da tela.</div>
 
         
         <div class="lin lin--nf"
-             id="doc-9">
+             id="doc-11">
           <span class="lin__ico">
             <i class="bi bi-receipt"></i></span>
           <div class="lin__t">
@@ -668,14 +772,24 @@
           <div class="lin__v">−R$ 2,00</div>
           <div class="lin__s"><span class="cob cob--no">descoberta</span></div>
           
-          <button type="button" class="ok-btn"
-                  onclick="cfdConferir(this, 9)"
-                  title="visto de quem conferiu esta compra">
-            <i class="bi bi-circle"></i>
-            <span class="t">dar OK</span>
-          </button>
+          <div class="lin__acoes">
+            
+            <button type="button" class="vinc-btn" onclick="cfdAbrirVinculo(11)"
+                    title="amarrar um pagamento a esta nota">
+              <i class="bi bi-link-45deg"></i> vincular pagamento
+            </button>
+            
+            <button type="button" class="ok-btn"
+                    onclick="cfdConferir(this, 11)"
+                    title="visto de quem conferiu esta compra">
+              <i class="bi bi-circle"></i>
+              <span class="t">dar OK</span>
+            </button>
+          </div>
           
         </div>
+
+        
         
 
         
@@ -693,7 +807,134 @@
   
 </div>
 
+
+<div id="cfd-modal" onclick="if (event.target === this) cfdFecharVinculo()">
+  <div class="cx">
+    <div class="cx__h">
+      <i class="bi bi-link-45deg" style="color:#1D63A5"></i>
+      <b id="cfd-mtit">Vincular pagamento</b>
+      <button type="button" class="fechar" onclick="cfdFecharVinculo()">&times;</button>
+    </div>
+    <div class="cx__b">
+      <div class="falta">Falta cobrir nesta nota: <b id="cfd-mfalta">—</b></div>
+      <div id="cfd-mlista"></div>
+      <div class="campo" id="cfd-mcampo" hidden>
+        <label>Quanto deste pagamento entra nesta nota</label>
+        <input type="number" id="cfd-mvalor" step="0.01" min="0.01" inputmode="decimal">
+      </div>
+    </div>
+    <div class="cx__f">
+      <button type="button" onclick="cfdFecharVinculo()">Cancelar</button>
+      <button type="button" class="ok" id="cfd-mok" disabled onclick="cfdSalvarVinculo()">
+        Vincular</button>
+    </div>
+  </div>
+</div>
+
 <script>
+// ---------- Vínculo manual pagamento -> nota ----------
+// O automático (por data) resolve o caso comum; isto é para o que ele não
+// alcança — em especial pagamento anterior ao corte da captura.
+var cfdDoc = null, cfdSel = null, cfdFalta = 0;
+
+function cfdMoeda(v) {
+  return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2,
+                                                     maximumFractionDigits: 2 });
+}
+
+function cfdAbrirVinculo(docId) {
+  cfdDoc = docId; cfdSel = null;
+  var lista = document.getElementById('cfd-mlista');
+  lista.innerHTML = '<div class="vazio-c">carregando pagamentos...</div>';
+  document.getElementById('cfd-mcampo').hidden = true;
+  document.getElementById('cfd-mok').disabled = true;
+  document.getElementById('cfd-modal').classList.add('on');
+
+  fetch('#'.replace(/0$/, docId))
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j.ok) { lista.innerHTML = '<div class="vazio-c">' + (j.erro || 'falhou') + '</div>'; return; }
+      cfdFalta = j.falta;
+      document.getElementById('cfd-mtit').textContent = j.nota;
+      document.getElementById('cfd-mfalta').textContent = cfdMoeda(j.falta);
+      if (!j.candidatos.length) {
+        lista.innerHTML = '<div class="vazio-c">Nenhum pagamento deste fornecedor com valor ' +
+          'livre. Se o pagamento existe, confira se ele está conciliado neste ' +
+          'fornecedor lá no OFX.</div>';
+        return;
+      }
+      lista.innerHTML = j.candidatos.map(function (c) {
+        return '<label class="cand" data-id="' + c.id + '" data-livre="' + c.livre + '">' +
+          '<input type="radio" name="cfd-cand">' +
+          '<span class="cand__c"><span class="cand__d">' + c.data + '</span>' +
+          '<span class="cand__m">' + (c.descricao || '—') + '</span></span>' +
+          '<span class="cand__v"><span class="l">' + cfdMoeda(c.livre) + '</span><br>' +
+          '<span class="s">livre de ' + cfdMoeda(c.valor) + '</span></span></label>';
+      }).join('');
+      lista.querySelectorAll('.cand').forEach(function (el) {
+        el.addEventListener('click', function () {
+          lista.querySelectorAll('.cand').forEach(function (o) { o.classList.remove('cand--on'); });
+          el.classList.add('cand--on');
+          el.querySelector('input').checked = true;
+          cfdSel = el;
+          // Sugere o menor entre o que falta e o que o pagamento tem livre —
+          // é o que fecha a conta na maioria dos casos.
+          var v = Math.min(cfdFalta, parseFloat(el.dataset.livre));
+          document.getElementById('cfd-mcampo').hidden = false;
+          document.getElementById('cfd-mvalor').value = v.toFixed(2);
+          document.getElementById('cfd-mok').disabled = false;
+        });
+      });
+    })
+    .catch(function (e) { lista.innerHTML = '<div class="vazio-c">Erro de rede: ' + e + '</div>'; });
+}
+
+function cfdFecharVinculo() { document.getElementById('cfd-modal').classList.remove('on'); }
+
+function cfdSalvarVinculo() {
+  if (!cfdSel) return;
+  var btn = document.getElementById('cfd-mok');
+  var valor = parseFloat(document.getElementById('cfd-mvalor').value);
+  if (!(valor > 0)) { alert('Informe um valor maior que zero.'); return; }
+  btn.disabled = true; btn.textContent = 'gravando...';
+
+  fetch('#', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ doc_id: cfdDoc, transacao_id: parseInt(cfdSel.dataset.id, 10),
+                           valor: valor })
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  .then(function (res) {
+    btn.disabled = false; btn.textContent = 'Vincular';
+    if (!res.ok || !res.j.ok) { alert((res.j && res.j.erro) || 'não consegui vincular'); return; }
+    // Recarrega mesmo: o vínculo mexe no saldo, na cobertura e na alocação
+    // automática de todas as outras notas do fornecedor.
+    window.location.reload();
+  })
+  .catch(function (e) {
+    btn.disabled = false; btn.textContent = 'Vincular'; alert('Erro de rede: ' + e);
+  });
+}
+
+function cfdDesvincular(btn, vincId) {
+  if (!confirm('Desfazer este vínculo?')) return;
+  btn.disabled = true;
+  fetch('#', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vinculo_id: vincId })
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  .then(function (res) {
+    if (!res.ok || !res.j.ok) {
+      btn.disabled = false; alert((res.j && res.j.erro) || 'não consegui desfazer'); return;
+    }
+    window.location.reload();
+  })
+  .catch(function (e) { btn.disabled = false; alert('Erro de rede: ' + e); });
+}
+
 // Abre/fecha o detalhe do fornecedor (fechado por padrão: a lista fica legível
 // no celular e quem interessa é o selo do saldo).
 function cfdToggle(el) {

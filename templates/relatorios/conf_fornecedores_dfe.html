@@ -83,6 +83,63 @@
   /* Nota conferida esmaece: o que sobra colorido é o que ainda falta olhar. */
   #cfd .lin--ok{ background:#fbfdf9; }
   #cfd .lin--ok .lin__t,#cfd .lin--ok .lin__v{ opacity:.6; }
+  /* Vínculo manual: botão na linha da nota + a lista do que já foi amarrado */
+  #cfd .lin__acoes{ grid-column:2 / span 2; grid-row:3; justify-self:end; margin-top:.3rem;
+    display:flex; gap:.35rem; flex-wrap:wrap; justify-content:flex-end; }
+  #cfd .vinc-btn{ display:inline-flex; align-items:center; gap:.3rem; cursor:pointer;
+    border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:8px; padding:.3rem .6rem; font-size:11.5px; font-weight:700; }
+  #cfd .vinc-btn:hover{ background:#dfeaf8; border-color:var(--blue); }
+  #cfd .vinc{ display:flex; align-items:center; gap:.4rem; font-size:11px;
+    padding:.25rem .8rem .25rem 3.1rem; color:var(--ok); background:#f6faf2; }
+  #cfd .vinc .d{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; color:var(--muted); }
+  #cfd .vinc .v{ font-weight:700; font-variant-numeric:tabular-nums; }
+  #cfd .vinc .x{ border:0; background:none; color:#b9c2ce; cursor:pointer; padding:0 .1rem;
+    font-size:10px; }
+  #cfd .vinc .x:hover{ color:var(--danger); }
+  #cfd .cob--fp{ background:#e6f1fb; color:var(--blue-deep); }
+
+  /* Modal de vínculo */
+  #cfd-modal{ position:fixed; inset:0; z-index:1080; display:none;
+    background:rgba(16,45,80,.45); padding:12px; overflow-y:auto; }
+  #cfd-modal.on{ display:block; }
+  #cfd-modal .cx{ background:#fff; border-radius:14px; max-width:430px; margin:2vh auto;
+    overflow:hidden; box-shadow:0 12px 40px rgba(16,45,80,.35); }
+  #cfd-modal .cx__h{ padding:.7rem .85rem; background:var(--surface-1);
+    border-bottom:1px solid var(--line-2); display:flex; align-items:center; gap:.5rem; }
+  #cfd-modal .cx__h b{ font-size:.9rem; color:var(--blue-deep); }
+  #cfd-modal .cx__h .fechar{ margin-left:auto; border:0; background:none; font-size:1.1rem;
+    color:var(--muted); cursor:pointer; }
+  #cfd-modal .cx__b{ padding:.7rem .85rem; }
+  #cfd-modal .falta{ font-size:12px; color:var(--muted); margin-bottom:.6rem; }
+  #cfd-modal .falta b{ color:var(--danger); font-size:1rem; }
+  #cfd-modal .cand{ display:flex; gap:.55rem; align-items:flex-start; cursor:pointer;
+    border:1px solid var(--line-2); border-radius:10px; padding:.5rem .6rem; margin-bottom:.45rem; }
+  #cfd-modal .cand--on{ border-color:var(--blue); background:#eef5fd;
+    box-shadow:0 0 0 2px rgba(29,99,165,.12); }
+  #cfd-modal .cand input{ margin-top:.2rem; accent-color:var(--blue); flex:0 0 auto; }
+  #cfd-modal .cand__c{ min-width:0; flex:1; }
+  #cfd-modal .cand__d{ font-weight:700; font-size:.85rem; font-variant-numeric:tabular-nums; }
+  #cfd-modal .cand__m{ font-size:11px; color:var(--muted);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #cfd-modal .cand__v{ flex:0 0 auto; text-align:right; }
+  #cfd-modal .cand__v .l{ font-weight:800; font-variant-numeric:tabular-nums; font-size:.85rem; }
+  #cfd-modal .cand__v .s{ font-size:10.5px; color:var(--muted); }
+  #cfd-modal .campo{ border-top:1px solid var(--line); margin-top:.5rem; padding-top:.6rem; }
+  #cfd-modal .campo label{ font-size:10.5px; text-transform:uppercase; letter-spacing:.03em;
+    color:var(--muted); font-weight:700; display:block; margin-bottom:.2rem; }
+  #cfd-modal .campo input{ width:100%; border:1px solid var(--line-2); border-radius:8px;
+    padding:.4rem .55rem; font-size:.95rem; font-variant-numeric:tabular-nums; }
+  #cfd-modal .cx__f{ display:flex; gap:.5rem; padding:.7rem .85rem;
+    border-top:1px solid var(--line-2); background:var(--surface-1); }
+  #cfd-modal .cx__f button{ flex:1; border-radius:9px; padding:.5rem; font-weight:700;
+    font-size:.85rem; border:1px solid var(--line-2); background:#fff; color:var(--muted);
+    cursor:pointer; }
+  #cfd-modal .cx__f .ok{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #cfd-modal .cx__f .ok:disabled{ opacity:.5; cursor:not-allowed; }
+  #cfd-modal .vazio-c{ font-size:12px; color:var(--muted); text-align:center; padding:1.2rem .5rem; }
+
   /* Estado de cobertura da nota (alocação por data) */
   #cfd .cob{ font-size:10px; font-weight:700; border-radius:5px; padding:.05rem .35rem; }
   #cfd .cob--ok{ background:var(--ok-bg); color:var(--ok); }
@@ -203,6 +260,14 @@
       {% endif %}
     </div>
   </div>
+
+  {% if not vinculo_pronto %}
+  <div class="alert alert-warning py-2 small">
+    <b><i class="bi bi-database-exclamation"></i> Vínculo manual ainda não está ligado.</b>
+    Falta criar a tabela: rode <code>python scripts/alter_dfe_pagamento_nota.py</code>.
+    Até lá o relatório funciona só com a alocação automática por data.
+  </div>
+  {% endif %}
 
   {# ---------- Avisos de cadastro (furam o cruzamento) ---------- #}
   {% if duplicados %}
@@ -392,8 +457,9 @@
         {% endif %}
 
         <div class="fifo-h"><i class="bi bi-diagram-2"></i>
-          Cada pagamento foi aplicado nas notas mais antigas primeiro (por data).
-          Não há amarração de pagamento com nota no sistema — isto é leitura, não cadastro.</div>
+          O que você vinculou à mão vale primeiro e fica gravado. O resto o sistema
+          aplica sozinho nas notas mais antigas (por data) — isso é só leitura, refeita
+          a cada abertura da tela.</div>
 
         {% for l in d.linhas %}
         <div class="lin lin--{{ 'pg' if l.tipo == 'pagamento' else 'nf' }}{{ ' lin--ok' if l.conferido }}"
@@ -412,17 +478,38 @@
               {%- if l.coberta -%}<span class="cob cob--ok">coberta</span>
               {%- elif l.parcial -%}<span class="cob cob--pa">falta {{ l.falta | formatar_moeda }}</span>
               {%- else -%}<span class="cob cob--no">descoberta</span>{%- endif -%}
-            {%- else -%}saldo {{ l.saldo | formatar_moeda }}{%- endif -%}
+            {%- else -%}
+              saldo {{ l.saldo | formatar_moeda }}
+              {%- if l.fora_periodo %}<br><span class="cob cob--fp">fora do período, vinculado</span>{% endif -%}
+            {%- endif -%}
           </div>
           {% if l.tipo == 'nota' %}
-          <button type="button" class="ok-btn{{ ' ok-btn--on' if l.conferido }}"
-                  onclick="cfdConferir(this, {{ l.id }})"
-                  title="visto de quem conferiu esta compra">
-            <i class="bi {{ 'bi-check-circle-fill' if l.conferido else 'bi-circle' }}"></i>
-            <span class="t">{{ 'conferida' if l.conferido else 'dar OK' }}</span>
-          </button>
+          <div class="lin__acoes">
+            {% if not l.coberta %}
+            <button type="button" class="vinc-btn" onclick="cfdAbrirVinculo({{ l.id }})"
+                    title="amarrar um pagamento a esta nota">
+              <i class="bi bi-link-45deg"></i> vincular pagamento
+            </button>
+            {% endif %}
+            <button type="button" class="ok-btn{{ ' ok-btn--on' if l.conferido }}"
+                    onclick="cfdConferir(this, {{ l.id }})"
+                    title="visto de quem conferiu esta compra">
+              <i class="bi {{ 'bi-check-circle-fill' if l.conferido else 'bi-circle' }}"></i>
+              <span class="t">{{ 'conferida' if l.conferido else 'dar OK' }}</span>
+            </button>
+          </div>
           {% endif %}
         </div>
+
+        {% for v in l.vinculos %}
+        <div class="vinc">
+          <i class="bi bi-link-45deg"></i>
+          <span class="d">{{ v.data.strftime('%d/%m/%Y') }} · {{ v.descricao or 'pagamento' }}</span>
+          <span class="v">{{ v.valor | formatar_moeda }}</span>
+          <button type="button" class="x" onclick="cfdDesvincular(this, {{ v.id }})"
+                  title="desfazer este vínculo"><i class="bi bi-x-lg"></i></button>
+        </div>
+        {% endfor %}
         {% endfor %}
 
         {% if d.sobra > 0.005 or d.descoberto > 0.005 %}
@@ -443,7 +530,134 @@
   {% endif %}
 </div>
 
+{# ---------- Modal: escolher o pagamento que cobre a nota ---------- #}
+<div id="cfd-modal" onclick="if (event.target === this) cfdFecharVinculo()">
+  <div class="cx">
+    <div class="cx__h">
+      <i class="bi bi-link-45deg" style="color:#1D63A5"></i>
+      <b id="cfd-mtit">Vincular pagamento</b>
+      <button type="button" class="fechar" onclick="cfdFecharVinculo()">&times;</button>
+    </div>
+    <div class="cx__b">
+      <div class="falta">Falta cobrir nesta nota: <b id="cfd-mfalta">—</b></div>
+      <div id="cfd-mlista"></div>
+      <div class="campo" id="cfd-mcampo" hidden>
+        <label>Quanto deste pagamento entra nesta nota</label>
+        <input type="number" id="cfd-mvalor" step="0.01" min="0.01" inputmode="decimal">
+      </div>
+    </div>
+    <div class="cx__f">
+      <button type="button" onclick="cfdFecharVinculo()">Cancelar</button>
+      <button type="button" class="ok" id="cfd-mok" disabled onclick="cfdSalvarVinculo()">
+        Vincular</button>
+    </div>
+  </div>
+</div>
+
 <script>
+// ---------- Vínculo manual pagamento -> nota ----------
+// O automático (por data) resolve o caso comum; isto é para o que ele não
+// alcança — em especial pagamento anterior ao corte da captura.
+var cfdDoc = null, cfdSel = null, cfdFalta = 0;
+
+function cfdMoeda(v) {
+  return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2,
+                                                     maximumFractionDigits: 2 });
+}
+
+function cfdAbrirVinculo(docId) {
+  cfdDoc = docId; cfdSel = null;
+  var lista = document.getElementById('cfd-mlista');
+  lista.innerHTML = '<div class="vazio-c">carregando pagamentos...</div>';
+  document.getElementById('cfd-mcampo').hidden = true;
+  document.getElementById('cfd-mok').disabled = true;
+  document.getElementById('cfd-modal').classList.add('on');
+
+  fetch('{{ url_for("conf_fornecedores_dfe.candidatos", doc_id=0) }}'.replace(/0$/, docId))
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j.ok) { lista.innerHTML = '<div class="vazio-c">' + (j.erro || 'falhou') + '</div>'; return; }
+      cfdFalta = j.falta;
+      document.getElementById('cfd-mtit').textContent = j.nota;
+      document.getElementById('cfd-mfalta').textContent = cfdMoeda(j.falta);
+      if (!j.candidatos.length) {
+        lista.innerHTML = '<div class="vazio-c">Nenhum pagamento deste fornecedor com valor ' +
+          'livre. Se o pagamento existe, confira se ele está conciliado neste ' +
+          'fornecedor lá no OFX.</div>';
+        return;
+      }
+      lista.innerHTML = j.candidatos.map(function (c) {
+        return '<label class="cand" data-id="' + c.id + '" data-livre="' + c.livre + '">' +
+          '<input type="radio" name="cfd-cand">' +
+          '<span class="cand__c"><span class="cand__d">' + c.data + '</span>' +
+          '<span class="cand__m">' + (c.descricao || '—') + '</span></span>' +
+          '<span class="cand__v"><span class="l">' + cfdMoeda(c.livre) + '</span><br>' +
+          '<span class="s">livre de ' + cfdMoeda(c.valor) + '</span></span></label>';
+      }).join('');
+      lista.querySelectorAll('.cand').forEach(function (el) {
+        el.addEventListener('click', function () {
+          lista.querySelectorAll('.cand').forEach(function (o) { o.classList.remove('cand--on'); });
+          el.classList.add('cand--on');
+          el.querySelector('input').checked = true;
+          cfdSel = el;
+          // Sugere o menor entre o que falta e o que o pagamento tem livre —
+          // é o que fecha a conta na maioria dos casos.
+          var v = Math.min(cfdFalta, parseFloat(el.dataset.livre));
+          document.getElementById('cfd-mcampo').hidden = false;
+          document.getElementById('cfd-mvalor').value = v.toFixed(2);
+          document.getElementById('cfd-mok').disabled = false;
+        });
+      });
+    })
+    .catch(function (e) { lista.innerHTML = '<div class="vazio-c">Erro de rede: ' + e + '</div>'; });
+}
+
+function cfdFecharVinculo() { document.getElementById('cfd-modal').classList.remove('on'); }
+
+function cfdSalvarVinculo() {
+  if (!cfdSel) return;
+  var btn = document.getElementById('cfd-mok');
+  var valor = parseFloat(document.getElementById('cfd-mvalor').value);
+  if (!(valor > 0)) { alert('Informe um valor maior que zero.'); return; }
+  btn.disabled = true; btn.textContent = 'gravando...';
+
+  fetch('{{ url_for("conf_fornecedores_dfe.vincular") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ doc_id: cfdDoc, transacao_id: parseInt(cfdSel.dataset.id, 10),
+                           valor: valor })
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  .then(function (res) {
+    btn.disabled = false; btn.textContent = 'Vincular';
+    if (!res.ok || !res.j.ok) { alert((res.j && res.j.erro) || 'não consegui vincular'); return; }
+    // Recarrega mesmo: o vínculo mexe no saldo, na cobertura e na alocação
+    // automática de todas as outras notas do fornecedor.
+    window.location.reload();
+  })
+  .catch(function (e) {
+    btn.disabled = false; btn.textContent = 'Vincular'; alert('Erro de rede: ' + e);
+  });
+}
+
+function cfdDesvincular(btn, vincId) {
+  if (!confirm('Desfazer este vínculo?')) return;
+  btn.disabled = true;
+  fetch('{{ url_for("conf_fornecedores_dfe.desvincular") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vinculo_id: vincId })
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  .then(function (res) {
+    if (!res.ok || !res.j.ok) {
+      btn.disabled = false; alert((res.j && res.j.erro) || 'não consegui desfazer'); return;
+    }
+    window.location.reload();
+  })
+  .catch(function (e) { btn.disabled = false; alert('Erro de rede: ' + e); });
+}
+
 // Abre/fecha o detalhe do fornecedor (fechado por padrão: a lista fica legível
 // no celular e quem interessa é o selo do saldo).
 function cfdToggle(el) {
