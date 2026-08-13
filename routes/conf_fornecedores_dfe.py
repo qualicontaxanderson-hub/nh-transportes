@@ -281,16 +281,18 @@ def _vinculos(conn, doc_ids):
         return {}, {}
     ph = ','.join(['%s'] * len(doc_ids))
 
-    cur = conn.cursor(dictionary=True)
-    cur.execute("""
+    sql = """
         SELECT v.id, v.documento_id, v.transacao_id, v.valor,
                bt.data_transacao, bt.descricao,
                COALESCE(bt.valor,0) AS valor_pagamento
           FROM dfe_pagamento_nota v
           JOIN bank_transactions bt ON bt.id = v.transacao_id
-         WHERE v.documento_id IN (%s)
+         WHERE v.documento_id IN (__IDS__)
          ORDER BY bt.data_transacao, v.id
-    """ % ph, list(doc_ids))
+    """.replace('__IDS__', ph)
+
+    cur = conn.cursor(dictionary=True)
+    cur.execute(sql, list(doc_ids))
     rows = cur.fetchall()
 
     # O comprometido é de TODAS as notas, não só das que estão em tela — senão
@@ -324,8 +326,10 @@ def _pagamentos_vinculados_fora(conn, doc_ids, data_ini, data_fim):
     ph = ','.join(['%s'] * len(doc_ids))
     params = list(doc_ids) + [data_ini, data_fim]
 
-    cur = conn.cursor(dictionary=True)
-    cur.execute("""
+    # Monta a lista de ids por substituição de marcador, NÃO com o operador %:
+    # a query tem outros %s (as datas) que são placeholders do driver, e o %
+    # tentaria formatá-los também.
+    sql = """
         SELECT DISTINCT bt.id, bt.fornecedor_id, bt.data_transacao, bt.descricao,
                COALESCE(bt.valor,0)                          AS valor,
                f.razao_social                                AS fornecedor_nome,
@@ -336,10 +340,13 @@ def _pagamentos_vinculados_fora(conn, doc_ids, data_ini, data_fim):
           JOIN bank_accounts ba     ON ba.id = bt.account_id
           JOIN fornecedores f       ON f.id = bt.fornecedor_id
           LEFT JOIN clientes emp    ON emp.id = ba.cliente_id
-         WHERE v.documento_id IN (%s)
+         WHERE v.documento_id IN (__IDS__)
            AND (bt.data_transacao < %s OR bt.data_transacao > %s)
          ORDER BY bt.data_transacao, bt.id
-    """ % ph, params)
+    """.replace('__IDS__', ph)
+
+    cur = conn.cursor(dictionary=True)
+    cur.execute(sql, params)
     rows = cur.fetchall()
     cur.close()
     for r in rows:
