@@ -132,11 +132,15 @@
   .cfd-modal .cand--on{ border-color:var(--blue); background:#eef5fd;
     box-shadow:0 0 0 2px rgba(29,99,165,.12); }
   .cfd-modal .cand input{ margin-top:.2rem; accent-color:var(--blue); flex:0 0 auto; }
-  .cfd-modal .cand__c{ min-width:0; flex:1; }
-  .cfd-modal .cand__d{ font-weight:700; font-size:.85rem; font-variant-numeric:tabular-nums; }
-  .cfd-modal .cand__m{ font-size:11px; color:var(--muted);
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .cfd-modal .cand__v{ flex:0 0 auto; text-align:right; }
+  /* Data e descrição são spans: sem display:block ficam na MESMA linha
+     ("06/08/2026Pagamento Pix...") e o ellipsis não corta — a descrição
+     estoura e passa por cima do valor no celular. */
+  .cfd-modal .cand__c{ min-width:0; flex:1; display:block; }
+  .cfd-modal .cand__d{ display:block; font-weight:700; font-size:.85rem;
+    font-variant-numeric:tabular-nums; }
+  .cfd-modal .cand__m{ display:block; max-width:100%; font-size:11px;
+    color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cfd-modal .cand__v{ flex:0 0 auto; text-align:right; white-space:nowrap; }
   .cfd-modal .cand__v .l{ font-weight:800; font-variant-numeric:tabular-nums; font-size:.85rem; }
   .cfd-modal .cand__v .s{ font-size:10.5px; color:var(--muted); }
   .cfd-modal .campo{ border-top:1px solid var(--line); margin-top:.5rem; padding-top:.6rem; }
