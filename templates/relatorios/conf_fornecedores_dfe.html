@@ -149,6 +149,12 @@
   #cfd .fifo-h{ padding:.4rem .8rem; font-size:10.5px; color:var(--muted); line-height:1.45;
     background:#fbfdff; border-bottom:1px solid var(--line); }
   #cfd .fifo-h .bi{ color:var(--blue); }
+  /* Diagnóstico: mostra a resposta crua do servidor na própria página, sem
+     depender do modal. Serve pra separar "erro no servidor" de "erro na tela". */
+  #cfd .diag-link{ color:var(--blue); font-weight:700; white-space:nowrap; }
+  #cfd .diag-saida{ margin:0; padding:.5rem .8rem; font-size:10px; line-height:1.5;
+    background:#0f172a; color:#cbd5e1; white-space:pre-wrap; word-break:break-all;
+    max-height:16rem; overflow:auto; }
   /* Fecho do card: o que sobrou de dinheiro e o que sobrou de nota */
   #cfd .fecho{ display:flex; gap:.5rem; flex-wrap:wrap; padding:.55rem .8rem;
     border-top:1px solid var(--line-2); background:var(--surface-1); }
@@ -460,7 +466,14 @@
         <div class="fifo-h"><i class="bi bi-diagram-2"></i>
           O que você vinculou à mão vale primeiro e fica gravado. O resto o sistema
           aplica sozinho nas notas mais antigas (por data) — isso é só leitura, refeita
-          a cada abertura da tela.</div>
+          a cada abertura da tela.
+          {% set _abertas = d.linhas | selectattr('tipo', 'equalto', 'nota')
+                                     | rejectattr('coberta') | list %}
+          {% if _abertas %}
+          <a href="#" class="diag-link"
+             onclick="cfdDiagnostico(this, {{ _abertas[0].id }}); return false;">testar vínculo</a>
+          {% endif %}</div>
+        <pre class="diag-saida" hidden></pre>
 
         {% for l in d.linhas %}
         <div class="lin lin--{{ 'pg' if l.tipo == 'pagamento' else 'nf' }}{{ ' lin--ok' if l.conferido }}"
@@ -642,6 +655,28 @@ function cfdAbrirVinculoInterno(docId) {
 }
 
 function cfdFecharVinculo() { document.getElementById('cfd-modal').classList.remove('on'); }
+
+// Chama o mesmo endereço do modal e joga a resposta CRUA na página. Sem modal,
+// sem JSON.parse, sem nada no meio: separa "o servidor respondeu errado" de
+// "a tela não mostrou". O texto daqui é o que diz onde está o problema.
+function cfdDiagnostico(link, docId) {
+  var saida = link.closest('.fifo-h').parentNode.querySelector('.diag-saida');
+  saida.hidden = false;
+  saida.textContent = 'consultando nota #' + docId + '...';
+
+  var url = '{{ url_for("conf_fornecedores_dfe.candidatos", doc_id=0) }}'.replace(/0$/, docId);
+  fetch(url)
+    .then(function (r) {
+      return r.text().then(function (t) {
+        saida.textContent = 'GET ' + url + '\nHTTP ' + r.status + ' ' + r.statusText +
+          '\ncontent-type: ' + (r.headers.get('content-type') || '?') +
+          '\n\n' + t.slice(0, 1500);
+      });
+    })
+    .catch(function (e) {
+      saida.textContent = 'GET ' + url + '\nNÃO CHEGOU AO SERVIDOR\n' + e;
+    });
+}
 
 function cfdSalvarVinculo() {
   if (!cfdSel) return;
