@@ -124,6 +124,27 @@ CREATE TABLE IF NOT EXISTS dfe_cte (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
 
+# ==========================================================================
+# DDL da cobranca da NF-e. Uma linha por PARCELA (duplicata) — combustivel
+# tera sempre uma so, mas pneu/peca vem parcelado e a estrutura ja aguenta.
+# E a base do contas a pagar: vencimento e valor por parcela.
+# ==========================================================================
+DDL_DUPLICATAS = """
+CREATE TABLE IF NOT EXISTS dfe_duplicatas (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    documento_id  INT           NOT NULL,
+    n_dup         VARCHAR(60)   NOT NULL,
+    vencimento    DATE          NULL,
+    valor         DECIMAL(14,2) NULL,
+    criado_em     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_doc_dup (documento_id, n_dup),
+    KEY ix_venc (vencimento),
+    CONSTRAINT fk_dup_doc FOREIGN KEY (documento_id)
+        REFERENCES dfe_documentos(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+"""
+
 DDL_CTE_NFE = """
 CREATE TABLE IF NOT EXISTS dfe_cte_nfe (
     id            INT AUTO_INCREMENT PRIMARY KEY,
@@ -241,7 +262,73 @@ def extrair_nota(root):
         "modelo": modelo, "dh_txt": dh_txt, "ano": ano, "mes": mes,
         "emit_cnpj": emit_cnpj, "emit_nome": emit_nome, "dest_cnpj": dest_cnpj,
         "valor_total": valor_total, "situacao": situacao, "itens": itens,
+        "duplicatas": extrair_duplicatas(root),
+        "pagamento": extrair_pagamento(root),
     }
+
+
+# ==========================================================================
+# Cobranca (<cobr><dup>) e forma de pagamento (<pag><detPag>).
+#
+# E daqui que sai o VENCIMENTO. Combustivel vem sempre em parcela unica (no
+# dia ou no dia seguinte), mas pneu/peca/oficina vem parcelado — por isso a
+# duplicata e uma LISTA, e nao um campo na nota.
+#
+# Nada aqui pode derrubar a captura: nota sem <cobr> (a vista, ou resumo que
+# nem tem XML completo) e absolutamente normal e devolve lista vazia.
+# ==========================================================================
+def extrair_duplicatas(root):
+    dups = []
+    for dup in root.iter():
+        if cs._local(dup.tag) != "dup":
+            continue
+        venc = _parse_data(cs._text(dup, "dVenc"))
+        valor = cs._text(dup, "vDup")
+        if not venc and not valor:
+            continue
+        dups.append({
+            "n_dup": (cs._text(dup, "nDup") or "")[:60] or None,
+            "vencimento": venc,
+            "valor": valor,
+        })
+    # Sem nDup (o campo e opcional) numera na ordem, senao a chave unica
+    # (documento_id, n_dup) colidiria e so a ultima parcela sobraria.
+    for i, d in enumerate(dups, 1):
+        if not d["n_dup"]:
+            d["n_dup"] = "%03d" % i
+    return dups
+
+
+def extrair_pagamento(root):
+    """indPag: 0=a vista, 1=a prazo. tPag: 01=dinheiro, 15=boleto, 17=Pix...
+
+    indPag mudou de lugar entre versoes do layout (ficava em <ide> na 3.10 e
+    passou para <detPag> na 4.00), entao procura nos dois.
+    """
+    ind = cs._text(root, "indPag")
+    tpag = None
+    for det in root.iter():
+        if cs._local(det.tag) != "detPag":
+            continue
+        tpag = cs._text(det, "tPag") or tpag
+        ind = cs._text(det, "indPag") or ind
+        break                      # a primeira basta para classificar a nota
+    return {
+        "ind": (ind or "").strip()[:1] or None,
+        "tipo": (tpag or "").strip()[:2] or None,
+    }
+
+
+def _parse_data(txt):
+    """dVenc vem como AAAA-MM-DD. Devolve a string ou None se vier torta."""
+    txt = (txt or "").strip()[:10]
+    if len(txt) != 10:
+        return None
+    try:
+        datetime.strptime(txt, "%Y-%m-%d")
+    except ValueError:
+        return None
+    return txt
 
 
 # ==========================================================================
@@ -564,6 +651,13 @@ SQL_RESUMO_UPSERT = (
 
 SQL_DOC_ID = "SELECT id FROM dfe_documentos WHERE chave = %s"
 
+SQL_DUP_UPSERT = (
+    "INSERT INTO dfe_duplicatas (documento_id, n_dup, vencimento, valor) "
+    "VALUES (%s,%s,%s,%s) "
+    "ON DUPLICATE KEY UPDATE "
+    "  vencimento=VALUES(vencimento), valor=VALUES(valor)"
+)
+
 SQL_ITEM_UPSERT = (
     "INSERT INTO dfe_itens "
     "(documento_id, n_item, produto_xml, cprod_fornecedor, cean, cod_anp, "
@@ -710,6 +804,13 @@ def gravar_nota(conn, cur, cliente_id, cnpj_cert, nota, xml_bytes, nsu, schema,
             it["valor_unitario"], it["valor_total"],
         ))
         n_itens += 1
+
+    # Cobranca (vencimento por parcela). Nota a vista costuma nao ter <cobr>:
+    # lista vazia e caso normal, nao erro.
+    for dup in nota.get("duplicatas") or []:
+        cur.execute(SQL_DUP_UPSERT, (
+            documento_id, dup["n_dup"], dup["vencimento"], dup["valor"],
+        ))
 
     conn.commit()
     return n_itens
@@ -943,6 +1044,7 @@ def main():
             c0.execute(DDL_EVENTOS)
             c0.execute(DDL_CTE)
             c0.execute(DDL_CTE_NFE)
+            c0.execute(DDL_DUPLICATAS)
         con0.commit()
     finally:
         con0.close()

@@ -97,6 +97,35 @@ def upload_xml(caminho_dropbox: str, conteudo_bytes: bytes) -> dict:
     return upload_arquivo(caminho_dropbox, conteudo_bytes)
 
 
+def baixar_xml(caminho_dropbox: str) -> bytes | None:
+    """
+    Lê de volta um XML já guardado. Usado para reprocessar nota antiga sem
+    pedir nada à SEFAZ — foi assim que o vencimento das notas capturadas antes
+    da leitura de <cobr> pôde ser recuperado.
+
+    Devolve os bytes do XML, ou None se o arquivo não existe mais (a retenção
+    é de 90 dias; sumir depois disso é o comportamento esperado, não erro).
+    Qualquer outra falha do Dropbox levanta RuntimeError.
+    """
+    if not _DROPBOX_AVAILABLE:
+        raise RuntimeError('Pacote "dropbox" não instalado. Execute: pip install dropbox==12.0.2')
+    if not caminho_dropbox:
+        return None
+
+    caminho = _normalizar_caminho(caminho_dropbox)
+
+    try:
+        dbx = _criar_dbx()
+        _, resposta = dbx.files_download(caminho)
+        return resposta.content
+    except ApiError as exc:
+        if 'not_found' in str(exc).lower():
+            return None
+        raise RuntimeError(f'Falha ao baixar XML do Dropbox em "{caminho}": {exc}') from exc
+    except Exception as exc:
+        raise RuntimeError(f'Erro inesperado ao baixar XML do Dropbox em "{caminho}": {exc}') from exc
+
+
 def apagar_xml(caminho_dropbox: str) -> bool:
     """
     Apaga um XML do Dropbox (usado na limpeza de retenção dos 3 meses).
