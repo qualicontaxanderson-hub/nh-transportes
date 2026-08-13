@@ -114,6 +114,7 @@
   #cfd-modal .cx__b{ padding:.7rem .85rem; }
   #cfd-modal .falta{ font-size:12px; color:var(--muted); margin-bottom:.6rem; }
   #cfd-modal .falta b{ color:var(--danger); font-size:1rem; }
+  #cfd-modal .falta .obs{ display:block; margin-top:.25rem; font-size:10.5px; line-height:1.45; }
   #cfd-modal .cand{ display:flex; gap:.55rem; align-items:flex-start; cursor:pointer;
     border:1px solid var(--line-2); border-radius:10px; padding:.5rem .6rem; margin-bottom:.45rem; }
   #cfd-modal .cand--on{ border-color:var(--blue); background:#eef5fd;
@@ -539,7 +540,10 @@
       <button type="button" class="fechar" onclick="cfdFecharVinculo()">&times;</button>
     </div>
     <div class="cx__b">
-      <div class="falta">Falta cobrir nesta nota: <b id="cfd-mfalta">—</b></div>
+      <div class="falta">Pode vincular até <b id="cfd-mfalta">—</b>
+        <span class="obs">— é o valor da nota menos o que você já amarrou à mão.
+        O rateio automático por data não conta aqui: ao vincular, ele se refaz
+        sozinho e o dinheiro dele vai para outra nota.</span></div>
       <div id="cfd-mlista"></div>
       <div class="campo" id="cfd-mcampo" hidden>
         <label>Quanto deste pagamento entra nesta nota</label>
@@ -574,7 +578,13 @@ function cfdAbrirVinculo(docId) {
   document.getElementById('cfd-modal').classList.add('on');
 
   fetch('{{ url_for("conf_fornecedores_dfe.candidatos", doc_id=0) }}'.replace(/0$/, docId))
-    .then(function (r) { return r.json(); })
+    .then(function (r) {
+      // Erro de servidor costuma vir em HTML, não JSON — sem isto o catch
+      // engolia a causa e a tela só dizia "não funciona".
+      return r.json().catch(function () {
+        throw new Error('o servidor respondeu ' + r.status + ' (não foi JSON)');
+      });
+    })
     .then(function (j) {
       if (!j.ok) { lista.innerHTML = '<div class="vazio-c">' + (j.erro || 'falhou') + '</div>'; return; }
       cfdFalta = j.falta;
@@ -609,7 +619,10 @@ function cfdAbrirVinculo(docId) {
         });
       });
     })
-    .catch(function (e) { lista.innerHTML = '<div class="vazio-c">Erro de rede: ' + e + '</div>'; });
+    .catch(function (e) {
+      lista.innerHTML = '<div class="vazio-c">Não consegui carregar: ' + e.message +
+        '<br><br>Mostre esta mensagem pra quem cuida do sistema.</div>';
+    });
 }
 
 function cfdFecharVinculo() { document.getElementById('cfd-modal').classList.remove('on'); }

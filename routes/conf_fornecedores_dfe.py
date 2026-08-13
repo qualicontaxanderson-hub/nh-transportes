@@ -227,10 +227,41 @@ def _pagamentos_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids):
     return rows
 
 
+_DDL_VINCULO = """
+CREATE TABLE IF NOT EXISTS dfe_pagamento_nota (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    documento_id  INT            NOT NULL,
+    transacao_id  INT            NOT NULL,
+    valor         DECIMAL(14,2)  NOT NULL,
+    criado_em     TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    criado_por    INT            NULL,
+    UNIQUE KEY uq_doc_tx (documento_id, transacao_id),
+    KEY ix_doc (documento_id),
+    KEY ix_tx (transacao_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+
+def _garante_tabela_vinculo(conn):
+    """Cria a tabela do vínculo se ainda não existir.
+
+    Ela também tem script próprio (scripts/alter_dfe_pagamento_nota.py), mas
+    depender do script trava o recurso pra quem está no celular. Só cria — não
+    altera nem apaga nada — e o IF NOT EXISTS deixa repetir sem efeito.
+    """
+    cur = conn.cursor()
+    cur.execute("""SELECT COUNT(*) FROM information_schema.tables
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'dfe_pagamento_nota'""")
+    existe = bool(cur.fetchone()[0])
+    if not existe:
+        cur.execute(_DDL_VINCULO)
+        conn.commit()
+    cur.close()
+    return True
+
+
 def _tem_tabela_vinculo(conn):
-    """A tabela nasce por script (scripts/alter_dfe_pagamento_nota.py) e o
-    deploy chega antes dele. Sem esta checagem o relatório inteiro quebraria
-    nesse intervalo — melhor degradar para "só o automático"."""
     cur = conn.cursor()
     cur.execute("""SELECT COUNT(*) FROM information_schema.tables
                     WHERE table_schema = DATABASE()
@@ -611,7 +642,7 @@ def conf_fornecedores_dfe():
             conn, empresa_ids, fornecedor_ids)
 
         doc_ids = [n['doc_id'] for n in notas]
-        vinculo_pronto = _tem_tabela_vinculo(conn)
+        vinculo_pronto = _garante_tabela_vinculo(conn)
         vinculos, usado = ({}, {})
         if vinculo_pronto:
             vinculos, usado = _vinculos(conn, doc_ids)
@@ -662,8 +693,7 @@ def candidatos(doc_id):
     """
     conn = get_db_connection()
     try:
-        if not _tem_tabela_vinculo(conn):
-            return jsonify(ok=False, erro='falta rodar scripts/alter_dfe_pagamento_nota.py'), 409
+        _garante_tabela_vinculo(conn)
         cur = conn.cursor(dictionary=True)
         cur.execute("""
             SELECT d.id, d.numero, d.serie, d.dh_emissao, d.emit_cnpj,
@@ -737,8 +767,7 @@ def vincular():
 
     conn = get_db_connection()
     try:
-        if not _tem_tabela_vinculo(conn):
-            return jsonify(ok=False, erro='falta rodar scripts/alter_dfe_pagamento_nota.py'), 409
+        _garante_tabela_vinculo(conn)
         cur = conn.cursor(dictionary=True)
 
         cur.execute("""
