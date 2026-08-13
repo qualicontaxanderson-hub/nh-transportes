@@ -185,7 +185,7 @@ Esses casos são válidos e não foram alterados nesta correção.
 
 **Teste Rápido:**
 ```bash
-1. Acesse: https://nh-transportes.onrender.com/auth/login
+1. Acesse: https://app.postonovohorizonte.com.br/auth/login
 2. Login como SUPERVISOR
 3. Deve ir para página inicial (não /troco_pix/pista)
 4. Clique em "Formas de Pagamento"
@@ -200,4 +200,4 @@ Siga o guia em `GUIA_TESTES_SUPERVISOR.md`
 **Data da Correção:** 2026-02-05  
 **Issue:** SUPERVISOR limitado a /troco_pix/pista  
 **Status:** ✅ RESOLVIDO  
-**Ambiente:** Produção (Render)
+**Ambiente:** Produção (Railway)

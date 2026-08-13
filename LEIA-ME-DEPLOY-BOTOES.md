@@ -14,7 +14,7 @@
 **Commit correto:** `9ce121d`
 
 **Como fazer:**
-1. Render Dashboard
+1. painel do Railway
 2. Manual Deploy
 3. Commit: **9ce121d**
 4. Aguardar

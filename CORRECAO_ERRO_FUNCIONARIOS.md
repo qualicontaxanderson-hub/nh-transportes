@@ -69,11 +69,11 @@ traceback.print_exc()
 ## 🧪 Como Testar
 
 ### Passo 1: Aguardar Deploy
-Esperar o Render fazer deploy do branch `copilot/fix-troco-pix-auto-error`
+Esperar o Railway fazer deploy do branch `copilot/fix-troco-pix-auto-error`
 
 ### Passo 2: Acessar Formulário
 ```
-https://nh-transportes.onrender.com/lancamentos_caixa/novo
+https://app.postonovohorizonte.com.br/lancamentos_caixa/novo
 ```
 
 ### Passo 3: Selecionar Cliente e Data
@@ -96,7 +96,7 @@ https://nh-transportes.onrender.com/lancamentos_caixa/novo
 2. ✅ Modal deve abrir com lista de funcionários
 
 ### Passo 5: Verificar Logs
-Nos logs do Render, procurar por:
+Nos logs do Railway, procurar por:
 
 ```
 [DEBUG] Buscando funcionários para cliente_id: 1
@@ -141,12 +141,12 @@ Nos logs do Render, procurar por:
 
 **Verificar:**
 1. Console do navegador (F12) para erros JavaScript
-2. Logs do Render para erro 500
+2. Logs do Railway para erro 500
 3. Se endpoint retorna JSON válido
 
 **Testar endpoint diretamente:**
 ```bash
-curl https://nh-transportes.onrender.com/lancamentos_caixa/api/funcionarios/1
+curl https://app.postonovohorizonte.com.br/lancamentos_caixa/api/funcionarios/1
 ```
 
 **Resposta esperada:**

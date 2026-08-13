@@ -78,7 +78,7 @@ Valores totais também separados por categoria
 
 ## 🚀 COMO VERIFICAR:
 
-1. **Acesse:** https://nh-transportes.onrender.com/lancamentos-funcionarios/
+1. **Acesse:** https://app.postonovohorizonte.com.br/lancamentos-funcionarios/
 
 2. **O que você verá:**
    - Nova coluna "Categoria" na tabela

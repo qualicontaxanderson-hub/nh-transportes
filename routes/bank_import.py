@@ -1349,7 +1349,7 @@ def index():
     # inbox_is_tmp=True → oculta UI de pasta, mostra card de "use upload direto"
     inbox_is_tmp = _is_tmp_or_unset or _is_windows_path
     # inbox_dir_missing=True → caminho Linux válido mas diretório ainda não existe
-    #   (ex: /data/ofx_inbox precisa de um Render Disk montado em /data)
+    #   (ex: /data/ofx_inbox precisa de um Volume do Railway montado em /data)
     inbox_dir_missing = _is_valid_linux_path and not _inbox_dir_exists
 
     # Verifica se a integração Dropbox está configurada
@@ -4172,7 +4172,7 @@ def _get_inbox_dirs() -> tuple:
     Retorna (inbox_dir, processed_dir), criando ambos se não existirem.
 
     Usa /tmp/ofx_inbox como fallback quando o caminho configurado não é gravável
-    (ex.: diretório da aplicação somente leitura após o build no Render/Railway).
+    (ex.: diretório da aplicação somente leitura após o build no Railway).
 
     processed_dir é OFX_PROCESSED_DIR se configurado, caso contrário
     <inbox_dir>/processados/ (padrão compatível com versões anteriores).
@@ -4192,7 +4192,7 @@ def _get_inbox_dirs() -> tuple:
     if _try_makedirs(inbox) and _try_makedirs(processed):
         return inbox, processed
 
-    # Fallback para /tmp – sempre gravável no Render/Railway/Docker
+    # Fallback para /tmp – sempre gravável no Railway/Docker
     tmp_inbox = os.path.join('/tmp', 'ofx_inbox')
     tmp_processed = os.path.join(tmp_inbox, 'processados')
     _try_makedirs(tmp_inbox)
@@ -4841,7 +4841,7 @@ def api_dropbox_oauth_url():
         import dropbox
         app_key = os.environ.get('DROPBOX_APP_KEY', '').strip()
         if not app_key:
-            return jsonify({'ok': False, 'erro': 'DROPBOX_APP_KEY não configurado no Render.'})
+            return jsonify({'ok': False, 'erro': 'DROPBOX_APP_KEY não configurado no Railway.'})
 
         auth_flow = dropbox.DropboxOAuth2FlowNoRedirect(
             app_key,
@@ -4956,7 +4956,7 @@ def api_dropbox_oauth_token():
             'refresh_token': refresh_token,
             'instrucao': (
                 f'Copie o valor abaixo e configure como variável de ambiente '
-                f'DROPBOX_REFRESH_TOKEN no Render. Depois disso o token nunca mais vai expirar.'
+                f'DROPBOX_REFRESH_TOKEN no Railway. Depois disso o token nunca mais vai expirar.'
             ),
         })
     except Exception as exc:

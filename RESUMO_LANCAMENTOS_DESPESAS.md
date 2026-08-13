@@ -228,7 +228,7 @@ mysql -h [host] -u [user] -p[password] [database] < migrations/20260214_add_lanc
 
 ### Passo 2: Reiniciar App
 ```bash
-# A aplicação reinicia automaticamente no Render após git push
+# A aplicação reinicia automaticamente no Railway após git push
 # Ou manualmente:
 systemctl restart nh-transportes
 ```

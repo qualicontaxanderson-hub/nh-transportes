@@ -88,7 +88,7 @@ WHEN m.id IS NOT NULL THEN 'MOTORISTAS'
 
 **Commit e push:** 1 minuto
 
-**Deploy:** Automático no Render (5 minutos)
+**Deploy:** Automático no Railway (5 minutos)
 
 **Resultado:** 7 FRENTISTAS + 2 MOTORISTAS ✅
 

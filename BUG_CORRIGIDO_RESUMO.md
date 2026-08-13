@@ -2,7 +2,7 @@
 
 ## 🎯 Resumo Rápido
 
-**Problema:** Erro ao tentar editar usuário em https://nh-transportes.onrender.com/auth/usuarios
+**Problema:** Erro ao tentar editar usuário em https://app.postonovohorizonte.com.br/auth/usuarios
 
 **Status:** ✅ **CORRIGIDO**
 
@@ -30,20 +30,20 @@ Simplificamos o método `get_clientes_produtos_posto()` para retornar todos os c
 
 ### Teste 1: Editar Usuário Existente
 
-1. Acesse: https://nh-transportes.onrender.com/auth/usuarios
+1. Acesse: https://app.postonovohorizonte.com.br/auth/usuarios
 2. Faça login como ADMIN
 3. Clique em "Editar" em qualquer usuário
 4. **Resultado Esperado:** ✅ Página carrega sem erros
 
 ### Teste 2: Editar Usuário SUPERVISOR
 
-1. Acesse: https://nh-transportes.onrender.com/auth/usuarios
+1. Acesse: https://app.postonovohorizonte.com.br/auth/usuarios
 2. Clique em "Editar" em um usuário SUPERVISOR
 3. **Resultado Esperado:** ✅ Campo "Empresas com Acesso" aparece com lista de empresas
 
 ### Teste 3: Criar Novo Usuário SUPERVISOR
 
-1. Acesse: https://nh-transportes.onrender.com/auth/usuarios/novo
+1. Acesse: https://app.postonovohorizonte.com.br/auth/usuarios/novo
 2. Selecione nível "SUPERVISOR"
 3. **Resultado Esperado:** ✅ Campo de empresas aparece com lista completa
 
@@ -81,7 +81,7 @@ ORDER BY razao_social  # ✅ Funciona!
 - ✅ Sistema de gerenciamento de usuários totalmente funcional
 
 ### Ambiente:
-- 🟢 Produção (Render.com)
+- 🟢 Produção (Railway)
 - 🟢 Branch: copilot/fix-merge-issue-39
 
 ---
@@ -91,7 +91,7 @@ ORDER BY razao_social  # ✅ Funciona!
 A correção está no branch `copilot/fix-merge-issue-39` e precisa ser:
 
 1. **Mergeada para main/master**
-2. **Deploy automático no Render.com**
+2. **Deploy automático no Railway**
 
 Após o deploy:
 - ✅ Erro desaparece automaticamente

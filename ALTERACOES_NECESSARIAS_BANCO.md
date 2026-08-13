@@ -279,7 +279,7 @@ DELETE FROM lancamentosfuncionarios_v2 WHERE id IN (8, 9);
 
 ### Deploy:
 - [ ] **MERGE** branch para main
-- [ ] **AGUARDAR** deploy do Render (5 min)
+- [ ] **AGUARDAR** deploy do Railway (5 min)
 - [ ] **EXECUTAR** SQL de limpeza (2 min)
 - [ ] **TESTAR** páginas de edição e detalhe
 - [ ] **CONFIRMAR** dados corretos
@@ -296,7 +296,7 @@ git merge copilot/fix-merge-issue-39
 git push origin main
 ```
 
-**Aguardar:** Render faz deploy automaticamente (~5 min)
+**Aguardar:** Railway faz deploy automaticamente (~5 min)
 
 ### 2. Executar SQL de Limpeza (2 min)
 
@@ -311,13 +311,13 @@ DELETE FROM lancamentosfuncionarios_v2 WHERE id IN (8, 9);
 ### 3. Validar Resultado (3 min)
 
 **Página de Edição:**
-- Acessar: https://nh-transportes.onrender.com/lancamentos-funcionarios/editar/01-2026/1
+- Acessar: https://app.postonovohorizonte.com.br/lancamentos-funcionarios/editar/01-2026/1
 - Verificar: João e Roberta sem comissões
 - Confirmar: Rodrigo mantém R$ 1.000,00 (manual)
 - Confirmar: Motoristas mantêm comissões
 
 **Página de Detalhes:**
-- Acessar: https://nh-transportes.onrender.com/lancamentos-funcionarios/detalhe/01-2026/1
+- Acessar: https://app.postonovohorizonte.com.br/lancamentos-funcionarios/detalhe/01-2026/1
 - Verificar: Dados corretos por categoria
 - Confirmar: Total de funcionários correto
 

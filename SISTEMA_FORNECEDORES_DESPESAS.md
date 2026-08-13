@@ -367,7 +367,7 @@ DESCRIBE despesas_fornecedores;
 ### 2. Restart App
 
 ```bash
-# Render.com faz deploy automático
+# Railway faz deploy automático
 # Ou manualmente:
 sudo systemctl restart nh-transportes
 ```
@@ -376,10 +376,10 @@ sudo systemctl restart nh-transportes
 
 ```bash
 # 1. Testar acesso ao módulo
-curl https://nh-transportes.onrender.com/despesas/fornecedores/
+curl https://app.postonovohorizonte.com.br/despesas/fornecedores/
 
 # 2. Testar API
-curl https://nh-transportes.onrender.com/despesas/fornecedores/api/por-categoria/1
+curl https://app.postonovohorizonte.com.br/despesas/fornecedores/api/por-categoria/1
 
 # 3. Verificar logs
 tail -f /var/log/nh-transportes/app.log

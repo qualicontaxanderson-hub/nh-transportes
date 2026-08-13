@@ -331,7 +331,7 @@ GROUP BY l.mes, l.clienteid, categoria, l.statuslancamento
 
 ### Como Validar:
 
-1. **Acessar:** https://nh-transportes.onrender.com/lancamentos-funcionarios/
+1. **Acessar:** https://app.postonovohorizonte.com.br/lancamentos-funcionarios/
 
 2. **Verificar:**
    - Coluna "Categoria" aparece na tabela

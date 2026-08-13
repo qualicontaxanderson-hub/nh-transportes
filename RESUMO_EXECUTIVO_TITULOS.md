@@ -121,7 +121,7 @@ ORDER BY nome;
 ```
 
 ### 4. Teste em Produção
-1. Acessar: `https://nh-transportes.onrender.com/lancamentos-funcionarios/novo`
+1. Acessar: `https://app.postonovohorizonte.com.br/lancamentos-funcionarios/novo`
 2. Selecionar um cliente e mês
 3. Verificar se os títulos aparecem corretos:
    - ✅ "Total" (cabeçalho)

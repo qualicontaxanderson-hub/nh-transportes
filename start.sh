@@ -10,7 +10,7 @@ echo "Cache limpo! Iniciando aplicação..."
 
 # --- recria certificado P12 a partir do secret EFI_CERT_B64 (se existir) ---
 # destino pode ser sobrescrito pela variável EFI_CERT_PATH
-destination="${EFI_CERT_PATH:-/opt/render/project/src/producao-855343-fretes.p12}"
+destination="${EFI_CERT_PATH:-/tmp/producao-855343-fretes.p12}"
 
 if [ -n "${EFI_CERT_B64:-}" ] || [ -n "${EFI_CERT_B64_1:-}" ] || [ -n "${EFI_CERT_B64_2:-}" ]; then
   echo "Tentando decodificar EFI_CERT_B64 para ${destination}"

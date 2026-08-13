@@ -51,7 +51,7 @@ DESCRIBE usuario_permissoes;
 
 1. **Abra o navegador** e acesse:
    ```
-   https://nh-transportes.onrender.com/auth/login
+   https://app.postonovohorizonte.com.br/auth/login
    ```
 
 2. **Faça login como ADMIN** com suas credenciais de administrador

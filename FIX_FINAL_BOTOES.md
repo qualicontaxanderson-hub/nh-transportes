@@ -3,8 +3,8 @@
 ## 🐛 Problema Reportado (2026-02-14)
 
 **URLs afetadas:**
-1. `https://nh-transportes.onrender.com/despesas/` - Botão "novo Titulo" não aparecia
-2. `https://nh-transportes.onrender.com/despesas/titulo/1` - Botões "Editar", "Novo" e "Excluir" não apareciam
+1. `https://app.postonovohorizonte.com.br/despesas/` - Botão "novo Titulo" não aparecia
+2. `https://app.postonovohorizonte.com.br/despesas/titulo/1` - Botões "Editar", "Novo" e "Excluir" não apareciam
 
 **Sintoma:** Usuários administradores não conseguiam ver os botões de ação no módulo de Despesas.
 

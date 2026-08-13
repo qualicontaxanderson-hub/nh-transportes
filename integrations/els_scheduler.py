@@ -13,7 +13,7 @@ banco. Como só processa e-mails não lidos e os marca como lidos, rodar de 10 e
 Concorrência (gunicorn --workers N): cada worker cria o seu scheduler, então o
 job usa GET_LOCK global no MySQL para que só UMA execução rode por vez.
 
-Liga/desliga por env (configurar no Render):
+Liga/desliga por env (configurar no Railway):
     ELS_SCHED_ENABLED = '1' (default) | '0' para desligar
     ELS_SCHED_MINUTE  = minuto cron (default '*/10' = a cada 10 min)
     ELS_SCHED_HOURS   = horas cron (default '*' = toda hora)

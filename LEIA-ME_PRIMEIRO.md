@@ -4,7 +4,7 @@
 
 Você fez um lançamento de caixa no dia **01/01/2026** mas ele **não aparece** na lista quando acessa:
 ```
-https://nh-transportes.onrender.com/lancamentos_caixa/
+https://app.postonovohorizonte.com.br/lancamentos_caixa/
 ```
 
 ## ✅ SOLUÇÃO RÁPIDA (1 minuto)
@@ -20,7 +20,7 @@ WHERE id = 3;
 
 ### Passo 2: Atualize a página
 
-Acesse novamente: `https://nh-transportes.onrender.com/lancamentos_caixa/`
+Acesse novamente: `https://app.postonovohorizonte.com.br/lancamentos_caixa/`
 
 ✅ **O lançamento 01/01/2026 agora está visível!**
 
@@ -65,7 +65,7 @@ id=3, status='FECHADO', observacao=NULL
 
 ### Opção 1: Aguardar Deploy (Mais Demorado)
 1. Aguardar o deploy do novo código
-2. Acessar: `https://nh-transportes.onrender.com/lancamentos_caixa/editar/3`
+2. Acessar: `https://app.postonovohorizonte.com.br/lancamentos_caixa/editar/3`
 3. Clicar em "Salvar" (mesmo sem mudar nada)
 4. Sistema atualiza automaticamente
 5. Lançamento aparece na lista ✅
@@ -116,7 +116,7 @@ WHERE id = 3;
 - observacao = NULL ou vazio ✅
 
 ### 2. Na Interface
-1. Acesse: `https://nh-transportes.onrender.com/lancamentos_caixa/`
+1. Acesse: `https://app.postonovohorizonte.com.br/lancamentos_caixa/`
 2. Filtrar por período: 21/12/2025 a 04/02/2026
 3. **Deve ver:** Lançamento do dia 01/01/2026 na lista ✅
 
@@ -152,7 +152,7 @@ Após o próximo deploy, o sistema:
    - Pode executar UPDATE?
 
 2. **Verificar logs:**
-   - Após deploy, verificar logs do Render
+   - Após deploy, verificar logs do Railway
    - Procurar por: `[DEBUG DIAGNOSTICO]`
 
 3. **Tentar via interface:**

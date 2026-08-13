@@ -5,7 +5,7 @@
 
 ## 🎯 RESUMO RÁPIDO (2 min)
 
-Para a URL https://nh-transportes.onrender.com/lancamentos-funcionarios/ funcionar, você precisa ter:
+Para a URL https://app.postonovohorizonte.com.br/lancamentos-funcionarios/ funcionar, você precisa ter:
 
 ### 3 TABELAS:
 1. **funcionarios** - com coluna `categoria`
@@ -263,7 +263,7 @@ Verifique se lançamentos existem e se mês/cliente estão corretos.
 **Solução:**
 1. Verificar se deploy foi feito (commit 75 ou 76)
 2. Fazer merge da branch: `copilot/fix-merge-issue-39`
-3. Aguardar deploy do Render
+3. Aguardar deploy do Railway
 4. Limpar cache do navegador
 
 ---

@@ -81,7 +81,7 @@ fetch('/lancamentos-funcionarios/admin/limpar-comissoes-frentistas', {
 
 2. **Via curl:**
 ```bash
-curl -X POST https://nh-transportes.onrender.com/lancamentos-funcionarios/admin/limpar-comissoes-frentistas \
+curl -X POST https://app.postonovohorizonte.com.br/lancamentos-funcionarios/admin/limpar-comissoes-frentistas \
   -H "Cookie: session=YOUR_SESSION_COOKIE" \
   -H "Content-Type: application/json"
 ```
@@ -136,7 +136,7 @@ ORDER BY tipo, funcionario_nome;
 
 ### 3. Acessar Página Detalhe
 
-Acesse: `https://nh-transportes.onrender.com/lancamentos-funcionarios/detalhe/01-2026/1`
+Acesse: `https://app.postonovohorizonte.com.br/lancamentos-funcionarios/detalhe/01-2026/1`
 
 **Verificar:**
 - ✅ Marcos e Valmir (motoristas) aparecem com comissões

@@ -120,7 +120,7 @@ ORDER BY id DESC;
 ### Testar API Diretamente
 No navegador, abra:
 ```
-https://nh-transportes.onrender.com/lancamentos_caixa/get_vendas_dia?cliente_id=[ID]&data=2026-01-02
+https://app.postonovohorizonte.com.br/lancamentos_caixa/get_vendas_dia?cliente_id=[ID]&data=2026-01-02
 ```
 
 **Resposta esperada:**

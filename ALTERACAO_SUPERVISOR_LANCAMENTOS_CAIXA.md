@@ -113,7 +113,7 @@ O SUPERVISOR **continua tendo acesso** a todas as 9 seções via menu navbar:
 
 ### Teste 2: Tentativa de Acesso Direto à Home
 1. Estando logado como SUPERVISOR
-2. Digitar manualmente na URL: `https://nh-transportes.onrender.com/`
+2. Digitar manualmente na URL: `https://app.postonovohorizonte.com.br/`
 3. ✅ Deve ser redirecionado para `/lancamentos_caixa/`
 
 ### Teste 3: Navegação pelo Menu
@@ -150,10 +150,10 @@ O SUPERVISOR **continua tendo acesso** a todas as 9 seções via menu navbar:
 Esta alteração foi aplicada em:
 - **Branch:** `copilot/fix-merge-issue-39`
 - **Commit:** ef9b362
-- **Ambiente:** Produção (Render.com)
+- **Ambiente:** Produção (Railway)
 
 ### Instruções para Teste em Produção:
-1. Aguardar deploy automático do Render
+1. Aguardar deploy automático do Railway
 2. Fazer logout se já estiver logado
 3. Login como SUPERVISOR (MELKE)
 4. Verificar redirecionamento para `/lancamentos_caixa/`
@@ -165,7 +165,7 @@ Esta alteração foi aplicada em:
 Se houver algum problema ou dúvida sobre esta alteração, consulte:
 - Este documento (ALTERACAO_SUPERVISOR_LANCAMENTOS_CAIXA.md)
 - Documentação geral: SOLUCAO_FINAL_SUPERVISOR_2026-02-05.md
-- Logs no Render.com
+- Logs no Railway
 
 ---
 

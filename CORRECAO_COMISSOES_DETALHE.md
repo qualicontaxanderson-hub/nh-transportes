@@ -13,7 +13,7 @@ Na página de **detalhe** de lançamentos (`/lancamentos-funcionarios/detalhe/01
 
 ### URL Afetada:
 ```
-https://nh-transportes.onrender.com/lancamentos-funcionarios/detalhe/01-2026/1
+https://app.postonovohorizonte.com.br/lancamentos-funcionarios/detalhe/01-2026/1
 ```
 
 ### Funcionários Afetados:

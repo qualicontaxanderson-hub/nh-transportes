@@ -4,7 +4,7 @@
 
 **Sintoma:** Lançamento foi criado mas não aparece na lista de fechamentos de caixa.
 
-**URL:** https://nh-transportes.onrender.com/lancamentos_caixa/?data_inicio=2025-12-21&data_fim=2026-02-04&cliente_id=
+**URL:** https://app.postonovohorizonte.com.br/lancamentos_caixa/?data_inicio=2025-12-21&data_fim=2026-02-04&cliente_id=
 
 **Filtros Aplicados:**
 - Data início: 2025-12-21
@@ -94,7 +94,7 @@ Para diagnosticar o problema, foram adicionados logs detalhados que mostrarão:
 
 ### 1. Acesse a Lista
 ```
-https://nh-transportes.onrender.com/lancamentos_caixa/
+https://app.postonovohorizonte.com.br/lancamentos_caixa/
 ```
 
 ### 2. Aplique os Filtros
@@ -102,9 +102,9 @@ https://nh-transportes.onrender.com/lancamentos_caixa/
 - Data fim: 2026-02-04
 - Cliente: (deixar vazio ou selecionar)
 
-### 3. Verifique os Logs do Render
+### 3. Verifique os Logs do Railway
 ```bash
-# No dashboard do Render
+# No dashboard do Railway
 # Menu: Logs
 # Filtrar por [DEBUG]
 ```
@@ -183,7 +183,7 @@ WHERE id = 123;  -- substituir pelo ID real
 ```
 
 **Opção 2: Editar via Interface**
-1. Acessar diretamente: `https://nh-transportes.onrender.com/lancamentos_caixa/editar/123`
+1. Acessar diretamente: `https://app.postonovohorizonte.com.br/lancamentos_caixa/editar/123`
 2. Salvar (mesmo sem alterar nada)
 3. Sistema atualizará status para 'FECHADO' automaticamente
 

@@ -22,7 +22,7 @@ git merge copilot/fix-merge-issue-39
 git push origin main
 ```
 
-**Aguardar deploy do Render:** 5-10 minutos
+**Aguardar deploy do Railway:** 5-10 minutos
 
 **PRONTO! Sistema funciona!**
 
@@ -168,7 +168,7 @@ git push origin main
 
 **Aguarde 10 minutos.**
 
-**Acesse:** https://nh-transportes.onrender.com/lancamentos-funcionarios/
+**Acesse:** https://app.postonovohorizonte.com.br/lancamentos-funcionarios/
 
 **Veja:** 7 FRENTISTAS + 2 MOTORISTAS ✅
 

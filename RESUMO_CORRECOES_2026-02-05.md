@@ -174,7 +174,7 @@ Como SUPERVISOR, acesse:
 
 ### Próximos Passos:
 1. Merge para main/master
-2. Deploy automático no Render
+2. Deploy automático no Railway
 3. Testes em produção
 4. Verificar logs para confirmar ausência de erros
 

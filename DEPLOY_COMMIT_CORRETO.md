@@ -65,8 +65,8 @@ Feature: Adicionar botões vermelhos e interface completa para depósitos de che
 
 ## 🎯 Como Fazer o Deploy Correto
 
-### Passo 1: Acessar Render Dashboard
-1. Ir para https://dashboard.render.com
+### Passo 1: Acessar painel do Railway
+1. Ir para https://railway.app
 2. Selecionar o serviço `nh-transportes`
 
 ### Passo 2: Fazer Deploy Manual
@@ -85,11 +85,11 @@ Feature: Adicionar botões vermelhos e interface completa para depósitos de che
 ## ✅ Como Validar Após Deploy
 
 ### 1. Verificar Commit Deployado
-No Render, verificar que o commit é `9ce121d` ou posterior.
+No Railway, verificar que o commit é `9ce121d` ou posterior.
 
 ### 2. Acessar Página Novo
 ```
-URL: https://nh-transportes.onrender.com/lancamentos_caixa/novo
+URL: https://app.postonovohorizonte.com.br/lancamentos_caixa/novo
 ```
 
 ### 3. Procurar os Botões Vermelhos
@@ -115,7 +115,7 @@ R$ 6.556,03
 ### Problema: Botões ainda não aparecem
 
 **Causa 1: Deploy do commit errado**
-- Verificar commit no Render
+- Verificar commit no Railway
 - Deve ser `9ce121d` ou mais recente
 
 **Causa 2: Cache do navegador**

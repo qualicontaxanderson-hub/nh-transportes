@@ -84,9 +84,9 @@ despesas_fornecedores
 
 O método mais seguro e automatizado.
 
-#### Passo 1: Acessar o Shell do Render
+#### Passo 1: Acessar o Shell do Railway
 
-1. Acesse: https://dashboard.render.com
+1. Acesse: https://railway.app
 2. Navegue até o serviço: **nh-transportes**
 3. Clique na aba: **Shell**
 4. Aguarde o shell carregar
@@ -94,7 +94,7 @@ O método mais seguro e automatizado.
 #### Passo 2: Navegar até o Diretório
 
 ```bash
-cd /opt/render/project/src
+cd /app
 ```
 
 #### Passo 3: Executar o Script
@@ -158,7 +158,7 @@ Arquivo: migrations/20260215_add_despesas_fornecedores.sql
 
 Se preferir executar o SQL manualmente.
 
-#### Opção A: Via Railway/Render Dashboard
+#### Opção A: Via Railway/painel do Railway
 
 1. Acesse o banco de dados na dashboard
 2. Abra o cliente MySQL integrado
@@ -243,7 +243,7 @@ SHOW INDEX FROM despesas_fornecedores;
 
 #### 5. Testar Aplicação
 
-**URL:** https://nh-transportes.onrender.com/despesas/fornecedores/
+**URL:** https://app.postonovohorizonte.com.br/despesas/fornecedores/
 
 **Esperado:**
 - ✅ Página carrega **sem erro 500**
@@ -275,7 +275,7 @@ SHOW INDEX FROM despesas_fornecedores;
 
 #### 7. Testar Integração com Lançamento Mensal
 
-**URL:** https://nh-transportes.onrender.com/lancamentos_despesas/mensal
+**URL:** https://app.postonovohorizonte.com.br/lancamentos_despesas/mensal
 
 1. Selecione empresa e mês/ano
 2. Localize uma categoria (ex: ADVOGADO)
@@ -321,7 +321,7 @@ ERROR 1045 (28000): Access denied for user
 **Causa:** Credenciais incorretas ou usuário sem permissões
 
 **Solução:**
-1. Verifique variáveis de ambiente no Render
+1. Verifique variáveis de ambiente no Railway
 2. Use o usuário master/admin do banco
 3. Verifique se o usuário tem privilégios de CREATE TABLE
 
@@ -365,7 +365,7 @@ ModuleNotFoundError: No module named 'utils'
 **Solução:**
 ```bash
 # Certifique-se de estar no diretório correto
-cd /opt/render/project/src
+cd /app
 
 # Verifique se o diretório utils existe
 ls -la utils/
@@ -381,7 +381,7 @@ python run_single_migration.py migrations/20260215_add_despesas_fornecedores.sql
 **Causa possível 1:** Aplicação não foi reiniciada
 
 **Solução:**
-- Render geralmente reinicia automaticamente após deploy
+- Railway geralmente reinicia automaticamente após deploy
 - Se não reiniciar, force um redeploy ou reinicie manualmente
 
 **Causa possível 2:** Conexão ao banco antiga no pool
@@ -424,7 +424,7 @@ ERROR:utils.db:Error getting connection from pool: Failed getting connection; po
 
 ### Logs Importantes
 
-**Logs do Render:**
+**Logs do Railway:**
 1. Acesse: Dashboard → Service → Logs
 2. Procure por: `despesas_fornecedores`
 3. Verifique: Erros de SQL ou conexão

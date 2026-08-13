@@ -125,7 +125,7 @@ railway connect
 
 # Ou via MySQL Client
 mysql -h centerbeam.proxy.rlwy.net -P 56026 -u root -p railway
-# Password: CYTzzRYLVmEJGDexxXpgepWgpvebdSrV
+# Password: <senha no Railway>
 ```
 
 ### Passo 2: Executar os INSERTs
@@ -195,7 +195,7 @@ MOTORISTAS      | 2                  | 10118.44
 
 ### Após executar os INSERTs:
 
-**URL:** https://nh-transportes.onrender.com/lancamentos-funcionarios/
+**URL:** https://app.postonovohorizonte.com.br/lancamentos-funcionarios/
 
 **Deve mostrar:**
 ```
@@ -213,7 +213,7 @@ Mês      Cliente                Categoria    Total  Valor
 ### ✅ Código está CORRETO
 - Query com COALESCE (commit 75)
 - Prioridade de funcionarios sobre motoristas
-- Deploy já foi feito no Render
+- Deploy já foi feito no Railway
 
 ### ❌ Banco estava INCOMPLETO
 - Faltavam lançamentos para motoristas

@@ -30,7 +30,7 @@ WHERE id = 3;
 
 **Opção 1: Editar via Interface**
 1. Aguardar deploy do código atualizado
-2. Acessar: `https://nh-transportes.onrender.com/lancamentos_caixa/editar/3`
+2. Acessar: `https://app.postonovohorizonte.com.br/lancamentos_caixa/editar/3`
 3. Salvar (mesmo sem alterar nada)
 4. Sistema automaticamente:
    - Atualiza status para 'FECHADO'

@@ -2,7 +2,7 @@
 
 ## 🎯 SUA PERGUNTA
 
-> "O Banco de dados está assim na questão dos Cheques por que tem que ter no Lançamento de Caixa, tem que ter o CHEQUE Manual e o Auto que seria o Importado do https://nh-transportes.onrender.com/troco_pix/novo?origem=pista ai eu preciso saber se está tudo programado no URL"
+> "O Banco de dados está assim na questão dos Cheques por que tem que ter no Lançamento de Caixa, tem que ter o CHEQUE Manual e o Auto que seria o Importado do https://app.postonovohorizonte.com.br/troco_pix/novo?origem=pista ai eu preciso saber se está tudo programado no URL"
 
 **Verificação do banco:**
 ```
@@ -196,7 +196,7 @@ if valor_cheque_decimal > 0:
 
 ```
 1️⃣  FRENTISTA acessa URL:
-    https://nh-transportes.onrender.com/troco_pix/novo?origem=pista
+    https://app.postonovohorizonte.com.br/troco_pix/novo?origem=pista
     ↓
     Sistema captura: origem = "pista"
 

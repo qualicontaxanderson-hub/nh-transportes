@@ -8,7 +8,7 @@
 
 ## 📋 Requisito Original
 
-**URL Reportada:** `https://nh-transportes.onrender.com/auth/usuarios/5/editar`
+**URL Reportada:** `https://app.postonovohorizonte.com.br/auth/usuarios/5/editar`
 
 **Problema:**
 > "Tem um campo que são para seleção das empresas e aqui nesse quadro de clientes é para aparecer somente as empresas que estão configuradas com produtos... as empresas que estão assinaladas sem produtos não devem aparecer."
@@ -179,7 +179,7 @@ Executar query com JOIN e filtro
     ↓
 Retornar apenas empresas com produtos
     ↓
-Renderizar dropdown na página
+Railwayizar dropdown na página
     ↓
 Usuário vê apenas empresas relevantes ✅
 ```

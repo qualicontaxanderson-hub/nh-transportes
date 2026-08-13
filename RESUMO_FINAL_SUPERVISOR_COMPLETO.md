@@ -282,7 +282,7 @@ Resultado: ✅ Sem erros de sintaxe
 ### Informações:
 - **Branch:** `copilot/fix-merge-issue-39`
 - **Commits:** 10+ commits incrementais
-- **Ambiente:** Produção (Render.com)
+- **Ambiente:** Produção (Railway)
 - **Auto-deploy:** Habilitado
 
 ### Instruções Pós-Deploy:
@@ -305,8 +305,8 @@ Resultado: ✅ Sem erros de sintaxe
 
 ### Em Caso de Problemas:
 
-**Logs no Render:**
-- Acessar dashboard do Render
+**Logs no Railway:**
+- Acessar dashboard do Railway
 - Ver logs em tempo real
 - Buscar por "SUPERVISOR" ou "MELKE"
 
@@ -315,7 +315,7 @@ Resultado: ✅ Sem erros de sintaxe
 - Começar por: `ALTERACAO_SUPERVISOR_LANCAMENTOS_CAIXA.md`
 
 **Rollback (se necessário):**
-1. No Render, voltar para commit anterior
+1. No Railway, voltar para commit anterior
 2. Ou fazer revert manual dos 4 arquivos modificados
 
 ---

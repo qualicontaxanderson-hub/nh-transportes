@@ -15,7 +15,7 @@
 
 ### Erro 500 na Página de Lista
 
-**URL:** https://nh-transportes.onrender.com/lancamentos-funcionarios/  
+**URL:** https://app.postonovohorizonte.com.br/lancamentos-funcionarios/  
 **Status:** 500 Internal Server Error  
 **Data:** 09/02/2026 10:54:03 UTC  
 
@@ -339,7 +339,7 @@ sql_mode=ONLY_FULL_GROUP_BY
 ### 1. Acessar a Página
 
 ```
-URL: https://nh-transportes.onrender.com/lancamentos-funcionarios/
+URL: https://app.postonovohorizonte.com.br/lancamentos-funcionarios/
 ```
 
 **Resultado esperado:**

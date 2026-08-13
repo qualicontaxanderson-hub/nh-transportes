@@ -19,7 +19,7 @@ Após deploy de2d4ae, lançamento continuava não aparecendo na lista mesmo com:
 - ✅ Lançamento existe no banco
 - ✅ Data no período correto
 
-### Logs do Render (deploy de2d4ae)
+### Logs do Railway (deploy de2d4ae)
 ```
 [DEBUG DIAGNOSTICO] Buscando TODOS os lançamentos no período...
 [DEBUG DIAGNOSTICO] Total de lançamentos no período: 1
@@ -138,7 +138,7 @@ OR (lc.status = 'ABERTO' AND (lc.observacao IS NULL OR lc.observacao NOT LIKE 'L
 
 **1. Acessar lista:**
 ```
-https://nh-transportes.onrender.com/lancamentos_caixa/
+https://app.postonovohorizonte.com.br/lancamentos_caixa/
 ```
 
 **2. Filtrar período:**
@@ -213,7 +213,7 @@ WHERE (coluna IS NULL OR coluna NOT LIKE 'padrão%')
 
 ### 1. Verificar Commit Deployado
 ```bash
-# No Render, verificar commit atual:
+# No Railway, verificar commit atual:
 # Deve ser: 8718efd ou posterior
 ```
 

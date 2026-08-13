@@ -8,9 +8,9 @@
 ## 📋 Requisito Original
 
 **URL Reportada:**
-- https://nh-transportes.onrender.com/lancamentos_caixa/novo
-- https://nh-transportes.onrender.com/lancamentos_caixa/
-- https://nh-transportes.onrender.com/lancamentos_caixa/editar/
+- https://app.postonovohorizonte.com.br/lancamentos_caixa/novo
+- https://app.postonovohorizonte.com.br/lancamentos_caixa/
+- https://app.postonovohorizonte.com.br/lancamentos_caixa/editar/
 
 **Requisito:**
 > "liberar para o Supervisor acessar o Lançamento de Fechamento de Caixa Novo e EDITAR e ter acesso a tudo que está envolvido dentro do Fechamento como add ou editar dados"

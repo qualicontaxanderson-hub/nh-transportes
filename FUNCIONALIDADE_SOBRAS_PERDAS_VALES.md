@@ -202,7 +202,7 @@ Antes de usar, execute a migration:
 mysql -u usuario -p banco < migrations/20260203_add_sobras_perdas_vales_funcionarios.sql
 ```
 
-Ou via Render console se estiver em produção.
+Ou via Railway console se estiver em produção.
 
 ## 🔍 Verificação
 
@@ -220,7 +220,7 @@ Deve mostrar:
 
 2. **Teste o endpoint:**
 ```
-https://nh-transportes.onrender.com/lancamentos_caixa/api/funcionarios/1
+https://app.postonovohorizonte.com.br/lancamentos_caixa/api/funcionarios/1
 ```
 
 Deve retornar JSON com funcionários.

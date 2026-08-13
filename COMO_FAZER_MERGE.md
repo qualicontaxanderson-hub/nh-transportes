@@ -50,7 +50,7 @@ END
 3. **Fazer Merge:**
    - Clicar em "Merge pull request"
    - Confirmar o merge
-   - Aguardar deploy automático do Render (5-10 minutos)
+   - Aguardar deploy automático do Railway (5-10 minutos)
 
 ### Opção 2: Via Git Command Line
 
@@ -85,13 +85,13 @@ git push origin main  # ou master
 
 ### 1. Aguardar Deploy (5-10 minutos)
 
-O Render faz deploy automaticamente após o merge para main.
+O Railway faz deploy automaticamente após o merge para main.
 
-**Monitorar em:** https://dashboard.render.com
+**Monitorar em:** https://railway.app
 
 ### 2. Testar a Aplicação
 
-**Acessar:** https://nh-transportes.onrender.com/lancamentos-funcionarios/
+**Acessar:** https://app.postonovohorizonte.com.br/lancamentos-funcionarios/
 
 **Verificar:**
 ```
@@ -126,9 +126,9 @@ Se houver conflitos:
 ### "Deploy failed"
 
 Se o deploy falhar:
-1. Verificar logs no Render
+1. Verificar logs no Railway
 2. Verificar se todas as dependências estão no requirements.txt
-3. Tentar fazer redeploy manual no Render
+3. Tentar fazer redeploy manual no Railway
 
 ### "Ainda mostra errado"
 
@@ -136,7 +136,7 @@ Se após deploy ainda mostrar incorreto:
 1. Aguardar 5 minutos (cache do navegador)
 2. Fazer hard refresh (Ctrl+Shift+R)
 3. Verificar se deploy completou com sucesso
-4. Verificar logs de erro no Render
+4. Verificar logs de erro no Railway
 
 ---
 
@@ -167,7 +167,7 @@ Se após deploy ainda mostrar incorreto:
 ## ✅ Checklist Pós-Merge
 
 - [ ] Merge realizado com sucesso
-- [ ] Deploy completado no Render
+- [ ] Deploy completado no Railway
 - [ ] Página lista mostra 2 linhas (FRENTISTAS e MOTORISTAS)
 - [ ] FRENTISTAS = 7 funcionários
 - [ ] MOTORISTAS = 2 funcionários

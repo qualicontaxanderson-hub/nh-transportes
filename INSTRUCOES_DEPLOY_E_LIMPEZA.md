@@ -27,8 +27,8 @@ git merge copilot/fix-merge-issue-39
 # 3. Push para GitHub
 git push origin main
 
-# 4. Aguardar Render fazer deploy automático (~5 min)
-# Acompanhar em: https://dashboard.render.com/
+# 4. Aguardar Railway fazer deploy automático (~5 min)
+# Acompanhar em: https://railway.app/
 ```
 
 **✅ Verificar deploy completo antes de prosseguir!**
@@ -64,7 +64,7 @@ mysql -h localhost -u nh_user -p nh_transportes < migrations/20260207_limpar_com
 
 **Método 1 - Via DevTools do Navegador:**
 
-1. Acessar: `https://nh-transportes.onrender.com/lancamentos-funcionarios/`
+1. Acessar: `https://app.postonovohorizonte.com.br/lancamentos-funcionarios/`
 2. Fazer login como admin
 3. Abrir DevTools (F12)
 4. Ir para Console
@@ -89,7 +89,7 @@ fetch('/lancamentos-funcionarios/admin/limpar-comissoes-frentistas', {
 # Inspecionar Network tab no DevTools para pegar cookie
 
 # 2. Executar curl
-curl -X POST https://nh-transportes.onrender.com/lancamentos-funcionarios/admin/limpar-comissoes-frentistas \
+curl -X POST https://app.postonovohorizonte.com.br/lancamentos-funcionarios/admin/limpar-comissoes-frentistas \
   -H "Cookie: session=SEU_COOKIE_AQUI" \
   -H "Content-Type: application/json"
 ```
@@ -112,7 +112,7 @@ curl -X POST https://nh-transportes.onrender.com/lancamentos-funcionarios/admin/
 
 1. **Acessar página de detalhes:**
    ```
-   https://nh-transportes.onrender.com/lancamentos-funcionarios/detalhe/01-2026/1
+   https://app.postonovohorizonte.com.br/lancamentos-funcionarios/detalhe/01-2026/1
    ```
 
 2. **Verificar:**
@@ -172,7 +172,7 @@ VALMIR        | Motorista | 1400.00
 
 **Causa Possível 1:** Deploy não completou.
 
-**Solução:** Aguardar mais tempo, verificar logs do Render.
+**Solução:** Aguardar mais tempo, verificar logs do Railway.
 
 **Causa Possível 2:** Endpoint da API está errado.
 
@@ -232,9 +232,9 @@ Se aparecer este warning, o código correto ainda não foi deployado.
 
 **Se algo der errado:**
 
-1. **Verificar logs do Render:**
+1. **Verificar logs do Railway:**
    ```
-   https://dashboard.render.com/ → Logs
+   https://railway.app/ → Logs
    ```
 
 2. **Verificar logs do MySQL:**
@@ -256,14 +256,14 @@ Se aparecer este warning, o código correto ainda não foi deployado.
 
 ### Antes de Começar:
 - [ ] Acesso ao Git configurado
-- [ ] Acesso ao Render configurado
+- [ ] Acesso ao Railway configurado
 - [ ] Acesso ao banco MySQL configurado
 - [ ] Login admin no sistema disponível
 
 ### Durante Execução:
 - [ ] Passo 1: Merge realizado
 - [ ] Passo 1: Push realizado
-- [ ] Passo 1: Deploy completo (verificado no Render)
+- [ ] Passo 1: Deploy completo (verificado no Railway)
 - [ ] Passo 2: Limpeza executada (SQL ou API)
 - [ ] Passo 2: Resposta de sucesso recebida
 - [ ] Passo 3: Página detalhe validada

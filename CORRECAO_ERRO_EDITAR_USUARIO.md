@@ -152,4 +152,4 @@ Se no futuro for necessário filtrar clientes por "produtos posto" ou "ativos":
 **Data da Correção:** 2026-02-05  
 **Issue:** Erro ao editar usuário  
 **Status:** ✅ RESOLVIDO  
-**Ambiente:** Produção (Render)
+**Ambiente:** Produção (Railway)

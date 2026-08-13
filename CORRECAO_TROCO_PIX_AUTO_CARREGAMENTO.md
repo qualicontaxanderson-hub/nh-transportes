@@ -138,7 +138,7 @@ Deve retornar registros com troco_pix > 0.
 ### Verificação 3: Testar a API diretamente
 Abra o navegador e vá para:
 ```
-https://nh-transportes.onrender.com/lancamentos_caixa/get_vendas_dia?cliente_id=[ID]&data=2026-01-02
+https://app.postonovohorizonte.com.br/lancamentos_caixa/get_vendas_dia?cliente_id=[ID]&data=2026-01-02
 ```
 
 Resposta esperada:
@@ -184,7 +184,7 @@ Se `tem_pix_auto` retornar 0, você DEVE executar a migration:
 mysql -u root -p railway < /home/runner/work/nh-transportes/nh-transportes/migrations/20260203_add_troco_pix_auto.sql
 ```
 
-Ou via console do Render:
+Ou via console do Railway:
 ```bash
 mysql -h centerbeam.proxy.rlwy.net -P 56026 -u root -p railway < migrations/20260203_add_troco_pix_auto.sql
 ```

@@ -136,7 +136,7 @@ Abra o navegador e teste diretamente as URLs (substitua pelos IDs reais):
 
 **API de Comissões:**
 ```
-https://nh-transportes.onrender.com/lancamentos-funcionarios/get-comissoes/1/01-2026
+https://app.postonovohorizonte.com.br/lancamentos-funcionarios/get-comissoes/1/01-2026
 ```
 
 **Resposta esperada:**
@@ -150,7 +150,7 @@ https://nh-transportes.onrender.com/lancamentos-funcionarios/get-comissoes/1/01-
 
 **API de Empréstimos:**
 ```
-https://nh-transportes.onrender.com/emprestimos/get-emprestimos-ativos/3/01-2026
+https://app.postonovohorizonte.com.br/emprestimos/get-emprestimos-ativos/3/01-2026
 ```
 
 **Resposta esperada:**
@@ -203,7 +203,7 @@ Error fetching commissions: ...
    - **Preview**: Visualize os dados retornados
 
 **Se Status for 500:**
-→ Erro no servidor. Verifique os logs do Render.
+→ Erro no servidor. Verifique os logs do Railway.
 
 **Se Response estiver vazio `{}`:**
 → Não há dados para aquele cliente/mês. Verifique os dados no banco.
@@ -305,9 +305,9 @@ mysql -u usuario -p database < migrations/20260124_ensure_comissao_rubrica.sql
 
 ## Logs do Servidor
 
-Se nada funcionar, verifique os logs no Render:
+Se nada funcionar, verifique os logs no Railway:
 
-1. Acesse o dashboard do Render
+1. Acesse o dashboard do Railway
 2. Vá em "Logs"
 3. Procure por:
    - `ERROR in get_comissoes`
@@ -324,7 +324,7 @@ Se após seguir todos os passos o problema persistir, forneça:
 2. ✅ Screenshot da aba Network mostrando as chamadas de API
 3. ✅ Screenshot do Console mostrando erros (se houver)
 4. ✅ Qual campo específico não está funcionando (Comissão ou EMPRÉSTIMOS)
-5. ✅ Logs do servidor do Render
+5. ✅ Logs do servidor do Railway
 
 ---
 

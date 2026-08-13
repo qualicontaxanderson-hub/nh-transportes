@@ -13,7 +13,7 @@
 
 ### 1. Comissões Aparecendo para Funcionários Errados
 
-**URL:** `https://nh-transportes.onrender.com/lancamentos-funcionarios/editar/01-2026/1`
+**URL:** `https://app.postonovohorizonte.com.br/lancamentos-funcionarios/editar/01-2026/1`
 
 **Sintoma:**
 - **João** (frentista) mostrava valor de comissão
@@ -27,7 +27,7 @@
 
 ### 2. Página Novo Funcionava Corretamente
 
-**URL:** `https://nh-transportes.onrender.com/lancamentos-funcionarios/novo`
+**URL:** `https://app.postonovohorizonte.com.br/lancamentos-funcionarios/novo`
 
 **Status:** ✅ OK
 - Apenas motoristas tinham comissões

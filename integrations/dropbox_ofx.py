@@ -5,7 +5,7 @@ Fluxo:
   1. O usuário coloca o arquivo OFX na pasta Dropbox local
      (ex: C:\\Users\\ander\\Dropbox\\BANCOS\\OFX\\NOVO).
   2. O Dropbox sincroniza automaticamente para a nuvem.
-  3. O servidor Render/Railway usa este módulo para:
+  3. O servidor Railway usa este módulo para:
      a. Listar arquivos .ofx em DROPBOX_OFX_INBOX
      b. Baixar o conteúdo de um arquivo específico
      c. Mover o arquivo para DROPBOX_OFX_PROCESSED após importação
@@ -20,7 +20,7 @@ Como gerar o DROPBOX_TOKEN:
   2. Clique em "Create app" -> Scoped access -> Full Dropbox
   3. Em "Permissions", habilite: files.content.read, files.content.write, files.metadata.read
   4. Na aba "Settings", em "OAuth 2" -> "Generated access token", clique em "Generate"
-  5. Copie o token e configure como variável de ambiente DROPBOX_TOKEN no Render/Railway
+  5. Copie o token e configure como variável de ambiente DROPBOX_TOKEN no Railway
 """
 
 import os
@@ -106,7 +106,7 @@ def _criar_dbx():
 
     raise RuntimeError(
         'Dropbox não configurado. Configure DROPBOX_APP_KEY + DROPBOX_APP_SECRET + '
-        'DROPBOX_REFRESH_TOKEN (recomendado) ou DROPBOX_TOKEN no Render.'
+        'DROPBOX_REFRESH_TOKEN (recomendado) ou DROPBOX_TOKEN no Railway.'
     )
 
 
@@ -158,12 +158,12 @@ def listar_arquivos_ofx() -> list:
         if usa_oauth2():
             raise RuntimeError(
                 'Erro de autenticação Dropbox (OAuth2). Verifique se DROPBOX_APP_KEY, '
-                'DROPBOX_APP_SECRET e DROPBOX_REFRESH_TOKEN estão corretos no Render.'
+                'DROPBOX_APP_SECRET e DROPBOX_REFRESH_TOKEN estão corretos no Railway.'
             )
         raise RuntimeError(
             'Token Dropbox inválido ou expirado. '
             'Configure OAuth2 com refresh token para não precisar renovar manualmente: '
-            'adicione DROPBOX_APP_KEY, DROPBOX_APP_SECRET e DROPBOX_REFRESH_TOKEN no Render.'
+            'adicione DROPBOX_APP_KEY, DROPBOX_APP_SECRET e DROPBOX_REFRESH_TOKEN no Railway.'
         )
     except ApiError as exc:
         erro_str = str(exc).lower()

@@ -170,7 +170,7 @@ if rubrica_comissao:
 7. Para cada motorista com comissão:
    - Se não está na lista → ADICIONAR
    ↓
-8. Renderizar lista completa
+8. Railwayizar lista completa
 ```
 
 ### Dados Mesclados:

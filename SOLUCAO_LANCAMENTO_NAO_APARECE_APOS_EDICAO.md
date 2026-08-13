@@ -97,9 +97,9 @@ Query adicional para garantir que dados foram salvos corretamente.
 ### Teste 1: Editar e Verificar Logs
 
 1. Deploy do código
-2. Acessar: https://nh-transportes.onrender.com/lancamentos_caixa/editar/3
+2. Acessar: https://app.postonovohorizonte.com.br/lancamentos_caixa/editar/3
 3. Salvar (mesmo sem alterar nada)
-4. Ver logs do Render:
+4. Ver logs do Railway:
    ```
    [DEBUG EDIT] Limpando observação automática de Troco PIX
    [DEBUG EDIT] Atualizando lançamento id=3
@@ -107,7 +107,7 @@ Query adicional para garantir que dados foram salvos corretamente.
    [DEBUG EDIT] Linhas afetadas pelo UPDATE: 1
    [DEBUG EDIT] Após UPDATE - status=FECHADO, observacao=NULL
    ```
-5. Acessar lista: https://nh-transportes.onrender.com/lancamentos_caixa/
+5. Acessar lista: https://app.postonovohorizonte.com.br/lancamentos_caixa/
 6. ✅ Lançamento deve aparecer
 
 ### Teste 2: Verificar via SQL
@@ -159,7 +159,7 @@ WHERE id = 3;
 ```
 
 ### Opção 2: Via Interface
-1. Acessar: https://nh-transportes.onrender.com/lancamentos_caixa/editar/3
+1. Acessar: https://app.postonovohorizonte.com.br/lancamentos_caixa/editar/3
 2. Limpar campo "Observação" (apagar todo texto)
 3. Salvar
 4. Sistema atualiza status para 'FECHADO' e limpa observação
@@ -208,7 +208,7 @@ WHERE id = 3;
 
 ### Se Ainda Não Aparecer
 
-1. Verificar logs do Render após editar:
+1. Verificar logs do Railway após editar:
    - `[DEBUG EDIT] Linhas afetadas pelo UPDATE:` deve ser 1
    - `[DEBUG EDIT] Após UPDATE - status=` deve ser FECHADO
 

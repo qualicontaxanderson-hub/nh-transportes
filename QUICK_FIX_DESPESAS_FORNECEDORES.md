@@ -8,20 +8,20 @@
 
 ## A Solução (5 minutos)
 
-### Opção A: Script Automático no Render Shell ⭐ RECOMENDADO
+### Opção A: Script Automático no Railway Shell ⭐ RECOMENDADO
 
-1. **Acesse:** https://dashboard.render.com
+1. **Acesse:** https://railway.app
 2. **Abra:** Shell do serviço `nh-transportes`
 3. **Cole e execute:**
 
 ```bash
-cd /opt/render/project/src
+cd /app
 python run_single_migration.py migrations/20260215_add_despesas_fornecedores.sql --force
 ```
 
 4. **Aguarde:** ~10 segundos
 5. **Verifique:** ✅ "MIGRATION CONCLUÍDA COM SUCESSO!"
-6. **Teste:** https://nh-transportes.onrender.com/despesas/fornecedores/
+6. **Teste:** https://app.postonovohorizonte.com.br/despesas/fornecedores/
 
 ---
 
@@ -66,7 +66,7 @@ DESCRIBE despesas_fornecedores;
 
 ## 🎯 Teste Final
 
-1. Acesse: https://nh-transportes.onrender.com/despesas/fornecedores/
+1. Acesse: https://app.postonovohorizonte.com.br/despesas/fornecedores/
 2. ✅ Deve carregar sem erro 500
 3. ✅ Deve mostrar lista vazia
 4. ✅ Botão "Cadastrar Fornecedor" deve estar visível
@@ -86,7 +86,7 @@ Para mais detalhes, consulte:
 **Se o erro persistir:**
 
 1. Verifique se a migration foi executada com sucesso
-2. Reinicie a aplicação no Render (se necessário)
+2. Reinicie a aplicação no Railway (se necessário)
 3. Verifique os logs: `Erro ao conectar` ou `Foreign key constraint`
 4. Consulte `MANUAL_MIGRATION_GUIDE.md` seção Troubleshooting
 

@@ -286,7 +286,7 @@ SELECT id, username, nivel FROM usuarios WHERE username = 'MELKE';
 - Login novamente
 
 # 3. Verificar deploy:
-- Ver logs do Render
+- Ver logs do Railway
 - Confirmar que código está atualizado
 ```
 
@@ -352,7 +352,7 @@ SELECT id, username, nivel FROM usuarios WHERE username = 'MELKE';
 1. ✅ Código corrigido e commitado
 2. ✅ Documentação completa
 3. ⏳ **Fazer merge para main**
-4. ⏳ **Deploy automático (Render)**
+4. ⏳ **Deploy automático (Railway)**
 5. ⏳ **MELKE fazer logout/login**
 6. ⏳ **Testar em produção**
 7. ⏳ **Confirmar funcionamento**

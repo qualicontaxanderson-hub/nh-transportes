@@ -17,15 +17,15 @@ Executar a migration `20260215_add_despesas_fornecedores.sql` no banco de dados 
 
 ## 📋 Opção 1: Via Script Python (RECOMENDADO)
 
-### Passo 1: Acessar Shell do Render
+### Passo 1: Acessar Shell do Railway
 
-1. Acesse https://dashboard.render.com
+1. Acesse https://railway.app
 2. Selecione o serviço `nh-transportes`
 3. Clique na aba **Shell**
 4. Execute:
 
 ```bash
-cd /opt/render/project/src
+cd /app
 python run_single_migration.py migrations/20260215_add_despesas_fornecedores.sql --force
 ```
 
@@ -99,7 +99,7 @@ COMMENT = 'Fornecedores de despesas vinculados a categorias específicas';
 
 ### Como Executar:
 
-**Via Railway/Render Dashboard:**
+**Via Railway/painel do Railway:**
 
 1. Acesse o banco de dados na dashboard
 2. Abra o MySQL client
@@ -109,7 +109,7 @@ COMMENT = 'Fornecedores de despesas vinculados a categorias específicas';
 **Via MySQL Client Local:**
 
 ```bash
-# Pegue as credenciais do banco em Render Dashboard
+# Pegue as credenciais do banco em painel do Railway
 mysql -h <host> -u <user> -p<password> <database> < migrations/20260215_add_despesas_fornecedores.sql
 ```
 
@@ -178,11 +178,11 @@ SHOW INDEX FROM despesas_fornecedores;
 
 Após executar a migration:
 
-1. **Reinicie a aplicação** (se necessário, Render faz isso automaticamente)
+1. **Reinicie a aplicação** (se necessário, Railway faz isso automaticamente)
 
 2. **Acesse a URL:**
    ```
-   https://nh-transportes.onrender.com/despesas/fornecedores/
+   https://app.postonovohorizonte.com.br/despesas/fornecedores/
    ```
 
 3. **Resultado esperado:**
@@ -241,7 +241,7 @@ python run_single_migration.py migrations/20260215_add_despesas_fornecedores.sql
 
 ## 📊 Logs de Sucesso
 
-Após executar com sucesso, você verá nos logs do Render:
+Após executar com sucesso, você verá nos logs do Railway:
 
 ```
 ✅ Migration executada com sucesso!
@@ -276,6 +276,6 @@ mysql.connector.errors.ProgrammingError: Table 'railway.despesas_fornecedores' d
 Após seguir este guia, o sistema de Fornecedores de Despesas estará totalmente funcional!
 
 **Qualquer dúvida:**
-- Consulte os logs do Render
+- Consulte os logs do Railway
 - Verifique a estrutura do banco
 - Execute os comandos de verificação acima

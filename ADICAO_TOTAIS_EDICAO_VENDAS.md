@@ -136,7 +136,7 @@ URL: `/posto/vendas/editar/<data>/<cliente_id>`
 
 1. **Acessar página de edição:**
    ```
-   https://nh-transportes.onrender.com/posto/vendas/editar/2026-01-04/1
+   https://app.postonovohorizonte.com.br/posto/vendas/editar/2026-01-04/1
    ```
 
 2. **Verificar quadro de totais:**

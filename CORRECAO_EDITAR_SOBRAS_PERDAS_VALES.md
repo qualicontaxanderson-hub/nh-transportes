@@ -224,7 +224,7 @@ calcularTotais();
 
 ### Passo 1: Editar Lançamento Existente
 ```
-https://nh-transportes.onrender.com/lancamentos_caixa/editar/3
+https://app.postonovohorizonte.com.br/lancamentos_caixa/editar/3
 ```
 
 ### Passo 2: Adicionar Valores

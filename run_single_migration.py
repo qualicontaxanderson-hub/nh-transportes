@@ -5,8 +5,8 @@ Script para executar uma migration específica no banco de dados.
 Uso:
     python run_single_migration.py migrations/20260215_add_despesas_fornecedores.sql
 
-Ou pelo shell do Render:
-    cd /opt/render/project/src
+Ou pelo shell do Railway:
+    cd /app
     python run_single_migration.py migrations/20260215_add_despesas_fornecedores.sql
 """
 

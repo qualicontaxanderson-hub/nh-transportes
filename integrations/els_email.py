@@ -22,7 +22,7 @@ Segue os padrões do app: usa utils.db.get_db_connection(), cria as tabelas de
 forma idempotente (como routes/descargas.py) e é chamado pelo agendador
 integrations/els_scheduler.py.
 
-Configuração (variáveis de ambiente — configurar no Render):
+Configuração (variáveis de ambiente — configurar no Railway):
     ELS_MAIL_IMAP_HOST   (default imap.titan.email)
     ELS_MAIL_IMAP_PORT   (default 993)
     ELS_MAIL_USER        (ex.: goiatuba@postonovohorizonte.com.br)

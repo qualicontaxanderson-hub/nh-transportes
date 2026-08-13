@@ -27,16 +27,16 @@ MAS apareceu erro:
 
 ```
 TypeError: 'NoneType' object is not subscriptable
-File "/opt/render/project/src/routes/lancamentos_caixa.py", line 167
+File "/app/routes/lancamentos_caixa.py", line 167
 observacao={lanc.get('observacao', '')[:50]}
 ```
 
-### Logs do Render
+### Logs do Railway
 
 ```
 [DEBUG] Número de lançamentos encontrados: 1
 Error in lancamentos_caixa lista: Traceback (most recent call last):
-  File "/opt/render/project/src/routes/lancamentos_caixa.py", line 167, in lista
+  File "/app/routes/lancamentos_caixa.py", line 167, in lista
     print(f"... observacao={lanc.get('observacao', '')[:50]}")
                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
 TypeError: 'NoneType' object is not subscriptable
@@ -149,7 +149,7 @@ Se você está trabalhando com valores do banco de dados que podem ser NULL:
 
 ### 1. Após Deploy
 
-Acessar: `https://nh-transportes.onrender.com/lancamentos_caixa/`
+Acessar: `https://app.postonovohorizonte.com.br/lancamentos_caixa/`
 
 ### 2. Verificar Logs
 

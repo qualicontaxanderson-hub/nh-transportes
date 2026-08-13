@@ -44,7 +44,7 @@ class Config:
     DB_HOST = "centerbeam.proxy.rlwy.net"
     DB_PORT = 56026
     DB_USER = "root"
-    DB_PASSWORD = "CYTzzRYLVmEJGDexxXpgepWgpvebdSrV"
+    DB_PASSWORD = "<senha no Railway>"
 ```
 
 **Depois (config.py):**
@@ -56,7 +56,7 @@ class Config:
     DB_HOST = os.environ.get('DB_HOST', 'centerbeam.proxy.rlwy.net')
     DB_PORT = int(os.environ.get('DB_PORT', 56026))
     DB_USER = os.environ.get('DB_USER', 'root')
-    DB_PASSWORD = os.environ.get('DB_PASSWORD', 'CYTzzRYLVmEJGDexxXpgepWgpvebdSrV')
+    DB_PASSWORD = os.environ.get('DB_PASSWORD', '<senha no Railway>')
 ```
 
 ## Benefícios

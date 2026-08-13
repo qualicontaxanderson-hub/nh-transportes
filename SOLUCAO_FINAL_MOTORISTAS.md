@@ -50,7 +50,7 @@ MOTORISTAS: 0 funcionários ❌ ← SEM LANÇAMENTOS!
 ### 1️⃣ Acessar Interface de Criação
 
 ```
-https://nh-transportes.onrender.com/lancamentos-funcionarios/novo
+https://app.postonovohorizonte.com.br/lancamentos-funcionarios/novo
 ```
 
 ---
@@ -92,7 +92,7 @@ https://nh-transportes.onrender.com/lancamentos-funcionarios/novo
 ### 4️⃣ Verificar Resultado
 
 ```
-https://nh-transportes.onrender.com/lancamentos-funcionarios/
+https://app.postonovohorizonte.com.br/lancamentos-funcionarios/
 ```
 
 **Deve mostrar:**
@@ -216,7 +216,7 @@ TOTAL      | 9                  | R$ 33.382,42
 
 1. **Acessar:**
    ```
-   https://nh-transportes.onrender.com/lancamentos-funcionarios/
+   https://app.postonovohorizonte.com.br/lancamentos-funcionarios/
    ```
 
 2. **Verificar:**

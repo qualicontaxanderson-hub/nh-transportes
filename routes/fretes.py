@@ -613,7 +613,7 @@ def salvar_importados():
     try:
         # Idempotência: se já existem fretes gravados para este pedido_id,
         # abortar antes de qualquer INSERT para evitar duplicatas causadas por
-        # duplo-clique, lentidão da rede (Railway/Render) ou retry do browser.
+        # duplo-clique, lentidão da rede (Railway) ou retry do browser.
         if pedido_id:
             try:
                 cur.execute(

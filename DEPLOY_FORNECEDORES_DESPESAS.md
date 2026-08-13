@@ -76,10 +76,10 @@ SHOW INDEX FROM despesas_fornecedores;
 
 ### Passo 4: Deploy do Código
 
-**Render.com (Automático):**
+**Railway (Automático):**
 ```bash
 # Código já está no repositório
-# Render detecta mudanças automaticamente
+# Railway detecta mudanças automaticamente
 # Aguardar deploy (2-5 minutos)
 ```
 
@@ -204,7 +204,7 @@ DELETE FROM despesas_fornecedores WHERE nome LIKE 'Teste Deploy%';
 **3.1. API listar por categoria:**
 ```bash
 # Com curl
-curl https://nh-transportes.onrender.com/despesas/fornecedores/api/por-categoria/1
+curl https://app.postonovohorizonte.com.br/despesas/fornecedores/api/por-categoria/1
 
 # Esperado:
 # [{"id": 1, "nome": "Fornecedor 1"}, {"id": 2, "nome": "Fornecedor 2"}]
@@ -213,7 +213,7 @@ curl https://nh-transportes.onrender.com/despesas/fornecedores/api/por-categoria
 **3.2. API criar rápido:**
 ```bash
 # Com curl
-curl -X POST https://nh-transportes.onrender.com/despesas/fornecedores/api/criar-rapido \
+curl -X POST https://app.postonovohorizonte.com.br/despesas/fornecedores/api/criar-rapido \
   -H "Content-Type: application/json" \
   -d '{"nome": "Teste API", "categoria_id": 1}'
 
@@ -374,7 +374,7 @@ SELECT * FROM despesas_fornecedores
 WHERE categoria_id = 1 AND ativo = 1;
 
 # 2. Testar API
-curl https://nh-transportes.onrender.com/despesas/fornecedores/api/por-categoria/1
+curl https://app.postonovohorizonte.com.br/despesas/fornecedores/api/por-categoria/1
 
 # 3. Verificar console do navegador (F12)
 # Procurar por erros AJAX

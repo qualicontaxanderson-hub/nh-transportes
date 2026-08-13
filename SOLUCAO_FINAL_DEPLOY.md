@@ -43,11 +43,11 @@ git push origin main
 ```
 
 ### 2. Aguardar Deploy Automático (5 min)
-- Render faz deploy automaticamente quando main é atualizado
-- Monitorar logs em: https://dashboard.render.com
+- Railway faz deploy automaticamente quando main é atualizado
+- Monitorar logs em: https://railway.app
 
 ### 3. Validar Resultado (3 min)
-- Acessar: https://nh-transportes.onrender.com/lancamentos-funcionarios/
+- Acessar: https://app.postonovohorizonte.com.br/lancamentos-funcionarios/
 - Verificar que aparecem 2 linhas:
   - **FRENTISTAS: 7 funcionários**
   - **MOTORISTAS: 2 funcionários**

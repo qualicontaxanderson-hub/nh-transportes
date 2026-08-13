@@ -25,7 +25,7 @@ Duplicate entry '1-6-01/2026-1' for key 'lancamentosfuncionarios_v2.unique_lanca
 
 ### Stack Trace:
 ```python
-File "/opt/render/project/src/routes/lancamentos_funcionarios.py", line 106, in novo
+File "/app/routes/lancamentos_funcionarios.py", line 106, in novo
     cursor.execute("""
         INSERT INTO lancamentosfuncionarios_v2 (
             clienteid, funcionarioid, mes, rubricaid, valor, 

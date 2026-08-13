@@ -17,7 +17,7 @@
 
 Abra o navegador e vá para:
 ```
-https://nh-transportes.onrender.com/auth/login
+https://app.postonovohorizonte.com.br/auth/login
 ```
 
 #### 2️⃣ Faça Login como ADMIN

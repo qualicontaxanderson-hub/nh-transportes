@@ -212,7 +212,7 @@ if nivel == 'PISTA':
 ### Teste 3: Permanência na Página Inicial (Bug #3)
 ```bash
 1. Após login, verificar URL
-2. Deve ser https://nh-transportes.onrender.com/ ✅
+2. Deve ser https://app.postonovohorizonte.com.br/ ✅
 3. NÃO deve redirecionar automaticamente ✅
 ```
 
@@ -318,7 +318,7 @@ Tentar acessar URL que SUPERVISOR NÃO deve acessar:
 - [x] Push para branch `copilot/fix-merge-issue-39`
 - [x] Documentação completa
 - [ ] **PRÓXIMO:** Merge para `main`
-- [ ] **PRÓXIMO:** Deploy automático no Render
+- [ ] **PRÓXIMO:** Deploy automático no Railway
 - [ ] **PRÓXIMO:** Teste em produção
 
 ### Após Deploy em Produção:
@@ -391,7 +391,7 @@ git push -f
 - [x] Push realizado
 
 ### Pós-Deploy:
-- [ ] Aplicação reiniciada no Render
+- [ ] Aplicação reiniciada no Railway
 - [ ] MELKE fez logout/login
 - [ ] Menu mostra 9 seções
 - [ ] Todas as URLs funcionam

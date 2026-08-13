@@ -16,7 +16,7 @@
 ```
 No Banco de dados constam de fechamento de caixa, 
 mas no site sumiu as informações 
-https://nh-transportes.onrender.com/lancamentos_caixa/
+https://app.postonovohorizonte.com.br/lancamentos_caixa/
 ```
 
 ### Dados do Banco
@@ -171,11 +171,11 @@ cursor.execute("""
 ### Teste 1: Lançamento Existente (id=3)
 ```bash
 # ANTES do deploy
-curl https://nh-transportes.onrender.com/lancamentos_caixa/
+curl https://app.postonovohorizonte.com.br/lancamentos_caixa/
 # Resultado: Lançamento id=3 NÃO aparece ❌
 
 # DEPOIS do deploy
-curl https://nh-transportes.onrender.com/lancamentos_caixa/
+curl https://app.postonovohorizonte.com.br/lancamentos_caixa/
 # Resultado: Lançamento id=3 AINDA não aparece (status ainda é ABERTO)
 #            Precisa EDITAR o lançamento para mudar status
 

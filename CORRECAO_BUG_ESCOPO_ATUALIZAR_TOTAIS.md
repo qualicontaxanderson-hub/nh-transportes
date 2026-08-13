@@ -2,7 +2,7 @@
 
 ## 📋 Problema Reportado
 
-**URL:** https://nh-transportes.onrender.com/posto/vendas/editar/2026-01-05/1  
+**URL:** https://app.postonovohorizonte.com.br/posto/vendas/editar/2026-01-05/1  
 **Descrição:** Os valores não estavam sendo somados na página de edição de vendas.
 
 ## 🔍 Análise Técnica

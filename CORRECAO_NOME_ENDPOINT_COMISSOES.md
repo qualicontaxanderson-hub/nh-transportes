@@ -15,7 +15,7 @@ Correção de um erro crítico onde o código estava tentando chamar um endpoint
 
 ## Problema Reportado
 
-### Erro nos Logs do Render:
+### Erro nos Logs do Railway:
 
 ```
 Warning: Could not fetch commissions from API: Could not build url for endpoint 'lancamentos_funcionarios.get_comissoes_motoristas' with values ['cliente_id', 'mes']. Did you mean 'lancamentos_funcionarios.get_comissoes' instead?
@@ -133,7 +133,7 @@ api_url = url_for('lancamentos_funcionarios.get_comissoes',
 
 **Passo a passo:**
 1. Acessar página detalhe
-2. Verificar logs do Render
+2. Verificar logs do Railway
 
 **Resultado esperado:**
 - ✅ Sem warnings sobre "Could not build url"

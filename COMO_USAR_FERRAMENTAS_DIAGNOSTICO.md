@@ -206,7 +206,7 @@ UPDATE funcionarios SET categoria = 'FRENTISTA';
 **Solução:**
 1. Verificar se deploy foi feito (commit 75/76)
 2. Fazer merge da branch: `copilot/fix-merge-issue-39`
-3. Aguardar deploy do Render
+3. Aguardar deploy do Railway
 4. Limpar cache do navegador
 
 ---

@@ -37,14 +37,14 @@ Retiradas para Pagamentos   VA JOÃO                 R$ 350,00
 ## 🚀 Como Fazer Deploy Correto
 
 ### Opção 1: Deploy pela Branch (Recomendado)
-1. Acessar dashboard do Render
+1. Acessar dashboard do Railway
 2. Selecionar serviço nh-transportes
 3. Clicar "Manual Deploy"
 4. Selecionar branch: **copilot/fix-troco-pix-auto-error**
 5. Deploy (vai pegar o commit 573b230 automaticamente)
 
 ### Opção 2: Deploy por Commit Específico
-1. Dashboard do Render
+1. Dashboard do Railway
 2. Manual Deploy
 3. Especificar commit: **573b230**
 4. Deploy
@@ -55,7 +55,7 @@ Retiradas para Pagamentos   VA JOÃO                 R$ 350,00
 
 ### Teste 1: Visualização
 ```
-1. Acessar: https://nh-transportes.onrender.com/lancamentos_caixa/visualizar/7
+1. Acessar: https://app.postonovohorizonte.com.br/lancamentos_caixa/visualizar/7
 2. Ir até "Comprovação para Fechamento"
 3. Verificar:
    ✅ Ver "Descontos Cadastro" (não "RETIRADAS PARA PAGAMENTO")

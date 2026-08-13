@@ -93,7 +93,7 @@ A primeira correção resolveu o item #1, mas o item #2 continuava causando o pr
 
 ### Cenário 1: Login como SUPERVISOR
 ```
-1. Acesse: https://nh-transportes.onrender.com/auth/login
+1. Acesse: https://app.postonovohorizonte.com.br/auth/login
 2. Login como MELKE (SUPERVISOR)
 3. ✅ Deve ir para / (página inicial)
 4. ✅ Deve PERMANECER na página inicial
@@ -205,4 +205,4 @@ Com AMBAS: SUPERVISOR funciona corretamente! 🎉
 **Data da Correção:** 2026-02-05  
 **Issue:** SUPERVISOR ainda limitado após primeira correção  
 **Status:** ✅ RESOLVIDO (correção adicional)  
-**Ambiente:** Produção (Render)
+**Ambiente:** Produção (Railway)

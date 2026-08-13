@@ -11,7 +11,7 @@
 
 O usuário reportou que os totais dos lançamentos não apareciam na página de edição:
 ```
-URL: https://nh-transportes.onrender.com/posto/vendas/editar/<data>/<cliente_id>
+URL: https://app.postonovohorizonte.com.br/posto/vendas/editar/<data>/<cliente_id>
 Problema: "ainda não constam os totais dos lançamentos não aparecem.."
 ```
 

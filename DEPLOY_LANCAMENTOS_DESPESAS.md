@@ -50,7 +50,7 @@ kill -HUP [PID]
 # Ou reiniciar completamente
 systemctl restart nh-transportes
 
-# No Render.com
+# No Railway
 # Vai reiniciar automaticamente após git push
 ```
 
@@ -123,7 +123,7 @@ SOURCE migrations/20260214_add_lancamentos_despesas.sql;
 # Verificar logs
 tail -f /var/log/flask.log
 
-# Ou no Render.com
+# Ou no Railway
 # Ir em Logs e procurar por erros
 ```
 

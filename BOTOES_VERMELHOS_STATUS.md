@@ -24,7 +24,7 @@
 
 **Commit:** `9ce121d` (ou mais recente: `9f009cd`)
 
-**Onde:** Render Dashboard  
+**Onde:** painel do Railway  
 **Branch:** copilot/fix-troco-pix-auto-error
 
 ---
@@ -170,7 +170,7 @@
 ### 1. Fazer Deploy
 
 ```
-1. Acessar: https://dashboard.render.com
+1. Acessar: https://railway.app
 2. Selecionar: nh-transportes
 3. Clicar: "Manual Deploy"
 4. Branch: copilot/fix-troco-pix-auto-error
@@ -191,7 +191,7 @@ Ou abrir em aba anônima
 ### 3. Acessar e Ver
 
 ```
-URL: https://nh-transportes.onrender.com/lancamentos_caixa/novo
+URL: https://app.postonovohorizonte.com.br/lancamentos_caixa/novo
 
 Procurar:
 - Seção "Depósitos em Cheques À Vista"

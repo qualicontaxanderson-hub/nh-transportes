@@ -76,7 +76,7 @@ APÓS O MERGE:
 ├────────────────┼──────────────┤
 │ Criar PR       │ 1 min        │
 │ Fazer Merge    │ 1 min        │
-│ Deploy Render  │ 5-10 min     │
+│ Deploy Railway  │ 5-10 min     │
 │ Validar        │ 2 min        │
 ├────────────────┼──────────────┤
 │ TOTAL          │ ~15 minutos  │
@@ -89,7 +89,7 @@ APÓS O MERGE:
 
 Após o merge, acesse:
 ```
-https://nh-transportes.onrender.com/lancamentos-funcionarios/
+https://app.postonovohorizonte.com.br/lancamentos-funcionarios/
 ```
 
 Deve aparecer:

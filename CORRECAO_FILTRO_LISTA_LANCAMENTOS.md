@@ -147,7 +147,7 @@ Resultado: ✅ Aparece na lista
 ### Teste 1: Lançamentos Existentes Aparecem
 ```bash
 # Acessar o site
-https://nh-transportes.onrender.com/lancamentos_caixa/
+https://app.postonovohorizonte.com.br/lancamentos_caixa/
 
 # Verificar que a lista NÃO está vazia
 # Deve mostrar todos os fechamentos legítimos

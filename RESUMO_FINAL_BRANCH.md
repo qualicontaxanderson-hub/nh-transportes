@@ -60,7 +60,7 @@ git merge copilot/fix-merge-issue-39
 # 3. Push para produção
 git push origin main
 
-# 4. Aguardar deploy do Render (5 minutos)
+# 4. Aguardar deploy do Railway (5 minutos)
 ```
 
 ### Passo 2: EXECUTAR SQL DE LIMPEZA (2 minutos)
@@ -80,7 +80,7 @@ DELETE FROM lancamentosfuncionarios_v2 WHERE id IN (8, 9);
 ### Passo 3: VALIDAR (5 minutos)
 
 1. **Página Lista:**
-   - Acessar: https://nh-transportes.onrender.com/lancamentos-funcionarios/
+   - Acessar: https://app.postonovohorizonte.com.br/lancamentos-funcionarios/
    - Verificar: Status 200, sem erro 500
    - Confirmar: 2 linhas (FRENTISTAS e MOTORISTAS)
    - Validar: Total de 9 funcionários (7 + 2)
@@ -147,7 +147,7 @@ DELETE FROM lancamentosfuncionarios_v2 WHERE id IN (8, 9);
 
 - [ ] **MERGE para main** ⚠️
 - [ ] **Push para produção** ⚠️
-- [ ] **Aguardar deploy do Render** (5 min)
+- [ ] **Aguardar deploy do Railway** (5 min)
 - [ ] **Verificar logs de deploy** (sem erros)
 
 ### Após o Deploy:
@@ -205,7 +205,7 @@ Mês      Cliente                          Categoria    Func  Valor
 
 ### Em Caso de Problemas:
 
-1. **Erro 500:** Verificar logs do Render
+1. **Erro 500:** Verificar logs do Railway
 2. **SQL não executa:** Verificar credenciais do banco
 3. **Dados não aparecem:** Limpar cache do navegador
 4. **Dúvidas:** Consultar documentação (47 documentos)

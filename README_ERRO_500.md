@@ -16,10 +16,10 @@ A funcionalidade de **Fornecedores de Despesas** foi implementada e está no có
 
 ### Opção 1: Script Automático (Recomendado) ⭐
 
-**No Shell do Render:**
+**No Shell do Railway:**
 
 ```bash
-cd /opt/render/project/src
+cd /app
 python run_single_migration.py migrations/20260215_add_despesas_fornecedores.sql --force
 ```
 
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS despesas_fornecedores (
 Após executar, teste:
 
 ```
-https://nh-transportes.onrender.com/despesas/fornecedores/
+https://app.postonovohorizonte.com.br/despesas/fornecedores/
 ```
 
 **Esperado:**

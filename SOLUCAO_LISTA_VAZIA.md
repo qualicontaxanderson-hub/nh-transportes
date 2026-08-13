@@ -4,7 +4,7 @@
 
 **Sintoma:**
 ```
-Usuário acessa: https://nh-transportes.onrender.com/lancamentos_caixa/
+Usuário acessa: https://app.postonovohorizonte.com.br/lancamentos_caixa/
 Resultado: Lista vazia (nenhum lançamento aparece)
 Banco de dados: Contém lançamentos (confirmado via query)
 ```
@@ -108,7 +108,7 @@ Exatamente os lançamentos automáticos de Troco PIX! ✅
 
 **1. Verificar Lista:**
 ```
-URL: https://nh-transportes.onrender.com/lancamentos_caixa/
+URL: https://app.postonovohorizonte.com.br/lancamentos_caixa/
 Resultado Esperado: ✅ Lista com lançamentos visíveis
 ```
 
@@ -120,7 +120,7 @@ Resultado Esperado: ✅ Lançamentos filtrados aparecem
 
 **3. Criar Troco PIX:**
 ```
-URL: https://nh-transportes.onrender.com/troco_pix/novo
+URL: https://app.postonovohorizonte.com.br/troco_pix/novo
 Criar novo Troco PIX
 Voltar para lista
 Resultado Esperado: ❌ Troco PIX NÃO aparece (correto)

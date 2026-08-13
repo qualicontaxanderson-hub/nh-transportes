@@ -23,7 +23,7 @@ Erro ao carregar lançamentos de caixa: name 'data_inicio' is not defined
 ```python
 [DEBUG DIAGNOSTICO] Buscando TODOS os lançamentos no período...
 Error in lancamentos_caixa lista: Traceback (most recent call last):
-  File "/opt/render/project/src/routes/lancamentos_caixa.py", line 124, in lista
+  File "/app/routes/lancamentos_caixa.py", line 124, in lista
     """, (data_inicio, data_fim))
           ^^^^^^^^^^^
 NameError: name 'data_inicio' is not defined
@@ -93,7 +93,7 @@ cursor.execute("""
 ## 🧪 Como Testar
 
 ### Após Deploy
-1. ✅ Acessar: https://nh-transportes.onrender.com/lancamentos_caixa/
+1. ✅ Acessar: https://app.postonovohorizonte.com.br/lancamentos_caixa/
 2. ✅ Página deve carregar sem erro
 3. ✅ Logs devem mostrar:
    ```
@@ -189,7 +189,7 @@ Após deploy do hotfix:
 
 **Se o erro persistir após deploy:**
 1. Verificar se commit a50d7c5 foi deployado
-2. Ver logs do servidor no Render
+2. Ver logs do servidor no Railway
 3. Confirmar variável está usando `filtros['data_inicio']`
 4. Contactar suporte técnico
 

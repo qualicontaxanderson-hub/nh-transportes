@@ -41,7 +41,7 @@ linha 487, antes de `return app`), existe o bloco análogo:
         app.logger.warning("[els_sched] não foi possível iniciar o scheduler.", exc_info=True)
 ```
 
-## Passo 2 — Variáveis de ambiente (no Render)
+## Passo 2 — Variáveis de ambiente (no Railway)
 
 ```
 ELS_MAIL_IMAP_HOST=imap.titan.email        # Titan; se a caixa for Gmail: imap.gmail.com

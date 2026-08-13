@@ -90,7 +90,7 @@ Criado **3 menus distintos** baseados no nível do usuário:
 
 ### Teste 1: Login como SUPERVISOR
 ```bash
-1. Acesse https://nh-transportes.onrender.com/auth/login
+1. Acesse https://app.postonovohorizonte.com.br/auth/login
 2. Login: MELKE
 3. Senha: [senha do MELKE]
 4. Após login, verifique o navbar
@@ -162,7 +162,7 @@ Menu com 9 seções → Clicar → Acessar → Usar ✅
 
 ### Após o Merge:
 
-1. Deploy automático no Render
+1. Deploy automático no Railway
 2. MELKE deve fazer **logout** e **login** novamente
 3. Verificar que vê o novo menu
 4. Testar acesso a cada seção

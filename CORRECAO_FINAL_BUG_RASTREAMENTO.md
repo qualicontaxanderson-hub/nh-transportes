@@ -139,7 +139,7 @@ for lanc in lancamentos:
       - Cria entrada de lançamento com comissão
       - Adiciona à lista final
 
-5. **Renderiza lista completa:**
+5. **Railwayiza lista completa:**
    - Dados do banco (filtrados) + comissões da API
 
 ---

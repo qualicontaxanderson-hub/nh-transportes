@@ -308,9 +308,9 @@ DESCRIBE despesas_fornecedores;
 -- Esperado: 5 campos (id, nome, categoria_id, ativo, criado_em)
 ```
 
-**4. Deploy Código (automático Render.com):**
+**4. Deploy Código (automático Railway):**
 - Código já está no repositório
-- Render detecta e faz deploy automático
+- Railway detecta e faz deploy automático
 - Aguardar 2-5 minutos
 
 **5. Validação (5 min):**

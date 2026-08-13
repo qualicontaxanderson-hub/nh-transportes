@@ -174,7 +174,7 @@ mysql -h containers-us-west-xxx.railway.app \
 
 ---
 
-### Método 2: Interface Web (Railway/Render)
+### Método 2: Interface Web (Railway)
 
 **Railway:**
 1. Acessar dashboard do projeto
@@ -183,7 +183,7 @@ mysql -h containers-us-west-xxx.railway.app \
 4. Copiar conteúdo do arquivo `migrations/20260204_add_supervisor_permissions.sql`
 5. Colar e executar
 
-**Render:**
+**Railway:**
 1. Acessar dashboard
 2. Selecionar o banco de dados
 3. Aba "Console"
@@ -366,7 +366,7 @@ SHOW TABLES LIKE 'usuario_%';
 
 ### Passo 3: Deploy do Código ✅
 ```bash
-# Via git push para Render/Railway
+# Via git push para Railway
 git push origin main  # ou branch apropriada
 ```
 

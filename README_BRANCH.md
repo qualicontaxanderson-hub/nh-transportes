@@ -9,7 +9,7 @@ O código está correto, mas **2 ações são necessárias** para resolver o pro
 git checkout main
 git merge copilot/fix-merge-issue-39
 git push origin main
-# Aguardar Render fazer deploy (~5 min)
+# Aguardar Railway fazer deploy (~5 min)
 ```
 
 ### 2️⃣ LIMPAR DADOS

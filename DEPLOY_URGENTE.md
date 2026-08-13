@@ -4,9 +4,9 @@
 
 ### 🔥 O QUE FAZER AGORA
 
-**1. Acessar Render Dashboard**
+**1. Acessar painel do Railway**
 ```
-https://dashboard.render.com
+https://railway.app
 ```
 
 **2. Ir para o Serviço**
@@ -27,7 +27,7 @@ Aguardar: "Your service is live 🎉"
 
 **5. Testar**
 ```
-https://nh-transportes.onrender.com/lancamentos_caixa/
+https://app.postonovohorizonte.com.br/lancamentos_caixa/
 ```
 
 **Resultado Esperado:**
@@ -67,7 +67,7 @@ Correção: Commit 8718efd ✅
 
 ## Como Validar Que Funcionou?
 
-### 1. Ver Logs do Render
+### 1. Ver Logs do Railway
 ```
 [DEBUG DIAGNOSTICO] Total de lançamentos no período: 1
 [DEBUG DIAGNOSTICO] #1: id=3, data=2026-01-01, status=ABERTO, obs=None

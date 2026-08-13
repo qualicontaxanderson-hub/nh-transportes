@@ -15,7 +15,7 @@
 ### Erro em Produção
 
 **Data/Hora:** 09/02/2026 às 10:54 UTC  
-**URL:** https://nh-transportes.onrender.com/lancamentos-funcionarios/  
+**URL:** https://app.postonovohorizonte.com.br/lancamentos-funcionarios/  
 **Status:** 500 Internal Server Error  
 
 **Mensagem de Erro:**
@@ -108,12 +108,12 @@ git push origin main
 ```
 
 #### 2. Aguardar Deploy Automático (5 min)
-- Render detecta push na main
+- Railway detecta push na main
 - Inicia build automaticamente
 - Deploy em produção
 
 #### 3. Validar (2 min)
-- Acessar: https://nh-transportes.onrender.com/lancamentos-funcionarios/
+- Acessar: https://app.postonovohorizonte.com.br/lancamentos-funcionarios/
 - Verificar: Página carrega sem erro 500 ✅
 - Confirmar: Tabela mostra categorias ✅
 
@@ -192,7 +192,7 @@ Esta branch contém 56 commits com 15 features/correções:
 
 ### Se Houver Problemas
 
-1. Verificar logs do Render
+1. Verificar logs do Railway
 2. Confirmar que branch foi merged
 3. Confirmar que deploy foi concluído
 4. Testar URL em navegador anônimo (evitar cache)

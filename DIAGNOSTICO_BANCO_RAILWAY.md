@@ -297,7 +297,7 @@ A query prioriza `funcionarios` sobre `motoristas`, então mesmo com IDs sobrepo
 
 ### Se Tudo Estiver Correto no Banco:
 - Verificar se deploy foi feito (commit 75)
-- Verificar logs do Render
+- Verificar logs do Railway
 - Limpar cache do navegador
 
 ---

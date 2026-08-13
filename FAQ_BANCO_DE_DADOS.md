@@ -152,7 +152,7 @@ git pull origin copilot/fix-troco-pix-auto-error
 systemctl restart app
 # ou
 pm2 restart app
-# ou via Render dashboard
+# ou via Railway dashboard
 
 # Pronto! ✅
 ```

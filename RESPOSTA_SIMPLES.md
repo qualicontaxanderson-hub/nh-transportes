@@ -26,7 +26,7 @@
 
 ### 1. Acesse o Sistema
 ```
-https://nh-transportes.onrender.com/auth/login
+https://app.postonovohorizonte.com.br/auth/login
 ```
 
 ### 2. Login como ADMIN

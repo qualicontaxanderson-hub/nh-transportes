@@ -154,7 +154,7 @@ Todas as entradas automáticas têm prefixo **"AUTO -"** na descrição
 ### Como verificar se está funcionando:
 
 #### 1. Criar um TROCO PIX
-- Acesse: https://nh-transportes.onrender.com/troco_pix/novo
+- Acesse: https://app.postonovohorizonte.com.br/troco_pix/novo
 - Preencha todos os campos
 - Salve
 
