@@ -20,6 +20,7 @@ adiantamento viraria diferença falsa a cada período.
 Rota:
   GET /relatorios/conf_fornecedores_dfe
 """
+import xml.etree.ElementTree as ET
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
@@ -100,6 +101,163 @@ CREATE TABLE IF NOT EXISTS fornecedor_grupo_raiz (
     KEY ix_titular (titular_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 """
+
+
+# ─── NOTA INCLUÍDA À MÃO ──────────────────────────────────────────────────────
+# A captura da SEFAZ só entrega de 07/07 em diante, mas o pagamento de dentro do
+# período às vezes quita nota de ANTES — a MAX pagou R$ 9.090,00 em 07/07 pela
+# NF-e 446307 de 27/06, que a SEFAZ nunca entregou. Sem a nota, o fornecedor
+# fica eternamente "adiantado" no valor dela.
+#
+# `entrada_manual = 1` marca a nota que o usuário trouxe pelo XML: ela IGNORA o corte e
+# entra na conferência mesmo sendo mais antiga. Só essas — as 7 notas de junho
+# que a captura pegou por acaso continuam de fora, porque o pagamento delas
+# também está fora e incluí-las inventaria dívida.
+def _tag(el):
+    """Nome da tag sem o namespace (o XML da NF-e vem todo com xmlns)."""
+    t = el.tag
+    return t.rsplit('}', 1)[-1] if '}' in t else t
+
+
+def _txt(pai, nome):
+    if pai is None:
+        return None
+    for el in pai.iter():
+        if _tag(el) == nome:
+            return (el.text or '').strip() or None
+    return None
+
+
+def _no(raiz, nome):
+    for el in raiz.iter():
+        if _tag(el) == nome:
+            return el
+    return None
+
+
+def _so_digitos(v):
+    return ''.join(c for c in (v or '') if c.isdigit())
+
+
+def _dh_para_mysql(s):
+    """'2026-06-27T07:16:26-03:00' -> '2026-06-27 07:16:26'."""
+    if not s:
+        return None
+    s = s.strip().replace('T', ' ')
+    return s[:19] if len(s) >= 19 else None
+
+
+def _ler_nfe(xml_txt):
+    """Lê o essencial de uma NF-e do XML, só com a biblioteca padrão.
+
+    Não usa o parser de scripts/processa_dfe.py de propósito: aquele importa
+    consulta_sefaz, que valida variáveis de ambiente já no import e derrubaria
+    esta rota por um motivo que não é dela. Aqui o XML é o único insumo.
+    """
+    root = ET.fromstring(xml_txt.encode('utf-8'))
+
+    inf = _no(root, 'infNFe')
+    chave = _so_digitos((inf.get('Id') if inf is not None else '') or '')
+    if len(chave) != 44:
+        chave = _so_digitos(_txt(root, 'chNFe'))
+    if len(chave) != 44:
+        raise ValueError('não achei a chave de 44 dígitos (infNFe/chNFe)')
+
+    ide = _no(root, 'ide')
+    emit = _no(root, 'emit')
+    dest = _no(root, 'dest')
+    tot = _no(root, 'ICMSTot')
+    prot = _no(root, 'protNFe')
+
+    cstat = _txt(prot, 'cStat') if prot is not None else None
+    situacao = 'denegada' if cstat in ('110', '301', '302', '303') else 'autorizado'
+
+    itens = []
+    for det in root.iter():
+        if _tag(det) != 'det':
+            continue
+        prod = _no(det, 'prod')
+        if prod is None:
+            continue
+        itens.append({
+            'n_item': int(det.get('nItem') or (len(itens) + 1)),
+            'produto_xml': (_txt(prod, 'xProd') or '')[:160] or None,
+            'cprod_fornecedor': (_txt(prod, 'cProd') or '')[:60] or None,
+            'cean': (_txt(prod, 'cEAN') or '')[:20] or None,
+            'cod_anp': _txt(prod, 'cProdANP'),
+            'ncm': _txt(prod, 'NCM'),
+            'unidade': (_txt(prod, 'uCom') or '')[:6] or None,
+            'quantidade': _txt(prod, 'qCom'),
+            'valor_unitario': _txt(prod, 'vUnCom'),
+            'valor_total': _txt(prod, 'vProd'),
+        })
+
+    # Duplicata (vencimento por parcela). Combustível quase nunca traz <dup> —
+    # lista vazia é caso normal, não erro.
+    dups = []
+    for dup in root.iter():
+        if _tag(dup) != 'dup':
+            continue
+        venc = (_txt(dup, 'dVenc') or '')[:10] or None
+        dups.append({'n_dup': (_txt(dup, 'nDup') or '')[:60] or None,
+                     'vencimento': venc, 'valor': _txt(dup, 'vDup')})
+    for i, d in enumerate(dups, 1):
+        if not d['n_dup']:
+            d['n_dup'] = '%03d' % i
+
+    nome_emit = _txt(emit, 'xNome')
+    return {
+        'chave': chave,
+        'modelo': _txt(ide, 'mod'),
+        'numero': _txt(ide, 'nNF'),
+        'serie': _txt(ide, 'serie'),
+        'dh_emissao': _dh_para_mysql(_txt(ide, 'dhEmi')),
+        'emit_cnpj': _so_digitos(_txt(emit, 'CNPJ')) or None,
+        'emit_nome': nome_emit[:160] if nome_emit else None,
+        'dest_cnpj': (_so_digitos(_txt(dest, 'CNPJ') or _txt(dest, 'CPF'))
+                      or None),
+        'valor_total': _txt(tot, 'vNF') if tot is not None else _txt(root, 'vNF'),
+        'situacao': situacao,
+        'itens': itens,
+        'duplicatas': dups,
+    }
+
+
+_SQL_ITEM_MANUAL = (
+    "INSERT INTO dfe_itens "
+    "(documento_id, n_item, produto_xml, cprod_fornecedor, cean, cod_anp, "
+    " ncm, unidade, quantidade, valor_unitario, valor_total) "
+    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+    "ON DUPLICATE KEY UPDATE "
+    "  produto_xml=VALUES(produto_xml), cprod_fornecedor=VALUES(cprod_fornecedor), "
+    "  cean=VALUES(cean), cod_anp=VALUES(cod_anp), ncm=VALUES(ncm), "
+    "  unidade=VALUES(unidade), quantidade=VALUES(quantidade), "
+    "  valor_unitario=VALUES(valor_unitario), valor_total=VALUES(valor_total)"
+)
+
+_SQL_DUP_MANUAL = (
+    "INSERT INTO dfe_duplicatas (documento_id, n_dup, vencimento, valor) "
+    "VALUES (%s,%s,%s,%s) "
+    "ON DUPLICATE KEY UPDATE vencimento=VALUES(vencimento), valor=VALUES(valor)"
+)
+
+
+def _garante_coluna_manual(conn):
+    """Cria dfe_documentos.entrada_manual se faltar. Só adiciona; default 0.
+
+    O nome NAO e `manual`: virou palavra reservada no MySQL 8.0.31 e o ALTER
+    morre com erro de sintaxe que nao diz o motivo.
+    """
+    cur = conn.cursor()
+    cur.execute("""SELECT COUNT(*) FROM information_schema.columns
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'dfe_documentos'
+                      AND column_name = 'entrada_manual'""")
+    if not cur.fetchone()[0]:
+        cur.execute("ALTER TABLE dfe_documentos "
+                    "ADD COLUMN entrada_manual TINYINT(1) NOT NULL DEFAULT 0")
+        conn.commit()
+    cur.close()
 
 
 def _garante_tabela_grupo(conn):
@@ -265,7 +423,9 @@ def _cnpjs_duplicados(conn):
 
 def _notas_anteriores(conn, data_ini, empresa_ids, fornecedor_ids):
     """Notas entre o CORTE e o início do período (é o saldo de trás)."""
-    where = [_FILTRO_NOTA, "d.dh_emissao >= %s", "d.dh_emissao < %s"]
+    # Nota trazida à mão NUNCA entra aqui: ela aparece como linha no período
+    # (mesmo sendo mais velha). Contar nos dois lugares dobraria a dívida.
+    where = [_FILTRO_NOTA, "d.entrada_manual = 0", "d.dh_emissao >= %s", "d.dh_emissao < %s"]
     params = [DATA_CORTE_DFE + " 00:00:00", data_ini + " 00:00:00"]
     _em("d.cliente_id", empresa_ids, where, params)
     _em("m.forn_id", fornecedor_ids, where, params)
@@ -306,8 +466,14 @@ def _pagamentos_anteriores(conn, data_ini, empresa_ids, fornecedor_ids):
 
 
 def _notas_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids):
-    where = [_FILTRO_NOTA, "d.dh_emissao BETWEEN %s AND %s"]
-    params = [data_ini + " 00:00:00", data_fim + " 23:59:59"]
+    # A nota trazida à mão entra mesmo sendo anterior ao início do período — é
+    # exatamente para isso que ela foi trazida: o pagamento dela está aqui
+    # dentro e sem ela o fornecedor fica adiantado para sempre.
+    where = [_FILTRO_NOTA,
+             "(d.dh_emissao BETWEEN %s AND %s"
+             " OR (d.entrada_manual = 1 AND d.dh_emissao < %s))"]
+    params = [data_ini + " 00:00:00", data_fim + " 23:59:59",
+              data_ini + " 00:00:00"]
     _em("d.cliente_id", empresa_ids, where, params)
     _em("m.forn_id", fornecedor_ids, where, params)
 
@@ -319,7 +485,7 @@ def _notas_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids):
                d.id                                       AS doc_id,
                d.chave, d.numero, d.serie, d.dh_emissao,
                COALESCE(d.valor_total,0)                  AS valor,
-               d.resumo, d.conferido,
+               d.resumo, d.conferido, d.entrada_manual,
                COALESCE(emp.nome_fantasia, emp.razao_social) AS empresa_nome,
                -- Vencimento: informação, não regra. Só 1 em cada 5 notas traz
                -- o bloco de cobrança (as distribuidoras de combustível nunca
@@ -695,6 +861,7 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None,
             'detalhe': n['empresa_nome'] or '',
             'resumo': bool(n['resumo']),
             'conferido': bool(n['conferido']),
+            'manual': bool(n.get('entrada_manual')),
             'chave': n['chave'],
             'vinculos': vinculos.get(n['doc_id'], []),
             'vinc_total': sum(v['valor'] for v in vinculos.get(n['doc_id'], [])),
@@ -809,6 +976,7 @@ def conf_fornecedores_dfe():
     conn = get_db_connection()
     try:
         _garante_tabela_grupo(conn)
+        _garante_coluna_manual(conn)
         empresas = _empresas(conn)
         fornecedores = _fornecedores(conn)
         duplicados = _cnpjs_duplicados(conn)
@@ -1058,6 +1226,116 @@ def desvincular():
     if not apagou:
         return jsonify(ok=False, erro='vínculo não encontrado'), 404
     return jsonify(ok=True)
+
+
+@bp.route('/conf_fornecedores_dfe/importar_nota', methods=['POST'])
+@login_required
+@admin_required
+def importar_nota():
+    """Traz uma NF-e pelo XML, para conferência, mesmo anterior ao corte.
+
+    O caso que pediu isto: a MAX foi paga em 07/07 (R$ 9.090,00) por uma nota
+    de 27/06 que a SEFAZ nunca entregou — a captura começa em 07/07. Sem a
+    nota, aquele pagamento fica para sempre como adiantamento.
+
+    A nota entra marcada com manual=1 e passa a valer na conferência apesar da
+    data. É o XML autêntico da SEFAZ que manda: número, valor, emitente e
+    itens saem dele, ninguém digita valor.
+    """
+    dados = request.get_json(silent=True) or {}
+    xml_txt = (dados.get('xml') or '').strip()
+    if not xml_txt:
+        return jsonify(ok=False, erro='cole o XML da nota'), 400
+    if '<' not in xml_txt:
+        return jsonify(ok=False, erro='isso não parece um XML'), 400
+
+    try:
+        nota = _ler_nfe(xml_txt)
+    except Exception as e:
+        return jsonify(ok=False, erro='XML inválido: %s' % e), 400
+
+    # Modelo 55 = NF-e. 57 e CT-e (frete, mora noutro lugar); 65 e cupom.
+    if (nota.get('modelo') or '55') != '55':
+        return jsonify(ok=False,
+                       erro='só NF-e (modelo 55) entra aqui — este é modelo '
+                            '%s' % nota.get('modelo')), 400
+    if nota.get('situacao') == 'denegada':
+        return jsonify(ok=False, erro='nota denegada não vira dívida'), 400
+    if not nota.get('valor_total'):
+        return jsonify(ok=False, erro='o XML não traz o valor total (vNF)'), 400
+
+    conn = get_db_connection()
+    try:
+        _garante_coluna_manual(conn)
+        cur = conn.cursor(dictionary=True)
+
+        # O destinatário tem de ser UMA DAS SUAS empresas — senão qualquer XML
+        # de qualquer um entraria na conferência da casa.
+        cur.execute("""
+            SELECT id, COALESCE(nome_fantasia, razao_social) AS nome
+              FROM clientes
+             WHERE REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','') = %s
+             LIMIT 1
+        """, (nota.get('dest_cnpj') or '',))
+        emp = cur.fetchone()
+        if not emp:
+            cur.close()
+            return jsonify(ok=False,
+                           erro='o destinatário da nota (%s) não é uma empresa '
+                                'sua' % (nota.get('dest_cnpj') or '—')), 400
+
+        cur.execute("SELECT id, entrada_manual FROM dfe_documentos WHERE chave = %s",
+                    (nota['chave'],))
+        ja = cur.fetchone()
+
+        cur.close()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO dfe_documentos
+                (cliente_id, chave, tipo, schema_dfe, resumo, numero, serie,
+                 modelo, dh_emissao, emit_cnpj, emit_nome, dest_cnpj,
+                 valor_total, situacao, entrada_manual)
+            VALUES (%s,%s,'NFe','manual',0,%s,%s,%s,%s,%s,%s,%s,%s,%s,1)
+            ON DUPLICATE KEY UPDATE
+                numero=VALUES(numero), serie=VALUES(serie),
+                dh_emissao=VALUES(dh_emissao), emit_cnpj=VALUES(emit_cnpj),
+                emit_nome=VALUES(emit_nome), valor_total=VALUES(valor_total),
+                resumo=0, entrada_manual=1
+        """, (emp['id'], nota['chave'], nota['numero'], nota['serie'],
+              nota['modelo'], nota['dh_emissao'], nota['emit_cnpj'],
+              nota['emit_nome'], nota['dest_cnpj'], nota['valor_total'],
+              nota['situacao']))
+
+        cur.execute("SELECT id FROM dfe_documentos WHERE chave = %s",
+                    (nota['chave'],))
+        doc_id = cur.fetchone()[0]
+
+        for it in nota.get('itens') or []:
+            cur.execute(_SQL_ITEM_MANUAL, (
+                doc_id, it['n_item'], it['produto_xml'], it['cprod_fornecedor'],
+                it['cean'], it['cod_anp'], it['ncm'], it['unidade'],
+                it['quantidade'], it['valor_unitario'], it['valor_total'],
+            ))
+        for dup in nota.get('duplicatas') or []:
+            cur.execute(_SQL_DUP_MANUAL, (
+                doc_id, dup['n_dup'], dup['vencimento'], dup['valor'],
+            ))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+    return jsonify(
+        ok=True,
+        ja_existia=bool(ja),
+        doc_id=doc_id,
+        numero=nota['numero'],
+        emitente=nota['emit_nome'],
+        valor=float(nota['valor_total']),
+        emissao=(nota['dh_emissao'] or '')[:10],
+        empresa=emp['nome'],
+        itens=len(nota.get('itens') or []),
+    )
 
 
 def _raizes_do_fornecedor(conn, fid):

@@ -254,6 +254,12 @@
       <h4 class="mb-0 fw-bold">Fornecedores × Compras DFe</h4>
       <p class="mb-0 opacity-75 small">A dívida sai da nota que a SEFAZ entregou; o pagamento, do OFX que você concilia</p>
     </div>
+    {# Nota anterior ao corte que a SEFAZ nunca entregou, mas cujo pagamento
+       está aqui dentro: sem ela o fornecedor fica adiantado para sempre. #}
+    <button type="button" class="btn btn-light btn-sm fw-semibold"
+            onclick="cfdAbrirImportar()">
+      <i class="bi bi-filetype-xml"></i> Incluir nota
+    </button>
   </div>
 
   {# ---------- Corte: a explicacao saiu; o alarme fica ---------- #}
@@ -516,6 +522,7 @@
             <span class="data">{{ l.data.strftime('%d/%m') }}</span>
             {{ l.rotulo }}
             {% if l.resumo %}<span class="tag" title="entrou como resumo; o XML completo ainda não chegou">resumo</span>{% endif %}
+            {% if l.manual %}<span class="tag" title="nota trazida pelo XML: a captura da SEFAZ não a alcançou, e ela entra na conferência apesar de ser anterior ao corte">à mão</span>{% endif %}
             {% if l.vencimento %}
             <span class="venc" title="vencimento declarado na nota (bloco de cobrança)">
               <i class="bi bi-calendar-event"></i>
@@ -608,6 +615,36 @@
   </div>
 </div>
 
+{# ---------- Modal: incluir nota pelo XML (anterior ao corte) ---------- #}
+<div id="cfd-xmodal" class="cfd-modal" onclick="if (event.target === this) cfdFecharImportar()">
+  <div class="cx">
+    <div class="cx__h">
+      <i class="bi bi-filetype-xml" style="color:#1D63A5"></i>
+      <b>Incluir nota pelo XML</b>
+      <button type="button" class="fechar" onclick="cfdFecharImportar()">&times;</button>
+    </div>
+    <div class="cx__b">
+      <div class="falta"><span class="obs">Para a nota que a captura da SEFAZ não
+        alcançou — emitida <b>antes de {{ corte[8:10] }}/{{ corte[5:7] }}/{{ corte[0:4] }}</b>
+        e paga aqui dentro. Número, valor, data e emitente saem do próprio XML;
+        nada é digitado. Ela entra na conferência apesar da data e fica marcada
+        como <b>à mão</b>.</span></div>
+      <div class="campo" style="border-top:0; margin-top:0; padding-top:0">
+        <label>Cole o XML da NF-e</label>
+        <textarea id="cfd-xml" rows="7" spellcheck="false"
+                  style="width:100%; border:1px solid var(--line-2); border-radius:8px;
+                         padding:.45rem .6rem; font-size:.72rem; font-family:ui-monospace,
+                         Menlo,Consolas,monospace" placeholder="&lt;nfeProc ...&gt;"></textarea>
+      </div>
+      <div id="cfd-xres" class="falta" style="margin-top:.5rem"></div>
+    </div>
+    <div class="cx__f">
+      <button type="button" onclick="cfdFecharImportar()">Cancelar</button>
+      <button type="button" class="ok" id="cfd-xok" onclick="cfdSalvarImportar()">Incluir</button>
+    </div>
+  </div>
+</div>
+
 {# ---------- Modal: juntar duas empresas do mesmo grupo ---------- #}
 <div id="cfd-gmodal" class="cfd-modal" onclick="if (event.target === this) cfdFecharGrupo()">
   <div class="cx">
@@ -640,6 +677,37 @@
 </div>
 
 <script>
+// ---------- Incluir nota pelo XML ----------
+function cfdAbrirImportar() {
+  document.getElementById('cfd-xml').value = '';
+  document.getElementById('cfd-xres').textContent = '';
+  document.getElementById('cfd-xmodal').classList.add('on');
+}
+function cfdFecharImportar() {
+  document.getElementById('cfd-xmodal').classList.remove('on');
+}
+function cfdSalvarImportar() {
+  var xml = document.getElementById('cfd-xml').value.trim();
+  var res = document.getElementById('cfd-xres');
+  var btn = document.getElementById('cfd-xok');
+  if (!xml) { res.textContent = 'Cole o XML da nota.'; return; }
+  btn.disabled = true;
+  res.textContent = 'Lendo o XML...';
+  fetch('{{ url_for("conf_fornecedores_dfe.importar_nota") }}', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ xml: xml })
+  }).then(function (r) { return r.json(); })
+    .then(function (j) {
+      btn.disabled = false;
+      if (!j.ok) { res.innerHTML = '<b>' + (j.erro || 'não deu para incluir') + '</b>'; return; }
+      res.innerHTML = (j.ja_existia ? 'Nota já estava na base e foi atualizada: ' : 'Incluída: ')
+        + '<b>NF-e nº ' + j.numero + '</b> · ' + j.emitente + ' · ' + j.emissao
+        + ' · ' + cfdMoeda(j.valor) + ' (' + j.empresa + ')';
+      setTimeout(function () { location.reload(); }, 1200);
+    })
+    .catch(function () { btn.disabled = false; res.textContent = 'falha de rede'; });
+}
+
 // ---------- Grupo de fornecedores (raiz diferente) ----------
 // Dois pontos de entrada: do card (o card é o titular e você escolhe quem
 // entra) e da nota órfã (o emitente não tem cadastro, então você escolhe o
