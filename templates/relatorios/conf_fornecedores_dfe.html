@@ -185,6 +185,10 @@
   #cfd .conf-cnt--ok{ background:var(--ok-bg); color:var(--ok); }
   #cfd .tag{ font-size:10px; font-weight:700; border-radius:5px; padding:.05rem .35rem;
     background:var(--pend-bg); color:var(--pend); }
+  /* Vencimento: só 1 em cada 5 notas traz. Discreto de propósito — é
+     informação, não a regra que decide o rateio. */
+  #cfd .venc{ font-size:10px; font-weight:700; border-radius:5px; padding:.05rem .35rem;
+    background:#e6f1fb; color:var(--blue-deep); white-space:nowrap; }
   #cfd .ant{ padding:.45rem .8rem; font-size:11.5px; color:var(--muted);
     background:#fbfdff; border-bottom:1px solid var(--line); }
   #cfd .ant b{ color:var(--ink); font-variant-numeric:tabular-nums; }
@@ -484,6 +488,11 @@
             <span class="data">{{ l.data.strftime('%d/%m') }}</span>
             {{ l.rotulo }}
             {% if l.resumo %}<span class="tag" title="entrou como resumo; o XML completo ainda não chegou">resumo</span>{% endif %}
+            {% if l.vencimento %}
+            <span class="venc" title="vencimento declarado na nota (bloco de cobrança)">
+              <i class="bi bi-calendar-event"></i>
+              {% if l.n_parcelas > 1 %}{{ l.n_parcelas }}x, 1ª {% endif %}{{ l.vencimento.strftime('%d/%m') }}</span>
+            {% endif %}
           </div>
           <div class="lin__m">{{ l.detalhe or '—' }}</div>
           <div class="lin__v">{{ '+' if l.tipo == 'pagamento' else '−' }}{{ l.valor | formatar_moeda }}</div>

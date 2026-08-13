@@ -62,9 +62,17 @@ _FILTRO_NOTA = """
 # antes. Sem corte, o saldo acumulado somaria meses de pagamento contra ZERO
 # nota e todo fornecedor apareceria com um adiantamento gigante e falso.
 # Os DOIS lados são cortados aqui — nota e pagamento — pra a conta fechar.
-# É o mesmo corte da tela "Pendente pra Descer" (estoque.DATA_CORTE_PENDENTE).
-# Ajuste aqui se a captura for reprocessada mais para trás.
-DATA_CORTE_DFE = '2026-08-01'
+#
+# 07/07/2026 é onde a série de notas fica CONTÍNUA, medido na base:
+#   - primeira linha gravada em dfe_documentos: 08/07/2026 17:52
+#   - a SEFAZ entregou notas a partir de 07/07
+#   - antes disso só existem 7 notas soltas (1 e 2 de junho) e um vazio de
+#     03/06 a 06/07 — período em que o pagamento apareceria sem a nota.
+#
+# NÃO copie daqui o corte da tela "Pendente pra Descer" (01/08): aquele é de
+# outro assunto (estoque) e usar ele aqui escondia as 88 notas de julho
+# enquanto mostrava os pagamentos de julho, inventando ~R$ 27 mil de dívida.
+DATA_CORTE_DFE = '2026-07-07'
 
 # Quantos dias ANTES do corte olhar em busca de pagamento que provavelmente
 # cobre nota de depois do corte (a casa paga e a nota sai dias à frente).
@@ -189,7 +197,17 @@ def _notas_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids):
                d.chave, d.numero, d.serie, d.dh_emissao,
                COALESCE(d.valor_total,0)                  AS valor,
                d.resumo, d.conferido,
-               COALESCE(emp.nome_fantasia, emp.razao_social) AS empresa_nome
+               COALESCE(emp.nome_fantasia, emp.razao_social) AS empresa_nome,
+               -- Vencimento: informação, não regra. Só 1 em cada 5 notas traz
+               -- o bloco de cobrança (as distribuidoras de combustível nunca
+               -- mandam), então o rateio continua pela data; isto é para o
+               -- olho e para o contas a pagar futuro.
+               -- CUIDADO: este SQL passa por formatação de string; sinal de
+               -- porcentagem em comentário vira marcador e quebra a query.
+               (SELECT MIN(v.vencimento) FROM dfe_duplicatas v
+                 WHERE v.documento_id = d.id)               AS vencimento,
+               (SELECT COUNT(*) FROM dfe_duplicatas v
+                 WHERE v.documento_id = d.id)               AS n_parcelas
           FROM dfe_documentos d
           JOIN fornecedores f ON %s = %s
           LEFT JOIN clientes emp ON emp.id = d.cliente_id
@@ -533,6 +551,8 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None,
             'chave': n['chave'],
             'vinculos': vinculos.get(n['doc_id'], []),
             'vinc_total': sum(v['valor'] for v in vinculos.get(n['doc_id'], [])),
+            'vencimento': n.get('vencimento'),
+            'n_parcelas': int(n.get('n_parcelas') or 0),
         })
 
     for p in pagamentos:

@@ -50,7 +50,21 @@ def main():
     ap.add_argument('--limite', type=int, default=500)
     ap.add_argument('--simular', action='store_true',
                     help='le e mostra, mas nao grava nada')
+    ap.add_argument('--pasta', default=None,
+                    help='pasta LOCAL do Dropbox sincronizado (ex.: '
+                         r'"C:\Users\User\Dropbox\FISCAL\DFe"). Evita precisar '
+                         'das credenciais da API — o arquivo ja esta no disco.')
     args = ap.parse_args()
+
+    # Indice chave -> arquivo, montado uma vez. Sem isso seria uma varredura
+    # do disco por nota.
+    local = {}
+    if args.pasta:
+        import glob
+        for caminho in glob.glob(os.path.join(args.pasta, '**', '*.xml'),
+                                 recursive=True):
+            local[os.path.basename(caminho)[:-4]] = caminho
+        print('%d XML no disco em %s\n' % (len(local), args.pasta))
 
     con = pymysql.connect(**cs.CONN)
     try:
@@ -67,7 +81,11 @@ def main():
             rotulo = 'NF %s/%s %s' % (n['numero'], n['serie'],
                                       (n['emit_nome'] or '')[:32])
             try:
-                xml = baixar_xml(n['xml_caminho'])
+                if local:
+                    caminho = local.get(n['chave'])
+                    xml = open(caminho, 'rb').read() if caminho else None
+                else:
+                    xml = baixar_xml(n['xml_caminho'])
             except Exception as e:                            # noqa: BLE001
                 print('  ERRO   %-44s %s' % (rotulo, e))
                 erros += 1
