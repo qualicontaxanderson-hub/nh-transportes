@@ -41,6 +41,78 @@ bp = Blueprint('conf_fornecedores_dfe', __name__, url_prefix='/relatorios')
 _CNPJ_FORN = "LPAD(REPLACE(REPLACE(REPLACE(REPLACE(f.cnpj,'.',''),'/',''),'-',''),' ',''),14,'0')"
 _CNPJ_NOTA = "LPAD(d.emit_cnpj,14,'0')"
 
+
+def _raiz_de(alias):
+    """Os 8 primeiros dígitos do CNPJ do cadastro `alias` — a raiz da empresa."""
+    return ("LEFT(LPAD(REPLACE(REPLACE(REPLACE(REPLACE({a}.cnpj,'.',''),'/',''),"
+            "'-',''),' ',''),14,'0'),8)").format(a=alias)
+
+
+# ─── RAIZ E GRUPO ─────────────────────────────────────────────────────────────
+# Casar pelo CNPJ inteiro separava matriz de filial: a nota saía da filial e o
+# pagamento estava pendurado na matriz, então o MESMO fornecedor aparecia duas
+# vezes — devendo em cima, adiantado embaixo. Media na base: ALE (/0010 contra
+# /0001), INTEGRACAO (/0011 contra /0005) e NEXTA (/0006 contra /0013), R$ 543
+# mil parados por isso. A comparação passa a ser pela RAIZ: matriz e filiais
+# viram um só cadastro na conferência.
+#
+# Raiz diferente é outra doença, e a raiz nunca a cura: paga-se para a RODOIL e
+# o produto vem da TOWER; paga-se a RODOBRAS COMERCIALIZADORA e a nota vem da
+# DISTRIBUIDORA RODOBRAS (raízes 57.370.381 e 33.777.842). Para esses,
+# fornecedor_grupo_raiz aponta cada raiz do grupo para um fornecedor TITULAR e
+# o relatório trata o grupo inteiro como um fornecedor só.
+_RAIZ_FORN = _raiz_de('f')
+_RAIZ_NOTA = "LEFT(%s,8)" % _CNPJ_NOTA
+
+# Mapa raiz -> fornecedor que representa o grupo, usado como tabela derivada em
+# todas as consultas. MIN(id) elege um dono para a raiz (sem isso, matriz e
+# filial cadastradas duplicariam a nota no JOIN e inflariam o total); o LEFT
+# JOIN troca esse dono pelo titular quando a raiz pertence a um grupo.
+#
+# As raízes vêm de DOIS lugares e o UNION é obrigatório: só o cadastro deixaria
+# de fora a raiz que ninguém cadastrou — justamente a DISTRIBUIDORA RODOBRAS,
+# que emite a nota enquanto o dinheiro sai para a irmã cadastrada.
+_MAPA = """(
+        SELECT r.raiz AS raiz, COALESCE(g.titular_id, r.id) AS forn_id
+          FROM (SELECT u.raiz AS raiz, MIN(u.id) AS id
+                  FROM (SELECT LEFT(LPAD(REPLACE(REPLACE(REPLACE(REPLACE(fz.cnpj,'.',''),
+                                     '/',''),'-',''),' ',''),14,'0'),8) AS raiz,
+                               fz.id AS id
+                          FROM fornecedores fz
+                         WHERE fz.cnpj IS NOT NULL AND fz.cnpj <> ''
+                        UNION ALL
+                        SELECT gz.raiz AS raiz, gz.titular_id AS id
+                          FROM fornecedor_grupo_raiz gz) u
+                 GROUP BY u.raiz) r
+          LEFT JOIN fornecedor_grupo_raiz g ON g.raiz = r.raiz
+      ) m"""
+
+# Junta o mapa ao cadastro titular. Vem depois de uma tabela que já exponha a
+# raiz a comparar — por isso cada consulta diz com o que `m.raiz` casa.
+_JOIN_TITULAR = "JOIN fornecedores f ON f.id = m.forn_id"
+
+_DDL_GRUPO = """
+CREATE TABLE IF NOT EXISTS fornecedor_grupo_raiz (
+    raiz       CHAR(8)   NOT NULL PRIMARY KEY,
+    titular_id INT       NOT NULL,
+    criado_em  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    criado_por INT       NULL,
+    KEY ix_titular (titular_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+
+def _garante_tabela_grupo(conn):
+    """Cria fornecedor_grupo_raiz se faltar. Só cria — não altera nem apaga."""
+    cur = conn.cursor()
+    cur.execute("""SELECT COUNT(*) FROM information_schema.tables
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'fornecedor_grupo_raiz'""")
+    if not cur.fetchone()[0]:
+        cur.execute(_DDL_GRUPO)
+        conn.commit()
+    cur.close()
+
 # O que conta como compra nossa:
 #   - NF-e (CT-e mora em dfe_cte e é frete, não compra);
 #   - autorizada (cancelada/denegada não gera dívida);
@@ -125,6 +197,55 @@ def _fornecedores(conn):
     return rows
 
 
+def _mapa_cadastros(conn):
+    """Como cada cadastro entra na conferência.
+
+    Devolve (canonico, nomes, raizes):
+      canonico[fornecedor_id] = id do fornecedor que representa o grupo
+      nomes[canonico_id]      = razões sociais do grupo, titular primeiro
+      raizes[canonico_id]     = raízes que caem nesse grupo
+    """
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT f.id, f.razao_social, f.cnpj, m.forn_id, m.raiz
+          FROM fornecedores f
+          JOIN __MAPA__ ON m.raiz = __RAIZ_F__
+         ORDER BY (f.id = m.forn_id) DESC, f.razao_social
+    """.replace('__MAPA__', _MAPA).replace('__RAIZ_F__', _RAIZ_FORN))
+    rows = cur.fetchall()
+    cur.close()
+
+    canonico, nomes, raizes = {}, defaultdict(list), defaultdict(set)
+    for r in rows:
+        canonico[r['id']] = r['forn_id']
+        nome = (r['razao_social'] or '').strip()
+        if nome and nome not in nomes[r['forn_id']]:
+            nomes[r['forn_id']].append(nome)
+        raizes[r['forn_id']].add(r['raiz'])
+
+    # Raiz agrupada que não tem cadastro nenhum (a nota órfã que você pendurou
+    # num fornecedor): o nome vem da própria nota, senão o card esconderia
+    # quem de fato emitiu.
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT g.raiz, g.titular_id,
+               (SELECT d.emit_nome FROM dfe_documentos d
+                 WHERE LEFT(LPAD(d.emit_cnpj,14,'0'),8) = g.raiz
+                 ORDER BY d.dh_emissao DESC LIMIT 1) AS emit_nome
+          FROM fornecedor_grupo_raiz g
+         WHERE NOT EXISTS (SELECT 1 FROM fornecedores f
+                            WHERE __RAIZ_F__ = g.raiz)
+    """.replace('__RAIZ_F__', _RAIZ_FORN))
+    for r in cur.fetchall():
+        nome = (r['emit_nome'] or '').strip()
+        raizes[r['titular_id']].add(r['raiz'])
+        if nome and nome not in nomes[r['titular_id']]:
+            nomes[r['titular_id']].append(nome)
+    cur.close()
+
+    return canonico, dict(nomes), {k: sorted(v) for k, v in raizes.items()}
+
+
 def _cnpjs_duplicados(conn):
     """Dois fornecedores com o mesmo CNPJ fariam a nota entrar duas vezes no
     JOIN e inflar o total. Melhor avisar do que entregar número errado."""
@@ -147,16 +268,16 @@ def _notas_anteriores(conn, data_ini, empresa_ids, fornecedor_ids):
     where = [_FILTRO_NOTA, "d.dh_emissao >= %s", "d.dh_emissao < %s"]
     params = [DATA_CORTE_DFE + " 00:00:00", data_ini + " 00:00:00"]
     _em("d.cliente_id", empresa_ids, where, params)
-    _em("f.id", fornecedor_ids, where, params)
+    _em("m.forn_id", fornecedor_ids, where, params)
 
     cur = conn.cursor(dictionary=True)
     cur.execute("""
-        SELECT f.id AS fornecedor_id, COALESCE(SUM(d.valor_total),0) AS total
+        SELECT m.forn_id AS fornecedor_id, COALESCE(SUM(d.valor_total),0) AS total
           FROM dfe_documentos d
-          JOIN fornecedores f ON %s = %s
+          JOIN %s ON m.raiz = %s
          WHERE %s
-         GROUP BY f.id
-    """ % (_CNPJ_FORN, _CNPJ_NOTA, " AND ".join(where)), params)
+         GROUP BY m.forn_id
+    """ % (_MAPA, _RAIZ_NOTA, " AND ".join(where)), params)
     rows = cur.fetchall()
     cur.close()
     return {r['fornecedor_id']: float(r['total'] or 0) for r in rows}
@@ -167,16 +288,18 @@ def _pagamentos_anteriores(conn, data_ini, empresa_ids, fornecedor_ids):
              "bt.data_transacao >= %s", "bt.data_transacao < %s"]
     params = [DATA_CORTE_DFE, data_ini]
     _em("ba.cliente_id", empresa_ids, where, params)
-    _em("bt.fornecedor_id", fornecedor_ids, where, params)
+    _em("m.forn_id", fornecedor_ids, where, params)
 
     cur = conn.cursor(dictionary=True)
     cur.execute("""
-        SELECT bt.fornecedor_id, COALESCE(SUM(bt.valor),0) AS total
+        SELECT m.forn_id AS fornecedor_id, COALESCE(SUM(bt.valor),0) AS total
           FROM bank_transactions bt
           JOIN bank_accounts ba ON ba.id = bt.account_id
+          JOIN fornecedores fp  ON fp.id = bt.fornecedor_id
+          JOIN %s ON m.raiz = %s
          WHERE %s
-         GROUP BY bt.fornecedor_id
-    """ % " AND ".join(where), params)
+         GROUP BY m.forn_id
+    """ % (_MAPA, _raiz_de('fp'), " AND ".join(where)), params)
     rows = cur.fetchall()
     cur.close()
     return {r['fornecedor_id']: float(r['total'] or 0) for r in rows}
@@ -186,11 +309,11 @@ def _notas_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids):
     where = [_FILTRO_NOTA, "d.dh_emissao BETWEEN %s AND %s"]
     params = [data_ini + " 00:00:00", data_fim + " 23:59:59"]
     _em("d.cliente_id", empresa_ids, where, params)
-    _em("f.id", fornecedor_ids, where, params)
+    _em("m.forn_id", fornecedor_ids, where, params)
 
     cur = conn.cursor(dictionary=True)
     cur.execute("""
-        SELECT f.id                                       AS fornecedor_id,
+        SELECT m.forn_id                                  AS fornecedor_id,
                f.razao_social                             AS fornecedor_nome,
                f.cnpj                                     AS fornecedor_cnpj,
                d.id                                       AS doc_id,
@@ -209,11 +332,12 @@ def _notas_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids):
                (SELECT COUNT(*) FROM dfe_duplicatas v
                  WHERE v.documento_id = d.id)               AS n_parcelas
           FROM dfe_documentos d
-          JOIN fornecedores f ON %s = %s
+          JOIN %s ON m.raiz = %s
+          %s
           LEFT JOIN clientes emp ON emp.id = d.cliente_id
          WHERE %s
          ORDER BY d.dh_emissao, d.id
-    """ % (_CNPJ_FORN, _CNPJ_NOTA, " AND ".join(where)), params)
+    """ % (_MAPA, _RAIZ_NOTA, _JOIN_TITULAR, " AND ".join(where)), params)
     rows = cur.fetchall()
     cur.close()
     return rows
@@ -224,22 +348,24 @@ def _pagamentos_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids):
              "bt.data_transacao BETWEEN %s AND %s"]
     params = [data_ini, data_fim]
     _em("ba.cliente_id", empresa_ids, where, params)
-    _em("bt.fornecedor_id", fornecedor_ids, where, params)
+    _em("m.forn_id", fornecedor_ids, where, params)
 
     cur = conn.cursor(dictionary=True)
     cur.execute("""
-        SELECT bt.id, bt.fornecedor_id, bt.data_transacao, bt.descricao,
+        SELECT bt.id, m.forn_id AS fornecedor_id, bt.data_transacao, bt.descricao,
                COALESCE(bt.valor,0)                       AS valor,
                f.razao_social                             AS fornecedor_nome,
                f.cnpj                                     AS fornecedor_cnpj,
                COALESCE(emp.nome_fantasia, emp.razao_social) AS empresa_nome
           FROM bank_transactions bt
           JOIN bank_accounts ba ON ba.id = bt.account_id
-          JOIN fornecedores f   ON f.id = bt.fornecedor_id
+          JOIN fornecedores fp  ON fp.id = bt.fornecedor_id
+          JOIN %s ON m.raiz = %s
+          %s
           LEFT JOIN clientes emp ON emp.id = ba.cliente_id
          WHERE %s
          ORDER BY bt.data_transacao, bt.id
-    """ % " AND ".join(where), params)
+    """ % (_MAPA, _raiz_de('fp'), _JOIN_TITULAR, " AND ".join(where)), params)
     rows = cur.fetchall()
     cur.close()
     return rows
@@ -287,6 +413,19 @@ def _tem_tabela_vinculo(conn):
     ok = bool(cur.fetchone()[0])
     cur.close()
     return ok
+
+
+def _canonico_do_cnpj(conn, cnpj):
+    """Qual fornecedor representa este CNPJ (pela raiz, respeitando o grupo)."""
+    if not cnpj:
+        return None
+    cur = conn.cursor()
+    cur.execute("""SELECT m.forn_id FROM __MAPA__
+                    WHERE m.raiz = LEFT(LPAD(%s,14,'0'),8)"""
+                .replace('__MAPA__', _MAPA), (cnpj,))
+    row = cur.fetchone()
+    cur.close()
+    return row[0] if row else None
 
 
 def _vinculos(conn, doc_ids):
@@ -348,7 +487,8 @@ def _pagamentos_vinculados_fora(conn, doc_ids, data_ini, data_fim):
     # a query tem outros %s (as datas) que são placeholders do driver, e o %
     # tentaria formatá-los também.
     sql = """
-        SELECT DISTINCT bt.id, bt.fornecedor_id, bt.data_transacao, bt.descricao,
+        SELECT DISTINCT bt.id, m.forn_id AS fornecedor_id, bt.data_transacao,
+               bt.descricao,
                COALESCE(bt.valor,0)                          AS valor,
                f.razao_social                                AS fornecedor_nome,
                f.cnpj                                        AS fornecedor_cnpj,
@@ -356,12 +496,16 @@ def _pagamentos_vinculados_fora(conn, doc_ids, data_ini, data_fim):
           FROM dfe_pagamento_nota v
           JOIN bank_transactions bt ON bt.id = v.transacao_id
           JOIN bank_accounts ba     ON ba.id = bt.account_id
-          JOIN fornecedores f       ON f.id = bt.fornecedor_id
+          JOIN fornecedores fp      ON fp.id = bt.fornecedor_id
+          JOIN __MAPA__ ON m.raiz = __RAIZ_FP__
+          __JOIN_TITULAR__
           LEFT JOIN clientes emp    ON emp.id = ba.cliente_id
          WHERE v.documento_id IN (__IDS__)
            AND (bt.data_transacao < %s OR bt.data_transacao > %s)
          ORDER BY bt.data_transacao, bt.id
-    """.replace('__IDS__', ph)
+    """.replace('__IDS__', ph).replace('__MAPA__', _MAPA) \
+       .replace('__RAIZ_FP__', _raiz_de('fp')) \
+       .replace('__JOIN_TITULAR__', _JOIN_TITULAR)
 
     cur = conn.cursor(dictionary=True)
     cur.execute(sql, params)
@@ -384,17 +528,19 @@ def _pagamentos_antes_do_corte(conn, empresa_ids, fornecedor_ids):
              "bt.data_transacao >= %s", "bt.data_transacao < %s"]
     params = [inicio, DATA_CORTE_DFE]
     _em("ba.cliente_id", empresa_ids, where, params)
-    _em("bt.fornecedor_id", fornecedor_ids, where, params)
+    _em("m.forn_id", fornecedor_ids, where, params)
 
     cur = conn.cursor(dictionary=True)
     cur.execute("""
-        SELECT bt.fornecedor_id, bt.data_transacao, bt.descricao,
+        SELECT m.forn_id AS fornecedor_id, bt.data_transacao, bt.descricao,
                COALESCE(bt.valor,0) AS valor
           FROM bank_transactions bt
           JOIN bank_accounts ba ON ba.id = bt.account_id
+          JOIN fornecedores fp  ON fp.id = bt.fornecedor_id
+          JOIN %s ON m.raiz = %s
          WHERE %s
          ORDER BY bt.data_transacao DESC, bt.id DESC
-    """ % " AND ".join(where), params)
+    """ % (_MAPA, _raiz_de('fp'), " AND ".join(where)), params)
     rows = cur.fetchall()
     cur.close()
 
@@ -429,7 +575,7 @@ def _janela_captura(conn):
 def _notas_sem_fornecedor(conn, data_ini, data_fim, empresa_ids):
     """Nota que entrou pela SEFAZ e cujo emitente não está no cadastro. É o
     achado mais útil do relatório: compra que nenhum controle enxerga."""
-    where = [_FILTRO_NOTA, "d.dh_emissao BETWEEN %s AND %s", "f.id IS NULL"]
+    where = [_FILTRO_NOTA, "d.dh_emissao BETWEEN %s AND %s", "m.forn_id IS NULL"]
     params = [data_ini + " 00:00:00", data_fim + " 23:59:59"]
     _em("d.cliente_id", empresa_ids, where, params)
 
@@ -440,11 +586,11 @@ def _notas_sem_fornecedor(conn, data_ini, data_fim, empresa_ids):
                COALESCE(SUM(d.valor_total),0) AS total,
                MAX(d.dh_emissao)           AS ultima
           FROM dfe_documentos d
-          LEFT JOIN fornecedores f ON %s = %s
+          LEFT JOIN %s ON m.raiz = %s
          WHERE %s
          GROUP BY d.emit_cnpj, d.emit_nome
          ORDER BY total DESC
-    """ % (_CNPJ_FORN, _CNPJ_NOTA, " AND ".join(where)), params)
+    """ % (_MAPA, _RAIZ_NOTA, " AND ".join(where)), params)
     rows = cur.fetchall()
     cur.close()
     return rows
@@ -523,7 +669,7 @@ def _aloca_fifo(linhas, saldo_anterior):
 
 
 def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None,
-           vinculos=None, usado=None):
+           vinculos=None, usado=None, nomes=None):
     """Uma linha do tempo por fornecedor, com saldo corrente.
 
     Ordem: por data; empatou, pagamento antes da nota — é a sequência real
@@ -531,6 +677,7 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None,
     """
     vinculos = vinculos or {}
     usado = usado or {}
+    nomes = nomes or {}
     por_forn = defaultdict(lambda: {'nome': '', 'cnpj': '', 'eventos': []})
 
     for n in notas:
@@ -608,9 +755,15 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None,
         if antes and saldo >= -0.005:
             antes = None
 
+        # Um grupo mostra TODAS as razões sociais: na web uma ao lado da outra,
+        # no celular uma embaixo da outra (o template decide) — quem confere
+        # precisa ver que ali estão duas empresas, não uma.
+        lista_nomes = nomes.get(fid) or [f['nome'] or '(fornecedor %s)' % fid]
+
         saida.append({
             'fornecedor_id': fid,
-            'nome': f['nome'] or '(fornecedor %s)' % fid,
+            'nome': ' / '.join(lista_nomes),
+            'nomes': lista_nomes,
             'cnpj': f['cnpj'] or '',
             'saldo_anterior': saldo_anterior,
             'comprado': comprado,
@@ -655,10 +808,19 @@ def conf_fornecedores_dfe():
 
     conn = get_db_connection()
     try:
+        _garante_tabela_grupo(conn)
         empresas = _empresas(conn)
         fornecedores = _fornecedores(conn)
         duplicados = _cnpjs_duplicados(conn)
         janela = _janela_captura(conn)
+
+        canonico, nomes, raizes = _mapa_cadastros(conn)
+        # O filtro traz o id que o usuário escolheu na lista; quem manda nas
+        # consultas é o representante do grupo. Sem traduzir, filtrar pela
+        # filial devolveria tela vazia.
+        if fornecedor_ids:
+            fornecedor_ids = sorted({str(canonico.get(int(i), int(i)))
+                                     for i in fornecedor_ids})
 
         notas_ant = _notas_anteriores(conn, data_ini, empresa_ids, fornecedor_ids)
         pagos_ant = _pagamentos_anteriores(conn, data_ini, empresa_ids, fornecedor_ids)
@@ -680,7 +842,7 @@ def conf_fornecedores_dfe():
         conn.close()
 
     dados = _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte,
-                   vinculos, usado)
+                   vinculos, usado, nomes)
 
     totais = {
         'comprado': sum(d['comprado'] for d in dados),
@@ -721,6 +883,7 @@ def candidatos(doc_id):
     conn = get_db_connection()
     try:
         _garante_tabela_vinculo(conn)
+        _garante_tabela_grupo(conn)
         cur = conn.cursor(dictionary=True)
         cur.execute("""
             SELECT d.id, d.numero, d.serie, d.dh_emissao, d.emit_cnpj,
@@ -734,20 +897,25 @@ def candidatos(doc_id):
             cur.close()
             return jsonify(ok=False, erro='nota não encontrada'), 404
 
+        # Candidato é pagamento do MESMO grupo (raiz, ou grupo montado à mão) —
+        # não do mesmo CNPJ. É o que faz o pagamento da matriz aparecer para a
+        # nota da filial, e o da RODOIL para a nota da TOWER.
+        canonico = _canonico_do_cnpj(conn, nota['emit_cnpj'] or '')
         cur.execute("""
             SELECT bt.id, bt.data_transacao, bt.descricao,
                    COALESCE(bt.valor,0) AS valor,
                    COALESCE((SELECT SUM(v.valor) FROM dfe_pagamento_nota v
                               WHERE v.transacao_id = bt.id), 0) AS usado
               FROM bank_transactions bt
-              JOIN fornecedores f ON f.id = bt.fornecedor_id
+              JOIN fornecedores fp ON fp.id = bt.fornecedor_id
+              JOIN __MAPA__ ON m.raiz = __RAIZ_FP__
              WHERE bt.tipo = 'DEBIT'
                AND bt.fornecedor_id IS NOT NULL
-               AND %s = LPAD(%s,14,'0')
+               AND m.forn_id = %s
              ORDER BY ABS(DATEDIFF(bt.data_transacao, %s)), bt.data_transacao DESC
              LIMIT 40
-        """ % (_CNPJ_FORN, '%s', '%s'),
-            (nota['emit_cnpj'] or '', nota['dh_emissao']))
+        """.replace('__MAPA__', _MAPA).replace('__RAIZ_FP__', _raiz_de('fp')),
+            (canonico, nota['dh_emissao']))
         pagos = cur.fetchall()
         cur.close()
     finally:
@@ -805,6 +973,7 @@ def vincular():
     conn = get_db_connection()
     try:
         _garante_tabela_vinculo(conn)
+        _garante_tabela_grupo(conn)
         cur = conn.cursor(dictionary=True)
 
         cur.execute("""
@@ -822,19 +991,22 @@ def vincular():
             SELECT COALESCE(bt.valor,0) AS valor, bt.fornecedor_id,
                    COALESCE((SELECT SUM(v.valor) FROM dfe_pagamento_nota v
                               WHERE v.transacao_id = bt.id AND v.documento_id <> %s), 0) AS outros,
-                   %s AS cnpj_forn
+                   m.forn_id AS canonico
               FROM bank_transactions bt
-              JOIN fornecedores f ON f.id = bt.fornecedor_id
-             WHERE bt.id = %%s AND bt.tipo = 'DEBIT'
-        """ % ('%s', _CNPJ_FORN), (doc_id, tx_id))
+              JOIN fornecedores fp ON fp.id = bt.fornecedor_id
+              JOIN __MAPA__ ON m.raiz = __RAIZ_FP__
+             WHERE bt.id = %s AND bt.tipo = 'DEBIT'
+        """.replace('__MAPA__', _MAPA).replace('__RAIZ_FP__', _raiz_de('fp')),
+            (doc_id, tx_id))
         pg = cur.fetchone()
         if not pg:
             cur.close()
             return jsonify(ok=False, erro='pagamento não encontrado'), 404
 
-        # O pagamento tem de ser do fornecedor da nota — o usuário já concilia
-        # o lançamento no fornecedor certo, então isto é só uma trava.
-        if (pg['cnpj_forn'] or '') != (nota['emit_cnpj'] or '').rjust(14, '0'):
+        # O pagamento tem de ser do MESMO GRUPO da nota — matriz, filial ou
+        # empresa irmã agrupada à mão. O usuário já concilia o lançamento no
+        # fornecedor certo, então isto é só uma trava.
+        if pg['canonico'] != _canonico_do_cnpj(conn, nota['emit_cnpj'] or ''):
             cur.close()
             return jsonify(ok=False,
                            erro='esse pagamento está conciliado noutro fornecedor'), 400
@@ -885,6 +1057,110 @@ def desvincular():
 
     if not apagou:
         return jsonify(ok=False, erro='vínculo não encontrado'), 404
+    return jsonify(ok=True)
+
+
+def _raizes_do_fornecedor(conn, fid):
+    """Raiz do cadastro + as raízes que ele já titulariza (se for um grupo)."""
+    cur = conn.cursor()
+    cur.execute("SELECT %s FROM fornecedores f WHERE f.id = %%s" % _RAIZ_FORN,
+                (fid,))
+    row = cur.fetchone()
+    raizes = {row[0]} if row and row[0] else set()
+    cur.execute("SELECT raiz FROM fornecedor_grupo_raiz WHERE titular_id = %s",
+                (fid,))
+    raizes |= {r[0] for r in cur.fetchall()}
+    cur.close()
+    return raizes
+
+
+@bp.route('/conf_fornecedores_dfe/agrupar', methods=['POST'])
+@login_required
+@admin_required
+def agrupar():
+    """Junta dois cadastros de raízes diferentes num fornecedor só.
+
+    É o caso RODOIL/TOWER: paga-se para um CNPJ e o produto vem de outro, de
+    empresa irmã. A raiz nunca resolve isso — matriz e filial ela já junta
+    sozinha, mas raiz diferente é outra empresa. Aqui as duas (ou mais) passam
+    a responder por um titular e o relatório soma nota e pagamento no mesmo
+    card, mostrando as duas razões sociais.
+    """
+    dados = request.get_json(silent=True) or {}
+    try:
+        titular_id = int(dados.get('titular_id'))
+    except (TypeError, ValueError):
+        return jsonify(ok=False, erro='fornecedor inválido'), 400
+
+    # Duas entradas: outro CADASTRO (RODOIL + TOWER, os dois cadastrados) ou uma
+    # RAIZ solta — a nota órfã, cujo emitente não está em fornecedores. É o caso
+    # da DISTRIBUIDORA RODOBRAS: quem recebe o dinheiro está cadastrado, quem
+    # emite a nota não, e sem isto o grupo seria impossível de montar.
+    raiz_solta = ''.join(c for c in str(dados.get('raiz') or '') if c.isdigit())[:8]
+    outro_id = None
+    if not raiz_solta:
+        try:
+            outro_id = int(dados.get('fornecedor_id'))
+        except (TypeError, ValueError):
+            return jsonify(ok=False, erro='fornecedor inválido'), 400
+        if titular_id == outro_id:
+            return jsonify(ok=False, erro='escolha um fornecedor diferente'), 400
+    elif len(raiz_solta) < 8:
+        return jsonify(ok=False, erro='CNPJ do emitente inválido'), 400
+
+    conn = get_db_connection()
+    try:
+        _garante_tabela_grupo(conn)
+        raizes = _raizes_do_fornecedor(conn, titular_id)
+        raizes |= ({raiz_solta} if raiz_solta
+                   else _raizes_do_fornecedor(conn, outro_id))
+        if not raizes:
+            return jsonify(ok=False,
+                           erro='esses cadastros não têm CNPJ — sem CNPJ não há '
+                                'raiz para agrupar'), 400
+
+        cur = conn.cursor()
+        for raiz in sorted(raizes):
+            cur.execute("""
+                INSERT INTO fornecedor_grupo_raiz (raiz, titular_id, criado_por)
+                     VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE titular_id = VALUES(titular_id),
+                                        criado_por = VALUES(criado_por)
+            """, (raiz, titular_id, getattr(current_user, 'id', None)))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+    return jsonify(ok=True, raizes=sorted(raizes))
+
+
+@bp.route('/conf_fornecedores_dfe/desagrupar', methods=['POST'])
+@login_required
+@admin_required
+def desagrupar():
+    """Desfaz o grupo: cada raiz volta a responder por si (a raiz continua
+    juntando matriz e filiais — isso não é grupo, é a mesma empresa)."""
+    dados = request.get_json(silent=True) or {}
+    try:
+        titular_id = int(dados.get('titular_id'))
+    except (TypeError, ValueError):
+        return jsonify(ok=False, erro='fornecedor inválido'), 400
+
+    conn = get_db_connection()
+    try:
+        _garante_tabela_grupo(conn)
+        cur = conn.cursor()
+        cur.execute("DELETE FROM fornecedor_grupo_raiz WHERE titular_id = %s",
+                    (titular_id,))
+        conn.commit()
+        apagou = cur.rowcount
+        cur.close()
+    finally:
+        conn.close()
+
+    if not apagou:
+        return jsonify(ok=False, erro='esse fornecedor não é um grupo'), 404
     return jsonify(ok=True)
 
 

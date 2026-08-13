@@ -35,6 +35,18 @@
     border-bottom:1px solid var(--line-2); cursor:pointer; }
   #cfd .forn__nome{ font-weight:700; font-size:.9rem; line-height:1.25; min-width:0; }
   #cfd .forn__cnpj{ font-size:.72rem; color:var(--muted); font-variant-numeric:tabular-nums; }
+  /* Grupo (RODOIL/TOWER): na web as razões sociais ficam lado a lado; no
+     celular, onde não cabe, uma embaixo da outra. */
+  #cfd .forn__nome .sep{ color:var(--muted); font-weight:600; }
+  #cfd .grp-selo{ background:var(--surface-1); border:1px solid var(--line);
+                  border-radius:5px; padding:0 .3rem; font-size:.62rem;
+                  text-transform:uppercase; letter-spacing:.04em; font-weight:700; }
+  #cfd .grp-btn{ cursor:pointer; }
+  #cfd .grp-btn:hover{ color:var(--blue); }
+  @media (max-width: 640px){
+    #cfd .forn__nome .un{ display:block; }
+    #cfd .forn__nome .sep{ display:none; }
+  }
   #cfd .selo{ flex:0 0 auto; text-align:right; }
   #cfd .selo .v{ font-weight:800; font-size:.95rem; font-variant-numeric:tabular-nums;
     white-space:nowrap; line-height:1.2; }
@@ -101,45 +113,45 @@
   #cfd .cob--fp{ background:#e6f1fb; color:var(--blue-deep); }
 
   /* Modal de vínculo */
-  #cfd-modal{ position:fixed; inset:0; z-index:1080; display:none;
+  .cfd-modal{ position:fixed; inset:0; z-index:1080; display:none;
     background:rgba(16,45,80,.45); padding:12px; overflow-y:auto; }
-  #cfd-modal.on{ display:block; }
-  #cfd-modal .cx{ background:#fff; border-radius:14px; max-width:430px; margin:2vh auto;
+  .cfd-modal.on{ display:block; }
+  .cfd-modal .cx{ background:#fff; border-radius:14px; max-width:430px; margin:2vh auto;
     overflow:hidden; box-shadow:0 12px 40px rgba(16,45,80,.35); }
-  #cfd-modal .cx__h{ padding:.7rem .85rem; background:var(--surface-1);
+  .cfd-modal .cx__h{ padding:.7rem .85rem; background:var(--surface-1);
     border-bottom:1px solid var(--line-2); display:flex; align-items:center; gap:.5rem; }
-  #cfd-modal .cx__h b{ font-size:.9rem; color:var(--blue-deep); }
-  #cfd-modal .cx__h .fechar{ margin-left:auto; border:0; background:none; font-size:1.1rem;
+  .cfd-modal .cx__h b{ font-size:.9rem; color:var(--blue-deep); }
+  .cfd-modal .cx__h .fechar{ margin-left:auto; border:0; background:none; font-size:1.1rem;
     color:var(--muted); cursor:pointer; }
-  #cfd-modal .cx__b{ padding:.7rem .85rem; }
-  #cfd-modal .falta{ font-size:12px; color:var(--muted); margin-bottom:.6rem; }
-  #cfd-modal .falta b{ color:var(--danger); font-size:1rem; }
-  #cfd-modal .falta .obs{ display:block; margin-top:.25rem; font-size:10.5px; line-height:1.45; }
-  #cfd-modal .cand{ display:flex; gap:.55rem; align-items:flex-start; cursor:pointer;
+  .cfd-modal .cx__b{ padding:.7rem .85rem; }
+  .cfd-modal .falta{ font-size:12px; color:var(--muted); margin-bottom:.6rem; }
+  .cfd-modal .falta b{ color:var(--danger); font-size:1rem; }
+  .cfd-modal .falta .obs{ display:block; margin-top:.25rem; font-size:10.5px; line-height:1.45; }
+  .cfd-modal .cand{ display:flex; gap:.55rem; align-items:flex-start; cursor:pointer;
     border:1px solid var(--line-2); border-radius:10px; padding:.5rem .6rem; margin-bottom:.45rem; }
-  #cfd-modal .cand--on{ border-color:var(--blue); background:#eef5fd;
+  .cfd-modal .cand--on{ border-color:var(--blue); background:#eef5fd;
     box-shadow:0 0 0 2px rgba(29,99,165,.12); }
-  #cfd-modal .cand input{ margin-top:.2rem; accent-color:var(--blue); flex:0 0 auto; }
-  #cfd-modal .cand__c{ min-width:0; flex:1; }
-  #cfd-modal .cand__d{ font-weight:700; font-size:.85rem; font-variant-numeric:tabular-nums; }
-  #cfd-modal .cand__m{ font-size:11px; color:var(--muted);
+  .cfd-modal .cand input{ margin-top:.2rem; accent-color:var(--blue); flex:0 0 auto; }
+  .cfd-modal .cand__c{ min-width:0; flex:1; }
+  .cfd-modal .cand__d{ font-weight:700; font-size:.85rem; font-variant-numeric:tabular-nums; }
+  .cfd-modal .cand__m{ font-size:11px; color:var(--muted);
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  #cfd-modal .cand__v{ flex:0 0 auto; text-align:right; }
-  #cfd-modal .cand__v .l{ font-weight:800; font-variant-numeric:tabular-nums; font-size:.85rem; }
-  #cfd-modal .cand__v .s{ font-size:10.5px; color:var(--muted); }
-  #cfd-modal .campo{ border-top:1px solid var(--line); margin-top:.5rem; padding-top:.6rem; }
-  #cfd-modal .campo label{ font-size:10.5px; text-transform:uppercase; letter-spacing:.03em;
+  .cfd-modal .cand__v{ flex:0 0 auto; text-align:right; }
+  .cfd-modal .cand__v .l{ font-weight:800; font-variant-numeric:tabular-nums; font-size:.85rem; }
+  .cfd-modal .cand__v .s{ font-size:10.5px; color:var(--muted); }
+  .cfd-modal .campo{ border-top:1px solid var(--line); margin-top:.5rem; padding-top:.6rem; }
+  .cfd-modal .campo label{ font-size:10.5px; text-transform:uppercase; letter-spacing:.03em;
     color:var(--muted); font-weight:700; display:block; margin-bottom:.2rem; }
-  #cfd-modal .campo input{ width:100%; border:1px solid var(--line-2); border-radius:8px;
+  .cfd-modal .campo input{ width:100%; border:1px solid var(--line-2); border-radius:8px;
     padding:.4rem .55rem; font-size:.95rem; font-variant-numeric:tabular-nums; }
-  #cfd-modal .cx__f{ display:flex; gap:.5rem; padding:.7rem .85rem;
+  .cfd-modal .cx__f{ display:flex; gap:.5rem; padding:.7rem .85rem;
     border-top:1px solid var(--line-2); background:var(--surface-1); }
-  #cfd-modal .cx__f button{ flex:1; border-radius:9px; padding:.5rem; font-weight:700;
+  .cfd-modal .cx__f button{ flex:1; border-radius:9px; padding:.5rem; font-weight:700;
     font-size:.85rem; border:1px solid var(--line-2); background:#fff; color:var(--muted);
     cursor:pointer; }
-  #cfd-modal .cx__f .ok{ background:var(--blue); border-color:var(--blue); color:#fff; }
-  #cfd-modal .cx__f .ok:disabled{ opacity:.5; cursor:not-allowed; }
-  #cfd-modal .vazio-c{ font-size:12px; color:var(--muted); text-align:center; padding:1.2rem .5rem; }
+  .cfd-modal .cx__f .ok{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  .cfd-modal .cx__f .ok:disabled{ opacity:.5; cursor:not-allowed; }
+  .cfd-modal .vazio-c{ font-size:12px; color:var(--muted); text-align:center; padding:1.2rem .5rem; }
 
   /* Estado de cobertura da nota (alocação por data) */
   #cfd .cob{ font-size:10px; font-weight:700; border-radius:5px; padding:.05rem .35rem; }
@@ -370,13 +382,18 @@
     <div class="bloco__p">
       A SEFAZ entregou estas notas, mas o CNPJ do emitente não está em <b>fornecedores</b>.
       Enquanto não cadastrar, essa compra não entra em conferência nenhuma.
+      Se for empresa irmã de um fornecedor que você já paga — a nota vem de uma,
+      o dinheiro sai para a outra — use <b>juntar</b> e as duas viram um card só.
     </div>
     {% for o in orfas %}
     <div class="orfa">
       <div class="orfa__n">
         <div class="orfa__nome">{{ o.emit_nome or '(sem nome)' }}</div>
         <div class="orfa__cnpj">CNPJ {{ o.emit_cnpj or '—' }} · {{ o.notas }} nota{{ '' if o.notas == 1 else 's' }}
-          · última {{ o.ultima.strftime('%d/%m/%Y') if o.ultima else '—' }}</div>
+          · última {{ o.ultima.strftime('%d/%m/%Y') if o.ultima else '—' }}
+          · <span class="grp-btn" onclick="cfdAbrirGrupo(null, '{{ (o.emit_cnpj or '')[:8] }}')"
+                  title="juntar esta empresa a um fornecedor já cadastrado"><i class="bi bi-diagram-3"></i> juntar</span>
+        </div>
       </div>
       <div class="orfa__v">{{ o.total | formatar_moeda }}</div>
     </div>
@@ -395,8 +412,15 @@
     <div class="forn" id="forn-{{ d.fornecedor_id }}">
       <div class="forn__head" onclick="cfdToggle(this)">
         <div style="min-width:0">
-          <div class="forn__nome">{{ d.nome }}</div>
-          <div class="forn__cnpj">CNPJ {{ d.cnpj or '—' }}</div>
+          <div class="forn__nome">
+            {%- for n in d.nomes -%}
+              {%- if not loop.first %}<span class="sep"> / </span>{% endif -%}
+              <span class="un">{{ n }}</span>
+            {%- endfor -%}
+          </div>
+          <div class="forn__cnpj">CNPJ {{ d.cnpj or '—' }}
+            {%- if d.nomes|length > 1 %} <span class="grp-selo">grupo</span>{% endif -%}
+          </div>
         </div>
         <div class="selo {{ 'selo--cred' if cred else ('selo--deve' if deve else 'selo--zero') }}">
           <div class="v">{{ d.saldo_final | formatar_moeda }}</div>
@@ -424,6 +448,17 @@
           <i class="bi bi-check2-square"></i>
           <span class="n">{{ d.notas_ok }}</span>/{{ d.notas_total }} conferida{{ '' if d.notas_total == 1 else 's' }}
         </span>
+        {% endif %}
+        {# Matriz e filial a raiz já junta sozinha. Isto é para raiz DIFERENTE:
+           paga-se a RODOIL e a nota vem da TOWER. #}
+        {% if d.nomes|length > 1 %}
+        <span class="conf-cnt grp-btn" onclick="cfdSepararGrupo({{ d.fornecedor_id }})"
+              title="desfazer o grupo — cada empresa volta a responder por si">
+          <i class="bi bi-diagram-2"></i> separar</span>
+        {% else %}
+        <span class="conf-cnt grp-btn" onclick="cfdAbrirGrupo({{ d.fornecedor_id }})"
+              title="juntar com outra empresa do mesmo grupo (CNPJ de raiz diferente)">
+          <i class="bi bi-diagram-3"></i> juntar</span>
         {% endif %}
       </div>
 
@@ -547,7 +582,7 @@
 </div>
 
 {# ---------- Modal: escolher o pagamento que cobre a nota ---------- #}
-<div id="cfd-modal" onclick="if (event.target === this) cfdFecharVinculo()">
+<div id="cfd-modal" class="cfd-modal" onclick="if (event.target === this) cfdFecharVinculo()">
   <div class="cx">
     <div class="cx__h">
       <i class="bi bi-link-45deg" style="color:#1D63A5"></i>
@@ -573,7 +608,85 @@
   </div>
 </div>
 
+{# ---------- Modal: juntar duas empresas do mesmo grupo ---------- #}
+<div id="cfd-gmodal" class="cfd-modal" onclick="if (event.target === this) cfdFecharGrupo()">
+  <div class="cx">
+    <div class="cx__h">
+      <i class="bi bi-diagram-3" style="color:#1D63A5"></i>
+      <b>Juntar fornecedores</b>
+      <button type="button" class="fechar" onclick="cfdFecharGrupo()">&times;</button>
+    </div>
+    <div class="cx__b">
+      <div class="falta"><span class="obs">Matriz e filial já entram juntas sozinhas —
+        a conferência casa pela raiz do CNPJ. Use isto só quando a raiz é
+        DIFERENTE: você paga uma empresa e a nota vem da irmã. As duas passam a
+        somar no mesmo card.</span></div>
+      <div class="campo" style="border-top:0; margin-top:0; padding-top:0">
+        <label id="cfd-glabel">Qual empresa entra neste card</label>
+        <select id="cfd-gsel" style="width:100%; border:1px solid var(--line-2);
+                border-radius:8px; padding:.45rem .6rem; font-size:.85rem">
+          <option value="">— escolha —</option>
+          {% for f in fornecedores %}
+            {% if f.cnpj %}<option value="{{ f.id }}">{{ f.razao_social }} — {{ f.cnpj }}</option>{% endif %}
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="cx__f">
+      <button type="button" onclick="cfdFecharGrupo()">Cancelar</button>
+      <button type="button" class="ok" onclick="cfdSalvarGrupo()">Juntar</button>
+    </div>
+  </div>
+</div>
+
 <script>
+// ---------- Grupo de fornecedores (raiz diferente) ----------
+// Dois pontos de entrada: do card (o card é o titular e você escolhe quem
+// entra) e da nota órfã (o emitente não tem cadastro, então você escolhe o
+// fornecedor que vai receber essa raiz).
+var cfdGrpTitular = null, cfdGrpRaiz = null;
+
+function cfdAbrirGrupo(fid, raiz) {
+  cfdGrpTitular = fid;
+  cfdGrpRaiz = raiz || null;
+  document.getElementById('cfd-gsel').value = '';
+  document.getElementById('cfd-glabel').textContent = cfdGrpRaiz
+    ? 'Em qual fornecedor esta empresa entra'
+    : 'Qual empresa entra neste card';
+  document.getElementById('cfd-gmodal').classList.add('on');
+}
+function cfdFecharGrupo() {
+  document.getElementById('cfd-gmodal').classList.remove('on');
+}
+function cfdSalvarGrupo() {
+  var outro = document.getElementById('cfd-gsel').value;
+  if (!outro) { alert('Escolha o fornecedor.'); return; }
+  var corpo = cfdGrpRaiz
+    ? { titular_id: Number(outro), raiz: cfdGrpRaiz }
+    : { titular_id: cfdGrpTitular, fornecedor_id: Number(outro) };
+  fetch('{{ url_for("conf_fornecedores_dfe.agrupar") }}', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(corpo)
+  }).then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j.ok) { alert(j.erro || 'não deu para juntar'); return; }
+      location.reload();
+    })
+    .catch(function () { alert('falha de rede ao juntar'); });
+}
+function cfdSepararGrupo(fid) {
+  if (!confirm('Desfazer o grupo? Cada empresa volta a aparecer no seu card.')) return;
+  fetch('{{ url_for("conf_fornecedores_dfe.desagrupar") }}', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ titular_id: fid })
+  }).then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j.ok) { alert(j.erro || 'não deu para separar'); return; }
+      location.reload();
+    })
+    .catch(function () { alert('falha de rede ao separar'); });
+}
+
 // ---------- Vínculo manual pagamento -> nota ----------
 // O automático (por data) resolve o caso comum; isto é para o que ele não
 // alcança — em especial pagamento anterior ao corte da captura.
