@@ -210,7 +210,8 @@
   #cfd .vazio{ text-align:center; color:var(--muted); padding:2.2rem 1rem; background:#fff;
     border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); }
   #cfd .vazio .bi{ font-size:1.6rem; display:block; margin-bottom:.4rem; opacity:.5; }
-  /* Aviso do corte: fica sempre visível, é a premissa do número */
+  /* Aviso do corte: só aparece quando há algo errado (nota depois do corte
+     ou filtro puxado pro corte). A explicação fixa saiu da tela. */
   #cfd .corte{ display:flex; gap:.6rem; align-items:flex-start; background:#fff;
     border:1px solid var(--line-2); border-left:4px solid var(--blue);
     border-radius:10px; padding:.6rem .75rem; margin-bottom:1rem;
@@ -243,34 +244,26 @@
     </div>
   </div>
 
-  {# ---------- Corte: sem isto o saldo mente ---------- #}
+  {# ---------- Corte: a explicacao saiu; o alarme fica ---------- #}
   {% set corte_br = corte[8:10] ~ '/' ~ corte[5:7] ~ '/' ~ corte[0:4] %}
+  {% set nota_depois_do_corte = janela and janela.primeira
+                                and janela.primeira.strftime('%Y-%m-%d') > corte %}
+  {% if nota_depois_do_corte or puxou_pro_corte %}
   <div class="corte">
     <i class="bi bi-scissors"></i>
     <div>
-      <b>Tudo aqui começa em {{ corte_br }}.</b>
-      A captura da SEFAZ só tem nota desta data em diante, e o OFX tem pagamento
-      de muito antes. Os <b>dois</b> lados são cortados na mesma data — se só o
-      pagamento antigo entrasse, todo fornecedor apareceria com um adiantamento
-      que não existe.
-      {% if janela and janela.primeira %}
-        <span class="corte__j">Notas capturadas: {{ janela.notas }}, de
-          {{ janela.primeira.strftime('%d/%m/%Y') }} a {{ janela.ultima.strftime('%d/%m/%Y') }}.</span>
-        {% if janela.primeira.strftime('%Y-%m-%d') > corte %}
+      {% if nota_depois_do_corte %}
         <span class="corte__erro">A nota mais antiga é de
           {{ janela.primeira.strftime('%d/%m/%Y') }} — depois do corte. Pagamento entre
           {{ corte_br }} e essa data entra sem nota do outro lado e vira dívida falsa.</span>
-        {% endif %}
       {% endif %}
-      <span class="corte__j">Fornecedor que aparecer devendo mas tiver pagamento
-        logo antes de {{ corte_br }} ganha um aviso dentro do card — é o caso do
-        pagamento antigo que quitou nota nova.</span>
       {% if puxou_pro_corte %}
         <span class="corte__erro">A data inicial que você pediu é anterior ao corte;
           usei {{ corte_br }}.</span>
       {% endif %}
     </div>
   </div>
+  {% endif %}
 
   {% if not vinculo_pronto %}
   <div class="alert alert-warning py-2 small">
