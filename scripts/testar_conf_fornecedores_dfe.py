@@ -21,11 +21,27 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # ── stubs ─────────────────────────────────────────────────────────────────────
 
 class Linha(dict):
-    """Serve tanto pra row['coluna'] quanto pro fetchone()[0] das contagens."""
+    """Serve tanto pra row['coluna'] quanto pro fetchone()[0] das contagens.
+
+    Precisa vir PREENCHIDA: com dict vazio o `if not nota: return 404` cortava
+    a rota antes da segunda consulta, e o teste passava sem testar nada.
+    """
+
+    _PADRAO = {
+        'id': 1, 'numero': '838', 'serie': '2', 'valor': 8700.0, 'outros': 0.0,
+        'vinculado': 0.0, 'emit_cnpj': '02284585000144', 'fornecedor_id': 5,
+        'cnpj_forn': '02284585000144', 'total': 0.0, 'usado': 0.0, 'notas': 0,
+        'dh_emissao': datetime(2026, 8, 1, 9, 0),
+        'data_transacao': date(2026, 7, 31),
+        'descricao': 'PIX', 'primeira': None, 'ultima': None,
+    }
+
+    def __init__(self):
+        dict.__init__(self, Linha._PADRAO)
 
     def __getitem__(self, chave):
         if isinstance(chave, int):
-            return 0
+            return 1          # fetchone()[0] das contagens: tabela "existe"
         return dict.get(self, chave, None)
 
 
@@ -158,21 +174,25 @@ def main():
     print('OK  %-28s %d consulta(s)' % ('rota completa', total))
 
     # 3) Endpoints de escrita.
+    corpo = {'doc_id': 1, 'transacao_id': 9, 'valor': 8700.0,
+             'vinculo_id': 3, 'ok': True}
+    sys.modules['flask'].request.get_json = lambda silent=False: corpo
+
+    esperado = {'candidatos': 2, 'vincular': 3, 'conferir': 1, 'desvincular': 1}
     for nome, fn in (('conferir', cfd.conferir),
                      ('vincular', cfd.vincular),
                      ('desvincular', cfd.desvincular),
                      ('candidatos', lambda: cfd.candidatos(1))):
         del CONEXOES[:]
-        try:
-            fn()
-        except Exception as e:                      # noqa: BLE001
-            # Dados vazios levam a "invalido"/404 e tudo bem; o que nao pode e
-            # estourar montando SQL.
-            if 'format' in str(e) or 'argument' in str(e):
-                raise
+        fn()
+        n = sum(len(c.log) for c in CONEXOES)
         for c in CONEXOES:
             conferir_placeholders(c.log, nome)
-        print('OK  %-28s' % nome)
+        # Sem isto o teste "passava" sem chegar na consulta que interessa.
+        assert n >= esperado[nome], (
+            '%s rodou %d consulta(s), esperava ao menos %d — o teste saiu cedo '
+            'demais e nao cobriu o SQL de verdade' % (nome, n, esperado[nome]))
+        print('OK  %-28s %d consulta(s)' % (nome, n))
 
     print('\nTudo certo: nenhum SQL com placeholder sobrando ou faltando.')
 

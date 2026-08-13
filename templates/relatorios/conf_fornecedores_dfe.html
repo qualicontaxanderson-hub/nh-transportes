@@ -570,8 +570,19 @@ function cfdMoeda(v) {
 }
 
 function cfdAbrirVinculo(docId) {
+  // Se algo aqui estourar, o clique morria em silêncio e a tela parecia
+  // "não fazer nada" — sem pista nenhuma de onde quebrou.
+  try {
+    cfdAbrirVinculoInterno(docId);
+  } catch (e) {
+    alert('Falhou ao abrir o vínculo: ' + (e && e.message ? e.message : e));
+  }
+}
+
+function cfdAbrirVinculoInterno(docId) {
   cfdDoc = docId; cfdSel = null;
   var lista = document.getElementById('cfd-mlista');
+  if (!lista) { alert('A janela de vínculo não foi carregada nesta página.'); return; }
   lista.innerHTML = '<div class="vazio-c">carregando pagamentos...</div>';
   document.getElementById('cfd-mcampo').hidden = true;
   document.getElementById('cfd-mok').disabled = true;
@@ -590,10 +601,15 @@ function cfdAbrirVinculo(docId) {
       cfdFalta = j.falta;
       document.getElementById('cfd-mtit').textContent = j.nota;
       document.getElementById('cfd-mfalta').textContent = cfdMoeda(j.falta);
+      var dg = j.diag || {};
       if (!j.candidatos.length) {
-        lista.innerHTML = '<div class="vazio-c">Nenhum pagamento deste fornecedor com valor ' +
-          'livre. Se o pagamento existe, confira se ele está conciliado neste ' +
-          'fornecedor lá no OFX.</div>';
+        var causa = dg.pagamentos_do_fornecedor
+          ? 'Achei ' + dg.pagamentos_do_fornecedor + ' pagamento(s) deste fornecedor, mas ' +
+            'todos já estão inteiramente vinculados a outras notas.'
+          : 'Não achei nenhum lançamento de saída conciliado neste fornecedor. ' +
+            'Confira no OFX se o pagamento está apontado para ele.';
+        lista.innerHTML = '<div class="vazio-c">' + causa +
+          '<br><br><small>nota #' + dg.doc_id + ' · CNPJ ' + (dg.cnpj_nota || '?') + '</small></div>';
         return;
       }
       lista.innerHTML = j.candidatos.map(function (c) {

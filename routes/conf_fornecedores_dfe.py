@@ -747,10 +747,20 @@ def candidatos(doc_id):
         })
 
     falta = float(nota['valor'] or 0) - float(nota['vinculado'] or 0)
-    return jsonify(ok=True, falta=round(max(falta, 0.0), 2),
-                   nota='NF-e nº %s%s' % (nota['numero'] or '—',
-                                          ('/%s' % nota['serie']) if nota['serie'] else ''),
-                   candidatos=livres)
+    return jsonify(
+        ok=True,
+        falta=round(max(falta, 0.0), 2),
+        nota='NF-e nº %s%s' % (nota['numero'] or '—',
+                               ('/%s' % nota['serie']) if nota['serie'] else ''),
+        candidatos=livres,
+        # Diagnóstico: sem isto, lista vazia é indistinguível de consulta que
+        # não achou nada, e não dá pra saber onde o caminho quebrou.
+        diag={
+            'doc_id': doc_id,
+            'cnpj_nota': nota['emit_cnpj'],
+            'pagamentos_do_fornecedor': len(pagos),
+            'com_valor_livre': len(livres),
+        })
 
 
 @bp.route('/conf_fornecedores_dfe/vincular', methods=['POST'])
