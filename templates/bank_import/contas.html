@@ -3,21 +3,132 @@
 
 {% block styles %}
 <style>
-  .stat-card { border: 0; border-radius: .65rem; box-shadow: 0 2px 8px rgba(0,0,0,.07); }
-  .stat-card .stat-icon { width: 2.6rem; height: 2.6rem; border-radius: .5rem; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; }
-  #tbl-lista { font-size: 0.76rem; border-collapse: separate; border-spacing: 0; }
-  #tbl-lista thead tr th { background: #f0f4f8; color: #2c3e50; font-weight: 700; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.45rem 0.65rem; border-bottom: 2px solid #c5d5e8; white-space: nowrap; }
-  #tbl-lista tbody tr td { padding: 0.38rem 0.65rem; border-bottom: 1px solid #eef1f4; vertical-align: middle; color: #374151; }
-  #tbl-lista tbody tr:last-child td { border-bottom: none; }
-  #tbl-lista tbody tr.row-item { cursor: pointer; transition: background .1s; }
-  #tbl-lista tbody tr.row-item:hover td { background: #f0f7ff; }
-  .btn-acao { display: inline-flex; align-items: center; justify-content: center; width: 1.8rem; height: 1.8rem; border-radius: .4rem; border: 1px solid; font-size: .82rem; transition: background .15s, color .15s; text-decoration: none; cursor: pointer; background: none; }
-  .btn-editar  { color:#1D63A5; border-color:#bee0f5; background:#f0f7ff; }
-  .btn-editar:hover  { background:#1D63A5; color:#fff; }
-  .btn-desativar { color:#dc3545; border-color:#f5c6cb; background:#fff5f5; }
-  .btn-desativar:hover { background:#dc3545; color:#fff; }
-  .actions-cell { white-space: nowrap; }
-  .filter-bar { background: #f8fbff; border: 1px solid #d9e8f5; border-radius: .5rem; padding: .6rem 1rem; margin-bottom: 1rem; }
+  /* ═══════════════════════════════════════════════════════════════
+     Contas — mesmo padrão das outras telas do Banco.
+
+     A empresa virou cabeçalho de grupo: repetida em toda linha, era ela
+     que esticava a tabela para o lado no celular. Agora aparece uma vez
+     por bloco e a linha fica com o que muda de conta para conta.
+     ═════════════════════════════════════════════════════════════════ */
+  #cta-corpo{
+    --azul:#1D63A5; --azul-deep:#0C4C86; --azul-claro:#eaf1f9;
+    --verde:#17963C; --roxo:#6D48C8;
+    --ink:#151d27; --ink-2:#3a4655; --muted:#6b7684;
+    --line:#e7ebf1; --line-2:#d9e0e8; --surface:#f7f9fc;
+    --ok:#1c6b34; --ok-bg:#e4f4e8;
+    --pend:#8a5a00; --pend-bg:#fdf0d6;
+    --ign:#4b5563; --ign-bg:#eceef1;
+    --danger:#a32d2d; --danger-bg:#fbe9e9;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    color:var(--ink);
+  }
+
+  /* Números */
+  #cta-corpo .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem;
+    margin-bottom:.7rem; }
+  @media (min-width:768px){ #cta-corpo .nums{ grid-template-columns:repeat(4,1fr); } }
+  #cta-corpo .nums .n{ border-radius:13px; padding:.55rem .75rem; color:#fff;
+    box-shadow:0 2px 8px rgba(20,35,60,.12); }
+  #cta-corpo .nums .r{ font-size:.66rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.06em; opacity:.92; }
+  #cta-corpo .nums .v{ font-size:1.16rem; font-weight:800; letter-spacing:-.02em;
+    font-variant-numeric:tabular-nums; line-height:1.25; }
+  #cta-corpo .n--a{ background:linear-gradient(135deg,#2E6FB0,#1D63A5); }
+  #cta-corpo .n--b{ background:linear-gradient(135deg,#22A24B,#17963C); }
+  #cta-corpo .n--c{ background:linear-gradient(135deg,#5B6B7F,#465565); }
+  #cta-corpo .n--d{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
+
+  /* Aviso */
+  #cta-corpo .av{ display:flex; align-items:flex-start; gap:.5rem; border-radius:12px;
+    padding:.55rem .7rem; font-size:.82rem; margin-bottom:.6rem; line-height:1.35;
+    background:var(--pend-bg); color:#6b4600; border:1px solid #f0dcae; }
+  #cta-corpo .av i{ flex:0 0 auto; margin-top:.1rem; }
+  #cta-corpo .av b{ font-weight:800; }
+  #cta-corpo .av button{ background:none; border:0; color:inherit; font-weight:800;
+    text-decoration:underline; padding:0; cursor:pointer; font-family:inherit;
+    font-size:inherit; }
+
+  /* Filtro: cinco empresas e nove contas cabem em pastilhas na tela — uma
+     gaveta em passos aqui custaria quatro toques para achar uma linha. */
+  #cta-corpo .filtro{ display:flex; gap:.4rem; align-items:center; margin-bottom:.6rem;
+    flex-wrap:wrap; }
+  #cta-corpo .pastilhas{ display:flex; gap:.35rem; overflow-x:auto; flex:1 1 100%;
+    padding-bottom:.15rem; scrollbar-width:none; }
+  #cta-corpo .pastilhas::-webkit-scrollbar{ display:none; }
+  #cta-corpo .pt{ flex:0 0 auto; border:1px solid var(--line-2); background:#fff;
+    color:var(--ink-2); border-radius:99px; padding:.32rem .7rem; font-size:.78rem;
+    font-weight:700; cursor:pointer; font-family:inherit; white-space:nowrap; }
+  #cta-corpo .pt.on{ background:var(--azul); border-color:var(--azul); color:#fff; }
+  #cta-corpo .busca{ position:relative; flex:1 1 100%; }
+  #cta-corpo .busca i{ position:absolute; left:.6rem; top:50%; transform:translateY(-50%);
+    color:var(--muted); font-size:.85rem; }
+  #cta-corpo .busca input{ width:100%; border:1px solid var(--line-2); border-radius:10px;
+    padding:.45rem .65rem .45rem 1.9rem; font-size:.85rem; background:#fff;
+    color:var(--ink); font-family:inherit; }
+
+  /* Lista */
+  #cta-corpo .lst{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+    overflow:hidden; }
+  #cta-corpo .banda{ display:flex; align-items:center; gap:.5rem; padding:.45rem .7rem;
+    background:var(--azul-claro); color:var(--azul-deep); font-size:.79rem;
+    font-weight:800; border-bottom:1px solid var(--line-2); position:sticky; top:0;
+    z-index:3; }
+  #cta-corpo .banda span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #cta-corpo .banda .q{ margin-left:auto; flex:0 0 auto; opacity:.75;
+    font-variant-numeric:tabular-nums; }
+  #cta-corpo .banda.oculta, #cta-corpo .lin.oculta{ display:none; }
+
+  #cta-corpo .lin{ padding:.5rem .6rem; border-bottom:1px solid var(--line);
+    cursor:pointer; }
+  #cta-corpo .lin:last-child{ border-bottom:0; }
+  #cta-corpo .lin:hover{ background:var(--surface); }
+  #cta-corpo .l1{ display:flex; align-items:center; gap:.4rem; min-width:0; }
+  #cta-corpo .apelido{ font-size:.88rem; font-weight:800; letter-spacing:-.01em;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  #cta-corpo .l2{ display:flex; align-items:center; gap:.35rem; min-width:0;
+    margin-top:.1rem; }
+  /* Agência e conta em monoespaçada: são números que a pessoa confere
+     dígito a dígito contra o extrato. */
+  #cta-corpo .numeros{ font-family:var(--mono); font-size:.74rem; color:var(--ink-2);
+    font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    min-width:0; }
+  #cta-corpo .lanc{ margin-left:auto; flex:0 0 auto; font-size:.88rem; font-weight:800;
+    color:var(--azul-deep); font-variant-numeric:tabular-nums; letter-spacing:-.02em;
+    white-space:nowrap; }
+  #cta-corpo .lanc small{ font-size:.64rem; font-weight:700; color:var(--muted);
+    margin-left:.2rem; }
+  #cta-corpo .l3{ display:flex; align-items:center; gap:.3rem; min-width:0;
+    margin-top:.25rem; }
+  #cta-corpo .selo{ display:inline-block; font-size:.66rem; font-weight:800;
+    border-radius:5px; padding:.08rem .38rem; white-space:nowrap; max-width:100%;
+    overflow:hidden; text-overflow:ellipsis; }
+  #cta-corpo .selo--plano{ background:rgba(29,99,165,.12); color:var(--azul-deep); }
+  #cta-corpo .selo--plano code{ font-family:var(--mono); color:inherit; }
+  #cta-corpo .selo--sem{ background:var(--pend-bg); color:var(--pend); }
+  #cta-corpo .selo--off{ background:var(--ign-bg); color:var(--ign); }
+  #cta-corpo .acoes{ display:flex; gap:.1rem; align-items:center; margin-left:auto;
+    flex:0 0 auto; padding-left:.3rem; }
+  #cta-corpo .ic{ width:27px; height:27px; border-radius:7px;
+    border:1px solid transparent; background:none; display:grid; place-items:center;
+    font-size:.85rem; cursor:pointer; color:var(--muted); padding:0;
+    font-family:inherit; }
+  #cta-corpo .ic:hover{ background:var(--surface); border-color:var(--line-2);
+    color:var(--azul); }
+  #cta-corpo .ic--perigo:hover{ color:var(--danger); border-color:#f0c6c6; }
+  #cta-corpo .vazio{ text-align:center; color:var(--muted); padding:2.2rem 1rem;
+    font-size:.85rem; }
+  #cta-corpo .vazio b{ display:block; color:var(--ink); font-size:.95rem;
+    margin-bottom:.25rem; }
+
+  /* Saída da tela */
+  #cta-corpo .pe{ display:flex; gap:.45rem; flex-wrap:wrap; margin-top:.8rem; }
+  #cta-corpo .pe a{ display:inline-flex; align-items:center; gap:.3rem;
+    font-size:.79rem; font-weight:700; color:var(--azul); text-decoration:none;
+    background:#fff; border:1px solid var(--line-2); border-radius:10px;
+    padding:.4rem .7rem; }
+  #cta-corpo .pe a:hover{ border-color:var(--azul); }
+  #cta-corpo :focus-visible{ outline:2px solid var(--azul); outline-offset:2px; }
+
   /* Searchable dropdown for coligadas table */
   .csel-wrap { position: relative; min-width: 200px; }
   .csel-drop { display:none; position:absolute; z-index:1055; background:#fff;
@@ -61,132 +172,125 @@
   {% endwith %}
   <div id="alertBox"></div>
 
-  <!-- Stat cards -->
+  <div id="cta-corpo">
   {% set total = contas | length %}
   {% set ativas = contas | selectattr('ativo') | list | length %}
-  <div class="row g-3 mb-3">
-    <div class="col-6 col-md-3">
-      <div class="card stat-card h-100">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div class="stat-icon" style="background:#e8f0fb;"><i class="bi bi-bank" style="color:#1D63A5;"></i></div>
-          <div><div class="fs-4 fw-bold" style="color:#1D63A5;">{{ total }}</div><div class="text-muted small">Total</div></div>
-        </div>
-      </div>
+  {% set sem_plano = contas | rejectattr('plano_codigo') | list %}
+  {% set empresas = contas | map(attribute='empresa_nome') | select | unique | list %}
+  {% set lancamentos = contas | sum(attribute='total_transacoes') %}
+
+  <div class="nums">
+    <div class="n n--a">
+      <div class="r">Contas</div>
+      <div class="v">{{ total }}</div>
     </div>
-    <div class="col-6 col-md-3">
-      <div class="card stat-card h-100">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div class="stat-icon" style="background:#e6f4ea;"><i class="bi bi-check-circle" style="color:#198754;"></i></div>
-          <div><div class="fs-4 fw-bold" style="color:#198754;">{{ ativas }}</div><div class="text-muted small">Ativas</div></div>
-        </div>
-      </div>
+    <div class="n n--b">
+      <div class="r">Ativas</div>
+      <div class="v">{{ ativas }}</div>
+    </div>
+    <div class="n n--c">
+      <div class="r">Empresas</div>
+      <div class="v">{{ empresas | length }}</div>
+    </div>
+    <div class="n n--d">
+      <div class="r">Lançamentos</div>
+      <div class="v">{{ '{:,}'.format(lancamentos or 0)|replace(',','.') }}</div>
     </div>
   </div>
 
-  <!-- Filter bar -->
-  <div class="filter-bar d-flex align-items-center gap-2 flex-wrap">
-    <i class="bi bi-funnel text-secondary"></i>
-    <label class="text-muted small mb-0 me-1">Empresa:</label>
-    <select id="filtroEmpresa" class="form-select form-select-sm" style="width:auto;min-width:180px;">
-      <option value="">Todas</option>
-      {% for cl in clientes %}
-      <option value="{{ cl.id }}">{{ cl.razao_social }}</option>
+  {% if sem_plano %}
+  {# Sem plano de contas a conta nao sai na exportacao contabil: e o unico
+     furo de cadastro que da para ver daqui. #}
+  <div class="av">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    <div><b>{{ sem_plano | length }} conta(s) sem plano de contas.</b>
+      Elas funcionam para importar e conciliar, mas ficam de fora da
+      exportação contábil.
+      <button type="button" onclick="ctaSoSemPlano()">Ver quais são</button>.</div>
+  </div>
+  {% endif %}
+
+  <div class="filtro">
+    <div class="pastilhas" id="ctaPastilhas">
+      <button type="button" class="pt on" data-empresa="">Todas</button>
+      {% for e in empresas %}
+      <button type="button" class="pt" data-empresa="{{ e }}">{{ e }}</button>
       {% endfor %}
-    </select>
-    <button class="btn btn-sm btn-outline-secondary" onclick="limparFiltro()">
-      <i class="bi bi-x-lg"></i>
-    </button>
+    </div>
+    <div class="busca">
+      <i class="bi bi-search"></i>
+      <input type="text" id="ctaBusca" placeholder="Procurar banco, agência, conta ou apelido"
+             autocomplete="off">
+    </div>
   </div>
 
-  <!-- Table -->
-  <div class="card shadow-sm">
-    <div class="card-header d-flex justify-content-between align-items-center py-2"
-         style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-      <span><i class="bi bi-list me-1"></i> Lista de Contas</span>
-      <span id="badgeTotal" class="badge bg-white text-secondary" style="font-size:0.7rem;font-weight:600;">{{ total }}</span>
-    </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table mb-0" id="tbl-lista">
-          <thead>
-            <tr>
-              <th>Apelido / Banco</th>
-              <th>Agência</th>
-              <th>Conta</th>
-              <th>Empresa</th>
-              <th>Plano de Contas</th>
-              <th class="text-center">Transações</th>
-              <th class="text-center">Status</th>
-              <th class="text-center actions-cell" style="width:8%">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% if contas %}
-              {% for c in contas %}
-              <tr class="row-item"
-                  data-empresa-id="{{ c.cliente_id or '' }}"
-                  data-id="{{ c.id }}"
-                  data-banco="{{ c.banco_nome|e }}"
-                  data-agencia="{{ (c.agencia or '')|e }}"
-                  data-conta="{{ (c.conta or '')|e }}"
-                  data-apelido="{{ (c.apelido or '')|e }}"
-                  data-cliente-id="{{ c.cliente_id or '' }}"
-                  data-plano-id="{{ c.plano_contas_conta_id or '' }}">
-                <td>
-                  <strong>{{ c.apelido or c.banco_nome }}</strong>
-                  {% if c.apelido and c.apelido != c.banco_nome %}
-                  <br><small class="text-muted">{{ c.banco_nome }}</small>
-                  {% endif %}
-                </td>
-                <td>{{ c.agencia or '—' }}</td>
-                <td>{{ c.conta or '—' }}</td>
-                <td>{{ c.empresa_nome or '<span class="text-muted">—</span>' }}</td>
-                <td>
-                  {% if c.plano_codigo %}
-                    <small><code>{{ c.plano_codigo }}</code> {{ c.plano_nome }}</small>
-                  {% else %}
-                    <span class="text-muted">—</span>
-                  {% endif %}
-                </td>
-                <td class="text-center">
-                  <span class="badge bg-secondary" style="font-size:0.7rem;">{{ c.total_transacoes }}</span>
-                </td>
-                <td class="text-center">
-                  {% if c.ativo %}
-                    <span class="badge bg-success" style="font-size:0.7rem;">Ativa</span>
-                  {% else %}
-                    <span class="badge bg-secondary" style="font-size:0.7rem;">Inativa</span>
-                  {% endif %}
-                </td>
-                <td class="text-center actions-cell" onclick="event.stopPropagation()">
-                  <button class="btn-acao btn-editar"
-                          onclick="abrirEditar({{ c.id }}, '{{ c.banco_nome|e }}', '{{ (c.agencia or '')|e }}', '{{ (c.conta or '')|e }}', '{{ (c.apelido or '')|e }}', {{ c.cliente_id or 'null' }}, {{ c.plano_contas_conta_id or 'null' }})"
-                          title="Editar">
-                    <i class="bi bi-pencil"></i>
-                  </button>
-                  {% if c.ativo %}
-                  <button class="btn-acao btn-desativar ms-1"
-                          onclick="excluirConta({{ c.id }}, '{{ (c.apelido or c.banco_nome)|e }}')"
-                          title="Desativar">
-                    <i class="bi bi-trash"></i>
-                  </button>
-                  {% endif %}
-                </td>
-              </tr>
-              {% endfor %}
-            {% else %}
-              <tr>
-                <td colspan="8" class="text-center text-muted py-4">
-                  <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
-                  <div class="mt-2" style="font-size:0.82rem;">Nenhuma conta bancária cadastrada.</div>
-                </td>
-              </tr>
-            {% endif %}
-          </tbody>
-        </table>
+  <div class="lst" id="ctaLista">
+    {% for empresa in empresas + ([none] if contas | rejectattr('empresa_nome') | list else []) %}
+      {% set doGrupo = contas | selectattr('empresa_nome', 'equalto', empresa) | list %}
+      <div class="banda" data-grupo="{{ empresa or '' }}">
+        <i class="bi bi-building"></i>
+        <span>{{ empresa or 'Sem empresa vinculada' }}</span>
+        <span class="q">{{ doGrupo | length }}</span>
       </div>
+
+      {% for c in doGrupo %}
+      <div class="lin"
+           data-empresa="{{ c.empresa_nome or '' }}"
+           data-sem-plano="{{ '1' if not c.plano_codigo else '0' }}"
+           data-procura="{{ ((c.apelido or '') ~ ' ' ~ (c.banco_nome or '') ~ ' ' ~ (c.agencia or '') ~ ' ' ~ (c.conta or ''))|lower }}"
+           data-id="{{ c.id }}"
+           data-banco="{{ c.banco_nome or '' }}"
+           data-agencia="{{ c.agencia or '' }}"
+           data-conta="{{ c.conta or '' }}"
+           data-apelido="{{ c.apelido or '' }}"
+           data-cliente-id="{{ c.cliente_id or '' }}"
+           data-plano-id="{{ c.plano_contas_conta_id or '' }}">
+
+        <div class="l1">
+          <span class="apelido">{{ c.apelido or c.banco_nome }}</span>
+          {% if not c.ativo %}<span class="selo selo--off">Inativa</span>{% endif %}
+        </div>
+
+        <div class="l2">
+          <span class="numeros">{{ c.banco_nome }}{% if c.agencia %} · Ag {{ c.agencia }}{% endif %}{% if c.conta %} · {{ c.conta }}{% endif %}</span>
+          <span class="lanc">{{ '{:,}'.format(c.total_transacoes or 0)|replace(',','.') }}<small>lanç.</small></span>
+        </div>
+
+        <div class="l3">
+          {% if c.plano_codigo %}
+            <span class="selo selo--plano"><code>{{ c.plano_codigo }}</code> {{ c.plano_nome }}</span>
+          {% else %}
+            <span class="selo selo--sem">sem plano de contas</span>
+          {% endif %}
+          <span class="acoes">
+            <button type="button" class="ic" title="Editar"
+                    onclick="event.stopPropagation(); ctaEditarDaLinha(this)">
+              <i class="bi bi-pencil"></i>
+            </button>
+            {% if c.ativo %}
+            <button type="button" class="ic ic--perigo" title="Desativar"
+                    onclick="event.stopPropagation(); ctaDesativarDaLinha(this)">
+              <i class="bi bi-trash"></i>
+            </button>
+            {% endif %}
+          </span>
+        </div>
+      </div>
+      {% endfor %}
+    {% endfor %}
+
+    <div class="vazio" id="ctaVazio" {% if contas %}hidden{% endif %}>
+      <b>{% if contas %}Nada corresponde ao filtro.{% else %}Nenhuma conta cadastrada.{% endif %}</b>
+      {% if contas %}Tente outro termo ou volte para “Todas”.
+      {% else %}Use “Nova conta” aqui em cima para cadastrar a primeira.{% endif %}
     </div>
   </div>
+
+  <div class="pe">
+    <a href="#" onclick="ctaNova(); return false;"><i class="bi bi-plus-circle"></i> Nova conta</a>
+    <a href="{{ url_for('bank_import.index') }}"><i class="bi bi-arrow-left"></i> Voltar para o Banco</a>
+  </div>
+  </div><!-- /#cta-corpo -->
 
 </div>
 
@@ -360,39 +464,80 @@ document.getElementById('ed_cliente_id').addEventListener('change', function() {
   _populatePlanoSelect(document.getElementById('ed_plano_contas_conta_id'), clienteId, null);
 });
 
-// ---- Row click → open edit modal ----
-document.querySelectorAll('#tbl-lista tbody tr.row-item').forEach(function(row) {
-  row.addEventListener('click', function() {
-    const d = this.dataset;
-    abrirEditar(
-      parseInt(d.id),
-      d.banco,
-      d.agencia,
-      d.conta,
-      d.apelido,
-      d.clienteId ? parseInt(d.clienteId) : null,
-      d.planoId   ? parseInt(d.planoId)   : null
-    );
+/* ── Abrir a conta ────────────────────────────────────────────────────
+   Um só caminho, do clique na linha e do lápis: os dados vêm do data- da
+   própria linha, então nada é remontado em string dentro do onclick. */
+function ctaEditarDaLinha(el) {
+  var d = el.closest('.lin').dataset;
+  abrirEditar(parseInt(d.id, 10), d.banco, d.agencia, d.conta, d.apelido,
+              d.clienteId ? parseInt(d.clienteId, 10) : null,
+              d.planoId ? parseInt(d.planoId, 10) : null);
+}
+document.querySelectorAll('#ctaLista .lin').forEach(function (lin) {
+  lin.addEventListener('click', function (ev) {
+    if (ev.target.closest('button')) return;
+    ctaEditarDaLinha(lin);
   });
 });
+function ctaDesativarDaLinha(el) {
+  var d = el.closest('.lin').dataset;
+  excluirConta(parseInt(d.id, 10), d.apelido || d.banco);
+}
+function ctaNova() {
+  new bootstrap.Modal(document.getElementById('modalNovaConta')).show();
+}
 
-// ---- Filter ----
-document.getElementById('filtroEmpresa').addEventListener('change', function() {
-  const v = this.value;
-  const rows = document.querySelectorAll('#tbl-lista tbody tr.row-item');
-  let visible = 0;
-  rows.forEach(r => {
-    const match = !v || r.dataset.empresaId === v;
-    r.style.display = match ? '' : 'none';
-    if (match) visible++;
+/* ── Filtro: empresa, busca e o atalho das sem plano ──────────────────
+   Tudo aqui na tela — são nove contas, não vale uma volta ao servidor. */
+var ctaEmpresa = '';
+var ctaSemPlano = false;
+
+function ctaAplicar() {
+  var termo = (document.getElementById('ctaBusca').value || '').trim().toLowerCase();
+  var visiveis = 0;
+  document.querySelectorAll('#ctaLista .lin').forEach(function (lin) {
+    var passa = (!ctaEmpresa || lin.dataset.empresa === ctaEmpresa) &&
+                (!ctaSemPlano || lin.dataset.semPlano === '1') &&
+                (!termo || lin.dataset.procura.indexOf(termo) >= 0);
+    lin.classList.toggle('oculta', !passa);
+    if (passa) visiveis++;
   });
-  document.getElementById('badgeTotal').textContent = visible;
-});
+  /* O cabeçalho do grupo some junto quando não sobrou nenhuma conta dele —
+     senão fica um título de empresa sobre o vazio. */
+  document.querySelectorAll('#ctaLista .banda').forEach(function (banda) {
+    var n = 0, no = banda.nextElementSibling;
+    while (no && no.classList.contains('lin')) {
+      if (!no.classList.contains('oculta')) n++;
+      no = no.nextElementSibling;
+    }
+    banda.classList.toggle('oculta', n === 0);
+    banda.querySelector('.q').textContent = n;
+  });
+  document.getElementById('ctaVazio').hidden = visiveis > 0;
+}
 
-function limparFiltro() {
-  document.getElementById('filtroEmpresa').value = '';
-  document.querySelectorAll('#tbl-lista tbody tr.row-item').forEach(r => r.style.display = '');
-  document.getElementById('badgeTotal').textContent = '{{ total }}';
+document.querySelectorAll('#ctaPastilhas .pt').forEach(function (b) {
+  b.addEventListener('click', function () {
+    document.querySelectorAll('#ctaPastilhas .pt').forEach(function (o) {
+      o.classList.remove('on');
+    });
+    b.classList.add('on');
+    ctaEmpresa = b.dataset.empresa;
+    ctaSemPlano = false;
+    ctaAplicar();
+  });
+});
+document.getElementById('ctaBusca').addEventListener('input', ctaAplicar);
+
+function ctaSoSemPlano() {
+  ctaSemPlano = true;
+  ctaEmpresa = '';
+  document.getElementById('ctaBusca').value = '';
+  document.querySelectorAll('#ctaPastilhas .pt').forEach(function (o) {
+    o.classList.toggle('on', o.dataset.empresa === '');
+  });
+  ctaAplicar();
+  document.getElementById('ctaLista').scrollIntoView({ block: 'nearest' });
 }
 
 // Reset nova conta modal fields on open

@@ -456,7 +456,8 @@ body > .container-fluid:has(#reg){
               </button>
             </form>
             <form method="post" action="{{ url_for('conciliacao_regras.excluir', regra_id=r.id) }}"
-                  onsubmit="return confirm({{ ('Excluir a regra “' ~ r.padrao_descricao ~ '”?' ~ (' Ela já foi aplicada, então será apenas desativada.' if r.total_aplicacoes else ''))|tojson }})">
+                  class="f-excluir" data-nome="{{ r.padrao_descricao }}"
+                  data-aplicada="{{ '1' if r.total_aplicacoes else '0' }}">
               <input type="hidden" name="next" value="{{ voltar_para }}">
               <button class="ic ic--perigo" title="Excluir"><i class="bi bi-trash"></i></button>
             </form>
@@ -635,6 +636,19 @@ if (regTudo) {
 document.querySelectorAll('#reg .chk').forEach(function (c) {
   c.addEventListener('change', regContar);
 });
+/* A pergunta se monta aqui, e não num onsubmit= no HTML: o texto tem aspas
+   e acento, e no atributo ele quebrava o parser — o confirm nunca rodava e a
+   regra ia embora sem perguntar. */
+document.querySelectorAll('#reg .f-excluir').forEach(function (fm) {
+  fm.addEventListener('submit', function (ev) {
+    var msg = 'Excluir a regra “' + fm.dataset.nome + '”?';
+    if (fm.dataset.aplicada === '1') {
+      msg += ' Ela já foi aplicada, então será apenas desativada.';
+    }
+    if (!confirm(msg)) ev.preventDefault();
+  });
+});
+
 /* Clique em qualquer ponto da linha marca — menos nos botões e links dela. */
 document.querySelectorAll('#reg .lin').forEach(function (lin) {
   lin.addEventListener('click', function (ev) {
