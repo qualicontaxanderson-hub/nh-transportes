@@ -1,371 +1,774 @@
 {% extends "base.html" %}
-{% block title %}Regras de Conciliação{% endblock %}
+
+{% block title %}Regras de conciliação - NH Transportes{% endblock %}
 
 {% block styles %}
 <style>
-  .page-hero {
-    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
-    border-radius: .75rem; padding: 1.25rem 1.75rem; margin-bottom: 1.25rem; color: #fff;
-  }
-  .page-hero .hero-icon {
-    width: 2.75rem; height: 2.75rem; background: rgba(255,255,255,.15);
-    border-radius: .5rem; display: flex; align-items: center; justify-content: center;
-    font-size: 1.35rem; flex-shrink: 0;
-  }
-  .flt-header { background: #1D63A5; color: #fff; font-size: 0.78rem; font-weight: 600; padding: .45rem .75rem; border-radius: .35rem .35rem 0 0; }
-  #tbl-regras { font-size: 0.82rem; }
-  #tbl-regras thead th {
-    background: #1D63A5; color: #fff;
-    font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
-    padding: 0.45rem 0.5rem; border: none; white-space: nowrap;
-  }
-  #tbl-regras tbody td { padding: 0.35rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; }
-  #tbl-regras tbody tr.regra-row { cursor: pointer; transition: background .1s; }
-  #tbl-regras tbody tr.regra-row:hover { background: #eef4ff; }
+/* ═══════════════════════════════════════════════════════════════════════
+   Regras de conciliação — mesmo padrão do Recebimento.
+
+   A regra é um texto que casa com a descrição do extrato, então o padrão
+   aparece em fonte monoespaçada: é literal, e um espaço a mais muda tudo.
+   A lista é ordenada pelo número de aplicações e partida em duas faixas —
+   as que trabalham e as que nunca pegaram nada, que é o que se procura
+   quando algo não concilia sozinho.
+   ═════════════════════════════════════════════════════════════════════ */
+body > .container-fluid:has(#reg){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#reg){ padding:.7rem 1rem 0; }
+}
+#reg.container-fluid{ padding-left:0; padding-right:0; }
+
+#reg{
+  --azul:#1D63A5; --azul-deep:#0C4C86; --azul-claro:#eaf1f9;
+  --verde:#17963C; --roxo:#6D48C8;
+  --ink:#151d27; --ink-2:#3a4655; --muted:#6b7684;
+  --line:#e7ebf1; --line-2:#d9e0e8; --surface:#f7f9fc;
+  --ok:#1c6b34; --ok-bg:#e4f4e8;
+  --pend:#8a5a00; --pend-bg:#fdf0d6;
+  --ign:#4b5563; --ign-bg:#eceef1;
+  --danger:#a32d2d; --danger-bg:#fbe9e9;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  color:var(--ink);
+  overflow-x:hidden;
+}
+
+/* ── Topo ─────────────────────────────────────────────────────────── */
+#reg .topo{ background:linear-gradient(120deg,var(--azul-deep),var(--azul)); color:#fff;
+  border-radius:14px; padding:.6rem .8rem .15rem; margin-bottom:.7rem; }
+#reg .topo__l1{ display:flex; align-items:center; gap:.5rem; }
+#reg .topo h3{ margin:0; font-size:1.05rem; font-weight:800; letter-spacing:-.01em; }
+#reg .voltar{ display:inline-flex; align-items:center; gap:.3rem;
+  background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.28); color:#fff;
+  border-radius:99px; padding:.22rem .62rem; font-size:.75rem; font-weight:700;
+  text-decoration:none; flex:0 0 auto; }
+#reg .voltar:hover{ background:rgba(255,255,255,.3); color:#fff; }
+#reg .topo .fil{ margin-left:auto; flex:0 0 auto; background:rgba(255,255,255,.2);
+  border:1px solid rgba(255,255,255,.35); color:#fff; border-radius:10px;
+  padding:.32rem .6rem; font-size:.8rem; font-weight:800; cursor:pointer;
+  display:inline-flex; align-items:center; gap:.32rem; font-family:inherit; }
+#reg .topo .fil:hover{ background:rgba(255,255,255,.3); }
+#reg .topo .fil .b{ background:#fff; color:var(--azul-deep); border-radius:99px;
+  min-width:17px; height:17px; display:grid; place-items:center; font-size:.66rem; }
+#reg .topo .fil .b[hidden]{ display:none; }
+
+#reg .abas{ display:flex; gap:.35rem; overflow-x:auto; padding:.55rem 0 .5rem;
+  scrollbar-width:none; }
+#reg .abas::-webkit-scrollbar{ display:none; }
+#reg .aba{ flex:0 0 auto; border-radius:99px; padding:.32rem .8rem; font-size:.79rem;
+  font-weight:800; white-space:nowrap; color:#fff; text-decoration:none;
+  background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22); }
+#reg .aba:hover{ background:rgba(255,255,255,.26); color:#fff; }
+#reg .aba.on{ background:#fff; color:var(--azul-deep); border-color:#fff; }
+
+/* ── Números ──────────────────────────────────────────────────────── */
+#reg .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:.7rem; }
+@media (min-width:768px){ #reg .nums{ grid-template-columns:repeat(4,1fr); } }
+#reg .nums .n{ border-radius:13px; padding:.55rem .75rem; color:#fff;
+  box-shadow:0 2px 8px rgba(20,35,60,.12); text-decoration:none; display:block; }
+#reg .nums a.n:hover{ color:#fff; filter:brightness(1.06); }
+#reg .nums .r{ font-size:.66rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.06em; opacity:.92; }
+#reg .nums .v{ font-size:1.16rem; font-weight:800; letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums; line-height:1.25; }
+#reg .n--a{ background:linear-gradient(135deg,#2E6FB0,#1D63A5); }
+#reg .n--b{ background:linear-gradient(135deg,#22A24B,#17963C); }
+#reg .n--c{ background:linear-gradient(135deg,#5B6B7F,#465565); }
+#reg .n--d{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
+
+/* ── Avisos ───────────────────────────────────────────────────────── */
+#reg .av{ display:flex; align-items:flex-start; gap:.5rem; border-radius:12px;
+  padding:.55rem .7rem; font-size:.82rem; margin-bottom:.6rem; line-height:1.35; }
+#reg .av--alerta{ background:var(--pend-bg); color:#6b4600; border:1px solid #f0dcae; }
+#reg .av--ok{ background:var(--ok-bg); color:var(--ok); border:1px solid #bfe3c9; }
+#reg .av--erro{ background:var(--danger-bg); color:var(--danger); border:1px solid #f0c6c6; }
+#reg .av i{ flex:0 0 auto; margin-top:.1rem; }
+#reg .av b{ font-weight:800; }
+#reg .av a{ color:inherit; font-weight:800; }
+#reg .av .fechar{ margin-left:auto; background:none; border:0; color:inherit;
+  opacity:.55; cursor:pointer; font-size:.9rem; padding:0 .1rem; flex:0 0 auto; }
+
+/* ── Lista ────────────────────────────────────────────────────────── */
+#reg .lst{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+  overflow:hidden; }
+#reg .topo-lst{ display:flex; align-items:center; gap:.55rem; padding:.55rem .7rem;
+  border-bottom:1px solid var(--line); font-size:.8rem; font-weight:700;
+  color:var(--muted); cursor:pointer; user-select:none; margin:0; }
+#reg .topo-lst .tot{ margin-left:auto; color:var(--azul-deep);
+  font-variant-numeric:tabular-nums; }
+
+/* A faixa substitui a coluna "Status": em vez de repetir a mesma palavra em
+   toda linha, o cabeçalho diz uma vez o que aquele bloco tem em comum. */
+#reg .banda{ display:flex; align-items:center; gap:.5rem; padding:.45rem .7rem;
+  background:var(--azul-claro); color:var(--azul-deep); font-size:.79rem; font-weight:800;
+  border-bottom:1px solid var(--line-2); position:sticky; top:0; z-index:3; margin:0; }
+#reg .banda .q{ margin-left:auto; font-variant-numeric:tabular-nums; opacity:.75; }
+#reg .banda--fria{ background:var(--pend-bg); color:#6b4600; border-color:#f0dcae; }
+
+#reg .lin{ display:grid; grid-template-columns:auto minmax(0,1fr); gap:.1rem .55rem;
+  grid-template-areas:"chk desc" "chk meio" "chk baixo";
+  padding:.5rem .6rem; border-bottom:1px solid var(--line); align-items:center;
+  cursor:pointer; }
+#reg .lin:last-child{ border-bottom:0; }
+#reg .lin.sel{ background:var(--azul-claro); }
+#reg .c-chk{ grid-area:chk; align-self:center; }
+
+/* O padrão é texto literal comparado com o extrato: fonte monoespaçada e
+   espaço visível deixam ver o que realmente está gravado. */
+#reg .c-desc{ grid-area:desc; font-family:var(--mono); font-size:.83rem; font-weight:700;
+  letter-spacing:-.01em; color:var(--ink); min-width:0; line-height:1.3;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  overflow:hidden; word-break:break-word; }
+
+#reg .c-meio{ grid-area:meio; display:flex; align-items:center; gap:.35rem; min-width:0; }
+#reg .e2{ font-size:.72rem; color:var(--roxo); font-weight:700; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#reg .e2 code{ font-family:var(--mono); color:inherit; font-size:.72rem; }
+/* Aplicações à direita, alinhado com os ícones da linha de baixo: é o número
+   que diz se a regra vale alguma coisa. */
+#reg .c-usos{ margin-left:auto; flex:0 0 auto; font-size:.95rem; font-weight:800;
+  color:var(--verde); font-variant-numeric:tabular-nums; letter-spacing:-.02em;
+  white-space:nowrap; }
+#reg .c-usos small{ font-size:.66rem; font-weight:700; color:var(--muted);
+  margin-left:.15rem; }
+#reg .c-usos--zero{ color:var(--pend); }
+
+#reg .c-baixo{ grid-area:baixo; display:flex; align-items:center; gap:.3rem;
+  min-width:0; margin-top:.14rem; }
+#reg .c-acao{ display:flex; gap:.1rem; align-items:center; flex:0 0 auto;
+  margin-left:auto; padding-left:.3rem; }
+#reg .c-acao form{ display:inline; margin:0; }
+#reg .ic{ width:27px; height:27px; border-radius:7px; border:1px solid transparent;
+  background:none; display:grid; place-items:center; font-size:.85rem; cursor:pointer;
+  color:var(--muted); padding:0; font-family:inherit; text-decoration:none; }
+#reg .ic:hover{ background:var(--surface); border-color:var(--line-2); color:var(--azul); }
+#reg .ic--perigo:hover{ color:var(--danger); border-color:#f0c6c6; }
+
+#reg .marca{ width:19px; height:19px; cursor:pointer; accent-color:var(--azul); margin:0; }
+#reg .selo{ display:inline-block; font-size:.66rem; font-weight:800; border-radius:5px;
+  padding:.08rem .38rem; white-space:nowrap; max-width:100%; overflow:hidden;
+  text-overflow:ellipsis; }
+#reg .selo--cred{ background:var(--ok-bg); color:var(--ok); }
+#reg .selo--deb{ background:var(--danger-bg); color:var(--danger); }
+#reg .selo--ambos{ background:var(--ign-bg); color:var(--ign); }
+#reg .selo--forma{ background:rgba(109,72,200,.13); color:var(--roxo); min-width:0; }
+#reg .selo--cli{ background:rgba(29,99,165,.12); color:var(--azul-deep); min-width:0; }
+#reg .selo--forn{ background:rgba(29,99,165,.12); color:var(--azul-deep); min-width:0; }
+#reg .selo--desp{ background:var(--pend-bg); color:var(--pend); min-width:0; }
+#reg .selo--nada{ background:var(--danger-bg); color:var(--danger); }
+#reg .selo--exato{ background:var(--ign-bg); color:var(--ign); }
+#reg .conta{ font-size:.71rem; color:var(--muted); font-weight:700; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#reg .vazio{ text-align:center; color:var(--muted); padding:2.2rem 1rem; font-size:.85rem; }
+#reg .vazio b{ display:block; color:var(--ink); font-size:.95rem; margin-bottom:.25rem; }
+
+/* ── Diagnóstico ──────────────────────────────────────────────────── */
+#reg .diag{ margin-bottom:.7rem; }
+#reg .diag[hidden]{ display:none; }
+#reg .diag table{ width:100%; border-collapse:collapse; font-size:.76rem;
+  background:#fff; }
+#reg .diag .rolo{ overflow-x:auto; border:1px solid var(--line-2); border-radius:12px;
+  background:#fff; }
+#reg .diag th{ background:var(--surface); color:var(--muted); font-size:.64rem;
+  text-transform:uppercase; letter-spacing:.05em; font-weight:800; text-align:left;
+  padding:.4rem .55rem; border-bottom:1px solid var(--line-2); white-space:nowrap; }
+#reg .diag td{ padding:.38rem .55rem; border-bottom:1px solid var(--line);
+  vertical-align:top; }
+#reg .diag tr:last-child td{ border-bottom:0; }
+#reg .diag .mono{ font-family:var(--mono); font-size:.73rem; }
+#reg .diag .corta{ max-width:270px; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; }
+#reg .diag .falta{ color:var(--danger); font-weight:800; }
+
+/* ── Barra de lote ────────────────────────────────────────────────── */
+#reg .lote{ position:fixed; left:0; right:0; bottom:0; z-index:1040;
+  background:var(--azul-deep); color:#fff; padding:.6rem .8rem; display:flex;
+  align-items:center; gap:.5rem; flex-wrap:wrap; transform:translateY(110%);
+  transition:transform .18s ease; box-shadow:0 -6px 20px rgba(12,76,134,.25);
+  padding-bottom:calc(.6rem + env(safe-area-inset-bottom)); }
+#reg .lote.on{ transform:translateY(0); }
+#reg .lote .n{ font-weight:800; font-variant-numeric:tabular-nums; }
+#reg .lote .sep{ margin-left:auto; }
+#reg .bl{ border:0; border-radius:9px; padding:.36rem .7rem; font-size:.8rem;
+  font-weight:800; cursor:pointer; background:rgba(255,255,255,.18); color:#fff;
+  font-family:inherit; }
+#reg .bl:hover{ background:rgba(255,255,255,.3); }
+#reg .bl--fim{ background:#fff; color:var(--danger); }
+#reg .rodape-folga{ height:4.5rem; }
+
+/* ── Saída da tela ────────────────────────────────────────────────── */
+#reg .pe{ display:flex; gap:.45rem; flex-wrap:wrap; margin-top:.8rem; }
+#reg .pe a{ display:inline-flex; align-items:center; gap:.3rem; font-size:.79rem;
+  font-weight:700; color:var(--azul); text-decoration:none; background:#fff;
+  border:1px solid var(--line-2); border-radius:10px; padding:.4rem .7rem; }
+#reg .pe a:hover{ border-color:var(--azul); }
+
+/* ── Filtro em passos ─────────────────────────────────────────────── */
+#reg .escuro{ position:fixed; inset:0; background:rgba(12,25,42,.45); z-index:1050;
+  opacity:0; pointer-events:none; transition:opacity .2s; }
+#reg .escuro.on{ opacity:1; pointer-events:auto; }
+#reg .gav{ position:fixed; left:0; right:0; bottom:0; z-index:1051; background:#fff;
+  border-radius:18px 18px 0 0; max-height:88vh; display:flex; flex-direction:column;
+  transform:translateY(101%); transition:transform .24s cubic-bezier(.22,.7,.3,1);
+  box-shadow:0 -10px 30px rgba(12,25,42,.3); }
+#reg .gav.on{ transform:translateY(0); }
+@media (min-width:992px){
+  #reg .gav{ left:50%; right:auto; bottom:auto; top:8vh; width:520px; border-radius:16px;
+    transform:translate(-50%,10px); opacity:0; pointer-events:none;
+    transition:opacity .16s ease, transform .16s ease; max-height:84vh; }
+  #reg .gav.on{ transform:translate(-50%,0); opacity:1; pointer-events:auto; }
+  #reg .gav__pega{ display:none; }
+}
+#reg .gav__pega{ width:36px; height:4px; background:var(--line-2); border-radius:9px;
+  margin:.5rem auto .1rem; flex:0 0 auto; }
+#reg .passos{ display:flex; gap:.3rem; padding:.4rem .9rem .1rem; }
+#reg .passo{ flex:1; height:3px; border-radius:9px; background:var(--line-2); }
+#reg .passo.on{ background:var(--azul); }
+#reg .pnome{ padding:.35rem .9rem .4rem; font-size:.76rem; color:var(--muted);
+  font-weight:700; }
+#reg .pnome b{ color:var(--ink); font-size:.95rem; }
+#reg .gav__b{ overflow-y:auto; padding:0 .9rem .7rem; }
+#reg .gav__f{ border-top:1px solid var(--line); padding:.65rem .9rem; display:flex;
+  gap:.5rem; background:#fff;
+  padding-bottom:calc(.65rem + env(safe-area-inset-bottom)); }
+#reg .bt-g{ border:0; border-radius:10px; padding:.55rem .8rem; font-size:.87rem;
+  font-weight:800; cursor:pointer; font-family:inherit; }
+#reg .bt-g--ok{ flex:1; background:var(--azul); color:#fff; }
+#reg .bt-g--ok:hover{ background:var(--azul-deep); }
+#reg .bt-g--ca{ background:var(--surface); color:var(--muted); border:1px solid var(--line-2); }
+
+#reg .etapa[hidden]{ display:none; }
+#reg .gr{ margin-bottom:.85rem; }
+#reg .gr__t{ font-size:.69rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--muted); margin-bottom:.3rem; }
+#reg .opcs{ border:1px solid var(--line-2); border-radius:10px; overflow:hidden;
+  max-height:260px; overflow-y:auto; }
+#reg .opc{ display:flex; align-items:center; gap:.5rem; width:100%; padding:.5rem .6rem;
+  border:0; border-bottom:1px solid var(--line); background:#fff; font-family:inherit;
+  font-size:.85rem; text-align:left; color:var(--ink); cursor:pointer; min-width:0; }
+#reg .opc:last-child{ border-bottom:0; }
+#reg .opc:hover{ background:var(--surface); }
+#reg .opc.on{ background:var(--azul-claro); color:var(--azul-deep); font-weight:800; }
+#reg .opc span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+#reg .opc .tique{ margin-left:auto; color:var(--azul); flex:0 0 auto; }
+#reg .seg{ display:flex; gap:2px; background:var(--surface); border:1px solid var(--line-2);
+  border-radius:10px; padding:2px; }
+#reg .seg button{ flex:1; border:0; background:none; border-radius:8px; padding:.42rem .2rem;
+  font-size:.79rem; font-weight:700; color:var(--muted); cursor:pointer;
+  font-family:inherit; white-space:nowrap; }
+#reg .seg button.on{ background:#fff; color:var(--azul-deep);
+  box-shadow:0 1px 2px rgba(20,35,60,.1); }
+#reg .campo{ width:100%; border:1px solid var(--line-2); border-radius:10px;
+  padding:.5rem .65rem; font-size:.85rem; background:#fff; color:var(--ink);
+  font-family:inherit; }
+#reg .chips{ display:flex; flex-wrap:wrap; gap:.35rem; }
+#reg .chip{ border:1px solid var(--line-2); background:#fff; color:var(--ink-2);
+  border-radius:99px; padding:.32rem .7rem; font-size:.78rem; font-weight:700;
+  cursor:pointer; font-family:inherit; }
+#reg .chip.on{ background:var(--azul); border-color:var(--azul); color:#fff; }
+#reg .dica{ font-size:.75rem; color:var(--muted); margin-top:.3rem; }
+#reg :focus-visible{ outline:2px solid var(--azul); outline-offset:2px; }
+@media (prefers-reduced-motion: reduce){ #reg *{ transition:none !important; } }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-2">
+{# `next` devolve a MESMA tela com os MESMOS filtros depois de qualquer ação. #}
+{% set voltar_para = request.full_path if request.query_string else request.path %}
+{% set n_filtros = (1 if filtro_empresa else 0) + (1 if filtro_banco else 0)
+                   + (1 if filtro_q else 0) + (1 if filtro_tipo else 0)
+                   + (1 if filtro_destino else 0) %}
+{% set usadas = regras|selectattr('total_aplicacoes')|list %}
+{% set nunca  = regras|rejectattr('total_aplicacoes')|list %}
+{% set soma   = usadas|sum(attribute='total_aplicacoes') %}
+{% set sem_destino = regras|selectattr('forma_nome','none')|selectattr('fornecedor_nome','none')
+                           |selectattr('cliente_nome','none')|selectattr('titulo_nome','none')|list %}
 
-  <!-- Hero header -->
-  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-    <div class="hero-icon"><i class="bi bi-funnel-fill"></i></div>
-    <div class="flex-grow-1">
-      <h4 class="mb-0 fw-bold">Regras de Conciliação Automática</h4>
-      <p class="mb-0 opacity-75" style="font-size:0.8rem;">Gerencie as regras para conciliação automática de transações bancárias.</p>
-    </div>
-    <div class="d-flex gap-2">
-      <a href="{{ url_for('conciliacao_regras.memorias') }}" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);">
-        <i class="bi bi-bookmark-star"></i> Memorizações
+<div class="container-fluid" id="reg">
+
+  <div class="topo">
+    <div class="topo__l1">
+      <a class="voltar" href="{{ url_for('bank_import.index') }}">
+        <i class="bi bi-chevron-left"></i> Banco
       </a>
-      <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);" onclick="diagnosticarRegras(this)">
-        <i class="bi bi-bug"></i> Diagnóstico
+      <h3>Regras de conciliação</h3>
+      <button type="button" class="fil" onclick="regAbrirFiltro()">
+        <i class="bi bi-sliders"></i>
+        <span class="b" {{ 'hidden' if not n_filtros }}>{{ n_filtros }}</span>
       </button>
-      <a href="{{ url_for('conciliacao_regras.novo') }}" class="btn btn-sm" style="background:rgba(255,255,255,.9);color:#1D63A5;font-weight:600;">
-        <i class="bi bi-plus-circle"></i> Nova Regra
-      </a>
+    </div>
+    <div class="abas">
+      <a class="aba" href="{{ url_for('bank_import.index') }}">Resumo</a>
+      <a class="aba" href="{{ url_for('financeiro.recebimento') }}">Recebimentos</a>
+      <a class="aba" href="{{ url_for('financeiro.pagamentos') }}">Pagamentos</a>
+      <a class="aba" href="{{ url_for('financeiro.transferencias') }}">Transferências</a>
+      <a class="aba on" href="{{ url_for('conciliacao_regras.lista') }}">Regras</a>
+      <a class="aba" href="{{ url_for('conciliacao_regras.memorias') }}">Memorizações</a>
     </div>
   </div>
 
-  <div id="divDiagnostico" class="d-none mb-3"></div>
-
-  <div class="alert alert-info py-2">
-    <i class="bi bi-info-circle"></i>
-    As regras são aplicadas automaticamente no momento da importação OFX e ao clicar em "Auto-Conciliar".
-    <br>
-    <strong>Padrão principal</strong>: corresponde a qualquer transação cuja descrição contenha (ou seja exatamente) o texto informado.
-    <br>
-    <strong>Padrão secundário</strong>: quando informado, a descrição também deve conter este segundo texto.
-    Útil para "LIQ.COBRANCA SIMPLES" + "TRANSPORTES TREMEA" → direcionar para um cliente específico.
-  </div>
-
-  <!-- Filtros -->
-  <form method="get" action="" class="card shadow-sm mb-3">
-    <div class="flt-header"><i class="bi bi-funnel me-1"></i> Filtros</div>
-    <div class="card-body py-2">
-    <div class="row g-2 align-items-end">
-      <div class="col-sm-auto">
-        <label class="form-label small mb-1 fw-semibold">Banco</label>
-        <select name="banco" class="form-select form-select-sm" style="min-width:160px;">
-          <option value="">Todos os bancos</option>
-          {% for b in bancos %}
-            <option value="{{ b }}" {{ 'selected' if filtro_banco == b else '' }}>{{ b }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-sm-auto">
-        <label class="form-label small mb-1 fw-semibold">Empresa</label>
-        <select name="empresa" class="form-select form-select-sm" style="min-width:200px;">
-          <option value="">Todas as empresas</option>
-          {% for e in empresas %}
-            <option value="{{ e.id }}" {{ 'selected' if filtro_empresa == e.id|string else '' }}>{{ e.razao_social }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-sm-auto d-flex align-items-end gap-2">
-        {% if mostrar_inativos %}
-          <input type="hidden" name="inativos" value="1">
-          <span class="badge bg-secondary p-2">
-            <i class="bi bi-eye-slash"></i> Mostrando inativos
-          </span>
-        {% endif %}
-        <button type="submit" class="btn btn-outline-secondary btn-sm">
-          <i class="bi bi-search"></i> Filtrar
-        </button>
-        {% if filtro_banco or filtro_empresa %}
-          <a href="{{ url_for('conciliacao_regras.lista', inativos='1' if mostrar_inativos else None) }}"
-             class="btn btn-outline-danger btn-sm" title="Limpar filtros">
-            <i class="bi bi-x-circle"></i> Limpar
-          </a>
-        {% endif %}
-      </div>
-      <div class="col-sm-auto ms-auto d-flex align-items-end">
-        {% if mostrar_inativos %}
-          <a href="{{ url_for('conciliacao_regras.lista', banco=filtro_banco, empresa=filtro_empresa) }}"
-             class="btn btn-warning btn-sm">
-            <i class="bi bi-eye-slash"></i> Ocultar Inativos
-          </a>
-        {% else %}
-          <a href="{{ url_for('conciliacao_regras.lista', inativos='1', banco=filtro_banco, empresa=filtro_empresa) }}"
-             class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-eye"></i> Mostrar Inativos
-          </a>
-        {% endif %}
-      </div>
+  {# As duas visões são aba, não coluna: dentro de cada uma, "ativa" ou
+     "inativa" seria a mesma palavra repetida em todas as linhas. #}
+  {% set base_url = url_for('conciliacao_regras.lista', banco=filtro_banco or None,
+                            empresa=filtro_empresa or None, q=filtro_q or None,
+                            tipo=filtro_tipo or None, destino=filtro_destino or None) %}
+  <div class="nums">
+    <a class="n n--a" href="{{ base_url }}">
+      <div class="r">Em uso</div>
+      <div class="v">{{ n_ativas }}</div>
+    </a>
+    <div class="n n--b">
+      <div class="r">Aplicações</div>
+      <div class="v">{{ '{:,}'.format(soma or 0)|replace(',','.') }}</div>
     </div>
-    </div><!-- /card-body -->
-  </form>
+    <div class="n n--d">
+      <div class="r">Nunca pegaram</div>
+      <div class="v">{{ nunca|length }}</div>
+    </div>
+    <a class="n n--c" href="{{ base_url }}{{ '&' if '?' in base_url else '?' }}inativos=1">
+      <div class="r">Desativadas</div>
+      <div class="v">{{ n_inativas }}</div>
+    </a>
+  </div>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in messages %}
-      <div class="alert alert-{{ cat }} alert-dismissible fade show py-2" role="alert">
-        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      <div class="av av--{{ 'erro' if cat in ('danger','error') else ('alerta' if cat == 'warning' else 'ok') }}">
+        <i class="bi bi-info-circle-fill"></i>
+        <div>{{ msg }}</div>
+        <button type="button" class="fechar" onclick="this.parentElement.remove()">✕</button>
       </div>
     {% endfor %}
   {% endwith %}
 
-  <!-- Barra de ações em lote (aparece ao selecionar) -->
-  <form method="post" action="{{ url_for('conciliacao_regras.excluir_lote') }}" id="formLote">
-    <div id="barraLote" class="d-none mb-2 p-2 bg-light border rounded d-flex align-items-center gap-2">
-      <span id="lblSelecionados" class="small fw-semibold text-secondary"></span>
-      <button type="submit" class="btn btn-danger btn-sm"
-              onclick="return confirm('Excluir/desativar as regras selecionadas?')">
-        <i class="bi bi-trash"></i> Excluir selecionadas
-      </button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="limparSelecao()">
-        <i class="bi bi-x"></i> Cancelar
-      </button>
-      <span class="small text-muted ms-1">Regras já aplicadas serão desativadas em vez de excluídas.</span>
+  {% if mostrar_inativos %}
+    <div class="av av--alerta">
+      <i class="bi bi-pause-circle-fill"></i>
+      <div>Você está vendo as regras <b>desativadas</b>. Elas não são aplicadas na
+        importação nem no auto-conciliar.
+        <a href="{{ base_url }}">Ver as que estão em uso</a>.</div>
     </div>
+  {% elif sem_destino %}
+    {# Uma regra sem destino casa com a transação e não faz nada com ela: some
+       do "pendente" sem preencher forma, cliente, fornecedor ou despesa. #}
+    <div class="av av--alerta">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <div><b>{{ sem_destino|length }} regra(s) sem destino.</b>
+        Elas casam com a transação mas não dizem o que fazer com ela — o
+        lançamento sai de pendente sem receber forma, cliente, fornecedor ou
+        despesa. <a href="{{ base_url }}{{ '&' if '?' in base_url else '?' }}destino=nenhum">Ver quais são</a>.</div>
+    </div>
+  {% endif %}
 
-  <div class="card shadow-sm">
-    <div class="card-body p-0">
-      {% set total = regras|length %}
-      {% set inativos_count = regras|selectattr('ativo', 'equalto', 0)|list|length %}
-      <div class="px-3 pt-2 pb-1 text-muted small border-bottom d-flex justify-content-between">
-        <span>
-          <strong>{{ total }}</strong> regra(s) exibida(s){% if not mostrar_inativos and inativos_count == 0 %} — somente ativas{% endif %}
-        </span>
-        {% if mostrar_inativos and inativos_count > 0 %}
-          <span class="badge bg-secondary">{{ inativos_count }} inativa(s)</span>
+  <div id="regDiag" class="diag" hidden></div>
+
+  {# O formulário do lote fica FORA da lista: form dentro de form é descartado
+     pelo navegador, e os botões da linha acabavam disparando o excluir em
+     lote. As caixinhas se ligam a ele pelo atributo form=. #}
+  <form method="post" action="{{ url_for('conciliacao_regras.excluir_lote') }}" id="formLote">
+    <input type="hidden" name="next" value="{{ voltar_para }}">
+  </form>
+
+  <div class="lst">
+    <label class="topo-lst">
+      <input type="checkbox" class="marca" id="marcaTudo">
+      Selecionar todas
+      <span class="tot">{{ regras|length }} regra(s)</span>
+    </label>
+
+    {% if not regras %}
+      <div class="vazio">
+        <b>Nenhuma regra por aqui.</b>
+        {% if n_filtros %}
+          Nada corresponde ao filtro.
+          <a href="{{ url_for('conciliacao_regras.lista', inativos='1' if mostrar_inativos else None) }}">Limpar filtro</a>.
+        {% elif mostrar_inativos %}
+          Nenhuma regra foi desativada.
+        {% else %}
+          Comece criando a primeira em “Nova regra”.
         {% endif %}
       </div>
-      <table class="table table-hover table-sm mb-0" id="tbl-regras">
-        <thead>
-          <tr>
-            <th style="width:2rem;">
-              <input type="checkbox" id="checkAll" class="form-check-input" title="Selecionar todas">
-            </th>
-            <th>Padrão Principal ↑</th>
-            <th>Padrão Secundário</th>
-            <th>Tipo Match</th>
-            <th>Transação</th>
-            <th>Vincula a</th>
-            <th class="text-center">Aplicações</th>
-            <th class="text-center">Status</th>
-            <th class="text-center">Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in regras %}
-          <tr class="regra-row{{ ' table-secondary text-muted' if not r.ativo else '' }}">
-            <td>
-              <input type="checkbox" name="regra_ids" value="{{ r.id }}"
-                     class="form-check-input chk-regra">
-            </td>
-            <td><code>{{ r.padrao_descricao }}</code></td>
-            <td>
-              {% if r.get('padrao_secundario') %}
-                <code class="text-info">{{ r.padrao_secundario }}</code>
-              {% else %}
-                <span class="text-muted">—</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if r.tipo_match == 'exato' %}
-                <span class="badge bg-warning text-dark">Exato</span>
-              {% else %}
-                <span class="badge bg-secondary">Contém</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if r.tipo_transacao == 'CREDIT' %}
-                <span class="badge bg-success">Crédito</span>
-              {% elif r.tipo_transacao == 'DEBIT' %}
-                <span class="badge bg-danger">Débito</span>
-              {% else %}
-                <span class="badge bg-secondary">Ambos</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if r.get('forma_nome') %}
-                <span class="badge bg-success"><i class="bi bi-wallet2"></i> {{ r.forma_nome }}</span>
-              {% endif %}
-              {% if r.get('fornecedor_nome') %}
-                <span class="badge bg-primary"><i class="bi bi-building"></i> {{ r.fornecedor_nome }}</span>
-              {% endif %}
-              {% if r.get('cliente_nome') %}
-                <span class="badge bg-info text-dark"><i class="bi bi-person"></i> {{ r.cliente_nome }}</span>
-              {% endif %}
-              {% if r.get('titulo_nome') %}
-                <span class="badge bg-warning text-dark">
-                  <i class="bi bi-receipt"></i> {{ r.titulo_nome }}
-                  {% if r.get('categoria_nome') %} › {{ r.categoria_nome }}{% endif %}
-                </span>
-              {% endif %}
-              {% if not r.get('forma_nome') and not r.get('fornecedor_nome') and not r.get('cliente_nome') and not r.get('titulo_nome') %}
-                <span class="text-muted">—</span>
-              {% endif %}
-            </td>
-            <td class="text-center">{{ r.total_aplicacoes }}</td>
-            <td class="text-center">
-              {% if r.ativo %}
-                <span class="badge bg-success">Ativa</span>
-              {% else %}
-                <span class="badge bg-secondary">Inativa</span>
-              {% endif %}
-            </td>
-            <td class="text-center">
-              <a href="{{ url_for('conciliacao_regras.editar', regra_id=r.id) }}"
-                 class="btn btn-outline-primary btn-sm" title="Editar">
-                <i class="bi bi-pencil"></i>
-              </a>
-              <form method="post"
-                    action="{{ url_for('conciliacao_regras.toggle', regra_id=r.id) }}"
-                    class="d-inline">
-                <button class="btn btn-outline-secondary btn-sm" title="{{ 'Desativar' if r.ativo else 'Ativar' }}">
-                  <i class="bi {{ 'bi-pause-circle' if r.ativo else 'bi-play-circle' }}"></i>
-                </button>
-              </form>
-              <form method="post"
-                    action="{{ url_for('conciliacao_regras.excluir', regra_id=r.id) }}"
-                    class="d-inline"
-                    onsubmit="return confirm('Excluir esta regra?')">
-                <button class="btn btn-outline-danger btn-sm" title="Excluir">
-                  <i class="bi bi-trash"></i>
-                </button>
-              </form>
-            </td>
-          </tr>
-          {% else %}
-          <tr><td colspan="9" class="text-center text-muted py-3">
-            {% if filtro_banco or filtro_empresa %}
-              Nenhuma regra encontrada para os filtros selecionados.
-              <a href="{{ url_for('conciliacao_regras.lista') }}">Limpar filtros</a>
-            {% else %}
-              Nenhuma regra cadastrada. Clique em "Nova Regra" para começar.
-            {% endif %}
-          </td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-  </form><!-- /formLote -->
+    {% endif %}
 
-  <div class="mt-3">
-    <a href="{{ url_for('bank_import.conciliar') }}" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-arrow-left"></i> Voltar para Conciliação
+    {% for grupo in [
+        {'itens': usadas, 'rot': 'Trabalhando', 'ic': 'bi-lightning-charge-fill', 'fria': false},
+        {'itens': nunca,  'rot': 'Nunca pegaram nada', 'ic': 'bi-hourglass', 'fria': true}] %}
+      {% if grupo.itens %}
+      <div class="banda{{ ' banda--fria' if grupo.fria }}">
+        <i class="bi {{ grupo.ic }}"></i> {{ grupo.rot }}
+        <span class="q">{{ grupo.itens|length }}</span>
+      </div>
+
+      {% for r in grupo.itens %}
+      <div class="lin" data-id="{{ r.id }}">
+        <span class="c-chk">
+          <input type="checkbox" form="formLote" name="regra_ids" value="{{ r.id }}"
+                 class="marca chk" aria-label="Selecionar a regra {{ r.padrao_descricao }}">
+        </span>
+
+        <div class="c-desc">{{ r.padrao_descricao }}</div>
+
+        <div class="c-meio">
+          {% if r.padrao_secundario %}
+            <span class="e2">e também <code>{{ r.padrao_secundario }}</code></span>
+          {% endif %}
+          <span class="c-usos{{ ' c-usos--zero' if not r.total_aplicacoes }}">
+            {{ '{:,}'.format(r.total_aplicacoes or 0)|replace(',','.') }}<small>×</small>
+          </span>
+        </div>
+
+        <div class="c-baixo">
+          {% if r.tipo_transacao == 'CREDIT' %}
+            <span class="selo selo--cred">Entrada</span>
+          {% elif r.tipo_transacao == 'DEBIT' %}
+            <span class="selo selo--deb">Saída</span>
+          {% else %}
+            <span class="selo selo--ambos">Entrada e saída</span>
+          {% endif %}
+
+          {% if r.tipo_match == 'exato' %}<span class="selo selo--exato">texto exato</span>{% endif %}
+
+          {% if r.forma_nome %}
+            <span class="selo selo--forma">{{ r.forma_nome }}</span>
+          {% endif %}
+          {% if r.cliente_nome %}
+            <span class="selo selo--cli">{{ r.cliente_nome }}</span>
+          {% endif %}
+          {% if r.fornecedor_nome %}
+            <span class="selo selo--forn">{{ r.fornecedor_nome }}</span>
+          {% endif %}
+          {% if r.titulo_nome %}
+            <span class="selo selo--desp">{{ r.titulo_nome }}{% if r.categoria_nome %} › {{ r.categoria_nome }}{% endif %}</span>
+          {% endif %}
+          {% if not r.forma_nome and not r.cliente_nome and not r.fornecedor_nome and not r.titulo_nome %}
+            <span class="selo selo--nada">sem destino</span>
+          {% endif %}
+
+          {% if r.conta_banco %}
+            <span class="conta">{{ r.conta_banco }}{% if r.conta_apelido %} · {{ r.conta_apelido }}{% endif %}</span>
+          {% endif %}
+
+          <span class="c-acao">
+            <a class="ic" href="{{ url_for('conciliacao_regras.editar', regra_id=r.id) }}"
+               title="Editar"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="{{ url_for('conciliacao_regras.toggle', regra_id=r.id) }}">
+              <input type="hidden" name="next" value="{{ voltar_para }}">
+              <button class="ic" title="{{ 'Desativar' if r.ativo else 'Reativar' }}">
+                <i class="bi {{ 'bi-pause-circle' if r.ativo else 'bi-play-circle' }}"></i>
+              </button>
+            </form>
+            <form method="post" action="{{ url_for('conciliacao_regras.excluir', regra_id=r.id) }}"
+                  onsubmit="return confirm({{ ('Excluir a regra “' ~ r.padrao_descricao ~ '”?' ~ (' Ela já foi aplicada, então será apenas desativada.' if r.total_aplicacoes else ''))|tojson }})">
+              <input type="hidden" name="next" value="{{ voltar_para }}">
+              <button class="ic ic--perigo" title="Excluir"><i class="bi bi-trash"></i></button>
+            </form>
+          </span>
+        </div>
+      </div>
+      {% endfor %}
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="pe">
+    <a href="{{ url_for('conciliacao_regras.novo') }}">
+      <i class="bi bi-plus-circle"></i> Nova regra
+    </a>
+    <a href="#" onclick="regDiagnostico(this); return false;">
+      <i class="bi bi-activity"></i> Diagnóstico
+    </a>
+    <a href="{{ url_for('conciliacao_regras.memorias') }}">
+      <i class="bi bi-bookmark-star"></i> Memorizações
+    </a>
+    <a href="{{ url_for('bank_import.conciliar') }}">
+      <i class="bi bi-check2-square"></i> Conciliação
+    </a>
+    <a href="{{ url_for('bank_import.index') }}">
+      <i class="bi bi-arrow-left"></i> Voltar para o Banco
     </a>
   </div>
+
+  <div class="rodape-folga"></div>
+
+  <!-- Barra de lote -->
+  <div class="lote" id="regLote">
+    <span class="n"><span id="regQtd">0</span> selecionada(s)</span>
+    <span class="sep"></span>
+    <button type="button" class="bl" onclick="regLimpar()">Limpar</button>
+    <button type="submit" form="formLote" class="bl bl--fim" onclick="return regConfirma();">
+      <i class="bi bi-trash"></i> Excluir
+    </button>
+  </div>
+
+  <!-- Filtro em passos -->
+  <div class="escuro" id="reg-escuro" onclick="regFecharFiltro()"></div>
+  <form class="gav" id="reg-gav" method="get" action="{{ url_for('conciliacao_regras.lista') }}">
+    <div class="gav__pega"></div>
+    <div class="passos">
+      <span class="passo on" id="reg-p1"></span>
+      <span class="passo" id="reg-p2"></span>
+      <span class="passo" id="reg-p3"></span>
+    </div>
+    <div class="pnome">Passo <span id="reg-pn">1</span> de 3 — <b id="reg-pt">Empresa</b></div>
+
+    {% if mostrar_inativos %}<input type="hidden" name="inativos" value="1">{% endif %}
+    <input type="hidden" name="empresa" id="reg-empresa" value="{{ filtro_empresa }}">
+    <input type="hidden" name="banco"   id="reg-banco"   value="{{ filtro_banco }}">
+    <input type="hidden" name="tipo"    id="reg-tipo"    value="{{ filtro_tipo }}">
+    <input type="hidden" name="destino" id="reg-destino" value="{{ filtro_destino }}">
+
+    <div class="gav__b">
+      <!-- 1: empresa -->
+      <div class="etapa" id="reg-e1">
+        <div class="gr">
+          <div class="gr__t">De qual empresa</div>
+          <div class="opcs">
+            <button type="button" class="opc{{ ' on' if not filtro_empresa }}"
+                    data-campo="reg-empresa" data-valor="">
+              <span>Todas as empresas</span>
+            </button>
+            {% for e in empresas %}
+            <button type="button" class="opc{{ ' on' if filtro_empresa == e.id|string }}"
+                    data-campo="reg-empresa" data-valor="{{ e.id }}">
+              <span>{{ e.razao_social }}</span>
+            </button>
+            {% endfor %}
+          </div>
+          <div class="dica">A regra sem conta vale para todas as empresas e por
+            isso aparece em qualquer escolha aqui.</div>
+        </div>
+      </div>
+
+      <!-- 2: banco -->
+      <div class="etapa" id="reg-e2" hidden>
+        <div class="gr">
+          <div class="gr__t">De qual banco</div>
+          <div class="opcs">
+            <button type="button" class="opc{{ ' on' if not filtro_banco }}"
+                    data-campo="reg-banco" data-valor="">
+              <span>Todos os bancos</span>
+            </button>
+            {% for b in bancos %}
+            <button type="button" class="opc{{ ' on' if filtro_banco == b }}"
+                    data-campo="reg-banco" data-valor="{{ b }}">
+              <span>{{ b }}</span>
+            </button>
+            {% endfor %}
+          </div>
+          <div class="dica">A regra sem conta também aparece aqui: ela vale para todos os bancos.</div>
+        </div>
+      </div>
+
+      <!-- 3: refinar -->
+      <div class="etapa" id="reg-e3" hidden>
+        <div class="gr">
+          <div class="gr__t">Procurar no padrão</div>
+          <input type="text" name="q" class="campo" id="reg-q" value="{{ filtro_q }}"
+                 placeholder="ex.: PIX, TARIFA, SICREDI" autocomplete="off">
+          <div class="dica">Procura nos dois padrões, o principal e o secundário.</div>
+        </div>
+        <div class="gr">
+          <div class="gr__t">Tipo de transação</div>
+          <div class="seg">
+            <button type="button" data-campo="reg-tipo" data-valor=""
+                    class="{{ 'on' if not filtro_tipo }}">Todas</button>
+            <button type="button" data-campo="reg-tipo" data-valor="CREDIT"
+                    class="{{ 'on' if filtro_tipo == 'CREDIT' }}">Entrada</button>
+            <button type="button" data-campo="reg-tipo" data-valor="DEBIT"
+                    class="{{ 'on' if filtro_tipo == 'DEBIT' }}">Saída</button>
+          </div>
+        </div>
+        <div class="gr">
+          <div class="gr__t">Para onde a regra manda</div>
+          <div class="chips">
+            {% for c in [('','Qualquer'), ('forma','Forma de recebimento'), ('cliente','Cliente'),
+                         ('fornecedor','Fornecedor'), ('despesa','Despesa'), ('nenhum','Sem destino')] %}
+            <button type="button" class="chip{{ ' on' if filtro_destino == c[0] }}"
+                    data-campo="reg-destino" data-valor="{{ c[0] }}">{{ c[1] }}</button>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="gav__f">
+      <button type="button" class="bt-g bt-g--ca" id="reg-voltar" onclick="regPasso(-1)" hidden>Voltar</button>
+      <button type="button" class="bt-g bt-g--ok" id="reg-seguir" onclick="regPasso(1)">Continuar</button>
+      <button type="submit" class="bt-g bt-g--ok" id="reg-aplicar" hidden>Aplicar filtro</button>
+    </div>
+  </form>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
-// ---- Checkboxes e barra de lote ----
-const checkAll = document.getElementById('checkAll');
-const barraLote = document.getElementById('barraLote');
-const lblSelecionados = document.getElementById('lblSelecionados');
+/* ── Seleção e barra de lote ──────────────────────────────────────── */
+var regBarra = document.getElementById('regLote');
+var regQtd   = document.getElementById('regQtd');
+var regTudo  = document.getElementById('marcaTudo');
 
-function atualizarBarra() {
-  var marcados = document.querySelectorAll('.chk-regra:checked').length;
-  var total    = document.querySelectorAll('.chk-regra').length;
-  if (marcados > 0) {
-    barraLote.classList.remove('d-none');
-    barraLote.classList.add('d-flex');
-    lblSelecionados.textContent = marcados + ' de ' + total + ' selecionada(s)';
-  } else {
-    barraLote.classList.add('d-none');
-    barraLote.classList.remove('d-flex');
+function regContar() {
+  var chks = document.querySelectorAll('#reg .chk');
+  var n = document.querySelectorAll('#reg .chk:checked').length;
+  regQtd.textContent = n;
+  regBarra.classList.toggle('on', n > 0);
+  if (regTudo) regTudo.checked = n > 0 && n === chks.length;
+  document.querySelectorAll('#reg .lin').forEach(function (l) {
+    var c = l.querySelector('.chk');
+    l.classList.toggle('sel', !!(c && c.checked));
+  });
+}
+function regLimpar() {
+  document.querySelectorAll('#reg .chk').forEach(function (c) { c.checked = false; });
+  if (regTudo) regTudo.checked = false;
+  regContar();
+}
+function regConfirma() {
+  var n = document.querySelectorAll('#reg .chk:checked').length;
+  if (!n) { alert('Selecione ao menos uma regra.'); return false; }
+  return confirm('Excluir ' + n + ' regra(s)? As que já foram aplicadas serão apenas desativadas.');
+}
+if (regTudo) {
+  regTudo.addEventListener('change', function () {
+    document.querySelectorAll('#reg .chk').forEach(function (c) { c.checked = regTudo.checked; });
+    regContar();
+  });
+}
+document.querySelectorAll('#reg .chk').forEach(function (c) {
+  c.addEventListener('change', regContar);
+});
+/* Clique em qualquer ponto da linha marca — menos nos botões e links dela. */
+document.querySelectorAll('#reg .lin').forEach(function (lin) {
+  lin.addEventListener('click', function (ev) {
+    if (ev.target.closest('a, button, input, form')) return;
+    var c = lin.querySelector('.chk');
+    if (!c) return;
+    c.checked = !c.checked;
+    regContar();
+  });
+});
+
+/* ── Filtro em passos ─────────────────────────────────────────────── */
+var regN = 1;
+var REG_NOMES = ['Empresa', 'Banco', 'Refinar'];
+
+function regAbrirFiltro() {
+  document.getElementById('reg-gav').classList.add('on');
+  document.getElementById('reg-escuro').classList.add('on');
+  regIr(1);
+}
+function regFecharFiltro() {
+  document.getElementById('reg-gav').classList.remove('on');
+  document.getElementById('reg-escuro').classList.remove('on');
+}
+function regIr(n) {
+  regN = Math.min(3, Math.max(1, n));
+  for (var i = 1; i <= 3; i++) {
+    document.getElementById('reg-e' + i).hidden = (i !== regN);
+    document.getElementById('reg-p' + i).classList.toggle('on', i <= regN);
   }
-  if (checkAll) checkAll.checked = marcados === total && total > 0;
+  document.getElementById('reg-pn').textContent = regN;
+  document.getElementById('reg-pt').textContent = REG_NOMES[regN - 1];
+  document.getElementById('reg-voltar').hidden  = (regN === 1);
+  document.getElementById('reg-seguir').hidden  = (regN === 3);
+  document.getElementById('reg-aplicar').hidden = (regN !== 3);
 }
+function regPasso(d) { regIr(regN + d); }
 
-function limparSelecao() {
-  document.querySelectorAll('.chk-regra').forEach(function(c){ c.checked = false; });
-  if (checkAll) checkAll.checked = false;
-  atualizarBarra();
-}
-
-if (checkAll) {
-  checkAll.addEventListener('change', function() {
-    document.querySelectorAll('.chk-regra').forEach(function(c){ c.checked = checkAll.checked; });
-    atualizarBarra();
+/* Um só tratador para lista, segmento e chip: todos guardam o valor num
+   campo escondido e acendem o irmão escolhido. */
+document.querySelectorAll('#reg-gav [data-campo]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var campo = document.getElementById(b.dataset.campo);
+    campo.value = b.dataset.valor;
+    b.parentElement.querySelectorAll('[data-campo="' + b.dataset.campo + '"]').forEach(function (o) {
+      o.classList.remove('on');
+      var t = o.querySelector('.tique');
+      if (t) t.remove();
+    });
+    b.classList.add('on');
+    if (b.classList.contains('opc')) {
+      var i = document.createElement('i');
+      i.className = 'bi bi-check-lg tique';
+      b.appendChild(i);
+      regPasso(1);          /* escolheu na lista: já segue para o próximo passo */
+    }
   });
-}
-document.querySelectorAll('.chk-regra').forEach(function(c){
-  c.addEventListener('change', atualizarBarra);
+});
+document.querySelectorAll('#reg-gav .opc.on').forEach(function (b) {
+  var i = document.createElement('i');
+  i.className = 'bi bi-check-lg tique';
+  b.appendChild(i);
 });
 
-// Clique na linha seleciona o checkbox (single-click)
-document.querySelectorAll('tr.regra-row').forEach(function(row) {
-  row.addEventListener('click', function(e) {
-    if (e.target.closest('button, a, input, select, textarea, label')) return;
-    var chk = row.querySelector('.chk-regra');
-    if (!chk) return;
-    chk.checked = !chk.checked;
-    chk.dispatchEvent(new Event('change'));
-  });
-});
-
-// ---- Diagnóstico ----
-function diagnosticarRegras(btn) {
-  btn.disabled = true;
-  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Verificando...';
+/* ── Diagnóstico ──────────────────────────────────────────────────── */
+function regDiagnostico(link) {
+  var cx = document.getElementById('regDiag');
+  cx.hidden = false;
+  cx.innerHTML = '<div class="av av--ok"><i class="bi bi-hourglass-split"></i>' +
+                 '<div>Conferindo as regras contra as transações pendentes…</div></div>';
+  cx.scrollIntoView({ block: 'nearest' });
   fetch('/banco/api/diagnostico-regras')
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-bug"></i> Diagnóstico';
-      var div = document.getElementById('divDiagnostico');
-      div.classList.remove('d-none');
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
       if (d.erro) {
-        div.innerHTML = '<div class="alert alert-danger">Erro: ' + d.erro + '</div>';
+        cx.innerHTML = '<div class="av av--erro"><i class="bi bi-x-octagon-fill"></i>' +
+                       '<div>' + regEsc(d.erro) + '</div></div>';
         return;
       }
-      var html = '<div class="alert alert-' + (d.matches.length > 0 ? 'success' : 'warning') + '">';
-      html += '<strong>Diagnóstico:</strong> ' + d.total_regras + ' regra(s) ativa(s), ';
-      html += d.total_pendentes + ' transação(ões) pendente(s), ';
-      html += '<strong>' + d.matches.length + ' correspondência(s) encontrada(s)</strong>.';
-      if (d.matches.length === 0 && d.total_pendentes > 0) {
-        html += '<br><em>Nenhuma transação pendente corresponde às regras ativas. ';
-        html += 'Verifique se o padrão está correto e se a transação tem status "pendente".</em>';
+      var achou = d.matches.length > 0;
+      var h = '<div class="av av--' + (achou ? 'ok' : 'alerta') + '">' +
+              '<i class="bi bi-' + (achou ? 'check-circle-fill' : 'exclamation-triangle-fill') + '"></i><div>' +
+              '<b>' + d.matches.length + ' correspondência(s)</b> entre ' + d.total_regras +
+              ' regra(s) em uso e ' + d.total_pendentes + ' transação(ões) pendente(s).';
+      if (!achou && d.total_pendentes > 0) {
+        h += '<br>Nenhuma pendência bate com as regras — confira o texto do padrão.';
       }
-      html += '</div>';
-      if (d.matches.length > 0) {
-        html += '<div class="table-responsive"><table class="table table-sm table-bordered small">';
-        html += '<thead class="table-light"><tr><th>Tx ID</th><th>Tipo</th><th>Valor</th><th>Descrição</th><th>Regra</th><th>Título ID</th><th>Categoria ID</th></tr></thead><tbody>';
-        d.matches.forEach(function(m){
-          html += '<tr><td>#' + m.tx_id + '</td><td>' + m.tx_tipo + '</td><td>R$ ' + m.tx_valor + '</td>';
-          html += '<td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + m.tx_descricao + '">' + m.tx_descricao + '</td>';
-          html += '<td><em>' + m.regra_padrao + '</em></td>';
-          html += '<td>' + (m.titulo_id || '<span class="text-danger">NULL</span>') + '</td>';
-          html += '<td>' + (m.categoria_id || '<span class="text-danger">NULL ← PROBLEMA!</span>') + '</td></tr>';
-        });
-        html += '</tbody></table></div>';
-        if (d.matches.some(function(m){ return !m.titulo_id || !m.categoria_id; })) {
-          html += '<div class="alert alert-danger"><strong>⚠️ Regra sem Título/Categoria:</strong> A regra foi salva sem a categoria da despesa. ';
-          html += 'Edite a regra, selecione o Título, aguarde as categorias carregarem e selecione a Categoria antes de salvar.</div>';
+      h += '</div><button type="button" class="fechar" onclick="regFecharDiag()">✕</button></div>';
+
+      if (achou) {
+        var furados = d.matches.filter(function (m) { return !m.titulo_id || !m.categoria_id; });
+        if (furados.length) {
+          h += '<div class="av av--alerta"><i class="bi bi-exclamation-triangle-fill"></i><div>' +
+               '<b>' + furados.length + ' regra(s) de despesa sem categoria.</b> ' +
+               'Edite a regra, escolha o Título, espere as categorias carregarem e escolha a Categoria antes de salvar.' +
+               '</div></div>';
         }
+        h += '<div class="rolo"><table><thead><tr><th>Transação</th><th>Valor</th>' +
+             '<th>Descrição</th><th>Regra que pegou</th><th>Despesa</th></tr></thead><tbody>';
+        d.matches.forEach(function (m) {
+          h += '<tr><td class="mono">#' + regEsc(m.tx_id) + ' ' + regEsc(m.tx_tipo) + '</td>' +
+               '<td class="mono">R$ ' + regEsc(m.tx_valor) + '</td>' +
+               '<td class="corta" title="' + regEsc(m.tx_descricao) + '">' + regEsc(m.tx_descricao) + '</td>' +
+               '<td class="mono">' + regEsc(m.regra_padrao) + '</td><td>' +
+               (m.categoria_id ? ('título ' + regEsc(m.titulo_id) + ' · categoria ' + regEsc(m.categoria_id))
+                               : '<span class="falta">sem categoria</span>') +
+               '</td></tr>';
+        });
+        h += '</tbody></table></div>';
       }
-      div.innerHTML = html;
+      cx.innerHTML = h;
     })
-    .catch(function(e){
-      btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-bug"></i> Diagnóstico';
-      document.getElementById('divDiagnostico').classList.remove('d-none');
-      document.getElementById('divDiagnostico').innerHTML = '<div class="alert alert-danger">Erro de comunicação: ' + e.message + '</div>';
+    .catch(function (e) {
+      cx.innerHTML = '<div class="av av--erro"><i class="bi bi-x-octagon-fill"></i>' +
+                     '<div>Não deu para falar com o servidor: ' + regEsc(e.message) + '</div></div>';
     });
 }
+function regFecharDiag() {
+  var cx = document.getElementById('regDiag');
+  cx.hidden = true;
+  cx.innerHTML = '';
+}
+/* A descrição do extrato é texto de fora: vai escapada, sempre. */
+function regEsc(v) {
+  return String(v === null || v === undefined ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+regContar();
 </script>
 {% endblock %}

@@ -2,10 +2,10 @@ from flask import Blueprint, render_template, request, jsonify, flash, redirect,
 from flask_login import login_required
 from utils.decorators import admin_required
 from utils.db import get_db_connection
+from utils.navegacao import destino_pos_acao
 from utils.boletos import emitir_boleto_frete, emitir_boleto_multiplo, fetch_charge, fetch_boleto_pdf_stream, update_billet_expire, cancel_charge, _get_bearer_token, _ensure_credentials_from_env
 from datetime import datetime, date, timedelta
 from calendar import monthrange
-from urllib.parse import urlparse
 import os
 import requests
 import mysql.connector
@@ -1685,43 +1685,10 @@ def auto_conciliar_efi():
                         'message': f'Erro interno: {str(e)}'}), 500
 
 
-def _destino_pos_acao():
-    """Para onde voltar depois de uma ação da lista, PRESERVANDO o filtro.
-
-    O filtro é o estado da tela, não enfeite: voltar para a URL limpa obriga a
-    refazer empresa, conta, período e descrição a cada lançamento revertido —
-    era isso que acontecia ao reverter um a um.
-
-    Ordem: o campo `next` que a própria tela manda (explícito, imune a
-    Referrer-Policy), depois o referrer do navegador. Devolve None quando
-    nenhum dos dois serve, e aí quem chamou decide.
-
-    Só aceita caminho interno: nada de `//host`, esquema ou host de fora —
-    senão o POST vira redirecionamento aberto para um site qualquer.
-    """
-    def _interno(caminho):
-        if not caminho or not caminho.startswith('/') or caminho.startswith('//'):
-            return None
-        if '\\' in caminho or '\n' in caminho or '\r' in caminho:
-            return None
-        return caminho
-
-    destino = _interno((request.form.get('next') or '').strip())
-    if destino:
-        return destino
-
-    ref = (request.referrer or '').strip()
-    if ref:
-        try:
-            partes = urlparse(ref)
-        except Exception:
-            return None
-        # Mesmo host: o referrer de outro site não manda no nosso redirect.
-        if partes.netloc and partes.netloc != request.host:
-            return None
-        caminho = partes.path + (('?' + partes.query) if partes.query else '')
-        return _interno(caminho)
-    return None
+# O helper mudou para utils/navegacao.py: a mesma necessidade apareceu nas
+# regras de conciliação, e duas cópias divergiriam na parte que mais importa —
+# a checagem de destino externo.
+_destino_pos_acao = destino_pos_acao
 
 
 @financeiro_bp.route('/reverter-conciliacao/<int:tx_id>/', methods=['POST'])

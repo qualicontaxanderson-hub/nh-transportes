@@ -6,6 +6,7 @@ import pytz
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
+from utils.navegacao import destino_pos_acao
 
 _BRASILIA = pytz.timezone('America/Sao_Paulo')
 
@@ -109,29 +110,75 @@ def _get_contas(cursor):
 @bp.route('/')
 @login_required
 def lista():
-    """Lista as regras de conciliação com filtros opcionais."""
+    """Lista as regras de conciliação.
+
+    O filtro é o mesmo passo a passo das outras telas do Banco, e por isso
+    vive todo na URL: empresa, banco, busca no padrão, tipo de transação e
+    para onde a regra manda. Ativas x desativadas viraram aba — antes era
+    uma coluna que, na visão padrão, dizia "Ativa" em todas as linhas.
+    """
     mostrar_inativos = request.args.get('inativos', '0') == '1'
     filtro_banco     = request.args.get('banco', '').strip()
     filtro_empresa   = request.args.get('empresa', '').strip()
+    filtro_q         = request.args.get('q', '').strip()
+    filtro_tipo      = request.args.get('tipo', '').strip().upper()
+    filtro_destino   = request.args.get('destino', '').strip()
+
+    if filtro_tipo not in ('CREDIT', 'DEBIT', 'AMBOS'):
+        filtro_tipo = ''
+
+    # Cada destino é uma coluna de vínculo; "nenhum" é a regra que casa com a
+    # transação e não faz nada com ela — o caso que interessa achar.
+    _DESTINOS = {
+        'forma':      'r.forma_recebimento_id IS NOT NULL',
+        'cliente':    'r.cliente_id IS NOT NULL',
+        'fornecedor': 'r.fornecedor_id IS NOT NULL',
+        'despesa':    'r.titulo_id IS NOT NULL',
+        'nenhum':     ('r.forma_recebimento_id IS NULL AND r.cliente_id IS NULL'
+                       ' AND r.fornecedor_id IS NULL AND r.titulo_id IS NULL'),
+    }
+    if filtro_destino not in _DESTINOS:
+        filtro_destino = ''
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    where  = []
-    params = []
-
-    if not mostrar_inativos:
-        where.append("r.ativo = 1")
-
+    # Tudo menos o ativo/inativo: as duas abas contam sob o MESMO filtro, senão
+    # o número da aba vizinha mente.
+    where, params = [], []
+    # A regra sem conta vale para TODAS as contas, então ela pertence a
+    # qualquer empresa e a qualquer banco: filtrar por igualdade a escondia
+    # justamente onde ela também age.
     if filtro_banco:
-        where.append("ba.banco_nome = %s")
+        where.append("(ba.banco_nome = %s OR r.account_id IS NULL)")
         params.append(filtro_banco)
-
     if filtro_empresa:
-        where.append("ba.cliente_id = %s")
+        where.append("(ba.cliente_id = %s OR r.account_id IS NULL)")
         params.append(filtro_empresa)
+    if filtro_q:
+        where.append("(r.padrao_descricao LIKE %s OR r.padrao_secundario LIKE %s)")
+        params += ['%' + filtro_q + '%'] * 2
+    if filtro_tipo:
+        where.append("r.tipo_transacao = %s")
+        params.append(filtro_tipo)
+    if filtro_destino:
+        where.append('(' + _DESTINOS[filtro_destino] + ')')
 
-    where_clause = ("WHERE " + " AND ".join(where)) if where else ""
+    where_comum = ("WHERE " + " AND ".join(where)) if where else ""
+    de_para = """FROM bank_conciliacao_regras r
+                 LEFT JOIN bank_accounts ba ON ba.id = r.account_id"""
+
+    cursor.execute(
+        f"""SELECT SUM(r.ativo = 1) AS ativas, SUM(r.ativo = 0) AS inativas
+            {de_para} {where_comum}""",
+        params or None,
+    )
+    tot = cursor.fetchone() or {}
+    n_ativas   = int(tot.get('ativas') or 0)
+    n_inativas = int(tot.get('inativas') or 0)
+
+    where_lista = where + ["r.ativo = %s"]
+    params_lista = params + [0 if mostrar_inativos else 1]
 
     cursor.execute(
         f"""SELECT r.*,
@@ -149,13 +196,13 @@ def lista():
            LEFT JOIN titulos_despesas td ON td.id = r.titulo_id
            LEFT JOIN categorias_despesas cd ON cd.id = r.categoria_id
            LEFT JOIN bank_accounts ba ON ba.id = r.account_id
-           {where_clause}
-           ORDER BY r.padrao_descricao""",
-        params or None,
+           WHERE {" AND ".join(where_lista)}
+           ORDER BY r.total_aplicacoes DESC, r.padrao_descricao""",
+        params_lista,
     )
     regras = cursor.fetchall()
 
-    # Opções para os dropdowns de filtro
+    # Opções dos passos do filtro
     cursor.execute(
         "SELECT DISTINCT banco_nome FROM bank_accounts WHERE ativo=1 ORDER BY banco_nome"
     )
@@ -180,6 +227,11 @@ def lista():
         mostrar_inativos=mostrar_inativos,
         filtro_banco=filtro_banco,
         filtro_empresa=filtro_empresa,
+        filtro_q=filtro_q,
+        filtro_tipo=filtro_tipo,
+        filtro_destino=filtro_destino,
+        n_ativas=n_ativas,
+        n_inativas=n_inativas,
     )
 
 
@@ -312,7 +364,7 @@ def toggle(regra_id):
         flash('Regra ' + ('ativada' if novo_status else 'desativada') + '.', 'info')
     cursor.close()
     conn.close()
-    return redirect(url_for('conciliacao_regras.lista'))
+    return redirect(destino_pos_acao() or url_for('conciliacao_regras.lista'))
 
 
 @bp.route('/<int:regra_id>/excluir', methods=['POST'])
@@ -334,7 +386,7 @@ def excluir(regra_id):
             flash('Regra excluída.', 'success')
     cursor.close()
     conn.close()
-    return redirect(url_for('conciliacao_regras.lista'))
+    return redirect(destino_pos_acao() or url_for('conciliacao_regras.lista'))
 
 
 @bp.route('/excluir-lote', methods=['POST'])
@@ -345,7 +397,7 @@ def excluir_lote():
     ids = [int(i) for i in ids_raw if i.isdigit()]
     if not ids:
         flash('Nenhuma regra selecionada.', 'warning')
-        return redirect(url_for('conciliacao_regras.lista'))
+        return redirect(destino_pos_acao() or url_for('conciliacao_regras.lista'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -381,7 +433,7 @@ def excluir_lote():
     if desativar_ids:
         partes.append(f'{len(desativar_ids)} regra(s) já aplicada(s) foram desativadas')
     flash('; '.join(partes) + '.', 'success')
-    return redirect(url_for('conciliacao_regras.lista'))
+    return redirect(destino_pos_acao() or url_for('conciliacao_regras.lista'))
 
 
 @bp.route('/memorias')
