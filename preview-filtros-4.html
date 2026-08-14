@@ -1,0 +1,489 @@
+<title>Quatro Filtros para o Dia a Dia</title>
+
+<style>
+:root{
+  --laranja:#E4923F; --laranja-deep:#CE722A;
+  --azul:#1D63A5; --azul-deep:#0C4C86; --azul-claro:#eaf1f9;
+  --verde:#17963C; --roxo:#6D48C8;
+  --ink:#151d27; --ink-2:#3a4655; --muted:#6b7684;
+  --line:#e7ebf1; --line-2:#d9e0e8;
+  --card:#fff; --ground:#eef2f7; --surface:#f7f9fc;
+  --ok:#1c6b34; --ok-bg:#e4f4e8; --pend:#8a5a00; --pend-bg:#fdf0d6;
+  --danger:#a32d2d;
+  --sombra:0 1px 2px rgba(20,35,60,.05), 0 8px 24px rgba(20,35,60,.08);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --laranja:#C67F35; --laranja-deep:#A85F22;
+    --azul:#6CA9E2; --azul-deep:#9CC8F0; --azul-claro:#16283a;
+    --verde:#63c47f; --roxo:#a58ae8;
+    --ink:#e9eef5; --ink-2:#c3ccd8; --muted:#95a1b1;
+    --line:#2a3341; --line-2:#36414f;
+    --card:#1b222c; --ground:#0e1319; --surface:#161d26;
+    --ok:#a5d9b4; --ok-bg:#17301f; --pend:#e9c583; --pend-bg:#2f2515;
+    --danger:#efa5a5;
+    --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.34);
+  }
+}
+:root[data-theme="dark"]{
+  --laranja:#C67F35; --laranja-deep:#A85F22;
+  --azul:#6CA9E2; --azul-deep:#9CC8F0; --azul-claro:#16283a;
+  --verde:#63c47f; --roxo:#a58ae8;
+  --ink:#e9eef5; --ink-2:#c3ccd8; --muted:#95a1b1;
+  --line:#2a3341; --line-2:#36414f;
+  --card:#1b222c; --ground:#0e1319; --surface:#161d26;
+  --ok:#a5d9b4; --ok-bg:#17301f; --pend:#e9c583; --pend-bg:#2f2515;
+  --danger:#efa5a5;
+  --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.34);
+}
+*{ box-sizing:border-box; }
+body{ margin:0; background:var(--ground); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:15px; line-height:1.55; }
+.wrap{ max-width:1240px; margin:0 auto; padding:2rem 1rem 4rem; }
+h1{ font-size:1.6rem; margin:0 0 .35rem; letter-spacing:-.015em; text-wrap:balance; }
+.lead{ color:var(--muted); max-width:64ch; margin:0; }
+.small{ font-size:.82rem; color:var(--muted); }
+
+.grade{ display:grid; gap:1.6rem; margin-top:1.6rem; }
+@media (min-width:760px){ .grade{ grid-template-columns:repeat(2,1fr); } }
+@media (min-width:1160px){ .grade{ grid-template-columns:repeat(4,1fr); } }
+
+.modelo{ display:flex; flex-direction:column; gap:.55rem; min-width:0; }
+.modelo__cab{ display:flex; align-items:baseline; gap:.5rem; }
+.modelo__n{ font-variant-numeric:tabular-nums; font-weight:800; font-size:.78rem;
+  color:var(--card); background:var(--ink); border-radius:6px; padding:.05rem .38rem; }
+.modelo__t{ font-weight:800; font-size:1rem; letter-spacing:-.01em; }
+.modelo__p{ font-size:.84rem; color:var(--muted); margin:0; }
+.modelo__nota{ font-size:.79rem; color:var(--muted); border-top:1px dashed var(--line-2);
+  padding-top:.45rem; }
+.modelo__nota b{ color:var(--ink-2); }
+
+.fone{ background:var(--card); border:1px solid var(--line-2); border-radius:20px;
+  box-shadow:var(--sombra); overflow:hidden; position:relative; }
+.fone__topo{ background:linear-gradient(100deg,#E8A055,#7FC3E8); height:8px; }
+.tela{ height:540px; overflow-y:auto; overscroll-behavior:contain; position:relative; }
+.tela::-webkit-scrollbar{ width:5px; }
+.tela::-webkit-scrollbar-thumb{ background:var(--line-2); border-radius:9px; }
+
+.hero{ background:linear-gradient(100deg,var(--laranja),var(--laranja-deep)); color:#fff;
+  padding:.7rem .8rem; display:flex; align-items:center; gap:.5rem; }
+.hero h3{ margin:0; font-size:.95rem; font-weight:800; letter-spacing:-.01em; }
+.hero .s{ font-size:.7rem; opacity:.85; }
+.hero .ic{ margin-left:auto; flex:0 0 auto; background:rgba(255,255,255,.2);
+  border:1px solid rgba(255,255,255,.4); border-radius:9px; padding:.3rem .55rem;
+  font-size:.78rem; font-weight:800; cursor:pointer; display:inline-flex;
+  align-items:center; gap:.3rem; color:#fff; }
+.hero .ic .b{ background:#fff; color:var(--laranja-deep); border-radius:99px;
+  min-width:17px; height:17px; display:grid; place-items:center; font-size:.68rem; }
+
+/* lista dia a dia (a de trás, aprovada) */
+.sel-todos{ display:flex; align-items:center; gap:.5rem; padding:.45rem .7rem;
+  font-size:.76rem; font-weight:700; color:var(--muted); border-bottom:1px solid var(--line); }
+.sel-todos .t{ margin-left:auto; color:var(--azul-deep); font-variant-numeric:tabular-nums; }
+.dia{ display:flex; align-items:center; gap:.5rem; padding:.4rem .7rem;
+  background:var(--azul-claro); color:var(--azul-deep); font-size:.76rem; font-weight:800;
+  border-bottom:1px solid var(--line-2); }
+.dia .t{ margin-left:auto; font-variant-numeric:tabular-nums; }
+.item{ display:grid; grid-template-columns:auto 1fr auto; gap:.1rem .55rem;
+  padding:.42rem .7rem; border-bottom:1px solid var(--line); align-items:center; }
+.item__t{ font-size:.82rem; font-weight:600; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; }
+.item__v{ text-align:right; font-size:.84rem; font-variant-numeric:tabular-nums;
+  font-weight:800; color:var(--verde); }
+.item__s{ grid-column:2/4; font-size:.69rem; color:var(--muted); }
+.mk{ width:16px; height:16px; border-radius:5px; border:1.5px solid var(--line-2);
+  flex:0 0 auto; display:grid; place-items:center; font-size:.6rem; color:#fff; }
+.mk.on{ background:var(--azul); border-color:var(--azul); }
+.selo{ font-size:.62rem; font-weight:800; border-radius:5px; padding:.06rem .32rem; }
+.selo--ok{ background:var(--ok-bg); color:var(--ok); }
+.selo--pe{ background:var(--pend-bg); color:var(--pend); }
+
+/* ── 1 · chips fixos ─────────────────────────────────────────────── */
+.chips{ display:flex; gap:.3rem; padding:.45rem .6rem; overflow-x:auto;
+  border-bottom:1px solid var(--line); background:var(--card); }
+.chips::-webkit-scrollbar{ display:none; }
+.chip{ border:1px solid var(--line-2); border-radius:99px; padding:.22rem .55rem;
+  font-size:.73rem; font-weight:700; white-space:nowrap; background:var(--card);
+  display:inline-flex; align-items:center; gap:.25rem; cursor:pointer; }
+.chip.on{ background:var(--azul-claro); border-color:var(--azul); color:var(--azul-deep); }
+.chip .v{ opacity:.6; font-size:.65rem; }
+
+/* ── 2 · gaveta pelo funil ───────────────────────────────────────── */
+.escuro{ position:absolute; inset:0; background:rgba(12,25,42,.45); z-index:4;
+  opacity:0; pointer-events:none; transition:opacity .2s; }
+.escuro.on{ opacity:1; pointer-events:auto; }
+.gav{ position:absolute; left:0; right:0; bottom:0; z-index:5; background:var(--card);
+  border-radius:18px 18px 0 0; max-height:84%; display:flex; flex-direction:column;
+  transform:translateY(101%); transition:transform .24s cubic-bezier(.22,.7,.3,1);
+  box-shadow:0 -10px 30px rgba(12,25,42,.3); }
+.gav.on{ transform:translateY(0); }
+.gav__p{ width:36px; height:4px; background:var(--line-2); border-radius:9px;
+  margin:.5rem auto .1rem; }
+.gav__c{ display:flex; align-items:center; padding:.3rem .8rem .5rem; }
+.gav__c b{ font-size:.95rem; }
+.gav__c .l{ margin-left:auto; color:var(--azul); font-size:.78rem; font-weight:700;
+  cursor:pointer; }
+.gav__b{ overflow-y:auto; padding:0 .8rem .6rem; }
+.gav__f{ border-top:1px solid var(--line); padding:.6rem .8rem; display:flex; gap:.5rem; }
+.bt{ border:0; border-radius:10px; padding:.5rem .8rem; font-size:.84rem; font-weight:800;
+  cursor:pointer; font-family:inherit; }
+.bt--a{ flex:1; background:var(--azul); color:#fff; }
+.bt--c{ background:var(--surface); color:var(--muted); border:1px solid var(--line-2); }
+
+.gr{ margin-bottom:.75rem; }
+.gr__c{ display:flex; align-items:baseline; gap:.4rem; margin-bottom:.25rem; }
+.gr__t{ font-size:.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.05em;
+  color:var(--muted); }
+.gr__n{ font-size:.68rem; color:var(--muted); }
+.gr__a{ margin-left:auto; font-size:.7rem; font-weight:700; color:var(--azul); cursor:pointer; }
+.opcs{ border:1px solid var(--line-2); border-radius:10px; overflow:hidden; max-height:132px;
+  overflow-y:auto; }
+.opc{ display:flex; align-items:center; gap:.5rem; padding:.42rem .55rem;
+  border-bottom:1px solid var(--line); font-size:.79rem; cursor:pointer; }
+.opc:last-child{ border-bottom:0; }
+.opc.on{ background:var(--azul-claro); }
+.opc .s{ display:block; font-size:.67rem; color:var(--muted); }
+.opc__t{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.opc--travado{ color:var(--muted); font-style:italic; cursor:default; }
+.seg{ display:flex; gap:2px; background:var(--surface); border:1px solid var(--line-2);
+  border-radius:9px; padding:2px; }
+.seg span{ flex:1; text-align:center; font-size:.73rem; font-weight:700; color:var(--muted);
+  padding:.32rem .1rem; border-radius:7px; cursor:pointer; }
+.seg span.on{ background:var(--card); color:var(--azul-deep); box-shadow:var(--sombra); }
+.campo{ width:100%; border:1px solid var(--line-2); border-radius:9px; padding:.42rem .55rem;
+  font-size:.8rem; background:var(--card); color:var(--ink); font-family:inherit; }
+.par{ display:grid; grid-template-columns:1fr 1fr; gap:.4rem; }
+
+/* ── 3 · busca no topo ───────────────────────────────────────────── */
+.busca{ display:flex; align-items:center; gap:.45rem; padding:.5rem .6rem;
+  border-bottom:1px solid var(--line); }
+.busca input{ flex:1; border:1px solid var(--line-2); border-radius:99px;
+  padding:.42rem .7rem; font-size:.82rem; background:var(--surface); color:var(--ink);
+  font-family:inherit; }
+.busca .f{ flex:0 0 auto; border:1px solid var(--line-2); border-radius:9px;
+  padding:.35rem .5rem; font-size:.8rem; background:var(--card); cursor:pointer; }
+
+/* ── 4 · passo a passo ───────────────────────────────────────────── */
+.passos{ display:flex; gap:.3rem; padding:.5rem .7rem .3rem; }
+.passo{ flex:1; height:3px; border-radius:9px; background:var(--line-2); }
+.passo.on{ background:var(--azul); }
+.pnome{ padding:0 .8rem .35rem; font-size:.72rem; color:var(--muted); font-weight:700; }
+.pnome b{ color:var(--ink); }
+
+.tab-comp{ width:100%; border-collapse:collapse; font-size:.85rem; background:var(--card);
+  border:1px solid var(--line-2); border-radius:12px; overflow:hidden; margin-top:.7rem; }
+.tab-comp th, .tab-comp td{ padding:.5rem .65rem; border-bottom:1px solid var(--line);
+  text-align:left; vertical-align:top; }
+.tab-comp th{ background:var(--surface); font-size:.72rem; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--muted); }
+.tab-comp tr:last-child td{ border-bottom:0; }
+.rolar{ overflow-x:auto; }
+h2{ font-size:1.05rem; margin:2.4rem 0 .3rem; }
+@media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+</style>
+
+<div class="wrap">
+
+  <h1>Quatro filtros para o Dia a dia</h1>
+  <p class="lead">A lista é a que você aprovou — dia com subtotal, marcar o dia inteiro, barra
+  somando o marcado. O que muda em cada um é <b>como se chega até o filtro</b>. Pode tocar.</p>
+
+  <div class="grade">
+
+    <!-- ═══ 1 · CHIPS FIXOS ═══ -->
+    <div class="modelo">
+      <div class="modelo__cab"><span class="modelo__n">1</span>
+        <span class="modelo__t">Chips fixos</span></div>
+      <p class="modelo__p">O filtro mora na tela, numa fileira que rola de lado. Sempre à vista,
+      um toque cada.</p>
+      <div class="fone"><div class="fone__topo"></div><div class="tela" id="t1">
+        <div class="hero"><div><h3>Recebimento</h3><div class="s">Sicoob NH · jul–ago</div></div></div>
+        <div class="chips">
+          <span class="chip on">Posto NH <span class="v">▾</span></span>
+          <span class="chip on">Sicoob NH <span class="v">▾</span></span>
+          <span class="chip on">jul–ago <span class="v">▾</span></span>
+          <span class="chip">situação <span class="v">▾</span></span>
+          <span class="chip">forma <span class="v">▾</span></span>
+          <span class="chip">valor <span class="v">▾</span></span>
+        </div>
+        <div class="sel-todos"><span class="mk"></span> selecionar todos · 29
+          <span class="t">R$ 27.241,66</span></div>
+        <div class="dia"><span class="mk"></span> 12 de agosto <span class="t">R$ 757,64</span></div>
+        <div class="item"><span class="mk"></span><span class="item__t">Recebimento Pix BARATÃO</span>
+          <span class="item__v">757,64</span>
+          <span class="item__s"><span class="selo selo--pe">Pendente</span> 04.518.744/0001-09</span></div>
+        <div class="dia"><span class="mk on">✓</span> 11 de agosto <span class="t">R$ 1.656,79</span></div>
+        <div class="item"><span class="mk on">✓</span><span class="item__t">Recebimento Pix BARATÃO</span>
+          <span class="item__v">589,17</span>
+          <span class="item__s"><span class="selo selo--ok">Conciliado</span></span></div>
+        <div class="item"><span class="mk on">✓</span><span class="item__t">Recebimento Pix BARATÃO</span>
+          <span class="item__v">122,26</span>
+          <span class="item__s"><span class="selo selo--ok">Conciliado</span></span></div>
+        <div class="dia"><span class="mk"></span> 10 de agosto <span class="t">R$ 2.633,07</span></div>
+        <div class="item"><span class="mk"></span><span class="item__t">Recebimento Pix BARATÃO</span>
+          <span class="item__v">1.687,71</span>
+          <span class="item__s"><span class="selo selo--ok">Conciliado</span></span></div>
+      </div></div>
+      <div class="modelo__nota"><b>Ganha:</b> você vê o que está filtrando sem abrir nada.
+      <b>Perde:</b> come uma faixa da tela e a fileira rola de lado — filtro escondido à direita
+      passa despercebido.</div>
+    </div>
+
+    <!-- ═══ 2 · GAVETA PELO FUNIL ═══ -->
+    <div class="modelo">
+      <div class="modelo__cab"><span class="modelo__n">2</span>
+        <span class="modelo__t">Gaveta pelo funil</span></div>
+      <p class="modelo__p">Tela limpa. O funil abre tudo de uma vez, de baixo, com as empresas e
+      as contas em lista de marcar.</p>
+      <div class="fone"><div class="fone__topo"></div><div class="tela">
+        <div class="hero"><div><h3>Recebimento</h3><div class="s">Sicoob NH · jul–ago</div></div>
+          <button class="ic" onclick="abrir2()">⌕ <span class="b">3</span></button></div>
+        <div class="sel-todos"><span class="mk"></span> selecionar todos · 29
+          <span class="t">R$ 27.241,66</span></div>
+        <div class="dia"><span class="mk"></span> 12 de agosto <span class="t">R$ 757,64</span></div>
+        <div class="item"><span class="mk"></span><span class="item__t">Recebimento Pix BARATÃO</span>
+          <span class="item__v">757,64</span>
+          <span class="item__s"><span class="selo selo--pe">Pendente</span></span></div>
+        <div class="dia"><span class="mk on">✓</span> 11 de agosto <span class="t">R$ 1.656,79</span></div>
+        <div class="item"><span class="mk on">✓</span><span class="item__t">Recebimento Pix BARATÃO</span>
+          <span class="item__v">589,17</span>
+          <span class="item__s"><span class="selo selo--ok">Conciliado</span></span></div>
+        <div class="item"><span class="mk on">✓</span><span class="item__t">Recebimento Pix BARATÃO</span>
+          <span class="item__v">122,26</span>
+          <span class="item__s"><span class="selo selo--ok">Conciliado</span></span></div>
+        <div class="dia"><span class="mk"></span> 10 de agosto <span class="t">R$ 2.633,07</span></div>
+        <div class="item"><span class="mk"></span><span class="item__t">Recebimento Pix BARATÃO</span>
+          <span class="item__v">1.687,71</span>
+          <span class="item__s"><span class="selo selo--ok">Conciliado</span></span></div>
+
+        <div class="escuro" id="e2" onclick="fechar2()"></div>
+        <div class="gav" id="g2">
+          <div class="gav__p"></div>
+          <div class="gav__c"><b>Filtros</b><span class="l" onclick="fechar2()">limpar tudo</span></div>
+          <div class="gav__b">
+            <div class="gr">
+              <div class="gr__c"><span class="gr__t">Empresa</span><span class="gr__n">1 de 5</span>
+                <span class="gr__a">marcar todas</span></div>
+              <div class="opcs">
+                <div class="opc"><span class="mk"></span><span class="opc__t">FRESH START HOLDING</span></div>
+                <div class="opc"><span class="mk"></span><span class="opc__t">POSTO NH BR 153</span></div>
+                <div class="opc on"><span class="mk on">✓</span><span class="opc__t">POSTO NH GOIATUBA</span></div>
+                <div class="opc"><span class="mk"></span><span class="opc__t">PREST SERVICE STATION</span></div>
+              </div>
+            </div>
+            <div class="gr">
+              <div class="gr__c"><span class="gr__t">Conta</span><span class="gr__n">1 de 4</span>
+                <span class="gr__a">marcar todas</span></div>
+              <div class="opcs">
+                <div class="opc"><span class="mk"></span><span class="opc__t">CORA — NH GTBA</span></div>
+                <div class="opc on"><span class="mk on">✓</span><span class="opc__t">SICOOB — NH</span></div>
+                <div class="opc"><span class="mk"></span><span class="opc__t">SICREDI — NH GTBA</span></div>
+              </div>
+            </div>
+            <div class="gr">
+              <div class="gr__c"><span class="gr__t">Período</span></div>
+              <div class="seg"><span class="on">Este mês</span><span>Anterior</span>
+                <span>Ano</span><span>Datas</span></div>
+            </div>
+            <div class="gr">
+              <div class="gr__c"><span class="gr__t">Situação</span></div>
+              <div class="seg"><span class="on">Todas</span><span>Pendentes</span><span>Conciliados</span></div>
+            </div>
+          </div>
+          <div class="gav__f"><button class="bt bt--c" onclick="fechar2()">Cancelar</button>
+            <button class="bt bt--a" onclick="fechar2()">Filtrar</button></div>
+        </div>
+      </div></div>
+      <div class="modelo__nota"><b>Ganha:</b> tela limpa e tudo num lugar só; é o mais parecido
+      com a Lista de fretes. <b>Perde:</b> para saber o que está filtrando, tem que abrir.</div>
+    </div>
+
+    <!-- ═══ 3 · BUSCA MANDA ═══ -->
+    <div class="modelo">
+      <div class="modelo__cab"><span class="modelo__n">3</span>
+        <span class="modelo__t">Busca manda</span></div>
+      <p class="modelo__p">O campo de busca fica fixo no topo — é o que você mais usa
+      ("BARAT"). O resto do filtro fica atrás do funil.</p>
+      <div class="fone"><div class="fone__topo"></div><div class="tela">
+        <div class="hero"><div><h3>Recebimento</h3><div class="s">29 · R$ 27.241,66</div></div></div>
+        <div class="busca">
+          <input value="BARAT" readonly>
+          <span class="f" onclick="abrir3()">⌕ 3</span>
+        </div>
+        <div class="chips" style="border-bottom:1px solid var(--line)">
+          <span class="chip on">Sicoob NH</span><span class="chip on">jul–ago</span>
+          <span class="chip on">Posto NH</span>
+        </div>
+        <div class="sel-todos"><span class="mk"></span> selecionar todos · 29
+          <span class="t">R$ 27.241,66</span></div>
+        <div class="dia"><span class="mk"></span> 12 de agosto <span class="t">R$ 757,64</span></div>
+        <div class="item"><span class="mk"></span><span class="item__t">Recebimento Pix BARATÃO</span>
+          <span class="item__v">757,64</span>
+          <span class="item__s"><span class="selo selo--pe">Pendente</span></span></div>
+        <div class="dia"><span class="mk on">✓</span> 11 de agosto <span class="t">R$ 1.656,79</span></div>
+        <div class="item"><span class="mk on">✓</span><span class="item__t">Recebimento Pix BARATÃO</span>
+          <span class="item__v">589,17</span>
+          <span class="item__s"><span class="selo selo--ok">Conciliado</span></span></div>
+        <div class="item"><span class="mk on">✓</span><span class="item__t">Recebimento Pix BARATÃO</span>
+          <span class="item__v">122,26</span>
+          <span class="item__s"><span class="selo selo--ok">Conciliado</span></span></div>
+        <div class="dia"><span class="mk"></span> 10 de agosto <span class="t">R$ 2.633,07</span></div>
+        <div class="item"><span class="mk"></span><span class="item__t">Recebimento Pix BARATÃO</span>
+          <span class="item__v">1.687,71</span>
+          <span class="item__s"><span class="selo selo--ok">Conciliado</span></span></div>
+
+        <div class="escuro" id="e3" onclick="fechar3()"></div>
+        <div class="gav" id="g3">
+          <div class="gav__p"></div>
+          <div class="gav__c"><b>Mais filtros</b><span class="l" onclick="fechar3()">limpar</span></div>
+          <div class="gav__b">
+            <div class="gr">
+              <div class="gr__c"><span class="gr__t">Empresa</span><span class="gr__n">1 de 5</span></div>
+              <div class="opcs">
+                <div class="opc on"><span class="mk on">✓</span><span class="opc__t">POSTO NH GOIATUBA</span></div>
+                <div class="opc"><span class="mk"></span><span class="opc__t">POSTO NH BR 153</span></div>
+                <div class="opc"><span class="mk"></span><span class="opc__t">FRESH START HOLDING</span></div>
+              </div>
+            </div>
+            <div class="gr">
+              <div class="gr__c"><span class="gr__t">Conta</span><span class="gr__n">1 de 4</span></div>
+              <div class="opcs">
+                <div class="opc on"><span class="mk on">✓</span><span class="opc__t">SICOOB — NH</span></div>
+                <div class="opc"><span class="mk"></span><span class="opc__t">CORA — NH GTBA</span></div>
+              </div>
+            </div>
+            <div class="gr">
+              <div class="gr__c"><span class="gr__t">Valor</span></div>
+              <div class="par"><input class="campo" placeholder="mín."><input class="campo" placeholder="máx."></div>
+            </div>
+          </div>
+          <div class="gav__f"><button class="bt bt--c" onclick="fechar3()">Cancelar</button>
+            <button class="bt bt--a" onclick="fechar3()">Filtrar</button></div>
+        </div>
+      </div></div>
+      <div class="modelo__nota"><b>Ganha:</b> achar por texto vira um toque, sem abrir nada.
+      <b>Perde:</b> dois lugares para filtrar — busca aqui, resto ali.</div>
+    </div>
+
+    <!-- ═══ 4 · PASSO A PASSO ═══ -->
+    <div class="modelo">
+      <div class="modelo__cab"><span class="modelo__n">4</span>
+        <span class="modelo__t">Passo a passo</span></div>
+      <p class="modelo__p">A gaveta conduz: primeiro empresa, depois conta, depois período.
+      Impossível chegar na conta antes da empresa.</p>
+      <div class="fone"><div class="fone__topo"></div><div class="tela">
+        <div class="hero"><div><h3>Recebimento</h3><div class="s">Sicoob NH · jul–ago</div></div>
+          <button class="ic" onclick="abrir4()">⌕ <span class="b">3</span></button></div>
+        <div class="sel-todos"><span class="mk"></span> selecionar todos · 29
+          <span class="t">R$ 27.241,66</span></div>
+        <div class="dia"><span class="mk"></span> 12 de agosto <span class="t">R$ 757,64</span></div>
+        <div class="item"><span class="mk"></span><span class="item__t">Recebimento Pix BARATÃO</span>
+          <span class="item__v">757,64</span>
+          <span class="item__s"><span class="selo selo--pe">Pendente</span></span></div>
+        <div class="dia"><span class="mk on">✓</span> 11 de agosto <span class="t">R$ 1.656,79</span></div>
+        <div class="item"><span class="mk on">✓</span><span class="item__t">Recebimento Pix BARATÃO</span>
+          <span class="item__v">589,17</span>
+          <span class="item__s"><span class="selo selo--ok">Conciliado</span></span></div>
+        <div class="item"><span class="mk on">✓</span><span class="item__t">Recebimento Pix BARATÃO</span>
+          <span class="item__v">122,26</span>
+          <span class="item__s"><span class="selo selo--ok">Conciliado</span></span></div>
+        <div class="dia"><span class="mk"></span> 10 de agosto <span class="t">R$ 2.633,07</span></div>
+        <div class="item"><span class="mk"></span><span class="item__t">Recebimento Pix BARATÃO</span>
+          <span class="item__v">1.687,71</span>
+          <span class="item__s"><span class="selo selo--ok">Conciliado</span></span></div>
+
+        <div class="escuro" id="e4" onclick="fechar4()"></div>
+        <div class="gav" id="g4">
+          <div class="gav__p"></div>
+          <div class="passos"><span class="passo on" id="p4a"></span>
+            <span class="passo" id="p4b"></span><span class="passo" id="p4c"></span></div>
+          <div class="pnome" id="p4nome">Passo 1 de 3 · <b>Escolha a empresa</b></div>
+          <div class="gav__b" id="g4corpo"></div>
+          <div class="gav__f">
+            <button class="bt bt--c" id="b4volta" onclick="passo(-1)">Cancelar</button>
+            <button class="bt bt--a" id="b4segue" onclick="passo(1)">Continuar</button>
+          </div>
+        </div>
+      </div></div>
+      <div class="modelo__nota"><b>Ganha:</b> a ordem certa é a única possível — a conta nunca
+      abre sem empresa. <b>Perde:</b> três toques até filtrar, mesmo para trocar só o período.</div>
+    </div>
+
+  </div>
+
+  <h2>Comparando</h2>
+  <div class="rolar">
+    <table class="tab-comp">
+      <thead><tr><th>&nbsp;</th><th>1 · Chips</th><th>2 · Gaveta</th><th>3 · Busca</th><th>4 · Passo</th></tr></thead>
+      <tbody>
+        <tr><td>Ver o que está filtrando sem abrir</td><td><b>sim</b></td><td>não</td><td>sim</td><td>não</td></tr>
+        <tr><td>Toques para trocar a conta</td><td><b>2</b></td><td>3</td><td>3</td><td>4</td></tr>
+        <tr><td>Toques para achar "BARAT"</td><td>3</td><td>3</td><td><b>1</b></td><td>4</td></tr>
+        <tr><td>Impede conta sem empresa</td><td>por aviso</td><td>por aviso</td><td>por aviso</td><td><b>por desenho</b></td></tr>
+        <tr><td>Espaço que rouba da lista</td><td>uma faixa</td><td><b>nenhum</b></td><td>duas faixas</td><td><b>nenhum</b></td></tr>
+        <tr><td>Parecido com a Lista de fretes</td><td>não</td><td><b>sim</b></td><td>não</td><td>não</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="small" style="margin-top:1rem">Dá para combinar: o <b>2</b> com a busca fixa do
+  <b>3</b> resolve os dois extremos — tela limpa e achar por texto num toque. Diga o número (ou
+  a mistura) e eu implemento.</p>
+
+  <p class="small" style="margin-top:1.4rem">Maquete. Nada foi alterado no sistema.</p>
+</div>
+
+<script>
+function ab(id, e){ document.getElementById(id).classList.add('on');
+                    document.getElementById(e).classList.add('on'); }
+function fe(id, e){ document.getElementById(id).classList.remove('on');
+                    document.getElementById(e).classList.remove('on'); }
+function abrir2(){ ab('g2','e2'); } function fechar2(){ fe('g2','e2'); }
+function abrir3(){ ab('g3','e3'); } function fechar3(){ fe('g3','e3'); }
+function abrir4(){ passoAtual = 0; desenharPasso(); ab('g4','e4'); }
+function fechar4(){ fe('g4','e4'); }
+
+/* ── modelo 4: a gaveta conduz ─────────────────────────────────── */
+var passoAtual = 0;
+var PASSOS = [
+  { nome:'Escolha a empresa', corpo:
+    '<div class="opcs">' +
+    '<div class="opc"><span class="mk"></span><span class="opc__t">FRESH START HOLDING</span></div>' +
+    '<div class="opc"><span class="mk"></span><span class="opc__t">POSTO NH BR 153</span></div>' +
+    '<div class="opc on"><span class="mk on">✓</span><span class="opc__t">POSTO NH GOIATUBA</span></div>' +
+    '<div class="opc"><span class="mk"></span><span class="opc__t">PREST SERVICE STATION</span></div>' +
+    '<div class="opc"><span class="mk"></span><span class="opc__t">QUALICONTAX</span></div></div>' +
+    '<div class="gr__n" style="margin-top:.4rem">Pode marcar mais de uma.</div>' },
+  { nome:'Escolha a conta', corpo:
+    '<div class="gr__n" style="margin-bottom:.35rem">Contas de <b>POSTO NH GOIATUBA</b>:</div>' +
+    '<div class="opcs">' +
+    '<div class="opc"><span class="mk"></span><span class="opc__t">CORA — NH GTBA</span></div>' +
+    '<div class="opc"><span class="mk"></span><span class="opc__t">SANTANDER — NH GTBA</span></div>' +
+    '<div class="opc on"><span class="mk on">✓</span><span class="opc__t">SICOOB — NH</span></div>' +
+    '<div class="opc"><span class="mk"></span><span class="opc__t">SICREDI — NH GTBA</span></div></div>' },
+  { nome:'Período e o resto', corpo:
+    '<div class="gr"><div class="gr__c"><span class="gr__t">Período</span></div>' +
+    '<div class="seg"><span class="on">Este mês</span><span>Anterior</span><span>Ano</span><span>Datas</span></div></div>' +
+    '<div class="gr"><div class="gr__c"><span class="gr__t">Situação</span></div>' +
+    '<div class="seg"><span class="on">Todas</span><span>Pendentes</span><span>Conciliados</span></div></div>' +
+    '<div class="gr"><div class="gr__c"><span class="gr__t">Descrição</span></div>' +
+    '<input class="campo" value="BARAT"></div>' }
+];
+function desenharPasso(){
+  document.getElementById('g4corpo').innerHTML = PASSOS[passoAtual].corpo;
+  document.getElementById('p4nome').innerHTML =
+    'Passo ' + (passoAtual + 1) + ' de 3 · <b>' + PASSOS[passoAtual].nome + '</b>';
+  ['p4a','p4b','p4c'].forEach(function(id, i){
+    document.getElementById(id).classList.toggle('on', i <= passoAtual);
+  });
+  document.getElementById('b4volta').textContent = passoAtual === 0 ? 'Cancelar' : 'Voltar';
+  document.getElementById('b4segue').textContent = passoAtual === 2 ? 'Filtrar' : 'Continuar';
+}
+function passo(d){
+  var novo = passoAtual + d;
+  if (novo < 0 || novo > 2) { fechar4(); return; }
+  passoAtual = novo;
+  desenharPasso();
+}
+</script>

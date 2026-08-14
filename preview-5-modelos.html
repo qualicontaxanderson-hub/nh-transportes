@@ -1,0 +1,486 @@
+<title>Cinco Telas de Recebimento</title>
+
+<style>
+:root{
+  --laranja:#E4923F; --laranja-deep:#CE722A;
+  --azul:#1D63A5; --azul-deep:#0C4C86; --azul-claro:#eaf1f9;
+  --verde:#17963C; --verde-esc:#0f6b2b; --roxo:#6D48C8;
+  --ink:#151d27; --ink-2:#3a4655; --muted:#6b7684;
+  --line:#e7ebf1; --line-2:#d9e0e8;
+  --card:#fff; --ground:#eef2f7; --surface:#f7f9fc;
+  --ok:#1c6b34; --ok-bg:#e4f4e8; --pend:#8a5a00; --pend-bg:#fdf0d6;
+  --danger:#a32d2d;
+  --sombra:0 1px 2px rgba(20,35,60,.05), 0 8px 24px rgba(20,35,60,.08);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --laranja:#C67F35; --laranja-deep:#A85F22;
+    --azul:#6CA9E2; --azul-deep:#9CC8F0; --azul-claro:#16283a;
+    --verde:#63c47f; --verde-esc:#8fd9a4; --roxo:#a58ae8;
+    --ink:#e9eef5; --ink-2:#c3ccd8; --muted:#95a1b1;
+    --line:#2a3341; --line-2:#36414f;
+    --card:#1b222c; --ground:#0e1319; --surface:#161d26;
+    --ok:#a5d9b4; --ok-bg:#17301f; --pend:#e9c583; --pend-bg:#2f2515;
+    --danger:#efa5a5;
+    --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.34);
+  }
+}
+:root[data-theme="dark"]{
+  --laranja:#C67F35; --laranja-deep:#A85F22;
+  --azul:#6CA9E2; --azul-deep:#9CC8F0; --azul-claro:#16283a;
+  --verde:#63c47f; --verde-esc:#8fd9a4; --roxo:#a58ae8;
+  --ink:#e9eef5; --ink-2:#c3ccd8; --muted:#95a1b1;
+  --line:#2a3341; --line-2:#36414f;
+  --card:#1b222c; --ground:#0e1319; --surface:#161d26;
+  --ok:#a5d9b4; --ok-bg:#17301f; --pend:#e9c583; --pend-bg:#2f2515;
+  --danger:#efa5a5;
+  --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.34);
+}
+
+*{ box-sizing:border-box; }
+body{ margin:0; background:var(--ground); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:15px; line-height:1.55; }
+.wrap{ max-width:1240px; margin:0 auto; padding:2rem 1rem 4rem; }
+h1{ font-size:1.6rem; margin:0 0 .35rem; letter-spacing:-.015em; text-wrap:balance; }
+.lead{ color:var(--muted); max-width:64ch; margin:0; }
+.small{ font-size:.82rem; color:var(--muted); }
+code{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.82em;
+  background:var(--surface); border:1px solid var(--line); border-radius:4px; padding:.05em .3em; }
+
+.aviso{ border-left:3px solid var(--laranja); background:var(--card); border:1px solid var(--line-2);
+  border-left-width:3px; border-radius:0 10px 10px 0; padding:.7rem .85rem; margin:1.2rem 0 0;
+  font-size:.88rem; box-shadow:var(--sombra); }
+
+/* ── grade dos cinco ─────────────────────────────────────────────── */
+.grade{ display:grid; gap:1.6rem; margin-top:1.6rem; }
+@media (min-width:760px){ .grade{ grid-template-columns:repeat(2,1fr); } }
+@media (min-width:1120px){ .grade{ grid-template-columns:repeat(3,1fr); } }
+
+.modelo{ display:flex; flex-direction:column; gap:.55rem; min-width:0; }
+.modelo__cab{ display:flex; align-items:baseline; gap:.5rem; }
+.modelo__n{ font-variant-numeric:tabular-nums; font-weight:800; font-size:.78rem;
+  color:var(--card); background:var(--ink); border-radius:6px; padding:.05rem .38rem; }
+.modelo__t{ font-weight:800; font-size:1rem; letter-spacing:-.01em; }
+.modelo__p{ font-size:.84rem; color:var(--muted); margin:0; }
+.modelo__nota{ font-size:.79rem; color:var(--muted); border-top:1px dashed var(--line-2);
+  padding-top:.45rem; }
+.modelo__nota b{ color:var(--ink-2); }
+
+/* ── moldura de celular ──────────────────────────────────────────── */
+.fone{ background:var(--card); border:1px solid var(--line-2); border-radius:20px;
+  box-shadow:var(--sombra); overflow:hidden; }
+.fone__topo{ background:linear-gradient(100deg,#E8A055,#7FC3E8); height:8px; }
+.tela{ height:520px; overflow-y:auto; overscroll-behavior:contain; }
+.tela::-webkit-scrollbar{ width:5px; }
+.tela::-webkit-scrollbar-thumb{ background:var(--line-2); border-radius:9px; }
+
+/* peças comuns */
+.hero{ background:linear-gradient(100deg,var(--laranja),var(--laranja-deep)); color:#fff;
+  padding:.7rem .8rem; display:flex; align-items:center; gap:.5rem; }
+.hero h3{ margin:0; font-size:.95rem; font-weight:800; letter-spacing:-.01em; }
+.hero .s{ font-size:.7rem; opacity:.85; }
+.hero .ic{ margin-left:auto; width:30px; height:30px; border-radius:9px; flex:0 0 auto;
+  background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.4);
+  display:grid; place-items:center; font-size:.85rem; }
+.val{ font-variant-numeric:tabular-nums; font-weight:800; color:var(--verde);
+  letter-spacing:-.02em; }
+.selo{ font-size:.63rem; font-weight:800; border-radius:5px; padding:.08rem .34rem;
+  white-space:nowrap; }
+.selo--ok{ background:var(--ok-bg); color:var(--ok); }
+.selo--pe{ background:var(--pend-bg); color:var(--pend); }
+.selo--fo{ background:rgba(109,72,200,.13); color:var(--roxo); font-weight:700; }
+.mk{ width:17px; height:17px; border-radius:5px; border:1.5px solid var(--line-2);
+  flex:0 0 auto; display:grid; place-items:center; font-size:.62rem; color:#fff; }
+.mk.on{ background:var(--azul); border-color:var(--azul); }
+.barra-sel{ position:sticky; bottom:0; background:var(--azul-deep); color:#fff;
+  padding:.45rem .65rem; display:flex; align-items:center; gap:.45rem; font-size:.76rem;
+  font-weight:700; }
+.barra-sel .b{ background:rgba(255,255,255,.2); border-radius:7px; padding:.2rem .5rem; }
+.barra-sel .b--w{ background:#fff; color:var(--azul-deep); }
+
+/* ═══ A · EXTRATO ═════════════════════════════════════════════════ */
+.a-fil{ display:flex; align-items:center; gap:.4rem; padding:.45rem .7rem;
+  border-bottom:1px solid var(--line); font-size:.74rem; color:var(--muted); }
+.a-fil b{ color:var(--ink); }
+.a-fil .lnk{ margin-left:auto; color:var(--azul); font-weight:700; }
+.a-dia{ display:flex; align-items:baseline; gap:.4rem; padding:.4rem .7rem .2rem;
+  font-size:.68rem; text-transform:uppercase; letter-spacing:.07em; font-weight:800;
+  color:var(--muted); background:var(--surface); position:sticky; top:0; }
+.a-dia .t{ margin-left:auto; font-size:.72rem; text-transform:none; letter-spacing:0;
+  color:var(--ink-2); font-variant-numeric:tabular-nums; }
+.a-lin{ display:flex; align-items:center; gap:.55rem; padding:.5rem .7rem;
+  border-bottom:1px solid var(--line); }
+.a-lin__c{ min-width:0; flex:1; }
+.a-lin__t{ font-size:.83rem; font-weight:600; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; }
+.a-lin__s{ font-size:.7rem; color:var(--muted); display:flex; gap:.3rem; align-items:center; }
+.a-lin__v{ text-align:right; font-size:.86rem; }
+
+/* ═══ B · CARTÃO CALMO ════════════════════════════════════════════ */
+.b-cab{ display:flex; align-items:center; gap:.5rem; padding:.5rem .7rem;
+  font-size:.73rem; font-weight:700; color:var(--muted); }
+.b-cab .lnk{ margin-left:auto; color:var(--azul); }
+.b-lst{ padding:0 .6rem .6rem; display:flex; flex-direction:column; gap:.45rem; }
+.b-card{ display:flex; gap:.55rem; border:1px solid var(--line-2); border-radius:12px;
+  padding:.55rem .6rem; background:var(--card); position:relative; overflow:hidden; }
+.b-card::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:3px;
+  background:var(--ok); }
+.b-card.pend::before{ background:var(--pend); }
+.b-card__c{ min-width:0; flex:1; }
+.b-card__l1{ display:flex; align-items:center; gap:.4rem; font-size:.71rem; color:var(--muted); }
+.b-card__t{ font-size:.88rem; font-weight:700; margin-top:.1rem;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.b-card__l3{ display:flex; align-items:flex-end; gap:.5rem; margin-top:.35rem; }
+.b-card__v{ font-size:1.02rem; }
+.b-card__a{ margin-left:auto; display:flex; gap:.3rem; }
+.mini{ border:1px solid var(--line-2); background:var(--card); color:var(--azul);
+  border-radius:8px; padding:.22rem .5rem; font-size:.73rem; font-weight:700; }
+
+/* ═══ C · POR DIA ═════════════════════════════════════════════════ */
+.c-dia{ display:flex; align-items:center; gap:.5rem; padding:.45rem .7rem;
+  background:var(--azul-claro); color:var(--azul-deep); font-size:.76rem; font-weight:800;
+  position:sticky; top:0; border-bottom:1px solid var(--line-2); }
+.c-dia .t{ margin-left:auto; font-variant-numeric:tabular-nums; }
+.c-item{ display:grid; grid-template-columns:auto 1fr auto; gap:.15rem .55rem;
+  padding:.45rem .7rem; border-bottom:1px solid var(--line); align-items:center; }
+.c-item__t{ font-size:.83rem; font-weight:600; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; }
+.c-item__v{ text-align:right; font-size:.85rem; }
+.c-item__s{ grid-column:2/4; display:flex; gap:.3rem; align-items:center; font-size:.7rem;
+  color:var(--muted); }
+
+/* ═══ D · FOCO NO PENDENTE ════════════════════════════════════════ */
+.d-tit{ display:flex; align-items:center; gap:.45rem; padding:.55rem .7rem .3rem;
+  font-size:.74rem; font-weight:800; text-transform:uppercase; letter-spacing:.05em; }
+.d-tit--p{ color:var(--pend); }
+.d-tit--o{ color:var(--muted); }
+.d-tit .n{ background:var(--pend-bg); color:var(--pend); border-radius:99px;
+  padding:0 .4rem; font-size:.7rem; }
+.d-card{ margin:0 .6rem .45rem; border:1px solid var(--pend); background:var(--pend-bg);
+  border-radius:12px; padding:.55rem .6rem; }
+.d-card__t{ font-size:.87rem; font-weight:700; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; }
+.d-card__l{ display:flex; align-items:center; gap:.4rem; font-size:.71rem; color:var(--pend); }
+.d-card__b{ display:flex; align-items:center; gap:.4rem; margin-top:.4rem; }
+.d-acao{ background:var(--azul); color:#fff; border:0; border-radius:9px;
+  padding:.32rem .7rem; font-size:.78rem; font-weight:800; margin-left:auto; }
+.d-fold{ margin:.2rem .6rem .6rem; border:1px solid var(--line-2); border-radius:12px;
+  overflow:hidden; }
+.d-fold__c{ display:flex; align-items:center; gap:.5rem; padding:.5rem .6rem;
+  background:var(--surface); font-size:.79rem; font-weight:700; color:var(--muted); }
+.d-fold__c .v{ margin-left:auto; font-variant-numeric:tabular-nums; color:var(--ink-2); }
+.d-mini{ display:flex; align-items:center; gap:.5rem; padding:.42rem .6rem;
+  border-top:1px solid var(--line); font-size:.78rem; }
+
+/* ═══ E · TABELA DENSA ════════════════════════════════════════════ */
+.e-chips{ display:flex; gap:.3rem; padding:.45rem .6rem; overflow-x:auto;
+  border-bottom:1px solid var(--line); }
+.e-chip{ border:1px solid var(--line-2); border-radius:99px; padding:.15rem .5rem;
+  font-size:.71rem; font-weight:700; white-space:nowrap; background:var(--card); }
+.e-chip.on{ background:var(--azul-claro); border-color:var(--azul); color:var(--azul-deep); }
+.e-tab{ width:100%; border-collapse:collapse; font-size:.74rem; }
+.e-tab th{ position:sticky; top:0; background:var(--surface); color:var(--muted);
+  font-size:.63rem; text-transform:uppercase; letter-spacing:.05em; text-align:left;
+  padding:.35rem .45rem; border-bottom:1px solid var(--line-2); }
+.e-tab td{ padding:.32rem .45rem; border-bottom:1px solid var(--line); }
+.e-tab .v{ text-align:right; font-variant-numeric:tabular-nums; font-weight:700;
+  color:var(--verde); }
+.e-tab .d{ color:var(--muted); font-variant-numeric:tabular-nums; }
+
+.como{ margin-top:2.4rem; }
+.como h2{ font-size:1.05rem; margin:0 0 .6rem; }
+.tab-comp{ width:100%; border-collapse:collapse; font-size:.85rem; background:var(--card);
+  border:1px solid var(--line-2); border-radius:12px; overflow:hidden; }
+.tab-comp th, .tab-comp td{ padding:.5rem .65rem; border-bottom:1px solid var(--line);
+  text-align:left; vertical-align:top; }
+.tab-comp th{ background:var(--surface); font-size:.72rem; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--muted); }
+.tab-comp tr:last-child td{ border-bottom:0; }
+.rolar{ overflow-x:auto; }
+</style>
+
+<div class="wrap">
+
+  <h1>Cinco telas de Recebimento</h1>
+  <p class="lead">Cinco jeitos diferentes de resolver a mesma tela — não cinco cores da mesma
+  ideia. Escolha uma (ou peças de várias) e eu implemento.</p>
+
+  <div class="aviso">
+    <b>Antes:</b> você tem razão sobre o <b>selecionar todos</b>. Hoje ele só aparece
+    <em>depois</em> que você marca o primeiro lançamento, o que é inútil — o momento em que
+    você quer "todos" é o primeiro toque. <b>Nos cinco modelos abaixo ele está visível desde o
+    começo</b>, no cabeçalho da lista.
+  </div>
+
+  <div class="grade">
+
+    <!-- ═══════════ A ═══════════ -->
+    <div class="modelo">
+      <div class="modelo__cab"><span class="modelo__n">A</span>
+        <span class="modelo__t">Extrato</span></div>
+      <p class="modelo__p">Como o app do banco: linhas finas, agrupadas por dia, com subtotal do
+      dia. Cabe muita coisa na tela.</p>
+      <div class="fone"><div class="fone__topo"></div><div class="tela">
+        <div class="hero"><div><h3>Recebimento</h3><div class="s">Sicoob NH · jul–ago</div></div>
+          <div class="ic">⌕</div></div>
+        <div class="a-fil"><b>29</b> lançamentos · <b>R$ 27.241,66</b>
+          <span class="lnk">selecionar todos</span></div>
+
+        <div class="a-dia">Qua, 12 ago <span class="t">R$ 757,64</span></div>
+        <div class="a-lin"><span class="mk"></span><div class="a-lin__c">
+          <div class="a-lin__t">Recebimento Pix BARATÃO</div>
+          <div class="a-lin__s"><span class="selo selo--pe">Pendente</span></div></div>
+          <div class="a-lin__v val">757,64</div></div>
+
+        <div class="a-dia">Ter, 11 ago <span class="t">R$ 1.656,79</span></div>
+        <div class="a-lin"><span class="mk on">✓</span><div class="a-lin__c">
+          <div class="a-lin__t">Recebimento Pix BARATÃO</div>
+          <div class="a-lin__s"><span class="selo selo--ok">Conciliado</span>
+            <span class="selo selo--fo">Pix</span></div></div>
+          <div class="a-lin__v val">589,17</div></div>
+        <div class="a-lin"><span class="mk on">✓</span><div class="a-lin__c">
+          <div class="a-lin__t">Recebimento Pix BARATÃO</div>
+          <div class="a-lin__s"><span class="selo selo--ok">Conciliado</span>
+            <span class="selo selo--fo">Pix</span></div></div>
+          <div class="a-lin__v val">122,26</div></div>
+        <div class="a-lin"><span class="mk"></span><div class="a-lin__c">
+          <div class="a-lin__t">Recebimento Pix BARATÃO</div>
+          <div class="a-lin__s"><span class="selo selo--ok">Conciliado</span>
+            <span class="selo selo--fo">Pix</span></div></div>
+          <div class="a-lin__v val">945,36</div></div>
+
+        <div class="a-dia">Seg, 10 ago <span class="t">R$ 2.633,07</span></div>
+        <div class="a-lin"><span class="mk"></span><div class="a-lin__c">
+          <div class="a-lin__t">Recebimento Pix BARATÃO</div>
+          <div class="a-lin__s"><span class="selo selo--ok">Conciliado</span></div></div>
+          <div class="a-lin__v val">1.687,71</div></div>
+        <div class="a-lin"><span class="mk"></span><div class="a-lin__c">
+          <div class="a-lin__t">Recebimento Pix BARATÃO</div>
+          <div class="a-lin__s"><span class="selo selo--ok">Conciliado</span></div></div>
+          <div class="a-lin__v val">945,36</div></div>
+
+        <div class="barra-sel"><span>2 marcados</span>
+          <span style="margin-left:auto"></span>
+          <span class="b b--w">Reverter</span><span class="b">Excluir</span></div>
+      </div></div>
+      <div class="modelo__nota"><b>Ganha:</b> densidade e o subtotal do dia, que ajuda a bater
+      com o extrato. <b>Perde:</b> a ação por linha some — tudo passa a ser em lote.</div>
+    </div>
+
+    <!-- ═══════════ B ═══════════ -->
+    <div class="modelo">
+      <div class="modelo__cab"><span class="modelo__n">B</span>
+        <span class="modelo__t">Cartão calmo</span></div>
+      <p class="modelo__p">O que existe hoje, com menos peso: faixa colorida no lugar do selo
+      gritado, valor em destaque, ação discreta.</p>
+      <div class="fone"><div class="fone__topo"></div><div class="tela">
+        <div class="hero"><div><h3>Recebimento</h3><div class="s">29 · R$ 27.241,66</div></div>
+          <div class="ic">⌕</div></div>
+        <div class="b-cab"><span class="mk"></span> selecionar todos
+          <span class="lnk">ordenar ▾</span></div>
+        <div class="b-lst">
+          <div class="b-card pend"><span class="mk"></span><div class="b-card__c">
+            <div class="b-card__l1">12/08/2026 <span class="selo selo--pe">Pendente</span></div>
+            <div class="b-card__t">Recebimento Pix BARATÃO TECNOLOG</div>
+            <div class="b-card__l3"><span class="val b-card__v">R$ 757,64</span>
+              <span class="b-card__a"><span class="mini">Conciliar</span>
+                <span class="mini">⋯</span></span></div></div></div>
+
+          <div class="b-card"><span class="mk on">✓</span><div class="b-card__c">
+            <div class="b-card__l1">11/08/2026 <span class="selo selo--fo">Pix</span></div>
+            <div class="b-card__t">Recebimento Pix BARATÃO TECNOLOG</div>
+            <div class="b-card__l3"><span class="val b-card__v">R$ 589,17</span>
+              <span class="b-card__a"><span class="mini">Reverter</span>
+                <span class="mini">⋯</span></span></div></div></div>
+
+          <div class="b-card"><span class="mk"></span><div class="b-card__c">
+            <div class="b-card__l1">11/08/2026 <span class="selo selo--fo">Pix</span></div>
+            <div class="b-card__t">Recebimento Pix BARATÃO TECNOLOG</div>
+            <div class="b-card__l3"><span class="val b-card__v">R$ 122,26</span>
+              <span class="b-card__a"><span class="mini">Reverter</span>
+                <span class="mini">⋯</span></span></div></div></div>
+
+          <div class="b-card"><span class="mk"></span><div class="b-card__c">
+            <div class="b-card__l1">10/08/2026 <span class="selo selo--fo">Pix</span></div>
+            <div class="b-card__t">Recebimento Pix BARATÃO TECNOLOG</div>
+            <div class="b-card__l3"><span class="val b-card__v">R$ 945,36</span>
+              <span class="b-card__a"><span class="mini">Reverter</span>
+                <span class="mini">⋯</span></span></div></div></div>
+        </div>
+        <div class="barra-sel"><span>1 marcado</span><span style="margin-left:auto"></span>
+          <span class="b b--w">Reverter</span><span class="b">Excluir</span></div>
+      </div></div>
+      <div class="modelo__nota"><b>Ganha:</b> é o mais parecido com o que já existe — mudança
+      pequena. <b>Perde:</b> continua cabendo pouca coisa por tela.</div>
+    </div>
+
+    <!-- ═══════════ C ═══════════ -->
+    <div class="modelo">
+      <div class="modelo__cab"><span class="modelo__n">C</span>
+        <span class="modelo__t">Dia a dia</span></div>
+      <p class="modelo__p">A data manda. Cabeçalho de dia fixo enquanto rola, com total e
+      "marcar o dia inteiro" — para conferir contra o extrato.</p>
+      <div class="fone"><div class="fone__topo"></div><div class="tela">
+        <div class="hero"><div><h3>Recebimento</h3><div class="s">Sicoob NH</div></div>
+          <div class="ic">⌕</div></div>
+        <div class="b-cab"><span class="mk"></span> selecionar todos · 29
+          <span class="lnk">R$ 27.241,66</span></div>
+
+        <div class="c-dia"><span class="mk"></span> 12 de agosto <span class="t">R$ 757,64</span></div>
+        <div class="c-item"><span class="mk"></span>
+          <span class="c-item__t">Recebimento Pix BARATÃO</span>
+          <span class="c-item__v val">757,64</span>
+          <span class="c-item__s"><span class="selo selo--pe">Pendente</span> 04.518.744/0001-09</span></div>
+
+        <div class="c-dia"><span class="mk on">✓</span> 11 de agosto <span class="t">R$ 1.656,79</span></div>
+        <div class="c-item"><span class="mk on">✓</span>
+          <span class="c-item__t">Recebimento Pix BARATÃO</span>
+          <span class="c-item__v val">589,17</span>
+          <span class="c-item__s"><span class="selo selo--ok">Conciliado</span>
+            <span class="selo selo--fo">Pix</span></span></div>
+        <div class="c-item"><span class="mk on">✓</span>
+          <span class="c-item__t">Recebimento Pix BARATÃO</span>
+          <span class="c-item__v val">122,26</span>
+          <span class="c-item__s"><span class="selo selo--ok">Conciliado</span>
+            <span class="selo selo--fo">Pix</span></span></div>
+        <div class="c-item"><span class="mk on">✓</span>
+          <span class="c-item__t">Recebimento Pix BARATÃO</span>
+          <span class="c-item__v val">945,36</span>
+          <span class="c-item__s"><span class="selo selo--ok">Conciliado</span></span></div>
+
+        <div class="c-dia"><span class="mk"></span> 10 de agosto <span class="t">R$ 2.633,07</span></div>
+        <div class="c-item"><span class="mk"></span>
+          <span class="c-item__t">Recebimento Pix BARATÃO</span>
+          <span class="c-item__v val">1.687,71</span>
+          <span class="c-item__s"><span class="selo selo--ok">Conciliado</span></span></div>
+
+        <div class="barra-sel"><span>3 marcados · R$ 1.656,79</span>
+          <span style="margin-left:auto"></span>
+          <span class="b b--w">Reverter</span><span class="b">Excluir</span></div>
+      </div></div>
+      <div class="modelo__nota"><b>Ganha:</b> marcar um dia inteiro com um toque, e a barra
+      soma o que está marcado. <b>Perde:</b> só faz sentido ordenado por data.</div>
+    </div>
+
+    <!-- ═══════════ D ═══════════ -->
+    <div class="modelo">
+      <div class="modelo__cab"><span class="modelo__n">D</span>
+        <span class="modelo__t">Foco no pendente</span></div>
+      <p class="modelo__p">A tela abre no que falta fazer. O que já está conciliado fica
+      recolhido, sem sumir.</p>
+      <div class="fone"><div class="fone__topo"></div><div class="tela">
+        <div class="hero"><div><h3>Recebimento</h3><div class="s">2 esperando você</div></div>
+          <div class="ic">⌕</div></div>
+
+        <div class="d-tit d-tit--p">Precisa de você <span class="n">2</span>
+          <span style="margin-left:auto;font-weight:700;text-transform:none;letter-spacing:0"
+                class="small">selecionar todos</span></div>
+
+        <div class="d-card">
+          <div class="d-card__l">12/08/2026 · 04.518.744/0001-09</div>
+          <div class="d-card__t">Recebimento Pix BARATÃO TECNOLOG</div>
+          <div class="d-card__b"><span class="mk"></span>
+            <span class="val" style="font-size:1.05rem">R$ 757,64</span>
+            <button class="d-acao">Conciliar</button></div></div>
+
+        <div class="d-card">
+          <div class="d-card__l">11/08/2026 · 04.518.744/0001-09</div>
+          <div class="d-card__t">Recebimento Pix BARATÃO TECNOLOG</div>
+          <div class="d-card__b"><span class="mk"></span>
+            <span class="val" style="font-size:1.05rem">R$ 589,17</span>
+            <button class="d-acao">Conciliar</button></div></div>
+
+        <div class="d-tit d-tit--o">Já conciliados</div>
+        <div class="d-fold">
+          <div class="d-fold__c"><span class="mk"></span> 27 lançamentos
+            <span class="v">R$ 25.894,85 ▾</span></div>
+          <div class="d-mini"><span class="mk"></span> 11/08 · BARATÃO
+            <span class="val" style="margin-left:auto">122,26</span></div>
+          <div class="d-mini"><span class="mk"></span> 10/08 · BARATÃO
+            <span class="val" style="margin-left:auto">945,36</span></div>
+          <div class="d-mini"><span class="mk"></span> 10/08 · BARATÃO
+            <span class="val" style="margin-left:auto">1.687,71</span></div>
+        </div>
+      </div></div>
+      <div class="modelo__nota"><b>Ganha:</b> a tela vira lista de tarefa — some a pergunta
+      "o que falta?". <b>Perde:</b> ruim para quem entra só para conferir o mês fechado.</div>
+    </div>
+
+    <!-- ═══════════ E ═══════════ -->
+    <div class="modelo">
+      <div class="modelo__cab"><span class="modelo__n">E</span>
+        <span class="modelo__t">Tabela densa</span></div>
+      <p class="modelo__p">A mesma tabela do computador, encolhida com honestidade: filtro em
+      chips que rolam, muitas linhas por tela.</p>
+      <div class="fone"><div class="fone__topo"></div><div class="tela">
+        <div class="hero"><div><h3>Recebimento</h3><div class="s">29 · R$ 27.241,66</div></div>
+          <div class="ic">⌕</div></div>
+        <div class="e-chips">
+          <span class="e-chip on">Sicoob NH</span><span class="e-chip on">jul–ago</span>
+          <span class="e-chip on">“BARAT”</span><span class="e-chip">situação</span>
+          <span class="e-chip">forma</span><span class="e-chip">valor</span>
+        </div>
+        <table class="e-tab">
+          <thead><tr><th style="width:22px"><span class="mk"></span></th>
+            <th>Data</th><th>Descrição</th><th style="text-align:right">Valor</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mk"></span></td><td class="d">12/08</td>
+              <td>BARATÃO <span class="selo selo--pe">Pend</span></td><td class="v">757,64</td></tr>
+            <tr><td><span class="mk on">✓</span></td><td class="d">11/08</td>
+              <td>BARATÃO <span class="selo selo--fo">Pix</span></td><td class="v">589,17</td></tr>
+            <tr><td><span class="mk on">✓</span></td><td class="d">11/08</td>
+              <td>BARATÃO <span class="selo selo--fo">Pix</span></td><td class="v">122,26</td></tr>
+            <tr><td><span class="mk"></span></td><td class="d">10/08</td>
+              <td>BARATÃO <span class="selo selo--fo">Pix</span></td><td class="v">945,36</td></tr>
+            <tr><td><span class="mk"></span></td><td class="d">10/08</td>
+              <td>BARATÃO <span class="selo selo--fo">Pix</span></td><td class="v">1.687,71</td></tr>
+            <tr><td><span class="mk"></span></td><td class="d">07/08</td>
+              <td>BARATÃO <span class="selo selo--fo">Pix</span></td><td class="v">713,73</td></tr>
+            <tr><td><span class="mk"></span></td><td class="d">06/08</td>
+              <td>BARATÃO <span class="selo selo--fo">Pix</span></td><td class="v">960,30</td></tr>
+            <tr><td><span class="mk"></span></td><td class="d">05/08</td>
+              <td>BARATÃO <span class="selo selo--fo">Pix</span></td><td class="v">461,53</td></tr>
+            <tr><td><span class="mk"></span></td><td class="d">04/08</td>
+              <td>BARATÃO <span class="selo selo--fo">Pix</span></td><td class="v">899,05</td></tr>
+            <tr><td><span class="mk"></span></td><td class="d">03/08</td>
+              <td>BARATÃO <span class="selo selo--fo">Pix</span></td><td class="v">507,35</td></tr>
+            <tr><td><span class="mk"></span></td><td class="d">31/07</td>
+              <td>BARATÃO <span class="selo selo--fo">Pix</span></td><td class="v">1.001,02</td></tr>
+          </tbody>
+        </table>
+        <div class="barra-sel"><span>2 marcados</span><span style="margin-left:auto"></span>
+          <span class="b b--w">Reverter</span><span class="b">Excluir</span></div>
+      </div></div>
+      <div class="modelo__nota"><b>Ganha:</b> vê 11 linhas de uma vez — o dobro de hoje.
+      <b>Perde:</b> letra pequena, e a ação por linha vai toda para o lote.</div>
+    </div>
+
+  </div>
+
+  <div class="como">
+    <h2>Qual escolher</h2>
+    <div class="rolar">
+      <table class="tab-comp">
+        <thead><tr><th>Se o seu dia é…</th><th>Modelo</th><th>Por quê</th></tr></thead>
+        <tbody>
+          <tr><td>Bater o extrato do banco linha por linha</td><td><b>A · Extrato</b></td>
+            <td>Subtotal por dia é o que você compara com o app do banco.</td></tr>
+          <tr><td>Mexer pouco, só não quero feio</td><td><b>B · Cartão calmo</b></td>
+            <td>É o de hoje mais leve. A troca é pequena e sem risco.</td></tr>
+          <tr><td>Conferir dia fechado, marcar em bloco</td><td><b>C · Dia a dia</b></td>
+            <td>Um toque marca o dia inteiro e a barra soma o marcado.</td></tr>
+          <tr><td>Entrar, resolver o que falta e sair</td><td><b>D · Foco no pendente</b></td>
+            <td>Abre nos 2 pendentes; os 27 conciliados ficam recolhidos.</td></tr>
+          <tr><td>Ver muita coisa junta, celular e PC</td><td><b>E · Tabela densa</b></td>
+            <td>11 linhas por tela contra 4 ou 5 de hoje.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small" style="margin-top:.9rem">Dá para misturar: o cabeçalho de dia do <b>C</b>
+    com a densidade do <b>A</b>, por exemplo. Diga a letra (ou a mistura) e eu implemento — e o
+    mesmo padrão vale depois para Pagamentos e para as outras listas.</p>
+  </div>
+
+  <p class="small" style="margin-top:1.6rem">Maquete. Nada foi alterado no sistema.</p>
+</div>

@@ -5,43 +5,41 @@
 {% block styles %}
 <style>
 /* ═══════════════════════════════════════════════════════════════════════
-   Recebimento — padrão de lista do sistema.
-   Mesma linguagem da Lista de fretes: cabeçalho em degradê, números em
-   grade, cartão por lançamento no celular e tabela no computador.
-   O MESMO markup serve aos dois: quem troca a apresentação é o CSS, não
-   uma segunda cópia da lista no HTML.
+   Recebimento — lista "Dia a dia" + filtro em passo a passo.
+
+   A data manda: cada dia tem cabeçalho com total e uma caixa que marca o
+   dia inteiro. O filtro conduz — empresa, depois conta, depois o resto —
+   e por isso é impossível pedir conta sem empresa.
    ═════════════════════════════════════════════════════════════════════ */
 #rcb{
   --laranja:#E4923F; --laranja-deep:#CE722A;
-  --azul:#1D63A5; --azul-deep:#0C4C86;
-  --verde:#17963C;
-  --roxo:#6D48C8;
-  --ink:#1c2530; --muted:#6b7684; --line:#e6eaf0; --line-2:#d8dfe8;
-  --surface:#f7f9fc;
+  --azul:#1D63A5; --azul-deep:#0C4C86; --azul-claro:#eaf1f9;
+  --verde:#17963C; --roxo:#6D48C8;
+  --ink:#151d27; --ink-2:#3a4655; --muted:#6b7684;
+  --line:#e7ebf1; --line-2:#d9e0e8; --surface:#f7f9fc;
   --ok:#1c6b34; --ok-bg:#e4f4e8;
   --pend:#8a5a00; --pend-bg:#fdf0d6;
   --ign:#4b5563; --ign-bg:#eceef1;
-  --danger:#a32d2d; --danger-bg:#fceaea;
+  --danger:#a32d2d;
   color:var(--ink);
 }
 
-/* ── Cabeçalho ─────────────────────────────────────────────────────── */
-#rcb .hero{ background:linear-gradient(100deg, var(--laranja) 0%, var(--laranja-deep) 100%);
-  color:#fff; border-radius:14px; padding:.9rem 1.05rem; display:flex; align-items:center;
-  gap:.7rem; margin-bottom:.8rem; }
-#rcb .hero h4{ margin:0; font-size:1.12rem; font-weight:800; letter-spacing:-.01em; }
-#rcb .hero .sub{ font-size:.78rem; opacity:.85; }
-#rcb .hero .fil{ margin-left:auto; flex:0 0 auto; background:rgba(255,255,255,.18);
-  border:1px solid rgba(255,255,255,.38); color:#fff; border-radius:10px;
-  padding:.42rem .7rem; font-size:.82rem; font-weight:700; cursor:pointer;
-  display:inline-flex; align-items:center; gap:.35rem; }
+/* ── Cabeçalho ────────────────────────────────────────────────────── */
+#rcb .hero{ background:linear-gradient(100deg,var(--laranja),var(--laranja-deep));
+  color:#fff; border-radius:14px; padding:.85rem 1rem; display:flex;
+  align-items:center; gap:.7rem; margin-bottom:.8rem; }
+#rcb .hero h4{ margin:0; font-size:1.1rem; font-weight:800; letter-spacing:-.01em; }
+#rcb .hero .sub{ font-size:.76rem; opacity:.88; }
+#rcb .hero .fil{ margin-left:auto; flex:0 0 auto; background:rgba(255,255,255,.2);
+  border:1px solid rgba(255,255,255,.4); color:#fff; border-radius:10px;
+  padding:.4rem .65rem; font-size:.82rem; font-weight:800; cursor:pointer;
+  display:inline-flex; align-items:center; gap:.35rem; font-family:inherit; }
 #rcb .hero .fil:hover{ background:rgba(255,255,255,.3); }
-#rcb .hero .fil .cnt{ background:#fff; color:var(--laranja-deep); border-radius:999px;
-  min-width:19px; height:19px; display:inline-grid; place-items:center;
-  font-size:.7rem; font-weight:800; }
+#rcb .hero .fil .cnt{ background:#fff; color:var(--laranja-deep); border-radius:99px;
+  min-width:18px; height:18px; display:inline-grid; place-items:center; font-size:.68rem; }
 #rcb .hero .fil .cnt[hidden]{ display:none; }
 
-/* ── Números ───────────────────────────────────────────────────────── */
+/* ── Números ──────────────────────────────────────────────────────── */
 #rcb .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:.7rem; }
 @media (min-width:768px){ #rcb .nums{ grid-template-columns:repeat(4,1fr); } }
 #rcb .nums .n{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
@@ -52,143 +50,79 @@
 #rcb .v.azul{ color:var(--azul); } #rcb .v.verde{ color:var(--verde); }
 #rcb .v.amb{ color:var(--pend); } #rcb .v.cinza{ color:var(--muted); }
 
-/* ── Filtros (collapse do funil, como na Lista de fretes) ──────────
-   Empresa e Conta são listas de MARCAÇÃO, não <select multiple>: aceitam
-   várias, e a caixa de marcar funciona igual no iPhone, no Android e no
-   computador. A conta acompanha as empresas marcadas.                  */
-#rcb .form-label{ font-size:.72rem; color:#6b7280; font-weight:600; }
-#rcb .form-select, #rcb .form-control{ font-size:.8rem; }
-
-#rcb .gr__cab{ display:flex; align-items:baseline; gap:.4rem; margin-bottom:.25rem; }
-#rcb .gr__t{ font-size:.72rem; color:#6b7280; font-weight:700;
-  text-transform:uppercase; letter-spacing:.04em; }
-#rcb .gr__c{ font-size:.7rem; color:var(--muted); }
-#rcb .gr__a{ margin-left:auto; background:none; border:0; padding:0; cursor:pointer;
-  font-size:.72rem; font-weight:700; color:var(--azul); font-family:inherit; }
-#rcb .gr__a[hidden]{ display:none; }
-
-#rcb .opcs{ border:1px solid var(--line-2); border-radius:10px; overflow:hidden;
-  max-height:190px; overflow-y:auto; background:#fff; }
-@media (min-width:768px){
-  #rcb .opcs{ display:grid; grid-template-columns:1fr 1fr; max-height:230px; }
-}
-#rcb .opc{ display:flex; align-items:center; gap:.55rem; padding:.5rem .6rem;
-  border-bottom:1px solid var(--line); cursor:pointer; font-size:.82rem;
-  margin:0; min-width:0; }
-#rcb .opc:last-child{ border-bottom:0; }
-#rcb .opc:hover{ background:var(--surface); }
-#rcb .opc input{ width:18px; height:18px; accent-color:var(--azul); flex:0 0 auto; margin:0; }
-#rcb .opc__t{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
-#rcb .opc__s{ display:block; font-size:.71rem; color:var(--muted); }
-#rcb .opc:has(input:checked){ background:#eaf1f9; }
-#rcb .opcs .vazio-f{ padding:.75rem .6rem; font-size:.78rem; color:var(--muted);
-  text-align:center; grid-column:1/-1; }
-#rcb .hero .fil .cnt{ background:#fff; color:var(--laranja-deep); border-radius:999px;
-  width:8px; height:8px; display:inline-block; }
-
-/* ── Lista ─────────────────────────────────────────────────────────── */
+/* ── Lista ────────────────────────────────────────────────────────── */
 #rcb .lst{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
   overflow:hidden; }
-#rcb .lst__cab{ display:none; }
-#rcb .lin{ border-bottom:1px solid var(--line); }
-#rcb .lin:last-child{ border-bottom:0; }
-
-/* celular: cartão */
-#rcb .lin{
-  display:grid; gap:.15rem .5rem; padding:.55rem .7rem; align-items:center;
-  grid-template-columns:auto 1fr auto;
-  grid-template-areas:
-    "chk   data   status"
-    "desc  desc   desc"
-    "doc   forma  forma"
-    "valor valor  acao";
-}
-#rcb .lin.sel{ background:#eef5fd; box-shadow:inset 3px 0 0 var(--azul); }
-#rcb .c-chk{ grid-area:chk; }
-#rcb .c-data{ grid-area:data; font-size:.76rem; color:var(--muted); font-weight:700;
+#rcb .topo-lst{ display:flex; align-items:center; gap:.55rem; padding:.55rem .7rem;
+  border-bottom:1px solid var(--line); font-size:.8rem; font-weight:700;
+  color:var(--muted); cursor:pointer; user-select:none; margin:0; }
+#rcb .topo-lst .tot{ margin-left:auto; color:var(--azul-deep);
   font-variant-numeric:tabular-nums; }
-#rcb .c-status{ grid-area:status; text-align:right; }
-#rcb .c-desc{ grid-area:desc; font-size:.9rem; font-weight:700; letter-spacing:-.01em;
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#rcb .c-doc{ grid-area:doc; font-size:.73rem; color:var(--muted);
-  font-family:ui-monospace,Menlo,Consolas,monospace; }
-#rcb .c-forma{ grid-area:forma; }
-#rcb .c-valor{ grid-area:valor; font-size:1.02rem; font-weight:800; color:var(--verde);
-  font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
-#rcb .c-acao{ grid-area:acao; display:flex; gap:.35rem; justify-content:flex-end;
-  align-items:center; }
 
-/* computador: tabela */
-@media (min-width:992px){
-  #rcb .lst__cab{
-    display:grid; gap:.5rem; padding:.5rem .7rem; background:var(--surface);
-    border-bottom:2px solid var(--line-2);
-    font-size:.68rem; text-transform:uppercase; letter-spacing:.06em;
-    font-weight:800; color:var(--muted);
-  }
-  #rcb .lst__cab, #rcb .lin{
-    grid-template-columns:26px 92px minmax(0,1fr) 158px 132px 128px 104px 84px;
-    grid-template-areas:"chk data desc doc forma valor status acao";
-    align-items:center;
-  }
-  #rcb .lin{ padding:.42rem .7rem; }
-  #rcb .c-desc{ font-size:.82rem; font-weight:600; }
-  #rcb .c-valor{ font-size:.86rem; text-align:right; }
-  #rcb .c-status{ text-align:left; }
-  #rcb .c-acao{ justify-content:flex-end; }
-  #rcb .cab-valor{ text-align:right; }
-}
+#rcb .dia{ display:flex; align-items:center; gap:.55rem; padding:.45rem .7rem;
+  background:var(--azul-claro); color:var(--azul-deep); font-size:.8rem; font-weight:800;
+  border-bottom:1px solid var(--line-2); cursor:pointer; user-select:none;
+  position:sticky; top:0; z-index:3; margin:0; }
+#rcb .dia .tot{ margin-left:auto; font-variant-numeric:tabular-nums; }
+#rcb .dia.oculta, #rcb .lin.oculta{ display:none; }
 
-#rcb .lin.oculta{ display:none; }
-#rcb .marca{ width:19px; height:19px; cursor:pointer; accent-color:var(--azul); }
+#rcb .lin{ display:grid; grid-template-columns:auto 1fr auto; gap:.1rem .6rem;
+  padding:.5rem .7rem; border-bottom:1px solid var(--line); align-items:center;
+  position:relative; }
+#rcb .lin:last-child{ border-bottom:0; }
+#rcb .lin.sel{ background:#eef5fd; }
+#rcb .c-chk{ grid-row:1/3; }
+#rcb .c-desc{ font-size:.86rem; font-weight:700; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; min-width:0; }
+#rcb .c-valor{ text-align:right; font-size:.9rem; font-weight:800; color:var(--verde);
+  font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+#rcb .c-baixo{ grid-column:2/4; display:flex; align-items:center; gap:.35rem;
+  font-size:.71rem; color:var(--muted); min-width:0; }
+#rcb .c-doc{ font-family:ui-monospace,Menlo,Consolas,monospace; overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap; }
+#rcb .c-acao{ margin-left:auto; display:flex; gap:.3rem; align-items:center; flex:0 0 auto; }
 
-#rcb .selo{ display:inline-block; font-size:.68rem; font-weight:800; border-radius:6px;
-  padding:.1rem .42rem; white-space:nowrap; }
+#rcb .marca{ width:19px; height:19px; cursor:pointer; accent-color:var(--azul); margin:0; }
+#rcb .selo{ display:inline-block; font-size:.66rem; font-weight:800; border-radius:5px;
+  padding:.08rem .38rem; white-space:nowrap; }
 #rcb .selo--ok{ background:var(--ok-bg); color:var(--ok); }
 #rcb .selo--pend{ background:var(--pend-bg); color:var(--pend); }
 #rcb .selo--ign{ background:var(--ign-bg); color:var(--ign); }
-#rcb .selo--forma{ background:rgba(109,72,200,.12); color:var(--roxo); }
-#rcb .selo--forn{ background:var(--surface); color:var(--muted); font-weight:600; }
+#rcb .selo--forma{ background:rgba(109,72,200,.13); color:var(--roxo); }
 
-/* ── Ações da linha ────────────────────────────────────────────────── */
-#rcb .bt{ border:1px solid transparent; border-radius:9px; padding:.34rem .6rem;
-  font-size:.79rem; font-weight:700; cursor:pointer; display:inline-flex;
+#rcb .bt{ border:1px solid transparent; border-radius:9px; padding:.3rem .55rem;
+  font-size:.77rem; font-weight:700; cursor:pointer; display:inline-flex;
   align-items:center; gap:.3rem; font-family:inherit; white-space:nowrap; }
 #rcb .bt--pri{ background:var(--azul); color:#fff; }
 #rcb .bt--pri:hover{ background:var(--azul-deep); color:#fff; }
 #rcb .bt--mais{ background:#fff; border-color:var(--line-2); color:var(--muted);
-  padding:.34rem .5rem; }
+  padding:.3rem .45rem; }
 #rcb .bt--mais:hover{ border-color:var(--azul); color:var(--azul); }
-#rcb .menu{ position:absolute; z-index:30; right:.7rem; margin-top:.2rem; min-width:190px;
+#rcb .menu{ position:absolute; z-index:20; right:.7rem; top:100%; min-width:190px;
   background:#fff; border:1px solid var(--line-2); border-radius:10px;
   box-shadow:0 8px 24px rgba(20,35,60,.16); overflow:hidden; }
 #rcb .menu[hidden]{ display:none; }
 #rcb .menu button{ display:flex; align-items:center; gap:.45rem; width:100%; text-align:left;
   border:0; background:#fff; color:var(--ink); padding:.5rem .7rem; font-size:.83rem;
-  font-weight:600; cursor:pointer; font-family:inherit; border-bottom:1px solid var(--line); }
-#rcb .menu button:last-child{ border-bottom:0; }
+  font-weight:600; cursor:pointer; font-family:inherit; }
 #rcb .menu button:hover{ background:var(--surface); }
 #rcb .menu .perigo{ color:var(--danger); }
-#rcb .lin{ position:relative; }
 
-/* ── Carregar mais ─────────────────────────────────────────────────── */
 #rcb .mais{ padding:.6rem .7rem; }
 #rcb .mais button{ width:100%; border:1px dashed var(--line-2); background:transparent;
   color:var(--muted); border-radius:10px; padding:.5rem; font-size:.82rem; font-weight:700;
   cursor:pointer; font-family:inherit; }
 #rcb .mais button:hover{ border-color:var(--azul); color:var(--azul); }
+#rcb .vazio{ text-align:center; color:var(--muted); padding:2.2rem 1rem; font-size:.85rem; }
 
-/* ── Barra de lote ─────────────────────────────────────────────────── */
+/* ── Barra de lote ────────────────────────────────────────────────── */
 #rcb .lote{ position:fixed; left:0; right:0; bottom:0; z-index:1040;
-  background:var(--azul-deep); color:#fff; padding:.6rem .8rem;
-  display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;
-  transform:translateY(110%); transition:transform .18s ease;
-  box-shadow:0 -6px 20px rgba(12,76,134,.25);
+  background:var(--azul-deep); color:#fff; padding:.6rem .8rem; display:flex;
+  align-items:center; gap:.5rem; flex-wrap:wrap; transform:translateY(110%);
+  transition:transform .18s ease; box-shadow:0 -6px 20px rgba(12,76,134,.25);
   padding-bottom:calc(.6rem + env(safe-area-inset-bottom)); }
 #rcb .lote.on{ transform:translateY(0); }
 #rcb .lote .n{ font-weight:800; font-variant-numeric:tabular-nums; }
-#rcb .lote .todas{ background:none; border:0; color:#fff; text-decoration:underline;
-  cursor:pointer; font-size:.79rem; font-family:inherit; padding:0; }
 #rcb .lote .sep{ margin-left:auto; }
 #rcb .bl{ border:0; border-radius:9px; padding:.36rem .7rem; font-size:.8rem;
   font-weight:800; cursor:pointer; background:rgba(255,255,255,.18); color:#fff;
@@ -197,20 +131,95 @@
 #rcb .bl--rev{ background:#fff; color:var(--azul-deep); }
 #rcb .rodape-folga{ height:4.5rem; }
 
-#rcb .vazio{ text-align:center; color:var(--muted); padding:2.2rem 1rem; font-size:.85rem; }
-#rcb .btn-xs{ padding:.15rem .4rem; font-size:.72rem; border-radius:.25rem; }
+/* ── Filtro em passos ─────────────────────────────────────────────── */
+#rcb .escuro{ position:fixed; inset:0; background:rgba(12,25,42,.45); z-index:1050;
+  opacity:0; pointer-events:none; transition:opacity .2s; }
+#rcb .escuro.on{ opacity:1; pointer-events:auto; }
+#rcb .gav{ position:fixed; left:0; right:0; bottom:0; z-index:1051; background:#fff;
+  border-radius:18px 18px 0 0; max-height:88vh; display:flex; flex-direction:column;
+  transform:translateY(101%); transition:transform .24s cubic-bezier(.22,.7,.3,1);
+  box-shadow:0 -10px 30px rgba(12,25,42,.3); }
+#rcb .gav.on{ transform:translateY(0); }
+@media (min-width:992px){
+  #rcb .gav{ left:50%; right:auto; bottom:auto; top:8vh; width:520px; border-radius:16px;
+    transform:translate(-50%,10px); opacity:0; pointer-events:none;
+    transition:opacity .16s ease, transform .16s ease; max-height:84vh; }
+  #rcb .gav.on{ transform:translate(-50%,0); opacity:1; pointer-events:auto; }
+  #rcb .gav__pega{ display:none; }
+}
+#rcb .gav__pega{ width:36px; height:4px; background:var(--line-2); border-radius:9px;
+  margin:.5rem auto .1rem; flex:0 0 auto; }
+#rcb .passos{ display:flex; gap:.3rem; padding:.4rem .9rem .1rem; }
+#rcb .passo{ flex:1; height:3px; border-radius:9px; background:var(--line-2); }
+#rcb .passo.on{ background:var(--azul); }
+#rcb .pnome{ padding:.35rem .9rem .4rem; font-size:.76rem; color:var(--muted);
+  font-weight:700; }
+#rcb .pnome b{ color:var(--ink); font-size:.95rem; }
+#rcb .gav__b{ overflow-y:auto; padding:0 .9rem .7rem; }
+#rcb .gav__f{ border-top:1px solid var(--line); padding:.65rem .9rem; display:flex;
+  gap:.5rem; background:#fff;
+  padding-bottom:calc(.65rem + env(safe-area-inset-bottom)); }
+#rcb .bt-g{ border:0; border-radius:10px; padding:.55rem .8rem; font-size:.87rem;
+  font-weight:800; cursor:pointer; font-family:inherit; }
+#rcb .bt-g--ok{ flex:1; background:var(--azul); color:#fff; }
+#rcb .bt-g--ok:hover{ background:var(--azul-deep); }
+#rcb .bt-g--ca{ background:var(--surface); color:var(--muted); border:1px solid var(--line-2); }
+
+#rcb .etapa[hidden]{ display:none; }
+#rcb .gr{ margin-bottom:.85rem; }
+#rcb .gr__c{ display:flex; align-items:baseline; gap:.4rem; margin-bottom:.3rem; }
+#rcb .gr__t{ font-size:.69rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--muted); }
+#rcb .gr__n{ font-size:.7rem; color:var(--muted); }
+#rcb .gr__a{ margin-left:auto; background:none; border:0; padding:0; cursor:pointer;
+  font-size:.74rem; font-weight:700; color:var(--azul); font-family:inherit; }
+#rcb .gr__a[hidden]{ display:none; }
+#rcb .opcs{ border:1px solid var(--line-2); border-radius:10px; overflow:hidden;
+  max-height:250px; overflow-y:auto; }
+#rcb .opc{ display:flex; align-items:center; gap:.55rem; padding:.5rem .6rem;
+  border-bottom:1px solid var(--line); font-size:.85rem; cursor:pointer; margin:0;
+  min-width:0; }
+#rcb .opc:last-child{ border-bottom:0; }
+#rcb .opc:hover{ background:var(--surface); }
+#rcb .opc input{ width:19px; height:19px; accent-color:var(--azul); flex:0 0 auto; margin:0; }
+#rcb .opc__t{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+#rcb .opc__s{ display:block; font-size:.71rem; color:var(--muted); }
+#rcb .opc:has(input:checked){ background:var(--azul-claro); }
+#rcb .aviso-f{ padding:.8rem .6rem; font-size:.82rem; color:var(--muted); text-align:center; }
+#rcb .seg{ display:flex; gap:2px; background:var(--surface); border:1px solid var(--line-2);
+  border-radius:10px; padding:2px; }
+#rcb .seg button{ flex:1; border:0; background:none; border-radius:8px; padding:.42rem .2rem;
+  font-size:.79rem; font-weight:700; color:var(--muted); cursor:pointer;
+  font-family:inherit; white-space:nowrap; }
+#rcb .seg button.on{ background:#fff; color:var(--azul-deep);
+  box-shadow:0 1px 2px rgba(20,35,60,.1); }
+#rcb .campo{ width:100%; border:1px solid var(--line-2); border-radius:10px;
+  padding:.5rem .65rem; font-size:.85rem; background:#fff; color:var(--ink);
+  font-family:inherit; }
+#rcb .par{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; }
+#rcb .par[hidden]{ display:none; }
+#rcb .dica{ font-size:.75rem; color:var(--muted); margin-top:.3rem; }
 #rcb :focus-visible{ outline:2px solid var(--azul); outline-offset:2px; }
 @media (prefers-reduced-motion: reduce){ #rcb *{ transition:none !important; } }
 </style>
 {% endblock %}
 
 {% block content %}
-{# `next` volta para ESTA tela com ESTES filtros depois de qualquer ação —
-   sem ele, reverter um lançamento devolvia a lista zerada. #}
+{# `next` devolve a MESMA tela com os MESMOS filtros depois de qualquer ação. #}
 {% set voltar_para = request.full_path if request.query_string else request.path %}
-{% set tem_filtro = empresa_ids_filter or conta_ids_filter or forma_recebimento_id_filter
-                    or status_filter or data_inicio or data_fim or f_descricao
-                    or valor_min or valor_max %}
+{% set n_filtros = (empresa_ids_filter|length) + (conta_ids_filter|length)
+                   + (1 if forma_recebimento_id_filter else 0) + (1 if status_filter else 0)
+                   + (1 if (data_inicio or data_fim) else 0) + (1 if f_descricao else 0)
+                   + (1 if (valor_min or valor_max) else 0) %}
+
+{# Subtotal e contagem por dia: o cabeçalho do dia precisa deles antes de
+   desenhar, e a lista já vem ordenada por data. #}
+{% set tot_dia = {} %}
+{% for t in transacoes %}
+  {% set d = t.data_transacao.strftime('%Y-%m-%d') if t.data_transacao else 'sem-data' %}
+  {% if tot_dia.update({d: tot_dia.get(d, 0) + (t.valor or 0)}) %}{% endif %}
+{% endfor %}
+
 <div id="rcb" class="container-fluid">
 
   <nav aria-label="breadcrumb" class="mb-2">
@@ -221,20 +230,17 @@
     </ol>
   </nav>
 
-  <!-- ── Cabeçalho ───────────────────────────────────────────────────── -->
   <div class="hero">
     <div style="min-width:0">
       <h4>Recebimento</h4>
       <div class="sub">Créditos do extrato OFX</div>
     </div>
-    <button type="button" class="fil" data-bs-toggle="collapse"
-            data-bs-target="#rcb-filtros" aria-expanded="false"
-            aria-controls="rcb-filtros" title="Filtros">
-      <i class="bi bi-funnel"></i>{% if tem_filtro %}<span class="cnt">•</span>{% endif %}
+    <button type="button" class="fil" onclick="rcbAbrirFiltro()">
+      <i class="bi bi-funnel"></i>
+      <span class="cnt" {% if not n_filtros %}hidden{% endif %}>{{ n_filtros }}</span>
     </button>
   </div>
 
-  <!-- ── Números ─────────────────────────────────────────────────────── -->
   <div class="nums">
     <div class="n"><div class="r">Lançamentos</div>
       <div class="v azul">{{ transacoes|length }}</div></div>
@@ -246,177 +252,73 @@
       <div class="v amb">{{ total_pendentes }}</div></div>
   </div>
 
-  <!-- ── Filtros: o MESMO padrão da Lista de fretes ───────────────────
-       Funil no cabeçalho abre um collapse com um formulário comum. Sem
-       controle inventado: <select> nativo abre picker no iPhone, que era
-       o problema do <select multiple> ("0 Item").
-       Única regra a mais: Conta só libera depois da Empresa.           -->
-  <div class="collapse mb-2" id="rcb-filtros">
-    <div class="card" style="border:1px solid #e8e8e8;border-radius:.55rem;">
-      <div class="card-body py-2 px-3">
-        <form method="get" action="{{ url_for('financeiro.recebimento') }}" id="rcb-form">
-          <div class="row g-2">
-
-            <div class="col-12">
-              <div class="gr__cab">
-                <span class="gr__t">Empresa</span>
-                <span class="gr__c" id="rcb-emp-c">todas</span>
-                <button type="button" class="gr__a" id="rcb-emp-a" onclick="rcbTodasEmpresas()">marcar todas</button>
-              </div>
-              <div class="opcs" id="rcb-emps">
-                {% for e in empresas %}
-                <label class="opc">
-                  <input type="checkbox" name="empresa_id" value="{{ e.id }}"
-                         {% if e.id|string in (empresa_ids_filter or []) %}checked{% endif %}
-                         onchange="rcbContas()">
-                  <span class="opc__t">{{ e.razao_social }}</span>
-                </label>
-                {% endfor %}
-              </div>
-            </div>
-
-            <div class="col-12">
-              <div class="gr__cab">
-                <span class="gr__t">Conta bancária</span>
-                <span class="gr__c" id="rcb-cta-c"></span>
-                <button type="button" class="gr__a" id="rcb-cta-a" onclick="rcbTodasContas()" hidden>marcar todas</button>
-              </div>
-              <div class="opcs" id="rcb-ctas"></div>
-            </div>
-
-            <div class="col-6">
-              <label class="form-label mb-1">De</label>
-              <input type="date" name="data_inicio" id="rcb-di" class="form-control form-control-sm"
-                     value="{{ data_inicio or '' }}">
-            </div>
-            <div class="col-6">
-              <label class="form-label mb-1">Até</label>
-              <input type="date" name="data_fim" id="rcb-df" class="form-control form-control-sm"
-                     value="{{ data_fim or '' }}">
-            </div>
-
-            <div class="col-12 d-flex gap-1">
-              <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2"
-                      onclick="rcbPeriodo('mes_atual')">Este mês</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2"
-                      onclick="rcbPeriodo('mes_anterior')">Mês anterior</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2"
-                      onclick="rcbPeriodo('ano_atual')">Este ano</button>
-            </div>
-
-            <div class="col-6">
-              <label class="form-label mb-1">Situação</label>
-              <select name="status" class="form-select form-select-sm">
-                <option value="">Todas</option>
-                <option value="pendente"   {% if status_filter=='pendente' %}selected{% endif %}>Pendente</option>
-                <option value="conciliado" {% if status_filter=='conciliado' %}selected{% endif %}>Conciliado</option>
-                <option value="ignorado"   {% if status_filter=='ignorado' %}selected{% endif %}>Ignorado</option>
-              </select>
-            </div>
-            <div class="col-6">
-              <label class="form-label mb-1">Forma</label>
-              <select name="forma_recebimento_id" class="form-select form-select-sm">
-                <option value="">Todas</option>
-                {% for f in formas %}
-                <option value="{{ f.id }}" {% if f.id|string == forma_recebimento_id_filter %}selected{% endif %}>
-                  {{ f.nome }}</option>
-                {% endfor %}
-              </select>
-            </div>
-
-            <div class="col-12">
-              <label class="form-label mb-1">Descrição</label>
-              <input type="text" name="f_descricao" class="form-control form-control-sm"
-                     placeholder="parte da descrição, ex.: BARAT" value="{{ f_descricao or '' }}">
-            </div>
-
-            <div class="col-6">
-              <label class="form-label mb-1">Valor mín.</label>
-              <input type="text" name="valor_min" class="form-control form-control-sm"
-                     placeholder="150,00" value="{{ valor_min or '' }}">
-            </div>
-            <div class="col-6">
-              <label class="form-label mb-1">Valor máx.</label>
-              <input type="text" name="valor_max" class="form-control form-control-sm"
-                     placeholder="2.000,00" value="{{ valor_max or '' }}">
-            </div>
-
-            <div class="col-6">
-              <button type="submit" class="btn btn-primary btn-sm w-100">
-                <i class="bi bi-search"></i> Filtrar</button>
-            </div>
-            <div class="col-6">
-              <a href="{{ url_for('financeiro.recebimento') }}" class="btn btn-outline-secondary btn-sm w-100">
-                <i class="bi bi-x"></i> Limpar</a>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Lista ───────────────────────────────────────────────────────── -->
+  <!-- ── Lista dia a dia ─────────────────────────────────────────── -->
   <div class="lst">
-    <div class="lst__cab">
-      <span><input type="checkbox" class="marca" id="rcb-todos" onchange="rcbTodos(this.checked)"
-                   title="selecionar todos"></span>
-      <span>Data</span><span>Descrição</span><span>CNPJ/CPF</span><span>Forma</span>
-      <span class="cab-valor">Valor</span><span>Status</span><span></span>
-    </div>
+    {% if transacoes %}
+    <label class="topo-lst">
+      <input type="checkbox" class="marca" id="rcb-todos" onchange="rcbTodos(this.checked)">
+      selecionar todos · {{ transacoes|length }}
+      <span class="tot">R$ {{ "{:,.2f}".format(total_creditos or 0).replace(',','X').replace('.',',').replace('X','.') }}</span>
+    </label>
+    {% endif %}
 
+    {% set ns = namespace(dia=None, i=0) %}
     {% for t in transacoes %}
-    <div class="lin{% if loop.index0 >= 25 %} oculta{% endif %}"
-         data-id="{{ t.id }}" data-status="{{ t.status }}" data-valor="{{ t.valor }}"
-         onclick="rcbClique(event, this)">
-      <div class="c-chk">
-        <input type="checkbox" class="marca rchk" value="{{ t.id }}" data-status="{{ t.status }}"
-               onclick="event.stopPropagation()" onchange="rcbMarcou(this)">
-      </div>
-      <div class="c-data">{{ t.data_transacao.strftime('%d/%m/%Y') if t.data_transacao else '—' }}</div>
-      <div class="c-desc" title="{{ t.descricao or t.memo or '' }}">{{ t.descricao or t.memo or '—' }}</div>
-      <div class="c-doc">{{ t.cnpj_cpf or '—' }}</div>
-      <div class="c-forma">
-        {% if t.forma_recebimento_nome %}<span class="selo selo--forma">{{ t.forma_recebimento_nome }}</span>
-        {% elif t.fornecedor_nome %}<span class="selo selo--forn">{{ t.fornecedor_nome }}</span>
-        {% else %}<span class="text-muted">—</span>{% endif %}
-      </div>
-      <div class="c-valor">R$ {{ "{:,.2f}".format(t.valor).replace(',','X').replace('.',',').replace('X','.') }}</div>
-      <div class="c-status">
-        {% if t.status == 'conciliado' %}<span class="selo selo--ok">Conciliado</span>
-        {% elif t.status == 'ignorado' %}<span class="selo selo--ign">Ignorado</span>
-        {% else %}<span class="selo selo--pend">Pendente</span>{% endif %}
-      </div>
+      {% set d = t.data_transacao.strftime('%Y-%m-%d') if t.data_transacao else 'sem-data' %}
+      {% if d != ns.dia %}
+        {% set ns.dia = d %}
+        <label class="dia{% if ns.i >= 25 %} oculta{% endif %}" data-dia="{{ d }}">
+          <input type="checkbox" class="marca dia-chk" data-dia="{{ d }}" onchange="rcbDia(this)">
+          {% if t.data_transacao %}{{ t.data_transacao.strftime('%d/%m/%Y') }}{% else %}sem data{% endif %}
+          <span class="tot">R$ {{ "{:,.2f}".format(tot_dia.get(d, 0)).replace(',','X').replace('.',',').replace('X','.') }}</span>
+        </label>
+      {% endif %}
 
-      <div class="c-acao">
-        {# Uma ação principal, a que faz sentido NESTE estado. O resto no ⋯ —
-           assim o Excluir sai de debaixo do dedo. #}
-        {% if t.status == 'conciliado' %}
-        <form method="POST" action="{{ url_for('financeiro.reverter_conciliacao', tx_id=t.id) }}"
-              onclick="event.stopPropagation()"
-              onsubmit="return confirm('Reverter a conciliação do lançamento #{{ t.id }}?\n\nEle volta para Pendente e pode ser conciliado de novo.');">
-          <input type="hidden" name="next" value="{{ voltar_para }}">
-          <button type="submit" class="bt bt--pri" title="Reverter conciliação">
-            <i class="bi bi-arrow-counterclockwise"></i> <span class="d-lg-none">Reverter</span>
-          </button>
-        </form>
-        {% endif %}
-        <button type="button" class="bt bt--mais" title="mais ações"
-                onclick="event.stopPropagation(); rcbMenu(this)">⋯</button>
-        <div class="menu" hidden onclick="event.stopPropagation()">
-          <form method="POST" action="{{ url_for('financeiro.excluir_transacao', tx_id=t.id) }}"
-                onsubmit="return confirm('Excluir o lançamento #{{ t.id }} de R$ {{ '%.2f'|format(t.valor) }}?\n\nNão tem volta.');">
-            <input type="hidden" name="next" value="{{ voltar_para }}">
-            <button type="submit" class="perigo"><i class="bi bi-trash"></i> Excluir lançamento</button>
-          </form>
+      <div class="lin{% if ns.i >= 25 %} oculta{% endif %}" data-dia="{{ d }}"
+           data-valor="{{ t.valor }}" onclick="rcbClique(event, this)">
+        <div class="c-chk">
+          <input type="checkbox" class="marca rchk" value="{{ t.id }}"
+                 data-status="{{ t.status }}" data-dia="{{ d }}"
+                 onclick="event.stopPropagation()" onchange="rcbMarcou(this)">
+        </div>
+        <div class="c-desc" title="{{ t.descricao or t.memo or '' }}">{{ t.descricao or t.memo or '—' }}</div>
+        <div class="c-valor">R$ {{ "{:,.2f}".format(t.valor).replace(',','X').replace('.',',').replace('X','.') }}</div>
+        <div class="c-baixo">
+          {% if t.status == 'conciliado' %}<span class="selo selo--ok">Conciliado</span>
+          {% elif t.status == 'ignorado' %}<span class="selo selo--ign">Ignorado</span>
+          {% else %}<span class="selo selo--pend">Pendente</span>{% endif %}
+          {% if t.forma_recebimento_nome %}<span class="selo selo--forma">{{ t.forma_recebimento_nome }}</span>{% endif %}
+          <span class="c-doc">{{ t.cnpj_cpf or '—' }}</span>
+
+          <span class="c-acao">
+            {% if t.status == 'conciliado' %}
+            <form method="POST" action="{{ url_for('financeiro.reverter_conciliacao', tx_id=t.id) }}"
+                  onclick="event.stopPropagation()"
+                  onsubmit="return confirm('Reverter a conciliação do lançamento #{{ t.id }}?\n\nEle volta para Pendente.');">
+              <input type="hidden" name="next" value="{{ voltar_para }}">
+              <button type="submit" class="bt bt--pri" title="Reverter conciliação">
+                <i class="bi bi-arrow-counterclockwise"></i></button>
+            </form>
+            {% endif %}
+            <button type="button" class="bt bt--mais" title="mais ações"
+                    onclick="event.stopPropagation(); rcbMenu(this)">⋯</button>
+            <span class="menu" hidden onclick="event.stopPropagation()">
+              <form method="POST" action="{{ url_for('financeiro.excluir_transacao', tx_id=t.id) }}"
+                    onsubmit="return confirm('Excluir o lançamento #{{ t.id }} de R$ {{ '%.2f'|format(t.valor) }}?\n\nNão tem volta.');">
+                <input type="hidden" name="next" value="{{ voltar_para }}">
+                <button type="submit" class="perigo"><i class="bi bi-trash"></i> Excluir lançamento</button>
+              </form>
+            </span>
+          </span>
         </div>
       </div>
-    </div>
+      {% set ns.i = ns.i + 1 %}
     {% else %}
     <div class="vazio">
-      <i class="bi bi-inbox" style="font-size:1.8rem;opacity:.4;"></i>
+      <i class="bi bi-inbox" style="font-size:1.8rem;opacity:.4"></i>
       <div class="mt-2">
-        {% if filtro_aplicado %}Nenhum crédito encontrado para os filtros selecionados.
-        {% else %}Escolha uma <strong>empresa</strong> ou <strong>conta</strong> e clique em <strong>Filtrar</strong>.{% endif %}
+        {% if filtro_aplicado %}Nenhum crédito encontrado para os filtros escolhidos.
+        {% else %}Toque no funil e escolha uma <strong>empresa</strong> para começar.{% endif %}
       </div>
     </div>
     {% endfor %}
@@ -436,36 +338,143 @@
     <a href="/banco/relatorio" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-file-earmark-text"></i> Relatório OFX Completo</a>
   </div>
-
   <div class="rodape-folga"></div>
 
-  <!-- ── Barra de ação em lote ───────────────────────────────────────── -->
+  <!-- ── Barra de lote ───────────────────────────────────────────── -->
   <div class="lote" id="rcb-lote">
-    <span><span class="n" id="rcb-n">0</span> selecionadas</span>
-    <button type="button" class="todas" onclick="rcbTodos(true)">selecionar todas</button>
+    <span><span class="n" id="rcb-n">0</span> marcados · <span class="n" id="rcb-soma">R$ 0,00</span></span>
     <span class="sep"></span>
     <form method="POST" action="{{ url_for('financeiro.reverter_conciliacao_lote') }}"
           id="form-reverter-lote" style="display:inline" onsubmit="return confirmarReversaoLote();">
       <input type="hidden" name="next" value="{{ voltar_para }}">
-      <button type="submit" class="bl bl--rev">
-        <i class="bi bi-arrow-counterclockwise"></i> Reverter</button>
+      <button type="submit" class="bl bl--rev"><i class="bi bi-arrow-counterclockwise"></i> Reverter</button>
     </form>
     <form method="POST" action="{{ url_for('financeiro.excluir_transacao_lote') }}"
           id="form-excluir-lote" style="display:inline" onsubmit="return confirmarExclusaoLote();">
       <input type="hidden" name="next" value="{{ voltar_para }}">
       <button type="submit" class="bl"><i class="bi bi-trash"></i> Excluir</button>
     </form>
-    <button type="button" class="bl" onclick="rcbLimpar()">Limpar</button>
+    <button type="button" class="bl" onclick="rcbTodos(false)">Limpar</button>
   </div>
+
+  <!-- ── Filtro em três passos ───────────────────────────────────── -->
+  <div class="escuro" id="rcb-escuro" onclick="rcbFecharFiltro()"></div>
+  <form class="gav" id="rcb-gav" method="get" action="{{ url_for('financeiro.recebimento') }}">
+    <div class="gav__pega"></div>
+    <div class="passos">
+      <span class="passo" id="rcb-p0"></span>
+      <span class="passo" id="rcb-p1"></span>
+      <span class="passo" id="rcb-p2"></span>
+    </div>
+    <div class="pnome" id="rcb-pnome"></div>
+
+    <div class="gav__b">
+
+      <!-- Passo 1 — empresa -->
+      <div class="etapa" id="rcb-etapa-0" hidden>
+        <div class="gr">
+          <div class="gr__c">
+            <span class="gr__t">Empresa</span>
+            <span class="gr__n" id="rcb-emp-c"></span>
+            <button type="button" class="gr__a" onclick="rcbTodasEmpresas()">marcar todas</button>
+          </div>
+          <div class="opcs" id="rcb-emps">
+            {% for e in empresas %}
+            <label class="opc">
+              <input type="checkbox" name="empresa_id" value="{{ e.id }}"
+                     {% if e.id|string in (empresa_ids_filter or []) %}checked{% endif %}
+                     onchange="rcbContas()">
+              <span class="opc__t">{{ e.razao_social }}</span>
+            </label>
+            {% endfor %}
+          </div>
+          <div class="dica">Pode marcar mais de uma. Sem marcar nenhuma, vêm todas.</div>
+        </div>
+      </div>
+
+      <!-- Passo 2 — conta -->
+      <div class="etapa" id="rcb-etapa-1" hidden>
+        <div class="gr">
+          <div class="gr__c">
+            <span class="gr__t">Conta bancária</span>
+            <span class="gr__n" id="rcb-cta-c"></span>
+            <button type="button" class="gr__a" id="rcb-cta-a" onclick="rcbTodasContas()" hidden>marcar todas</button>
+          </div>
+          <div class="opcs" id="rcb-ctas"></div>
+        </div>
+      </div>
+
+      <!-- Passo 3 — período, valor e o resto -->
+      <div class="etapa" id="rcb-etapa-2" hidden>
+        <div class="gr">
+          <div class="gr__c"><span class="gr__t">Período</span></div>
+          <div class="seg" id="rcb-seg-per">
+            <button type="button" data-p="mes">Este mês</button>
+            <button type="button" data-p="ant">Anterior</button>
+            <button type="button" data-p="ano">Este ano</button>
+            <button type="button" data-p="datas">Datas</button>
+          </div>
+          <div class="par" id="rcb-datas" style="margin-top:.5rem" hidden>
+            <input type="date" name="data_inicio" id="rcb-di" class="campo" value="{{ data_inicio or '' }}">
+            <input type="date" name="data_fim" id="rcb-df" class="campo" value="{{ data_fim or '' }}">
+          </div>
+        </div>
+
+        <div class="gr">
+          <div class="gr__c"><span class="gr__t">Situação</span></div>
+          <div class="seg" id="rcb-seg-sit">
+            <button type="button" data-s="">Todas</button>
+            <button type="button" data-s="pendente">Pendentes</button>
+            <button type="button" data-s="conciliado">Conciliados</button>
+          </div>
+          <input type="hidden" name="status" id="rcb-status" value="{{ status_filter or '' }}">
+        </div>
+
+        <div class="gr">
+          <div class="gr__c"><span class="gr__t">Valor — de tal a tal</span></div>
+          <div class="par">
+            <input type="text" name="valor_min" class="campo" inputmode="decimal"
+                   placeholder="de R$ 150,00" value="{{ valor_min or '' }}">
+            <input type="text" name="valor_max" class="campo" inputmode="decimal"
+                   placeholder="até R$ 2.000,00" value="{{ valor_max or '' }}">
+          </div>
+          <div class="dica">Deixe um lado em branco para não limitar aquele lado.</div>
+        </div>
+
+        <div class="gr">
+          <div class="gr__c"><span class="gr__t">Descrição</span></div>
+          <input type="text" name="f_descricao" class="campo"
+                 placeholder="parte do texto, ex.: BARAT" value="{{ f_descricao or '' }}">
+        </div>
+
+        <div class="gr">
+          <div class="gr__c"><span class="gr__t">Forma de recebimento</span></div>
+          <select name="forma_recebimento_id" class="campo">
+            <option value="">Todas</option>
+            {% for f in formas %}
+            <option value="{{ f.id }}" {% if f.id|string == forma_recebimento_id_filter %}selected{% endif %}>
+              {{ f.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="gav__f">
+      <button type="button" class="bt-g bt-g--ca" id="rcb-volta" onclick="rcbPasso(-1)">Cancelar</button>
+      <button type="button" class="bt-g bt-g--ok" id="rcb-segue" onclick="rcbPasso(1)">Continuar</button>
+    </div>
+  </form>
 </div>
 
 <script>
-/* ── Seleção ───────────────────────────────────────────────────────── */
-function rcbLinhas() { return Array.prototype.slice.call(document.querySelectorAll('#rcb .lin')); }
-function rcbMarcadas() { return Array.prototype.slice.call(document.querySelectorAll('#rcb .rchk:checked')); }
-
+/* ═══════════════════════════════════════════════════════════════════
+   LISTA — seleção por linha, por dia e geral
+   ═══════════════════════════════════════════════════════════════════ */
+function rcbMarcadas() {
+  return Array.prototype.slice.call(document.querySelectorAll('#rcb .rchk:checked'));
+}
 function rcbClique(ev, lin) {
-  // Clique em botão, link ou dentro de um menu não seleciona a linha.
   if (ev.target.closest('button, a, form, .menu')) return;
   var chk = lin.querySelector('.rchk');
   chk.checked = !chk.checked;
@@ -475,6 +484,15 @@ function rcbMarcou(chk) {
   chk.closest('.lin').classList.toggle('sel', chk.checked);
   rcbAtualiza();
 }
+/* O cabeçalho do dia marca/desmarca o dia inteiro. */
+function rcbDia(chkDia) {
+  var dia = chkDia.dataset.dia;
+  document.querySelectorAll('#rcb .rchk[data-dia="' + dia + '"]').forEach(function (c) {
+    c.checked = chkDia.checked;
+    c.closest('.lin').classList.toggle('sel', chkDia.checked);
+  });
+  rcbAtualiza();
+}
 function rcbTodos(marcar) {
   document.querySelectorAll('#rcb .rchk').forEach(function (c) {
     c.checked = marcar;
@@ -482,30 +500,54 @@ function rcbTodos(marcar) {
   });
   rcbAtualiza();
 }
-function rcbLimpar() { rcbTodos(false); }
-
+function rcbMoeda(v) {
+  return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2,
+                                                     maximumFractionDigits: 2 });
+}
 function rcbAtualiza() {
-  var n = rcbMarcadas().length;
-  var total = document.querySelectorAll('#rcb .rchk').length;
+  var marcadas = rcbMarcadas();
+  var n = marcadas.length;
+  var soma = marcadas.reduce(function (a, c) {
+    return a + parseFloat(c.closest('.lin').dataset.valor || 0);
+  }, 0);
   document.getElementById('rcb-n').textContent = n;
+  document.getElementById('rcb-soma').textContent = rcbMoeda(soma);
   document.getElementById('rcb-lote').classList.toggle('on', n > 0);
+
   var todos = document.getElementById('rcb-todos');
   if (todos) {
+    var total = document.querySelectorAll('#rcb .rchk').length;
     todos.checked = n > 0 && n === total;
     todos.indeterminate = n > 0 && n < total;
   }
+  document.querySelectorAll('#rcb .dia-chk').forEach(function (cd) {
+    var doDia = document.querySelectorAll('#rcb .rchk[data-dia="' + cd.dataset.dia + '"]');
+    var on = document.querySelectorAll('#rcb .rchk[data-dia="' + cd.dataset.dia + '"]:checked');
+    cd.checked = doDia.length > 0 && on.length === doDia.length;
+    cd.indeterminate = on.length > 0 && on.length < doDia.length;
+  });
 }
 
-/* ── Mais linhas ───────────────────────────────────────────────────── */
 function rcbMais() {
-  var ocultas = document.querySelectorAll('#rcb .lin.oculta');
-  Array.prototype.slice.call(ocultas, 0, 25).forEach(function (l) { l.classList.remove('oculta'); });
+  var ocultas = document.querySelectorAll('#rcb .lin.oculta, #rcb .dia.oculta');
+  var mostradas = 0;
+  for (var i = 0; i < ocultas.length && mostradas < 25; i++) {
+    ocultas[i].classList.remove('oculta');
+    if (ocultas[i].classList.contains('lin')) mostradas++;
+  }
   var restam = document.querySelectorAll('#rcb .lin.oculta').length;
-  if (restam === 0) { document.getElementById('rcb-mais').remove(); }
-  else { document.getElementById('rcb-restam').textContent = restam; }
+  if (!restam) {
+    var b = document.getElementById('rcb-mais');
+    if (b) b.remove();
+    document.querySelectorAll('#rcb .dia.oculta').forEach(function (d) {
+      d.classList.remove('oculta');
+    });
+  } else {
+    document.getElementById('rcb-restam').textContent = restam;
+  }
+  rcbAtualiza();
 }
 
-/* ── Menu ⋯ ────────────────────────────────────────────────────────── */
 function rcbMenu(bt) {
   var m = bt.parentNode.querySelector('.menu');
   var abrindo = m.hidden;
@@ -516,7 +558,6 @@ document.addEventListener('click', function () {
   document.querySelectorAll('#rcb .menu').forEach(function (m) { m.hidden = true; });
 });
 
-/* ── Lote: injeta os ids escolhidos no formulário ──────────────────── */
 function rcbInjetar(form, marcadas) {
   form.querySelectorAll('input[name="tx_ids[]"]').forEach(function (el) { el.remove(); });
   marcadas.forEach(function (c) {
@@ -528,7 +569,7 @@ function rcbInjetar(form, marcadas) {
 function confirmarReversaoLote() {
   var cks = rcbMarcadas().filter(function (c) { return c.dataset.status === 'conciliado'; });
   if (!cks.length) {
-    alert('Nenhum lançamento conciliado selecionado.\nReverter só vale para quem está conciliado.');
+    alert('Nenhum lançamento conciliado marcado.\nReverter só vale para quem está conciliado.');
     return false;
   }
   if (!confirm('Reverter a conciliação de ' + cks.length + ' lançamento(s)?\n\nEles voltam para Pendente.')) return false;
@@ -542,22 +583,51 @@ function confirmarExclusaoLote() {
     return a + parseFloat(c.closest('.lin').dataset.valor || 0);
   }, 0);
   var conc = cks.filter(function (c) { return c.dataset.status === 'conciliado'; }).length;
-  var msg = 'Excluir ' + cks.length + ' lançamento(s), somando R$ ' +
-            soma.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
-            '?\n\nNão tem volta.';
+  var msg = 'Excluir ' + cks.length + ' lançamento(s), somando ' + rcbMoeda(soma) + '?\n\nNão tem volta.';
   if (conc) msg += '\n\nAtenção: ' + conc + ' está(ão) conciliado(s) — a conciliação se desfaz junto.';
   if (!confirm(msg)) return false;
   rcbInjetar(document.getElementById('form-excluir-lote'), cks);
   return true;
 }
 
-/* ── Filtros ────────────────────────────────────────────────────────
-   Formulário comum, submetido por GET — a URL continua sendo a verdade
-   do filtro, e é ela que o `next` das ações preserva.
-   Conta só libera depois da empresa: sem isso a lista traria conta de
-   qualquer empresa e o filtro sairia misturado.                        */
+/* ═══════════════════════════════════════════════════════════════════
+   FILTRO — três passos. A ordem é o próprio desenho: a conta só existe
+   depois da empresa, então não há como pedir uma sem a outra.
+   ═══════════════════════════════════════════════════════════════════ */
 var RCB_CONTAS = {{ contas | tojson }};
 var RCB_CONTA_SEL = ({{ (conta_ids_filter or []) | tojson }}).map(String);
+var RCB_PASSOS = ['Escolha a empresa', 'Escolha a conta', 'Período, valor e o resto'];
+var rcbPassoAtual = 0;
+
+function rcbAbrirFiltro() {
+  rcbPassoAtual = 0;
+  rcbContas();
+  rcbDesenhaPasso();
+  document.getElementById('rcb-gav').classList.add('on');
+  document.getElementById('rcb-escuro').classList.add('on');
+}
+function rcbFecharFiltro() {
+  document.getElementById('rcb-gav').classList.remove('on');
+  document.getElementById('rcb-escuro').classList.remove('on');
+}
+function rcbDesenhaPasso() {
+  for (var i = 0; i < 3; i++) {
+    document.getElementById('rcb-etapa-' + i).hidden = (i !== rcbPassoAtual);
+    document.getElementById('rcb-p' + i).classList.toggle('on', i <= rcbPassoAtual);
+  }
+  document.getElementById('rcb-pnome').innerHTML =
+    'Passo ' + (rcbPassoAtual + 1) + ' de 3 &middot; <b>' + RCB_PASSOS[rcbPassoAtual] + '</b>';
+  document.getElementById('rcb-volta').textContent = rcbPassoAtual === 0 ? 'Cancelar' : 'Voltar';
+  document.getElementById('rcb-segue').textContent = rcbPassoAtual === 2 ? 'Filtrar' : 'Continuar';
+  var corpo = document.querySelector('#rcb .gav__b');
+  if (corpo) corpo.scrollTop = 0;
+}
+function rcbPasso(d) {
+  if (d > 0 && rcbPassoAtual === 2) { document.getElementById('rcb-gav').submit(); return; }
+  if (d < 0 && rcbPassoAtual === 0) { rcbFecharFiltro(); return; }
+  rcbPassoAtual += d;
+  rcbDesenhaPasso();
+}
 
 function rcbEmpsMarcadas() {
   return Array.prototype.slice
@@ -565,9 +635,9 @@ function rcbEmpsMarcadas() {
     .map(function (c) { return String(c.value); });
 }
 
-/* Monta as contas das empresas marcadas. Chamada a cada marcação, então
-   preserva o que já estava escolhido — trocar de empresa não pode apagar
-   uma conta que continua valendo. */
+/* Monta as contas das empresas marcadas, preservando o que já estava
+   escolhido — marcar outra empresa não pode apagar a conta que continua
+   valendo. */
 function rcbContas() {
   var caixa = document.getElementById('rcb-ctas');
   if (!caixa) return;
@@ -582,7 +652,8 @@ function rcbContas() {
   var btTodas = document.getElementById('rcb-cta-a');
 
   if (!emps.length) {
-    caixa.innerHTML = '<div class="vazio-f">Marque uma empresa para ver as contas dela.</div>';
+    caixa.innerHTML = '<div class="aviso-f">Volte um passo e marque a empresa — ' +
+                      'as contas dela aparecem aqui.</div>';
     btTodas.hidden = true;
     rcbContadores();
     return;
@@ -591,9 +662,8 @@ function rcbContas() {
   var minhas = RCB_CONTAS.filter(function (c) {
     return emps.indexOf(String(c.cliente_id)) >= 0;
   });
-
   if (!minhas.length) {
-    caixa.innerHTML = '<div class="vazio-f">Nenhuma conta cadastrada para ' +
+    caixa.innerHTML = '<div class="aviso-f">Nenhuma conta cadastrada para ' +
       (emps.length === 1 ? 'esta empresa' : 'estas empresas') + '.</div>';
     btTodas.hidden = true;
     rcbContadores();
@@ -601,15 +671,12 @@ function rcbContas() {
   }
 
   btTodas.hidden = false;
-  // Com mais de uma empresa marcada, a conta precisa dizer de quem ela é.
   var mostrarDono = emps.length > 1;
   minhas.forEach(function (c) {
     var lb = document.createElement('label');
     lb.className = 'opc';
     var inp = document.createElement('input');
-    inp.type = 'checkbox';
-    inp.name = 'conta_id';
-    inp.value = c.id;
+    inp.type = 'checkbox'; inp.name = 'conta_id'; inp.value = c.id;
     inp.checked = jaMarcadas.indexOf(String(c.id)) >= 0;
     inp.addEventListener('change', rcbContadores);
     var txt = document.createElement('span');
@@ -621,11 +688,9 @@ function rcbContas() {
       sub.textContent = c.empresa_nome;
       txt.appendChild(sub);
     }
-    lb.appendChild(inp);
-    lb.appendChild(txt);
+    lb.appendChild(inp); lb.appendChild(txt);
     caixa.appendChild(lb);
   });
-
   rcbContadores();
 }
 
@@ -639,13 +704,9 @@ function rcbContadores() {
   if (ce) ce.textContent = empsOn ? (empsOn + ' de ' + emps.length) : 'todas';
   var cc = document.getElementById('rcb-cta-c');
   if (cc) cc.textContent = ctas.length ? (ctasOn ? (ctasOn + ' de ' + ctas.length) : 'todas') : '';
-
-  var be = document.getElementById('rcb-emp-a');
-  if (be) be.textContent = (empsOn === emps.length && emps.length) ? 'desmarcar todas' : 'marcar todas';
   var bc = document.getElementById('rcb-cta-a');
-  if (bc) bc.textContent = (ctasOn === ctas.length && ctas.length) ? 'desmarcar todas' : 'marcar todas';
+  if (bc) bc.textContent = (ctas.length && ctasOn === ctas.length) ? 'desmarcar todas' : 'marcar todas';
 }
-
 function rcbTodasEmpresas() {
   var todas = document.querySelectorAll('#rcb-emps input[name="empresa_id"]');
   var marcar = rcbEmpsMarcadas().length !== todas.length;
@@ -654,34 +715,63 @@ function rcbTodasEmpresas() {
 }
 function rcbTodasContas() {
   var todas = document.querySelectorAll('#rcb-ctas input[name="conta_id"]');
-  var marcadas = document.querySelectorAll('#rcb-ctas input[name="conta_id"]:checked').length;
-  var marcar = marcadas !== todas.length;
+  var on = document.querySelectorAll('#rcb-ctas input[name="conta_id"]:checked').length;
+  var marcar = on !== todas.length;
   todas.forEach(function (c) { c.checked = marcar; });
   rcbContadores();
 }
 
-function rcbPeriodo(tipo) {
-  var hoje = new Date(), ini, fim;
-  if (tipo === 'mes_atual') {
-    ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-    fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-  } else if (tipo === 'mes_anterior') {
-    ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
-    fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
-  } else {
-    ini = new Date(hoje.getFullYear(), 0, 1);
-    fim = new Date(hoje.getFullYear(), 11, 31);
+/* Período e situação: botões que escrevem nos campos que vão no GET. */
+function rcbIso(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+         '-' + String(d.getDate()).padStart(2, '0');
+}
+function rcbSegmentados() {
+  var per = document.getElementById('rcb-seg-per');
+  var di = document.getElementById('rcb-di');
+  var df = document.getElementById('rcb-df');
+  per.querySelectorAll('button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      per.querySelectorAll('button').forEach(function (o) { o.classList.remove('on'); });
+      b.classList.add('on');
+      var p = b.dataset.p;
+      document.getElementById('rcb-datas').hidden = (p !== 'datas');
+      if (p === 'datas') return;
+      var hoje = new Date(), i, f;
+      if (p === 'mes') {
+        i = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+        f = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+      } else if (p === 'ant') {
+        i = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+        f = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+      } else {
+        i = new Date(hoje.getFullYear(), 0, 1);
+        f = new Date(hoje.getFullYear(), 11, 31);
+      }
+      di.value = rcbIso(i);
+      df.value = rcbIso(f);
+    });
+  });
+  if (di.value || df.value) {
+    per.querySelector('[data-p="datas"]').classList.add('on');
+    document.getElementById('rcb-datas').hidden = false;
   }
-  function iso(d) {
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
-           '-' + String(d.getDate()).padStart(2, '0');
-  }
-  document.getElementById('rcb-di').value = iso(ini);
-  document.getElementById('rcb-df').value = iso(fim);
+
+  var sit = document.getElementById('rcb-seg-sit');
+  var campo = document.getElementById('rcb-status');
+  sit.querySelectorAll('button').forEach(function (b) {
+    if (b.dataset.s === campo.value) b.classList.add('on');
+    b.addEventListener('click', function () {
+      sit.querySelectorAll('button').forEach(function (o) { o.classList.remove('on'); });
+      b.classList.add('on');
+      campo.value = b.dataset.s;
+    });
+  });
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-  rcbContas();          // repõe as contas da empresa que já veio filtrada
+  rcbSegmentados();
+  rcbContas();
   rcbAtualiza();
 });
 </script>
