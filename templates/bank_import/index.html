@@ -196,16 +196,6 @@ body > .container-fluid:has(#bnc){
     </div>
 
 
-    <!-- Architecture explanation banner -->
-    <div class="alert alert-light border-start border-primary border-3 py-2 px-3 mb-3 d-flex align-items-center gap-2" style="font-size:0.85rem;">
-        <i class="bi bi-cloud-upload-fill text-primary fs-5 flex-shrink-0"></i>
-        <span>
-            <strong>Como importar:</strong>
-            Exporte o OFX no seu banco → selecione a conta no card <strong class="text-success">"Importar Extrato OFX"</strong> → clique em <strong class="text-success">"Importar Extrato"</strong>.
-            <span class="text-muted ms-1"><i class="bi bi-laptop"></i> → <i class="bi bi-globe"></i> → <i class="bi bi-database-fill-check text-success"></i></span>
-        </span>
-    </div>
-
     <!-- Números: os três primeiros levam para a tela que detalha. -->
     <div class="nums">
       <a class="n n--a" href="{{ url_for('bank_import.relatorio') }}">
@@ -367,20 +357,20 @@ body > .container-fluid:has(#bnc){
       </a>
     </div>
 
+    <div class="pe">
+      <a href="{{ url_for('index') }}">&larr; Voltar para o Dashboard</a>
+      <a href="{{ url_for('bank_import.relatorio') }}">Relatório OFX completo</a>
+    </div>
+
     <!-- OFX Inbox (watch-folder) -->
     <div class="row mt-4">
         <div class="col-12">
 
 
             {# ── Estado A: sem config ou /tmp ── use upload direto #}
+            {# Estado A (sem pasta configurada) nao mostra nada: as duas
+               caixas de importacao ja estao logo acima. #}
             {% if inbox_is_tmp and not is_windows_path %}
-            <div class="card shadow-sm border-0 bg-light">
-                <div class="card-body py-3 text-center text-muted" style="font-size:0.9rem;">
-                    <i class="bi bi-info-circle"></i>
-                    Use o card <strong>"Importar Extrato OFX"</strong> acima para enviar o
-                    arquivo direto do seu computador ou celular.
-                </div>
-            </div>
 
             {# ── Estado B: caminho Windows (ex: C:\Users\...) ── erro de configuração #}
             {% elif is_windows_path %}
