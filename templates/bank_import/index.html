@@ -49,6 +49,14 @@ body > .container-fluid:has(#bnc){
 #bnc .n--c{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
 #bnc .n--d{ background:linear-gradient(135deg,#5B6B7F,#465565); }
 
+/* Saída da tela: os mesmos botões das outras abas. Sem isto os links caem
+   como texto sublinhado, que foi o que apareceu no rodapé. */
+#bnc .pe{ display:flex; gap:.45rem; flex-wrap:wrap; margin-top:.9rem; }
+#bnc .pe a{ display:inline-flex; align-items:center; gap:.3rem; font-size:.79rem;
+  font-weight:700; color:var(--azul); text-decoration:none; background:#fff;
+  border:1px solid var(--line-2); border-radius:10px; padding:.4rem .7rem; }
+#bnc .pe a:hover{ border-color:var(--azul); color:var(--azul); }
+
 /* ── Cartão de importação: a ação principal da tela ──────────────── */
 #bnc .bloco{ background:#fff; border:1px solid var(--line-2); border-radius:14px;
   overflow:hidden; margin-bottom:.8rem; }
