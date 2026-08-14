@@ -25,7 +25,8 @@ from datetime import date, timedelta
 
 import requests
 
-from utils.boletos import _ensure_credentials_from_env, _get_bearer_token
+from utils.boletos import (_ensure_credentials_from_env, _get_bearer_token,
+                           fetch_charge)
 from utils.db import get_db_connection
 
 _API_PROD = "https://cobrancas.api.efipay.com.br"
@@ -64,18 +65,80 @@ def credenciais(config=None):
     })
 
 
+# Quais linhas do histórico são de fato o pagamento.
+#
+# O histórico começa na emissão, então pegar a primeira linha com data
+# devolveria a data de EMISSÃO. E há um vizinho traiçoeiro: "Aguardando
+# pagamento" contém "paga" dentro de "pagamento", e casaria com qualquer teste
+# ingênuo — gravando a data em que o boleto passou a esperar como se fosse a
+# data em que foi pago.
+#
+# Por isso a recusa vem antes da aceitação, e a varredura é de trás para a
+# frente: vale a última linha que fala de pagamento consumado.
+#
+# Uma data errada aqui é pior do que nenhuma: some do radar e não bate com o
+# extrato. Na dúvida, o campo fica em branco.
+_RECUSA = ('aguard', 'waiting', 'pending', 'unpaid', 'nao pago', 'não pago')
+_ACEITA = ('pago', 'paga', 'paid', 'liquidad', 'settled', 'baixad')
+
+
 def _data_pagamento(charge):
-    """Extrai a data em que o boleto foi pago, no formato YYYY-MM-DD."""
-    bruto = charge.get("paid_at") or charge.get("paidAt")
-    if bruto:
-        return str(bruto)[:10]
-    # Alguns retornos trazem a data só dentro do histórico da cobrança.
-    for h in (charge.get("history") or []):
+    """Data em que o boleto foi pago, YYYY-MM-DD, ou None se não der para saber.
+
+    Devolver None é um resultado legítimo: melhor a data em branco do que a
+    data de emissão fazendo as vezes de data de pagamento.
+    """
+    if not isinstance(charge, dict):
+        return None
+
+    for chave in ("paid_at", "paidAt", "payment_date", "settled_at"):
+        if charge.get(chave):
+            return str(charge[chave])[:10]
+
+    # O detalhe da cobrança aninha o pagamento em `payment`.
+    pagamento = charge.get("payment")
+    if isinstance(pagamento, dict):
+        for chave in ("paid_at", "paidAt", "payment_date"):
+            if pagamento.get(chave):
+                return str(pagamento[chave])[:10]
+        for sub in ("banking_billet", "credit_card", "pix"):
+            bloco = pagamento.get(sub)
+            if isinstance(bloco, dict):
+                for chave in ("paid_at", "paidAt", "payment_date"):
+                    if bloco.get(chave):
+                        return str(bloco[chave])[:10]
+
+    # Último recurso: a linha do histórico que fala de pagamento consumado.
+    for h in reversed(charge.get("history") or []):
         if not isinstance(h, dict):
             continue
-        quando = h.get("created_at") or h.get("date")
-        if quando:
-            return str(quando)[:10]
+        texto = (str(h.get("message") or "") + " " + str(h.get("status") or "")).lower()
+        if any(m in texto for m in _RECUSA):
+            continue
+        if any(m in texto for m in _ACEITA):
+            quando = h.get("created_at") or h.get("date")
+            if quando:
+                return str(quando)[:10]
+    return None
+
+
+def _data_pagamento_completa(charge, charge_id, cred, logger):
+    """A listagem da EFI não traz a data do pagamento — só o detalhe traz.
+
+    Então, quando a listagem não sabe, buscamos o detalhe daquela cobrança. Só
+    acontece para as que mudaram de status, não para a lista inteira.
+    """
+    quando = _data_pagamento(charge)
+    if quando:
+        return quando
+    try:
+        detalhe = fetch_charge(cred, charge_id)
+        if isinstance(detalhe, dict):
+            # O corpo útil às vezes vem embrulhado em "data".
+            return _data_pagamento(detalhe.get("data") or detalhe)
+    except Exception:
+        if logger:
+            logger.warning("[efi_recon] não deu para buscar o detalhe de %s", charge_id)
     return None
 
 
@@ -136,6 +199,7 @@ def reconciliar(begin_date=None, end_date=None, config=None, logger=None):
                     len(pagos), len(liquidados), len(cancelados), begin_date, end_date)
 
     atual_pagos, atual_cancelados, ja_corretos, nao_encontrados = [], [], [], []
+    sem_data = []   # baixados sem data: some do radar se ninguém contar
 
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
@@ -153,10 +217,13 @@ def reconciliar(begin_date=None, end_date=None, config=None, logger=None):
             if (row.get("status") or "").lower() == "pago":
                 ja_corretos.append(charge_id)
                 continue
+            quando = _data_pagamento_completa(charge, charge_id, cred, logger)
+            if quando is None:
+                sem_data.append(charge_id)
             cur.execute(
                 "UPDATE cobrancas SET status = 'pago', pago_via_provedor = 1,"
                 " data_pagamento = %s WHERE charge_id = %s",
-                (_data_pagamento(charge), charge_id),
+                (quando, charge_id),
             )
             conn.commit()
             atual_pagos.append(charge_id)
@@ -200,4 +267,5 @@ def reconciliar(begin_date=None, end_date=None, config=None, logger=None):
         "atualizados_cancelados": len(atual_cancelados),
         "ja_corretos": len(ja_corretos),
         "nao_encontrados": len(nao_encontrados),
+        "sem_data_pagamento": len(sem_data),
     }
