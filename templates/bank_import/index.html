@@ -48,6 +48,94 @@ body > .container-fluid:has(#bnc){
 #bnc .n--b{ background:linear-gradient(135deg,#22A24B,#17963C); }
 #bnc .n--c{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
 #bnc .n--d{ background:linear-gradient(135deg,#5B6B7F,#465565); }
+
+/* ── Cartão de importação: a ação principal da tela ──────────────── */
+#bnc .bloco{ background:#fff; border:1px solid var(--line-2); border-radius:14px;
+  overflow:hidden; margin-bottom:.8rem; }
+#bnc .bloco__c{ display:flex; align-items:center; gap:.45rem; padding:.6rem .8rem;
+  font-size:.9rem; font-weight:800; color:#fff;
+  background:linear-gradient(120deg,var(--azul-deep),var(--azul)); }
+#bnc .bloco__b{ padding:.8rem; }
+#bnc .rot{ font-size:.69rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.05em; color:#6b7684; margin-bottom:.25rem; display:block; }
+#bnc .campo{ width:100%; border:1px solid var(--line-2); border-radius:10px;
+  padding:.55rem .7rem; font-size:.88rem; background:#fff; color:#151d27;
+  font-family:inherit; }
+#bnc .solta{ border:2px dashed var(--line-2); border-radius:12px; padding:1.1rem .8rem;
+  text-align:center; cursor:pointer; background:#f7f9fc; transition:border-color .15s; }
+#bnc .solta:hover{ border-color:var(--azul); }
+#bnc .solta i{ font-size:1.7rem; color:var(--azul); }
+#bnc .solta p{ margin:.35rem 0 0; font-size:.85rem; font-weight:700; }
+#bnc .solta small{ font-size:.74rem; color:#6b7684; }
+#bnc .enviar{ width:100%; border:0; border-radius:11px; padding:.7rem;
+  font-size:.92rem; font-weight:800; color:#fff; cursor:pointer; font-family:inherit;
+  background:linear-gradient(120deg,var(--azul-deep),var(--azul)); }
+#bnc .enviar[disabled]{ background:#c7ced8; cursor:not-allowed; }
+#bnc .passos-txt{ font-size:.78rem; color:#6b7684; margin:0 0 .7rem; }
+#bnc .passos-txt b{ color:#151d27; }
+
+/* ── Botões de ação: alvo grande, um toque ───────────────────────── */
+#bnc .acoes{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; }
+@media (min-width:768px){ #bnc .acoes{ grid-template-columns:repeat(4,1fr); } }
+#bnc .ac{ display:flex; flex-direction:column; align-items:flex-start; gap:.15rem;
+  background:#fff; border:1px solid var(--line-2); border-radius:12px;
+  padding:.6rem .65rem; text-decoration:none; color:#151d27; cursor:pointer;
+  font-family:inherit; text-align:left; position:relative; }
+#bnc .ac:hover{ border-color:var(--azul); color:#151d27; }
+#bnc .ac i{ font-size:1.05rem; color:var(--azul); }
+#bnc .ac .t{ font-size:.82rem; font-weight:800; line-height:1.2; }
+#bnc .ac .d{ font-size:.71rem; color:#6b7684; }
+#bnc .ac--forte{ background:linear-gradient(120deg,#B8791C,#D79A2B); border-color:transparent;
+  color:#fff; }
+#bnc .ac--forte i, #bnc .ac--forte .d{ color:#fff; opacity:.92; }
+#bnc .ac--forte:hover{ color:#fff; filter:brightness(1.05); }
+#bnc .ac .sino{ position:absolute; top:.45rem; right:.5rem; background:#fff;
+  color:#B8791C; border-radius:99px; font-size:.68rem; font-weight:800;
+  padding:0 .35rem; min-width:18px; text-align:center; }
+
+/* ── Funil de empresa ────────────────────────────────────────────── */
+#bnc .topo .fil{ margin-left:auto; flex:0 0 auto; background:rgba(255,255,255,.2);
+  border:1px solid rgba(255,255,255,.35); color:#fff; border-radius:10px;
+  padding:.32rem .6rem; font-size:.8rem; font-weight:800; cursor:pointer;
+  display:inline-flex; align-items:center; gap:.32rem; font-family:inherit; }
+#bnc .topo .fil:hover{ background:rgba(255,255,255,.3); }
+#bnc .topo .fil .b{ background:#fff; color:var(--azul-deep); border-radius:99px;
+  min-width:17px; height:17px; display:grid; place-items:center; font-size:.66rem; }
+#bnc .escuro{ position:fixed; inset:0; background:rgba(12,25,42,.45); z-index:1050;
+  opacity:0; pointer-events:none; transition:opacity .2s; }
+#bnc .escuro.on{ opacity:1; pointer-events:auto; }
+#bnc .gav{ position:fixed; left:0; right:0; bottom:0; z-index:1051; background:#fff;
+  border-radius:18px 18px 0 0; max-height:80vh; display:flex; flex-direction:column;
+  transform:translateY(101%); transition:transform .24s cubic-bezier(.22,.7,.3,1);
+  box-shadow:0 -10px 30px rgba(12,25,42,.3); }
+#bnc .gav.on{ transform:translateY(0); }
+@media (min-width:992px){
+  #bnc .gav{ left:50%; right:auto; bottom:auto; top:10vh; width:480px; border-radius:16px;
+    transform:translate(-50%,10px); opacity:0; pointer-events:none;
+    transition:opacity .16s ease, transform .16s ease; }
+  #bnc .gav.on{ transform:translate(-50%,0); opacity:1; pointer-events:auto; }
+  #bnc .gav__pega{ display:none; }
+}
+#bnc .gav__pega{ width:36px; height:4px; background:var(--line-2); border-radius:9px;
+  margin:.5rem auto .1rem; }
+#bnc .gav__cab{ display:flex; align-items:baseline; gap:.5rem; padding:.5rem .9rem; }
+#bnc .gav__cab b{ font-size:.98rem; }
+#bnc .gav__n{ font-size:.72rem; color:#6b7684; }
+#bnc .gav__b{ overflow-y:auto; padding:0 .9rem .7rem; }
+#bnc .gav__f{ border-top:1px solid #e7ebf1; padding:.65rem .9rem;
+  padding-bottom:calc(.65rem + env(safe-area-inset-bottom)); }
+#bnc .bt-g{ width:100%; border:1px solid var(--line-2); background:#f7f9fc; color:#6b7684;
+  border-radius:10px; padding:.55rem; font-size:.87rem; font-weight:800; cursor:pointer;
+  font-family:inherit; }
+#bnc .opcs{ border:1px solid var(--line-2); border-radius:10px; overflow:hidden; }
+#bnc .opc{ display:flex; align-items:center; gap:.5rem; padding:.6rem .65rem;
+  border-bottom:1px solid #e7ebf1; font-size:.86rem; text-decoration:none;
+  color:#151d27; }
+#bnc .opc:last-child{ border-bottom:0; }
+#bnc .opc:hover{ background:#f7f9fc; color:#151d27; }
+#bnc .opc.on{ background:#eaf1f9; color:var(--azul-deep); font-weight:800; }
+#bnc .opc__t{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#bnc .opc .tique{ margin-left:auto; color:var(--azul); }
 </style>
 <style>
   .page-hero {
@@ -69,8 +157,18 @@ body > .container-fluid:has(#bnc){
         <a class="voltar" href="{{ url_for('index') }}">&larr; Dashboard</a>
         <div style="min-width:0">
           <h3>Banco</h3>
-          <div class="sub">Importação de extrato OFX e conciliação</div>
+          <div class="sub">
+            {%- if cliente_id_filter -%}
+              {%- for c in clientes if c.id == cliente_id_filter -%}{{ c.razao_social }}{%- endfor -%}
+            {%- else -%}Importação de extrato OFX e conciliação{%- endif -%}
+          </div>
         </div>
+        {% if clientes %}
+        <button type="button" class="fil" onclick="bncAbrirFiltro()">
+          <i class="bi bi-funnel"></i>
+          {% if cliente_id_filter %}<span class="b">1</span>{% endif %}
+        </button>
+        {% endif %}
       </div>
       <div class="abas">
         <a class="aba on" href="{{ url_for('bank_import.index') }}">Resumo</a>
@@ -81,110 +179,6 @@ body > .container-fluid:has(#bnc){
       </div>
     </div>
 
-    <!-- Dropbox — pasta automática (movido para o topo) -->
-    {# ── Dropbox: sempre aparece quando configurado ── #}
-    {% if dropbox_configured %}
-    <div class="card shadow-sm mb-4" style="border-left:4px solid #0061FE;">
-        <div class="card-header d-flex justify-content-between align-items-center"
-             style="background:#0061FE;color:white;">
-            <h5 class="mb-0">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 40 40" fill="white" class="me-2" style="vertical-align:-4px">
-                    <path d="M20 7.5L10 13.75 20 20 10 26.25 20 32.5 30 26.25 20 20 30 13.75 20 7.5zM10 26.25L0 20l10-6.25L0 7.5 10 1.25 20 7.5 10 13.75 20 20l-10 6.25zM30 1.25L40 7.5 30 13.75 40 20 30 26.25 20 20l10-6.25L20 7.5 30 1.25z"/>
-                </svg>
-                Dropbox — Pasta Automática
-                <small class="fw-normal ms-2" style="font-size:0.78rem;opacity:0.9;">
-                    Coloque o OFX em <code style="background:rgba(255,255,255,0.2);padding:1px 5px;border-radius:3px;">{{ dropbox_inbox }}</code> e importe aqui
-                </small>
-                {% if dropbox_oauth2 %}
-                <span class="badge bg-success ms-2" style="font-size:0.7rem;">
-                    <i class="bi bi-shield-check"></i> OAuth2 Permanente ✓
-                </span>
-                {% else %}
-                <span class="badge bg-warning text-dark ms-2" style="font-size:0.7rem;" title="Token expira em ~4 horas. Configure OAuth2 para nunca mais expirar.">
-                    <i class="bi bi-exclamation-triangle"></i> Token temporário (expira em ~4h)
-                </span>
-                {% endif %}
-            </h5>
-            <div class="d-flex gap-1">
-                {% if not dropbox_oauth2 %}
-                <button class="btn btn-sm btn-warning text-dark" onclick="document.getElementById('divOAuth2').classList.toggle('d-none')">
-                    <i class="bi bi-key"></i> Configurar Token Permanente
-                </button>
-                {% endif %}
-                <button class="btn btn-sm btn-light" onclick="verificarDropbox()">
-                    <i class="bi bi-arrow-clockwise"></i> Verificar
-                </button>
-            </div>
-        </div>
-    
-        {# Aviso OAuth2 — só aparece quando usando token temporário #}
-        {% if not dropbox_oauth2 %}
-        <div id="divOAuth2" class="d-none alert alert-warning mb-0 rounded-0 border-0" style="font-size:0.85rem;">
-            <strong>⚠️ Seu token Dropbox expira em ~4 horas.</strong>
-            Configure OAuth2 com refresh token para não precisar renovar nunca mais:
-            <ol class="mb-1 mt-1">
-                <li>Acesse <a href="https://www.dropbox.com/developers/apps" target="_blank">dropbox.com/developers/apps</a> → crie ou edite seu app → copie <strong>App Key</strong> e <strong>App Secret</strong></li>
-                <li>Configure <code>DROPBOX_APP_KEY</code> e <code>DROPBOX_APP_SECRET</code> no Railway (aba <strong>Variables</strong> do serviço do app) e <strong>faça redeploy</strong></li>
-                <li>Volte aqui e clique em <button class="btn btn-sm btn-primary py-0" onclick="gerarUrlOAuth2()"><i class="bi bi-box-arrow-up-right"></i> Gerar URL de Autorização</button></li>
-                <li>Autorize no Dropbox, cole o código aqui: <input type="text" id="inputOAuthCode" class="form-control form-control-sm d-inline-block" style="width:200px;" placeholder="Cole o código aqui...">
-                    <button class="btn btn-sm btn-success py-0 ms-1" onclick="trocarCodigoOAuth2()"><i class="bi bi-check-lg"></i> Obter Refresh Token</button></li>
-                <li id="liRefreshToken" class="d-none">Configure o valor abaixo como <code>DROPBOX_REFRESH_TOKEN</code> no Railway:<br>
-                    <code id="spanRefreshToken" class="bg-light p-1 d-inline-block mt-1" style="font-size:0.9rem;word-break:break-all;"></code>
-                    <button class="btn btn-sm btn-outline-secondary ms-1" onclick="navigator.clipboard.writeText(document.getElementById('spanRefreshToken').textContent)"><i class="bi bi-clipboard"></i></button>
-                </li>
-            </ol>
-        </div>
-        {% endif %}
-        <div class="card-body">
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <div class="alert alert-light border py-2 mb-1" style="font-size:0.82rem;">
-                        <i class="bi bi-folder2-open text-primary"></i>
-                        <strong>Pasta NOVO (Dropbox):</strong>
-                        <code>{{ dropbox_inbox }}</code>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="alert alert-light border py-2 mb-1" style="font-size:0.82rem;">
-                        <i class="bi bi-folder-check text-success"></i>
-                        <strong>Pasta IMPORTADOS (Dropbox):</strong>
-                        <code>{{ dropbox_processed }}</code>
-                    </div>
-                </div>
-            </div>
-    
-            <div class="row g-2 align-items-end mb-3" id="dbxFiltroRow">
-                <div class="col-sm-4">
-                    <label class="form-label fw-semibold mb-1" style="font-size:0.88rem;">
-                        <i class="bi bi-building"></i> Empresa:
-                    </label>
-                    <select id="dbxClienteId" class="form-select form-select-sm"
-                            onchange="dbxCarregarContas(this.value)">
-                        <option value="">— Selecione a empresa —</option>
-                        {% for c in clientes %}
-                        <option value="{{ c.id }}">{{ c.razao_social }}{% if c.nome_fantasia and c.nome_fantasia != c.razao_social %} ({{ c.nome_fantasia }}){% endif %}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-sm-5">
-                    <label class="form-label fw-semibold mb-1" style="font-size:0.88rem;">
-                        <i class="bi bi-bank"></i> Conta bancária:
-                    </label>
-                    <select id="dbxAccountId" class="form-select form-select-sm" disabled>
-                        <option value="">— Selecione a empresa primeiro —</option>
-                    </select>
-                </div>
-            </div>
-    
-            <div id="dbxFileList">
-                <div class="text-muted text-center py-3">
-                    <i class="bi bi-cloud fs-2 text-primary"></i>
-                    <p class="mt-1 mb-0">Selecione a <strong>Empresa</strong> e a <strong>Conta</strong> e clique em <strong>Verificar</strong>.</p>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
 
     <!-- Architecture explanation banner -->
     <div class="alert alert-light border-start border-primary border-3 py-2 px-3 mb-3 d-flex align-items-center gap-2" style="font-size:0.85rem;">
@@ -208,134 +202,125 @@ body > .container-fluid:has(#bnc){
         <div class="r">Contas ativas</div><div class="v">{{ contas|length }}</div></div>
     </div>
 
-    <!-- Empresa filter -->
+    {# O filtro desta tela é só a empresa, e ele mora no funil do cabeçalho,
+       como nas outras abas. Escolher já aplica — não há o que confirmar. #}
     {% if clientes %}
-    <form method="GET" action="{{ url_for('bank_import.index') }}" class="row g-2 align-items-end mb-3">
-        <div class="col-sm-5">
-            <label class="form-label fw-semibold mb-1" style="font-size:0.88rem;">
-                <i class="bi bi-building"></i> Filtrar por Empresa:
-            </label>
-            <select name="empresa_id" class="form-select form-select-sm" onchange="this.form.submit()">
-                <option value="">— Todas as Empresas —</option>
-                {% for c in clientes %}
-                <option value="{{ c.id }}" {% if cliente_id_filter == c.id %}selected{% endif %}>
-                    {{ c.razao_social }}{% if c.nome_fantasia and c.nome_fantasia != c.razao_social %} ({{ c.nome_fantasia }}){% endif %}
-                </option>
-                {% endfor %}
-            </select>
+    <div class="escuro" id="bnc-escuro" onclick="bncFecharFiltro()"></div>
+    <div class="gav" id="bnc-gav">
+      <div class="gav__pega"></div>
+      <div class="gav__cab"><b>Empresa</b>
+        <span class="gav__n">{{ clientes|length }} com conta bancária</span></div>
+      <div class="gav__b">
+        <div class="opcs">
+          <a class="opc{% if not cliente_id_filter %} on{% endif %}"
+             href="{{ url_for('bank_import.index') }}">
+            <span class="opc__t">Todas as empresas</span>
+            {% if not cliente_id_filter %}<i class="bi bi-check-lg tique"></i>{% endif %}
+          </a>
+          {% for c in clientes %}
+          <a class="opc{% if cliente_id_filter == c.id %} on{% endif %}"
+             href="{{ url_for('bank_import.index') }}?empresa_id={{ c.id }}">
+            <span class="opc__t">{{ c.razao_social }}</span>
+            {% if cliente_id_filter == c.id %}<i class="bi bi-check-lg tique"></i>{% endif %}
+          </a>
+          {% endfor %}
         </div>
-        {% if cliente_id_filter %}
-        <div class="col-auto">
-            <a href="{{ url_for('bank_import.index') }}" class="btn btn-sm btn-outline-secondary">
-                <i class="bi bi-x-circle"></i> Limpar filtro
-            </a>
-        </div>
-        {% endif %}
-    </form>
+      </div>
+      <div class="gav__f">
+        <button type="button" class="bt-g bt-g--ca" onclick="bncFecharFiltro()">Fechar</button>
+      </div>
+    </div>
     {% endif %}
 
-    <div class="row g-4">
-        <!-- Upload card -->
-        <div class="col-lg-6">
-            <div class="card shadow-sm border-primary">
-                <div class="card-header" style="background:#1D63A5;color:white;">
-                    <h5 class="mb-0">
-                        <i class="bi bi-cloud-upload"></i> Importar Extrato OFX
-                        <span class="badge bg-warning text-dark ms-2" style="font-size:0.72rem;">PASSO A PASSO</span>
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <!-- Step-by-step guide -->
-                    <ol class="list-group list-group-numbered list-group-flush mb-3" style="font-size:0.87rem;">
-                        <li class="list-group-item px-0 py-1 border-0">
-                            Exporte o extrato OFX no <strong>site/app do seu banco</strong>
-                        </li>
-                        <li class="list-group-item px-0 py-1 border-0">
-                            Selecione a <strong>Conta Bancária</strong> abaixo
-                        </li>
-                        <li class="list-group-item px-0 py-1 border-0">
-                            Clique na área pontilhada e selecione o arquivo <strong>.ofx</strong> do seu computador
-                        </li>
-                        <li class="list-group-item px-0 py-1 border-0">
-                            Clique em <strong>"Importar Extrato"</strong> — pronto! ✅
-                        </li>
-                    </ol>
-                    <form method="POST" action="{{ url_for('bank_import.upload') }}" enctype="multipart/form-data" id="uploadForm">
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Conta Bancária</label>
-                            {% if contas %}
-                            <select name="account_id" class="form-select" required>
-                                <option value="">Selecione a conta...</option>
-                                {% for conta in contas %}
-                                <option value="{{ conta.id }}">{{ conta.apelido or conta.banco_nome }}{% if conta.agencia %} – Ag {{ conta.agencia }}{% endif %}{% if conta.conta %} / {{ conta.conta }}{% endif %}{% if conta.empresa_nome %} [{{ conta.empresa_nome }}]{% endif %}</option>
-                                {% endfor %}
-                            </select>
-                            {% else %}
-                            <div class="alert alert-warning py-2 mb-0">
-                                <i class="bi bi-exclamation-triangle"></i>
-                                Nenhuma conta cadastrada.
-                                <a href="#" data-bs-toggle="modal" data-bs-target="#modalNovaConta">Cadastre uma conta</a>.
-                            </div>
-                            {% endif %}
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Arquivo OFX</label>
-                            <div id="dropZone"
-                                 class="border rounded p-4 text-center"
-                                 style="border-style:dashed!important;cursor:pointer;background:#f8f9fa;"
-                                 onclick="document.getElementById('ofxFile').click()">
-                                <i class="bi bi-file-earmark-arrow-up fs-2 text-primary"></i>
-                                <p class="mb-0 mt-2">Clique ou arraste o arquivo OFX aqui</p>
-                                <small class="text-muted">Formatos aceitos: .ofx, .OFX</small>
-                            </div>
-                            <input type="file" id="ofxFile" name="ofx_file" accept=".ofx,.OFX" class="d-none" required>
-                            <div id="fileInfo" class="mt-2 text-success d-none">
-                                <i class="bi bi-check-circle"></i> <span id="fileName"></span>
-                            </div>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100" {% if not contas %}disabled{% endif %}>
-                            <i class="bi bi-upload"></i> Importar Extrato
-                        </button>
-                    </form>
-                </div>
-            </div>
-        </div>
+    <!-- Importar: a ação principal desta tela -->
+    <div class="bloco">
+      <div class="bloco__c"><i class="bi bi-cloud-arrow-up-fill"></i> Importar extrato OFX</div>
+      <div class="bloco__b">
+        <p class="passos-txt">Exporte o <b>.ofx</b> no site do seu banco, escolha a conta e
+          envie o arquivo. Lançamento repetido é ignorado na importação.</p>
 
-        <!-- Quick links card -->
-        <div class="col-lg-6">
-            <div class="card shadow-sm h-100">
-                <div class="card-header" style="background:#28a745;color:white;">
-                    <h5 class="mb-0"><i class="bi bi-lightning-charge"></i> Ações Rápidas</h5>
-                </div>
-                <div class="card-body d-flex flex-column gap-3">
-                    <a href="{{ url_for('bank_import.conciliar') }}" class="btn btn-outline-warning">
-                        <i class="bi bi-arrow-left-right"></i> Conciliar Transações Pendentes
-                        {% if pendentes %}<span class="badge bg-warning text-dark ms-1">{{ pendentes }}</span>{% endif %}
-                    </a>
-                    <a href="{{ url_for('bank_import.relatorio') }}" class="btn btn-outline-info">
-                        <i class="bi bi-bar-chart-line"></i> Relatório de Transações
-                    </a>
-                    <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#modalDiasImportados">
-                        <i class="bi bi-calendar-check"></i> Consulta Último Dia Importado
-                    </button>
-                    <button class="btn btn-outline-secondary" onclick="autoReconcile()">
-                        <i class="bi bi-magic"></i> Executar Auto-Conciliação
-                    </button>
-                    <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalNovaConta">
-                        <i class="bi bi-bank"></i> Cadastrar Nova Conta
-                    </button>
-                    <a href="{{ url_for('bank_import.gerenciar_contas') }}" class="btn btn-outline-dark">
-                        <i class="bi bi-gear"></i> Gerenciar Contas (editar / excluir)
-                    </a>
-                    <a href="{{ url_for('conciliacao_regras.lista') }}" class="btn btn-outline-warning">
-                        <i class="bi bi-funnel"></i> Regras de Conciliaçao
-                    </a>
-                    <button class="btn btn-outline-success fw-semibold" data-bs-toggle="modal" data-bs-target="#modalExportacaoContabil">
-                        <i class="bi bi-file-earmark-spreadsheet me-1"></i> Exportação Contábil
-                    </button>
-                </div>
+        <form method="POST" action="{{ url_for('bank_import.upload') }}"
+              enctype="multipart/form-data" id="uploadForm">
+          <div class="mb-3">
+            <label class="rot">Conta bancária</label>
+            {% if contas %}
+            <select name="account_id" class="campo" required>
+              <option value="">Selecione a conta...</option>
+              {% for conta in contas %}
+              <option value="{{ conta.id }}">{{ conta.apelido or conta.banco_nome }}{% if conta.agencia %} – Ag {{ conta.agencia }}{% endif %}{% if conta.conta %} / {{ conta.conta }}{% endif %}{% if conta.empresa_nome %} [{{ conta.empresa_nome }}]{% endif %}</option>
+              {% endfor %}
+            </select>
+            {% else %}
+            <div class="alert alert-warning py-2 mb-0" style="font-size:.85rem">
+              <i class="bi bi-exclamation-triangle"></i> Nenhuma conta cadastrada.
+              <a href="#" data-bs-toggle="modal" data-bs-target="#modalNovaConta">Cadastre uma conta</a>.
             </div>
-        </div>
+            {% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label class="rot">Arquivo</label>
+            <div id="dropZone" class="solta" onclick="document.getElementById('ofxFile').click()">
+              <i class="bi bi-file-earmark-arrow-up"></i>
+              <p>Toque para escolher o arquivo OFX</p>
+              <small>aceita .ofx e .OFX</small>
+            </div>
+            <input type="file" id="ofxFile" name="ofx_file" accept=".ofx,.OFX" class="d-none" required>
+            <div id="fileInfo" class="mt-2 text-success d-none" style="font-size:.85rem;font-weight:700">
+              <i class="bi bi-check-circle"></i> <span id="fileName"></span>
+            </div>
+          </div>
+
+          <button type="submit" class="enviar" {% if not contas %}disabled{% endif %}>
+            <i class="bi bi-upload"></i> Importar extrato
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Ações: alvo grande, uma linha do que cada uma faz -->
+    <div class="acoes">
+      <a class="ac ac--forte" href="{{ url_for('bank_import.conciliar') }}">
+        {% if pendentes %}<span class="sino">{{ pendentes }}</span>{% endif %}
+        <i class="bi bi-arrow-left-right"></i>
+        <span class="t">Conciliar</span>
+        <span class="d">o que está pendente</span>
+      </a>
+      <button type="button" class="ac" onclick="autoReconcile()">
+        <i class="bi bi-magic"></i>
+        <span class="t">Auto-conciliação</span>
+        <span class="d">aplica as regras</span>
+      </button>
+      <a class="ac" href="{{ url_for('conciliacao_regras.lista') }}">
+        <i class="bi bi-funnel"></i>
+        <span class="t">Regras</span>
+        <span class="d">conciliar sozinho</span>
+      </a>
+      <a class="ac" href="{{ url_for('bank_import.relatorio') }}">
+        <i class="bi bi-bar-chart-line"></i>
+        <span class="t">Relatório</span>
+        <span class="d">tudo o que entrou</span>
+      </a>
+      <button type="button" class="ac" data-bs-toggle="modal" data-bs-target="#modalDiasImportados">
+        <i class="bi bi-calendar-check"></i>
+        <span class="t">Último dia</span>
+        <span class="d">até onde importou</span>
+      </button>
+      <button type="button" class="ac" data-bs-toggle="modal" data-bs-target="#modalExportacaoContabil">
+        <i class="bi bi-file-earmark-spreadsheet"></i>
+        <span class="t">Exportação contábil</span>
+        <span class="d">arquivo para o contador</span>
+      </button>
+      <button type="button" class="ac" data-bs-toggle="modal" data-bs-target="#modalNovaConta">
+        <i class="bi bi-plus-circle"></i>
+        <span class="t">Nova conta</span>
+        <span class="d">cadastrar banco</span>
+      </button>
+      <a class="ac" href="{{ url_for('bank_import.gerenciar_contas') }}">
+        <i class="bi bi-gear"></i>
+        <span class="t">Gerenciar contas</span>
+        <span class="d">editar ou excluir</span>
+      </a>
     </div>
 
     <!-- OFX Inbox (watch-folder) -->
@@ -345,17 +330,13 @@ body > .container-fluid:has(#bnc){
 
             {# ── Estado A: sem config ou /tmp ── use upload direto #}
             {% if inbox_is_tmp and not is_windows_path %}
-            {% if not dropbox_configured %}
             <div class="card shadow-sm border-0 bg-light">
                 <div class="card-body py-3 text-center text-muted" style="font-size:0.9rem;">
                     <i class="bi bi-info-circle"></i>
-                    <strong>Pasta de Entrada OFX</strong> não configurada.
-                    Use o card <strong>"Importar Extrato OFX"</strong> acima para importar diretamente do seu computador.
-                    <br><small>Para importação automática via Dropbox: configure <code>DROPBOX_TOKEN</code>, <code>DROPBOX_OFX_INBOX</code> e <code>DROPBOX_OFX_PROCESSED</code>
-                    nas <strong>Variables</strong> do serviço do app no Railway.</small>
+                    Use o card <strong>"Importar Extrato OFX"</strong> acima para enviar o
+                    arquivo direto do seu computador ou celular.
                 </div>
             </div>
-            {% endif %}
 
             {# ── Estado B: caminho Windows (ex: C:\Users\...) ── erro de configuração #}
             {% elif is_windows_path %}
@@ -370,13 +351,11 @@ body > .container-fluid:has(#bnc){
                         Caminho configurado: <code>{{ ofx_dir_configured }}</code></strong>
                         <hr class="my-2">
                         Este é um caminho <strong>Windows</strong> — o servidor roda <strong>Linux</strong> no Railway
-                        e não tem acesso a pastas do seu computador (Dropbox, OneDrive, etc.).
+                        e não tem acesso a pastas do seu computador.
                         <br><br>
-                        <strong>Solução A (recomendada):</strong> Configure a integração Dropbox adicionando
-                        <code>DROPBOX_TOKEN</code>, <code>DROPBOX_OFX_INBOX</code> e <code>DROPBOX_OFX_PROCESSED</code>
-                        nas <strong>Variables</strong> do serviço do app no Railway.<br>
-                        <strong>Solução B:</strong> Remova a variável <code>OFX_INBOX_DIR</code> do Railway
-                        e use o upload direto pelo navegador.
+                        <strong>Solução:</strong> remova a variável <code>OFX_INBOX_DIR</code> nas
+                        <strong>Variables</strong> do serviço no Railway e use o upload direto
+                        pelo navegador.
                     </div>
                     <div class="alert alert-success mb-0">
                         <strong><i class="bi bi-check-circle-fill"></i> Como importar agora (upload direto):</strong>
@@ -673,6 +652,16 @@ body > .container-fluid:has(#bnc){
 
 {% block scripts %}
 <script>
+/* Funil da empresa: escolher já aplica, então não há botão de confirmar. */
+function bncAbrirFiltro() {
+  document.getElementById('bnc-gav').classList.add('on');
+  document.getElementById('bnc-escuro').classList.add('on');
+}
+function bncFecharFiltro() {
+  document.getElementById('bnc-gav').classList.remove('on');
+  document.getElementById('bnc-escuro').classList.remove('on');
+}
+
     // ---------------------------------------------------------------
     // Duplicatas na importação: modal interativo
     // ---------------------------------------------------------------
@@ -1040,296 +1029,6 @@ body > .container-fluid:has(#bnc){
 
     {% endif %}
 
-    // ---------------------------------------------------------------
-    // Integração Dropbox API
-    // ---------------------------------------------------------------
-    {% if dropbox_configured %}
-
-    function dbxCarregarContas(clienteId) {
-        const selConta = document.getElementById('dbxAccountId');
-        selConta.innerHTML = '<option value="">Carregando...</option>';
-        selConta.disabled = true;
-        dbxResetFileList();
-        if (!clienteId) {
-            selConta.innerHTML = '<option value="">— Selecione a empresa primeiro —</option>';
-            return;
-        }
-        fetch('{{ url_for("bank_import.api_contas") }}?cliente_id=' + encodeURIComponent(clienteId))
-            .then(r => r.json())
-            .then(contas => {
-                selConta.innerHTML = '<option value="">— Selecione a conta —</option>';
-                if (contas.length === 0) {
-                    selConta.innerHTML = '<option value="">Nenhuma conta cadastrada para esta empresa</option>';
-                    return;
-                }
-                contas.forEach(c => {
-                    const opt = document.createElement('option');
-                    opt.value = c.id;
-                    let label = c.apelido || c.banco_nome;
-                    if (c.agencia) label += ' – Ag ' + c.agencia;
-                    if (c.conta)   label += ' / ' + c.conta;
-                    opt.textContent = label;
-                    selConta.appendChild(opt);
-                });
-                selConta.disabled = false;
-            })
-            .catch(() => {
-                selConta.innerHTML = '<option value="">Erro ao carregar contas — tente recarregar a página</option>';
-            });
-    }
-
-    function dbxResetFileList() {
-        document.getElementById('dbxFileList').innerHTML =
-            '<div class="text-muted text-center py-3"><i class="bi bi-cloud fs-2 text-primary"></i>' +
-            '<p class="mt-1 mb-0">Selecione a <strong>Conta</strong> e clique em <strong>Verificar</strong>.</p></div>';
-    }
-
-    function verificarDropbox() {
-        const selCliente = document.getElementById('dbxClienteId');
-        const selConta   = document.getElementById('dbxAccountId');
-        const clienteId  = selCliente ? selCliente.value : '';
-        const accountId  = selConta   ? selConta.value   : '';
-
-        if (!clienteId) {
-            alert('Por favor, selecione a Empresa e a Conta antes de verificar o Dropbox.');
-            return;
-        }
-        if (!accountId) {
-            alert('Por favor, selecione a Conta antes de verificar o Dropbox.');
-            return;
-        }
-
-        const listDiv = document.getElementById('dbxFileList');
-        listDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm" style="color:#0061FE;"></div> Verificando Dropbox...</div>';
-
-        const url = '{{ url_for("bank_import.api_dropbox_files") }}?account_id=' + encodeURIComponent(accountId);
-
-        fetch(url)
-            .then(r => {
-                const ct = r.headers.get('content-type') || '';
-                if (!ct.includes('application/json')) {
-                    listDiv.innerHTML = '<div class="alert alert-warning py-2">Resposta inesperada do servidor. Tente recarregar a página.</div>';
-                    return null;
-                }
-                return r.json();
-            })
-            .then(data => {
-                if (!data) return;
-                if (!data.success) {
-                    const msg = data.message || 'Erro desconhecido.';
-                    listDiv.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle"></i> ${msg}</div>`;
-                    return;
-                }
-                if (!data.files || data.files.length === 0) {
-                    const contaNome = selConta.options[selConta.selectedIndex].text;
-                    listDiv.innerHTML = `
-                        <div class="alert alert-warning py-2 mb-0">
-                            <i class="bi bi-search"></i>
-                            Nenhum arquivo <code>.ofx</code> encontrado no Dropbox para a conta <strong>${contaNome}</strong>.<br>
-                            <small class="text-muted">Pasta verificada: <code>{{ dropbox_inbox }}</code>. Coloque o arquivo OFX nessa pasta e clique em Verificar novamente.</small>
-                        </div>`;
-                    return;
-                }
-                renderDropboxFiles(data.files, data.filtrado, data.filtrado_sem_resultado, data.ultima_data_importacao || null);
-            })
-            .catch(err => {
-                listDiv.innerHTML = `<div class="alert alert-danger py-2">Erro ao verificar Dropbox: ${err}</div>`;
-            });
-    }
-
-    function renderDropboxFiles(files, filtrado, filtradoSemResultado, ultimaDataImportacao) {
-        const listDiv = document.getElementById('dbxFileList');
-        const wrap = document.createElement('div');
-
-        const header = document.createElement('div');
-        if (filtradoSemResultado) {
-            header.className = 'alert alert-warning py-2 mb-0';
-            const selConta = document.getElementById('dbxAccountId');
-            const contaNome = selConta ? selConta.options[selConta.selectedIndex].text : '';
-            header.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Nenhum arquivo encontrado automaticamente para a conta <strong>${contaNome}</strong>.<br>
-                <small>Coloque o arquivo OFX correto na pasta Dropbox e clique em Verificar novamente.</small>`;
-            wrap.appendChild(header);
-            listDiv.innerHTML = '';
-            listDiv.appendChild(wrap);
-            return;
-        } else {
-            header.className = filtrado ? 'alert alert-success py-2 mb-3' : 'alert alert-info py-2 mb-3';
-            let headerHtml = filtrado
-                ? `<i class="bi bi-funnel-fill text-success"></i> <strong>${files.length}</strong> arquivo(s) encontrado(s) para a conta selecionada.`
-                : `<i class="bi bi-check-circle"></i> <strong>${files.length}</strong> arquivo(s) OFX encontrado(s) no Dropbox. <small class="text-muted">(selecione uma conta para filtrar)</small>`;
-            if (ultimaDataImportacao) {
-                const ultFormatted = ultimaDataImportacao.split('-').reverse().join('/');
-                headerHtml += ` <span class="ms-2 badge bg-secondary" title="Último extrato já importado para esta conta"><i class="bi bi-calendar-check"></i> Último importado: ${ultFormatted}</span>`;
-            }
-            header.innerHTML = headerHtml;
-        }
-        wrap.appendChild(header);
-
-        // Helper: parse ISO date string to Date (noon UTC to avoid TZ shifts)
-        function _parseIso(s) {
-            if (!s) return null;
-            const p = s.split('-');
-            return p.length === 3 ? new Date(Date.UTC(+p[0], +p[1]-1, +p[2], 12)) : null;
-        }
-        const hoje = new Date(); hoje.setHours(12, 0, 0, 0);
-        const ultDate = _parseIso(ultimaDataImportacao);
-        const dias90 = new Date(hoje); dias90.setDate(hoje.getDate() - 90);
-
-        const tableWrap = document.createElement('div');
-        tableWrap.className = 'table-responsive';
-        const t = document.createElement('table');
-        t.className = 'table table-sm table-hover';
-        t.style.fontSize = '0.88rem';
-        t.innerHTML = `<thead class="table-light"><tr><th>Arquivo</th><th>Data (extrato)</th><th>Modificado</th><th>Tamanho</th><th class="text-center">Ação</th></tr></thead>`;
-        const tbody = document.createElement('tbody');
-
-        files.forEach(f => {
-            const kb = (f.tamanho / 1024).toFixed(1);
-            const tr = document.createElement('tr');
-
-            const tdNome = document.createElement('td');
-            tdNome.innerHTML = '<i class="bi bi-file-earmark-text" style="color:#0061FE;"></i> ';
-            const strong = document.createElement('strong');
-            strong.textContent = f.nome;
-            tdNome.appendChild(strong);
-
-            // ── Date badge logic ──
-            const tdData = document.createElement('td');
-            const fDate = _parseIso(f.data_arquivo);
-            let badgeHtml = '<span class="badge bg-danger" title="Nome do arquivo sem data — obrigatório incluir DDMMAAAA no nome"><i class="bi bi-calendar-x"></i> sem data (obrigatório)</span>';
-            let bloqueado = false;
-            let aviso90 = false;
-            let dataArquivoIso = f.data_arquivo || null;
-
-            if (!fDate) {
-                // Sem data no nome — bloquear
-                bloqueado = true;
-            } else {
-                const fDateStr = f.data_arquivo.split('-').reverse().join('/');
-                if (fDate > hoje) {
-                    // Futuro — bloquear
-                    badgeHtml = `<span class="badge bg-danger" title="Data futura — não é possível importar"><i class="bi bi-calendar-x"></i> ${fDateStr} (futuro)</span>`;
-                    bloqueado = true;
-                } else if (ultDate && fDate <= ultDate) {
-                    // Período já importado — bloquear
-                    const ultStr = ultimaDataImportacao.split('-').reverse().join('/');
-                    badgeHtml = `<span class="badge bg-warning text-dark" title="Período já importado (último: ${ultStr})"><i class="bi bi-lock-fill"></i> ${fDateStr} (já importado)</span>`;
-                    bloqueado = true;
-                } else if (fDate < dias90) {
-                    // Mais de 90 dias — aviso (não bloqueia)
-                    badgeHtml = `<span class="badge bg-secondary" title="Data com mais de 90 dias — confirme antes de importar"><i class="bi bi-exclamation-circle"></i> ${fDateStr} (>90 dias)</span>`;
-                    aviso90 = true;
-                } else {
-                    // OK
-                    badgeHtml = `<span class="badge bg-success"><i class="bi bi-calendar-check"></i> ${fDateStr}</span>`;
-                }
-            }
-            tdData.innerHTML = badgeHtml;
-
-            const tdMod = document.createElement('td');
-            tdMod.textContent = f.modificado;
-
-            const tdSize = document.createElement('td');
-            tdSize.textContent = kb + ' KB';
-
-            const tdAcao = document.createElement('td');
-            tdAcao.className = 'text-center';
-            const btn = document.createElement('button');
-            btn.dataset.nomeArquivo = f.nome;
-            btn.dataset.dataArquivo = dataArquivoIso || '';
-            btn.dataset.aviso90 = aviso90 ? '1' : '';
-            if (bloqueado) {
-                btn.className = 'btn btn-sm btn-secondary';
-                btn.disabled = true;
-                btn.title = 'Importação bloqueada para este arquivo';
-                btn.innerHTML = '<i class="bi bi-lock"></i> Bloqueado';
-            } else {
-                btn.className = 'btn btn-sm btn-success';
-                btn.innerHTML = '<i class="bi bi-cloud-download"></i> Importar do Dropbox';
-                btn.addEventListener('click', function() {
-                    importarDropbox(this.dataset.nomeArquivo, this.dataset.dataArquivo, this.dataset.aviso90 === '1');
-                });
-            }
-            tdAcao.appendChild(btn);
-
-            tr.appendChild(tdNome);
-            tr.appendChild(tdData);
-            tr.appendChild(tdMod);
-            tr.appendChild(tdSize);
-            tr.appendChild(tdAcao);
-            tbody.appendChild(tr);
-        });
-
-        t.appendChild(tbody);
-        tableWrap.appendChild(t);
-        wrap.appendChild(tableWrap);
-        listDiv.innerHTML = '';
-        listDiv.appendChild(wrap);
-    }
-
-    function importarDropbox(nomeArquivo, dataArquivoIso, aviso90) {
-        const sel = document.getElementById('dbxAccountId');
-        const accountId = sel ? sel.value : '';
-        if (!accountId) {
-            alert('Selecione uma conta bancária antes de importar.');
-            return;
-        }
-
-        // Aviso para extratos muito antigos (>90 dias)
-        if (aviso90 && dataArquivoIso) {
-            const dataStr = dataArquivoIso.split('-').reverse().join('/');
-            if (!confirm(
-                `Atenção: o extrato "${nomeArquivo}" tem data ${dataStr}, que é há mais de 90 dias.\n\n` +
-                `Tem certeza que deseja importar este período?\n\n` +
-                `Clique em OK para confirmar ou Cancelar para revisar.`
-            )) return;
-        }
-
-        if (!confirm(`Importar "${nomeArquivo}" do Dropbox para a conta selecionada?\n\nO arquivo será movido para a pasta IMPORTADOS do Dropbox após a importação.`)) return;
-
-        fetch('{{ url_for("bank_import.importar_dropbox") }}', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ account_id: accountId, nome_arquivo: nomeArquivo })
-        })
-        .then(r => r.json())
-        .then(data => { mostrarResultadoImportacao(data); })
-        .catch(() => alert('Erro ao importar do Dropbox.'));
-    }
-
-    {% if not dropbox_oauth2 %}
-    function gerarUrlOAuth2() {
-        fetch('{{ url_for("bank_import.api_dropbox_oauth_url") }}')
-        .then(r => r.json())
-        .then(data => {
-            if (data.ok) {
-                window.open(data.url, '_blank');
-                document.getElementById('divOAuth2').classList.remove('d-none');
-                document.getElementById('inputOAuthCode').focus();
-            } else {
-                alert('Erro: ' + data.erro);
-            }
-        });
-    }
-    function trocarCodigoOAuth2() {
-        const code = document.getElementById('inputOAuthCode').value.trim();
-        if (!code) { alert('Cole o código de autorização primeiro.'); return; }
-        fetch('{{ url_for("bank_import.api_dropbox_oauth_token") }}?code=' + encodeURIComponent(code))
-        .then(r => r.json())
-        .then(data => {
-            if (data.ok) {
-                const li = document.getElementById('liRefreshToken');
-                document.getElementById('spanRefreshToken').textContent = data.refresh_token;
-                li.classList.remove('d-none');
-                alert('✅ Refresh token obtido! Copie o valor exibido e configure como DROPBOX_REFRESH_TOKEN no Railway. Após redeploy, o token nunca mais vai expirar.');
-            } else {
-                alert('Erro: ' + data.erro);
-            }
-        });
-    }
-    {% endif %}
-
-    {% endif %}
 
     // ---------------------------------------------------------------
     // Consulta Último Dia Importado
