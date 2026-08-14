@@ -105,8 +105,8 @@ body > .container-fluid:has(#rcb){
 #rcb .dia .tot{ margin-left:auto; font-variant-numeric:tabular-nums; }
 #rcb .dia.oculta, #rcb .lin.oculta{ display:none; }
 
-#rcb .lin{ display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:.1rem .55rem;
-  grid-template-areas:"chk desc valor" "chk baixo baixo";
+#rcb .lin{ display:grid; grid-template-columns:auto minmax(0,1fr); gap:.1rem .55rem;
+  grid-template-areas:"chk desc" "chk baixo";
   padding:.45rem .6rem; border-bottom:1px solid var(--line); align-items:start;
   position:relative; cursor:pointer; }
 #rcb .lin:last-child{ border-bottom:0; }
@@ -117,17 +117,19 @@ body > .container-fluid:has(#rcb){
 #rcb .c-desc{ font-size:.85rem; font-weight:700; letter-spacing:-.01em; min-width:0;
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
   overflow:hidden; line-height:1.28; }
-#rcb .c-valor{ grid-area:valor; text-align:right; font-size:.92rem; font-weight:800;
-  color:var(--verde); font-variant-numeric:tabular-nums; letter-spacing:-.02em;
-  white-space:nowrap; }
+/* O valor mora na SEGUNDA linha, empurrado para a direita: a primeira fica
+   inteira para a descricao, que e o que estava sendo cortado. */
+#rcb .c-valor{ margin-left:auto; font-size:.95rem; font-weight:800; color:var(--verde);
+  font-variant-numeric:tabular-nums; letter-spacing:-.02em; white-space:nowrap;
+  flex:0 0 auto; }
 #rcb .c-baixo{ grid-area:baixo; display:flex; align-items:center; gap:.35rem;
-  min-width:0; flex-wrap:wrap; margin-top:.15rem; }
+  min-width:0; margin-top:.2rem; }
 #rcb .selo--tipo{ background:rgba(29,99,165,.1); color:var(--azul-deep); }
 #rcb .rot{ font-size:.62rem; text-transform:uppercase; letter-spacing:.05em;
   color:var(--muted); font-weight:800; flex:0 0 auto; }
 #rcb .dado{ font-size:.72rem; color:var(--ink-2); font-weight:600;
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#rcb .c-acao{ margin-left:auto; display:flex; gap:.1rem; align-items:center; flex:0 0 auto; }
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+#rcb .c-acao{ display:flex; gap:.1rem; align-items:center; flex:0 0 auto; margin-left:.3rem; }
 #rcb .ic{ width:27px; height:27px; border-radius:7px; border:1px solid transparent;
   background:none; display:grid; place-items:center; font-size:.85rem; cursor:pointer;
   color:var(--muted); padding:0; font-family:inherit; }
@@ -337,7 +339,6 @@ body > .container-fluid:has(#rcb){
                onclick="event.stopPropagation()" onchange="rcbMarcou(this)">
 
         <div class="c-desc" title="{{ t.descricao or t.memo or '' }}">{{ t.descricao or t.memo or '—' }}</div>
-        <div class="c-valor">R$ {{ "{:,.2f}".format(t.valor).replace(',','X').replace('.',',').replace('X','.') }}</div>
 
         <div class="c-baixo">
           {# Meio de pagamento lido do texto do banco: no pendente ainda nao
@@ -362,6 +363,8 @@ body > .container-fluid:has(#rcb){
           {% if t.cnpj_cpf %}
             <span class="rot">CNPJ</span><span class="dado">{{ t.cnpj_cpf }}</span>
           {% endif %}
+
+          <span class="c-valor">R$ {{ "{:,.2f}".format(t.valor).replace(',','X').replace('.',',').replace('X','.') }}</span>
 
           <span class="c-acao">
             {% if t.status == 'conciliado' %}
