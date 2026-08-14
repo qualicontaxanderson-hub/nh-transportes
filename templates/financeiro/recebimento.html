@@ -254,6 +254,32 @@ body > .container-fluid:has(#rcb){
 #rcb .par{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; }
 #rcb .par[hidden]{ display:none; }
 #rcb .dica{ font-size:.75rem; color:var(--muted); margin-top:.3rem; }
+
+/* Forma de recebimento: botão que abre lista agrupada, com busca */
+#rcb .escolher{ width:100%; display:flex; align-items:center; gap:.5rem;
+  border:1px solid var(--line-2); border-radius:10px; background:#fff; color:var(--ink);
+  padding:.5rem .65rem; font-size:.85rem; font-weight:600; cursor:pointer;
+  font-family:inherit; text-align:left; }
+#rcb .escolher:hover{ border-color:var(--azul); }
+#rcb .escolher span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#rcb .escolher i{ margin-left:auto; color:var(--muted); font-size:.8rem; flex:0 0 auto; }
+#rcb .escolher.aberto i{ transform:rotate(180deg); }
+#rcb .lista-f[hidden]{ display:none; }
+#rcb .busca-f{ margin:.4rem 0 .35rem; }
+#rcb .opcs--f{ max-height:230px; }
+#rcb .fam{ position:sticky; top:0; background:var(--surface); color:var(--muted);
+  font-size:.63rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em;
+  padding:.3rem .6rem; border-bottom:1px solid var(--line); z-index:1; }
+#rcb .fam .q{ opacity:.55; }
+#rcb .opc--f{ width:100%; border:0; background:none; font-family:inherit;
+  padding:.44rem .6rem .44rem 1rem; font-size:.82rem; text-align:left; color:var(--ink);
+  display:flex; align-items:center; gap:.4rem; cursor:pointer;
+  border-bottom:1px solid var(--line); }
+#rcb .opc--f:hover{ background:var(--surface); }
+#rcb .opc--f.on{ background:var(--azul-claro); color:var(--azul-deep); font-weight:800; }
+#rcb .opc--f span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#rcb .opc--f .tique{ margin-left:auto; color:var(--azul); font-size:.8rem; }
+#rcb .vazio-f{ padding:.7rem; font-size:.8rem; color:var(--muted); text-align:center; }
 #rcb :focus-visible{ outline:2px solid var(--azul); outline-offset:2px; }
 @media (prefers-reduced-motion: reduce){ #rcb *{ transition:none !important; } }
 </style>
@@ -528,14 +554,22 @@ Não tem volta.');">
         </div>
 
         <div class="gr">
-          <div class="gr__c"><span class="gr__t">Forma de recebimento</span></div>
-          <select name="forma_recebimento_id" class="campo">
-            <option value="">Todas</option>
-            {% for f in formas %}
-            <option value="{{ f.id }}" {% if f.id|string == forma_recebimento_id_filter %}selected{% endif %}>
-              {{ f.nome }}</option>
-            {% endfor %}
-          </select>
+          <div class="gr__c"><span class="gr__t">Forma de recebimento</span>
+            <span class="gr__n" id="rcb-forma-n"></span></div>
+          {# 64 formas num <select> nativo viram uma roda cinza ilegivel no
+             iPhone. Aqui e botao + lista agrupada por familia, com busca.
+             A rota ja entrega so as ativas (formas_recebimento.ativo = 1). #}
+          <input type="hidden" name="forma_recebimento_id" id="rcb-forma"
+                 value="{{ forma_recebimento_id_filter or '' }}">
+          <button type="button" class="escolher" id="rcb-forma-bt" onclick="rcbFormasAbrir()">
+            <span id="rcb-forma-rot">Todas as formas</span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <div class="lista-f" id="rcb-forma-lista" hidden>
+            <input type="search" class="campo busca-f" id="rcb-forma-busca"
+                   placeholder="buscar forma..." oninput="rcbFormasPintar()">
+            <div class="opcs opcs--f" id="rcb-forma-opcs"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -801,6 +835,109 @@ function rcbTodasContas() {
   rcbContadores();
 }
 
+/* ── Forma de recebimento ───────────────────────────────────────────
+   São 64 formas ATIVAS, e elas vêm em família: 23 "CLIENTE A PRAZO", 7 de
+   crédito, 5 de débito. Agrupadas, cada item mostra só o que muda —
+   "ELO - ANTECIPADO" em vez de repetir "CARTÃO DE CRÉDITO -" toda linha. */
+var RCB_FORMAS = {{ formas | tojson }};
+
+function rcbEsc(t) {
+  return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+function rcbSemAcento(t) {
+  return (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+}
+function rcbFamilia(nome) {
+  var p = (nome || '').split(' - ');
+  return p.length > 1 ? p[0].trim() : 'Outras';
+}
+function rcbResto(nome) {
+  var p = (nome || '').split(' - ');
+  return p.length > 1 ? p.slice(1).join(' - ').trim() : nome;
+}
+
+function rcbFormasAbrir() {
+  var cx = document.getElementById('rcb-forma-lista');
+  var bt = document.getElementById('rcb-forma-bt');
+  cx.hidden = !cx.hidden;
+  bt.classList.toggle('aberto', !cx.hidden);
+  if (!cx.hidden) {
+    rcbFormasPintar();
+    var b = document.getElementById('rcb-forma-busca');
+    if (b) b.focus();
+  }
+}
+
+function rcbFormasPintar() {
+  var busca = document.getElementById('rcb-forma-busca');
+  var termo = rcbSemAcento(busca ? busca.value : '');
+  var atual = document.getElementById('rcb-forma').value;
+  var caixa = document.getElementById('rcb-forma-opcs');
+
+  var achadas = RCB_FORMAS.filter(function (f) {
+    return !termo || rcbSemAcento(f.nome).indexOf(termo) >= 0;
+  });
+
+  // Agrupa por família ignorando acento e caixa: "CARTAO DE CREDITO" e
+  // "CARTÃO DE CRÉDITO" são a mesma coisa e não podem virar dois grupos.
+  var grupos = [], indice = {};
+  achadas.forEach(function (f) {
+    var chave = rcbSemAcento(rcbFamilia(f.nome));
+    if (!(chave in indice)) {
+      indice[chave] = grupos.length;
+      grupos.push({ titulo: rcbFamilia(f.nome), itens: [] });
+    }
+    grupos[indice[chave]].itens.push(f);
+  });
+
+  // Família de um item só não merece cabeçalho próprio: cai em "Outras".
+  var outras = { titulo: 'Outras', itens: [] };
+  grupos = grupos.filter(function (g) {
+    if (g.titulo === 'Outras') { outras.itens = outras.itens.concat(g.itens); return false; }
+    if (g.itens.length === 1) { outras.itens.push(g.itens[0]); return false; }
+    return true;
+  });
+  if (outras.itens.length) grupos.push(outras);
+
+  var html = '';
+  if (!achadas.length) {
+    html = '<div class="vazio-f">Nenhuma forma com esse nome.</div>';
+  } else {
+    html += '<button type="button" class="opc--f' + (!atual ? ' on' : '') +
+            '" data-id=""><span>Todas as formas</span>' +
+            (!atual ? '<i class="bi bi-check-lg tique"></i>' : '') + '</button>';
+    grupos.forEach(function (g) {
+      html += '<div class="fam">' + rcbEsc(g.titulo) +
+              ' <span class="q">' + g.itens.length + '</span></div>';
+      g.itens.forEach(function (f) {
+        var on = String(f.id) === String(atual);
+        var rotulo = (g.titulo === 'Outras') ? f.nome : rcbResto(f.nome);
+        html += '<button type="button" class="opc--f' + (on ? ' on' : '') +
+                '" data-id="' + f.id + '"><span>' + rcbEsc(rotulo) + '</span>' +
+                (on ? '<i class="bi bi-check-lg tique"></i>' : '') + '</button>';
+      });
+    });
+  }
+  caixa.innerHTML = html;
+  caixa.querySelectorAll('.opc--f').forEach(function (b) {
+    b.addEventListener('click', function () { rcbFormaEscolher(b.dataset.id); });
+  });
+}
+
+function rcbFormaEscolher(id) {
+  document.getElementById('rcb-forma').value = id || '';
+  rcbFormaRotulo();
+  document.getElementById('rcb-forma-lista').hidden = true;
+  document.getElementById('rcb-forma-bt').classList.remove('aberto');
+}
+function rcbFormaRotulo() {
+  var id = document.getElementById('rcb-forma').value;
+  var f = RCB_FORMAS.filter(function (x) { return String(x.id) === String(id); })[0];
+  document.getElementById('rcb-forma-rot').textContent = f ? f.nome : 'Todas as formas';
+  document.getElementById('rcb-forma-n').textContent =
+    f ? '' : (RCB_FORMAS.length + ' ativas');
+}
+
 /* Período e situação: botões que escrevem nos campos que vão no GET. */
 function rcbIso(d) {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
@@ -850,6 +987,7 @@ function rcbSegmentados() {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+  rcbFormaRotulo();
   rcbSegmentados();
   rcbContas();
   rcbAtualiza();
