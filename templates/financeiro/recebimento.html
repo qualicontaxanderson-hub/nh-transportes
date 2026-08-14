@@ -105,13 +105,19 @@ body > .container-fluid:has(#rcb){
 #rcb .dia .tot{ margin-left:auto; font-variant-numeric:tabular-nums; }
 #rcb .dia.oculta, #rcb .lin.oculta{ display:none; }
 
-#rcb .lin{ display:grid; grid-template-columns:auto minmax(0,1fr); gap:.1rem .55rem;
-  grid-template-areas:"chk desc" "chk baixo";
-  padding:.45rem .6rem; border-bottom:1px solid var(--line); align-items:start;
+#rcb .lin{ display:grid; grid-template-columns:auto minmax(0,1fr); gap:.08rem .55rem;
+  grid-template-areas:"chk desc" "chk meio" "chk baixo";
+  padding:.5rem .6rem; border-bottom:1px solid var(--line); align-items:center;
   position:relative; cursor:pointer; }
 #rcb .lin:last-child{ border-bottom:0; }
 #rcb .lin.sel{ background:var(--azul-claro); }
 #rcb .c-chk{ grid-area:chk; align-self:center; }
+/* Linha do meio: forma de recebimento e banco. */
+#rcb .c-meio{ grid-area:meio; display:flex; align-items:center; gap:.35rem;
+  min-width:0; }
+#rcb .c-meio .banco{ font-size:.73rem; color:var(--ink-2); font-weight:700;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+#rcb .c-meio .tracin{ color:var(--line-2); font-weight:700; flex:0 0 auto; }
 /* Duas linhas: "Recebimento Pix BARATAO TECNOLOGIA LTDA" cortado em uma so
    escondia justamente o nome de quem pagou. */
 #rcb .c-desc{ font-size:.85rem; font-weight:700; letter-spacing:-.01em; min-width:0;
@@ -123,7 +129,7 @@ body > .container-fluid:has(#rcb){
   font-variant-numeric:tabular-nums; letter-spacing:-.02em; white-space:nowrap;
   flex:0 0 auto; }
 #rcb .c-baixo{ grid-area:baixo; display:flex; align-items:center; gap:.35rem;
-  min-width:0; margin-top:.2rem; }
+  min-width:0; margin-top:.12rem; }
 #rcb .selo--tipo{ background:rgba(29,99,165,.1); color:var(--azul-deep); }
 #rcb .rot{ font-size:.62rem; text-transform:uppercase; letter-spacing:.05em;
   color:var(--muted); font-weight:800; flex:0 0 auto; }
@@ -365,29 +371,29 @@ body > .container-fluid:has(#rcb){
 
         <div class="c-desc" title="{{ t.descricao or t.memo or '' }}">{{ t.descricao or t.memo or '—' }}</div>
 
+        {# Linha 2 — forma de recebimento e banco. No pendente ainda não há
+           forma conciliada, então vale o meio lido do texto do banco. #}
+        {% set dl = (t.descricao or t.memo or '')|lower %}
+        {% set tipo = 'Pix' if 'pix' in dl
+                      else ('Boleto' if 'boleto' in dl
+                      else ('TED' if 'ted' in dl
+                      else ('Transferência' if 'transf' in dl else None))) %}
+        <div class="c-meio">
+          {% if t.forma_recebimento_nome %}<span class="selo selo--forma">{{ t.forma_recebimento_nome }}</span>
+          {% elif tipo %}<span class="selo selo--tipo">{{ tipo }}</span>{% endif %}
+          {% if (t.forma_recebimento_nome or tipo) and (t.conta_apelido or t.banco_nome) %}
+            <span class="tracin">·</span>
+          {% endif %}
+          {% if t.conta_apelido or t.banco_nome %}
+            <span class="banco">{{ t.conta_apelido or t.banco_nome }}</span>
+          {% endif %}
+        </div>
+
+        {# Linha 3 — situação, valor e ações. #}
         <div class="c-baixo">
-          {# Meio de pagamento lido do texto do banco: no pendente ainda nao
-             existe forma conciliada, e "Pix" ou "Boleto" ja orienta muito. #}
-          {% set dl = (t.descricao or t.memo or '')|lower %}
-          {% set tipo = 'Pix' if 'pix' in dl
-                        else ('Boleto' if 'boleto' in dl
-                        else ('TED' if 'ted' in dl
-                        else ('Transferência' if 'transf' in dl else None))) %}
           {% if t.status == 'conciliado' %}<span class="selo selo--ok">Conciliado</span>
           {% elif t.status == 'ignorado' %}<span class="selo selo--ign">Ignorado</span>
           {% else %}<span class="selo selo--pend">Pendente</span>{% endif %}
-          {% if t.forma_recebimento_nome %}<span class="selo selo--forma">{{ t.forma_recebimento_nome }}</span>
-          {% elif tipo %}<span class="selo selo--tipo">{{ tipo }}</span>{% endif %}
-
-          {# Rótulo em cima do dado — é o que deixa a linha legível de relance.
-             Campo vazio não vira traço solto: some. #}
-          {% if t.conta_apelido or t.banco_nome %}
-            <span class="rot">Conta</span>
-            <span class="dado">{{ t.conta_apelido or t.banco_nome }}</span>
-          {% endif %}
-          {% if t.cnpj_cpf %}
-            <span class="rot">CNPJ</span><span class="dado">{{ t.cnpj_cpf }}</span>
-          {% endif %}
 
           <span class="c-valor">R$ {{ "{:,.2f}".format(t.valor).replace(',','X').replace('.',',').replace('X','.') }}</span>
 
