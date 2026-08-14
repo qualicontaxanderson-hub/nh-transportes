@@ -18,3 +18,15 @@
       ('memorias',       'Memorizações',   'conciliacao_regras.memorias')] %}
 <a class="aba{{ ' on' if ativa == chave }}" href="{{ url_for(destino) }}">{{ rotulo }}</a>
 {%- endfor %}
+<script>
+(function () {
+  /* A barra abre mostrando a aba DA TELA, não o começo da lista. Quem entrava
+     em "Frete" via a barra parada em "Recebimentos" e parecia que a tela não
+     tinha trocado. Mexe só na rolagem da barra — nunca na da página. */
+  var barra = document.currentScript.parentElement;
+  var atual = barra.querySelector('.aba.on');
+  if (!atual) return;
+  barra.scrollLeft = Math.max(0, atual.offsetLeft
+                                 - (barra.clientWidth - atual.offsetWidth) / 2);
+})();
+</script>
