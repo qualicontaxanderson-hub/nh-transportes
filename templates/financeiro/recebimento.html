@@ -40,9 +40,6 @@
   min-width:19px; height:19px; display:inline-grid; place-items:center;
   font-size:.7rem; font-weight:800; }
 #rcb .hero .fil .cnt[hidden]{ display:none; }
-#rcb .pilulas[hidden]{ display:none; }
-#rcb .pil--travada{ opacity:.55; }
-#rcb .pil--limpar{ border-style:dashed; color:var(--muted); }
 
 /* ── Números ───────────────────────────────────────────────────────── */
 #rcb .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:.7rem; }
@@ -55,67 +52,11 @@
 #rcb .v.azul{ color:var(--azul); } #rcb .v.verde{ color:var(--verde); }
 #rcb .v.amb{ color:var(--pend); } #rcb .v.cinza{ color:var(--muted); }
 
-/* ── Filtros: pílula + folha ───────────────────────────────────────
-   Uma pílula por filtro, direto na tela. Tocar abre a folha DAQUELE
-   filtro; escolher aplica e fecha. Sem select multiple — no iPhone ele
-   mostra "0 Item" e não abre lista nenhuma.                            */
-#rcb .pilulas{ display:flex; gap:.35rem; flex-wrap:wrap; margin-bottom:.7rem; }
-#rcb .pil{ display:inline-flex; align-items:center; gap:.3rem; border-radius:999px;
-  border:1px solid var(--line-2); background:#fff; color:var(--ink);
-  padding:.34rem .62rem; font-size:.79rem; font-weight:700; cursor:pointer;
-  font-family:inherit; max-width:100%; }
-#rcb .pil .t{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#rcb .pil .seta{ color:var(--muted); font-size:.7rem; flex:0 0 auto; }
-#rcb .pil.ativa{ background:#eaf1f9; border-color:var(--azul); color:var(--azul-deep); }
-#rcb .pil.ativa .seta{ color:var(--azul-deep); }
-
-#rcb .fundo{ position:fixed; inset:0; background:rgba(15,25,40,.45); z-index:1050;
-  opacity:0; pointer-events:none; transition:opacity .2s; }
-#rcb .fundo.on{ opacity:1; pointer-events:auto; }
-#rcb .folha{ position:fixed; left:0; right:0; bottom:0; z-index:1051; background:#fff;
-  border-radius:18px 18px 0 0; max-height:76vh; display:flex; flex-direction:column;
-  transform:translateY(101%); transition:transform .22s cubic-bezier(.22,.7,.3,1);
-  box-shadow:0 -10px 34px rgba(15,25,40,.28); }
-#rcb .folha.on{ transform:translateY(0); }
-@media (min-width:992px){
-  #rcb .folha{ left:50%; right:auto; bottom:auto; top:14vh; transform:translate(-50%,-8px) scale(.98);
-    width:440px; border-radius:14px; opacity:0; pointer-events:none;
-    transition:opacity .16s ease, transform .16s ease; }
-  #rcb .folha.on{ transform:translate(-50%,0) scale(1); opacity:1; pointer-events:auto; }
-  #rcb .folha__pega{ display:none; }
-}
-#rcb .folha__pega{ width:38px; height:4px; border-radius:99px; background:var(--line-2);
-  margin:.5rem auto .2rem; flex:0 0 auto; }
-#rcb .folha__cab{ display:flex; align-items:center; gap:.5rem; padding:.5rem .9rem .5rem; }
-#rcb .folha__cab b{ font-size:.98rem; }
-#rcb .folha__cab .lim{ margin-left:auto; background:none; border:0; color:var(--azul);
-  font-weight:700; font-size:.8rem; cursor:pointer; font-family:inherit; }
-#rcb .folha__cab .lim[hidden]{ display:none; }
-#rcb .folha__corpo{ overflow-y:auto; padding:0 .55rem .7rem; }
-#rcb .folha__pe{ border-top:1px solid var(--line); padding:.6rem .9rem;
-  padding-bottom:calc(.6rem + env(safe-area-inset-bottom));
-  display:flex; gap:.5rem; background:#fff; }
-#rcb .folha__pe[hidden]{ display:none; }
-#rcb .bt-fo{ border:0; border-radius:10px; padding:.55rem .8rem; font-size:.87rem;
-  font-weight:800; cursor:pointer; font-family:inherit; }
-#rcb .bt-fo--ok{ flex:1; background:var(--azul); color:#fff; }
-#rcb .bt-fo--ok:hover{ background:var(--azul-deep); }
-#rcb .bt-fo--ca{ background:var(--surface); color:var(--muted); border:1px solid var(--line-2); }
-
-#rcb .op{ display:flex; align-items:center; gap:.6rem; width:100%; text-align:left;
-  border:0; background:none; padding:.62rem .65rem; border-radius:10px; cursor:pointer;
-  font-size:.9rem; font-weight:600; color:var(--ink); font-family:inherit; }
-#rcb .op:hover{ background:var(--surface); }
-#rcb .op .mk{ width:20px; height:20px; border-radius:6px; border:1.5px solid var(--line-2);
-  flex:0 0 auto; display:grid; place-items:center; font-size:.75rem; color:#fff; }
-#rcb .op.on{ background:#eaf1f9; color:var(--azul-deep); }
-#rcb .op.on .mk{ background:var(--azul); border-color:var(--azul); }
-#rcb .op .sub2{ display:block; font-size:.74rem; color:var(--muted); font-weight:500; }
-#rcb .campo-fo{ width:100%; border:1px solid var(--line-2); border-radius:10px;
-  padding:.5rem .65rem; font-size:.85rem; margin-bottom:.35rem; font-family:inherit;
-  color:var(--ink); background:#fff; }
-#rcb .par{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; padding:0 .65rem; }
-#rcb .dica{ padding:.1rem .65rem .4rem; font-size:.76rem; color:var(--muted); }
+/* ── Filtros (collapse, igual ao da Lista de fretes) ──────────────── */
+#rcb .form-label{ font-size:.72rem; color:#6b7280; font-weight:600; }
+#rcb .form-select, #rcb .form-control{ font-size:.8rem; }
+#rcb .hero .fil .cnt{ background:#fff; color:var(--laranja-deep); border-radius:999px;
+  width:8px; height:8px; display:inline-block; }
 
 /* ── Lista ─────────────────────────────────────────────────────────── */
 #rcb .lst{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
@@ -239,6 +180,9 @@
 {# `next` volta para ESTA tela com ESTES filtros depois de qualquer ação —
    sem ele, reverter um lançamento devolvia a lista zerada. #}
 {% set voltar_para = request.full_path if request.query_string else request.path %}
+{% set tem_filtro = empresa_ids_filter or conta_ids_filter or forma_recebimento_id_filter
+                    or status_filter or data_inicio or data_fim or f_descricao
+                    or valor_min or valor_max %}
 <div id="rcb" class="container-fluid">
 
   <nav aria-label="breadcrumb" class="mb-2">
@@ -255,9 +199,10 @@
       <h4>Recebimento</h4>
       <div class="sub">Créditos do extrato OFX</div>
     </div>
-    <button type="button" class="fil" id="rcb-funil" onclick="rcbAbrirFiltros()"
-            aria-expanded="false" aria-controls="rcb-pilulas" title="filtros">
-      <i class="bi bi-funnel"></i><span class="cnt" id="rcb-funil-n" hidden>0</span>
+    <button type="button" class="fil" data-bs-toggle="collapse"
+            data-bs-target="#rcb-filtros" aria-expanded="false"
+            aria-controls="rcb-filtros" title="Filtros">
+      <i class="bi bi-funnel"></i>{% if tem_filtro %}<span class="cnt">•</span>{% endif %}
     </button>
   </div>
 
@@ -273,27 +218,104 @@
       <div class="v amb">{{ total_pendentes }}</div></div>
   </div>
 
-  <!-- ── Filtros: uma pílula por filtro ──────────────────────────────
-       Toque abre só a lista daquele filtro; escolher aplica e fecha.
-       A pílula É o rótulo do que está valendo — por isso não existe mais
-       painel de onze campos nem chip repetindo a escolha embaixo.        -->
-  {% set tem_filtro = empresa_ids_filter or conta_ids_filter or forma_recebimento_id_filter
-                      or status_filter or data_inicio or data_fim or f_descricao
-                      or valor_min or valor_max %}
-  <div class="pilulas" id="rcb-pilulas" hidden></div>
+  <!-- ── Filtros: o MESMO padrão da Lista de fretes ───────────────────
+       Funil no cabeçalho abre um collapse com um formulário comum. Sem
+       controle inventado: <select> nativo abre picker no iPhone, que era
+       o problema do <select multiple> ("0 Item").
+       Única regra a mais: Conta só libera depois da Empresa.           -->
+  <div class="collapse mb-2" id="rcb-filtros">
+    <div class="card" style="border:1px solid #e8e8e8;border-radius:.55rem;">
+      <div class="card-body py-2 px-3">
+        <form method="get" action="{{ url_for('financeiro.recebimento') }}" id="rcb-form">
+          <div class="row g-2">
 
-  <div class="fundo" id="rcb-fundo" onclick="rcbFecharFolha()"></div>
+            <div class="col-12">
+              <label class="form-label mb-1">Empresa</label>
+              <select name="empresa_id" id="rcb-empresa" class="form-select form-select-sm"
+                      onchange="rcbContas()">
+                <option value="">Todas</option>
+                {% for e in empresas %}
+                <option value="{{ e.id }}" {% if e.id|string in (empresa_ids_filter or []) %}selected{% endif %}>
+                  {{ e.razao_social }}</option>
+                {% endfor %}
+              </select>
+            </div>
 
-  <div class="folha" id="rcb-folha" role="dialog" aria-modal="true" aria-labelledby="rcb-folha-tit">
-    <div class="folha__pega"></div>
-    <div class="folha__cab">
-      <b id="rcb-folha-tit">Filtro</b>
-      <button type="button" class="lim" id="rcb-varias" onclick="rcbVarias()">escolher várias</button>
-    </div>
-    <div class="folha__corpo" id="rcb-folha-corpo"></div>
-    <div class="folha__pe" id="rcb-folha-pe" hidden>
-      <button type="button" class="bt-fo bt-fo--ca" onclick="rcbFecharFolha()">Cancelar</button>
-      <button type="button" class="bt-fo bt-fo--ok" onclick="rcbAplicar()">Pronto</button>
+            <div class="col-12">
+              <label class="form-label mb-1">Conta bancária</label>
+              <select name="conta_id" id="rcb-conta" class="form-select form-select-sm" disabled>
+                <option value="">Escolha a empresa primeiro</option>
+              </select>
+            </div>
+
+            <div class="col-6">
+              <label class="form-label mb-1">De</label>
+              <input type="date" name="data_inicio" id="rcb-di" class="form-control form-control-sm"
+                     value="{{ data_inicio or '' }}">
+            </div>
+            <div class="col-6">
+              <label class="form-label mb-1">Até</label>
+              <input type="date" name="data_fim" id="rcb-df" class="form-control form-control-sm"
+                     value="{{ data_fim or '' }}">
+            </div>
+
+            <div class="col-12 d-flex gap-1">
+              <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2"
+                      onclick="rcbPeriodo('mes_atual')">Este mês</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2"
+                      onclick="rcbPeriodo('mes_anterior')">Mês anterior</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2"
+                      onclick="rcbPeriodo('ano_atual')">Este ano</button>
+            </div>
+
+            <div class="col-6">
+              <label class="form-label mb-1">Situação</label>
+              <select name="status" class="form-select form-select-sm">
+                <option value="">Todas</option>
+                <option value="pendente"   {% if status_filter=='pendente' %}selected{% endif %}>Pendente</option>
+                <option value="conciliado" {% if status_filter=='conciliado' %}selected{% endif %}>Conciliado</option>
+                <option value="ignorado"   {% if status_filter=='ignorado' %}selected{% endif %}>Ignorado</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label mb-1">Forma</label>
+              <select name="forma_recebimento_id" class="form-select form-select-sm">
+                <option value="">Todas</option>
+                {% for f in formas %}
+                <option value="{{ f.id }}" {% if f.id|string == forma_recebimento_id_filter %}selected{% endif %}>
+                  {{ f.nome }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label mb-1">Descrição</label>
+              <input type="text" name="f_descricao" class="form-control form-control-sm"
+                     placeholder="parte da descrição, ex.: BARAT" value="{{ f_descricao or '' }}">
+            </div>
+
+            <div class="col-6">
+              <label class="form-label mb-1">Valor mín.</label>
+              <input type="text" name="valor_min" class="form-control form-control-sm"
+                     placeholder="150,00" value="{{ valor_min or '' }}">
+            </div>
+            <div class="col-6">
+              <label class="form-label mb-1">Valor máx.</label>
+              <input type="text" name="valor_max" class="form-control form-control-sm"
+                     placeholder="2.000,00" value="{{ valor_max or '' }}">
+            </div>
+
+            <div class="col-6">
+              <button type="submit" class="btn btn-primary btn-sm w-100">
+                <i class="bi bi-search"></i> Filtrar</button>
+            </div>
+            <div class="col-6">
+              <a href="{{ url_for('financeiro.recebimento') }}" class="btn btn-outline-secondary btn-sm w-100">
+                <i class="bi bi-x"></i> Limpar</a>
+            </div>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 
@@ -493,341 +515,67 @@ function confirmarExclusaoLote() {
   return true;
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   FILTROS — uma pílula por filtro.
-   Tocar abre a folha DAQUELE filtro; escolher aplica e fecha. Aplicar é
-   navegar: a URL é a verdade do filtro, e é ela que as ações preservam.
-   ═══════════════════════════════════════════════════════════════════ */
-var RCB_EMPRESAS = {{ empresas | tojson }};
-var RCB_CONTAS   = {{ contas | tojson }};
-var RCB_FORMAS   = {{ formas | tojson }};
+/* ── Filtros ────────────────────────────────────────────────────────
+   Formulário comum, submetido por GET — a URL continua sendo a verdade
+   do filtro, e é ela que o `next` das ações preserva.
+   Conta só libera depois da empresa: sem isso a lista traria conta de
+   qualquer empresa e o filtro sairia misturado.                        */
+var RCB_CONTAS = {{ contas | tojson }};
+var RCB_CONTA_SEL = ({{ (conta_ids_filter or []) | tojson }}).map(String);
 
-var RCB_PERIODOS = [
-  { id:'mes', t:'Este mês' }, { id:'ant', t:'Mês anterior' },
-  { id:'ano', t:'Este ano' }, { id:'esc', t:'Escolher datas…' }
-];
-var RCB_SITS = [
-  { id:'',           t:'Todas as situações' },
-  { id:'pendente',   t:'Pendentes' },
-  { id:'conciliado', t:'Conciliados' },
-  { id:'ignorado',   t:'Ignorados' }
-];
+function rcbContas() {
+  var emp = document.getElementById('rcb-empresa');
+  var cta = document.getElementById('rcb-conta');
+  if (!emp || !cta) return;
 
-/* Estado vem da URL — não de variável paralela que pode discordar dela. */
-function rcbUrl() { return new URL(window.location.href); }
-function rcbTodosDe(nome) { return rcbUrl().searchParams.getAll(nome).filter(Boolean); }
-function rcbUm(nome) { return rcbUrl().searchParams.get(nome) || ''; }
+  var idEmp = emp.value;
+  cta.innerHTML = '';
 
-var folha = { qual: null, varias: false, escolha: [] };
-
-function rcbNomeEmpresa(id) {
-  var e = RCB_EMPRESAS.filter(function (x) { return String(x.id) === String(id); })[0];
-  if (!e) return 'empresa ' + id;
-  return e.razao_social.split(' ').slice(0, 3).join(' ');
-}
-function rcbNomeConta(id) {
-  var c = RCB_CONTAS.filter(function (x) { return String(x.id) === String(id); })[0];
-  return c ? (c.apelido || c.banco_nome || ('conta ' + id)) : ('conta ' + id);
-}
-function rcbNomeForma(id) {
-  var f = RCB_FORMAS.filter(function (x) { return String(x.id) === String(id); })[0];
-  return f ? f.nome : 'forma ' + id;
-}
-function rcbRotuloPeriodo() {
-  var i = rcbUm('data_inicio'), f = rcbUm('data_fim');
-  if (!i && !f) return 'Qualquer data';
-  function br(d) { return d ? d.split('-').reverse().join('/') : '…'; }
-  return br(i) + ' a ' + br(f);
-}
-
-/* ── Pílulas ────────────────────────────────────────────────────── */
-function rcbPilulas() {
-  var emp = rcbTodosDe('empresa_id'), cta = rcbTodosDe('conta_id');
-  var st = rcbUm('status'), fr = rcbUm('forma_recebimento_id'), ds = rcbUm('f_descricao');
-  var vmin = rcbUm('valor_min'), vmax = rcbUm('valor_max');
-  var temData = rcbUm('data_inicio') || rcbUm('data_fim');
-
-  var itens = [
-    { q:'periodo', t:rcbRotuloPeriodo(), on:!!temData },
-    { q:'empresa',
-      t: emp.length === 0 ? 'Todas as empresas'
-        : emp.length === 1 ? rcbNomeEmpresa(emp[0]) : emp.length + ' empresas',
-      on: emp.length > 0 },
-    // Conta só abre depois da empresa: sem ela a lista traria conta de
-    // qualquer empresa e o filtro sairia misturado.
-    { q:'conta',
-      t: cta.length === 0 ? (emp.length ? 'Todas as contas' : 'Conta (escolha a empresa)')
-        : cta.length === 1 ? rcbNomeConta(cta[0]) : cta.length + ' contas',
-      on: cta.length > 0, travada: emp.length === 0 },
-    { q:'status', t: st ? (RCB_SITS.filter(function (x) { return x.id === st; })[0] || {}).t : 'Todas as situações',
-      on: !!st },
-    { q:'forma', t: fr ? rcbNomeForma(fr) : 'Qualquer forma', on: !!fr },
-    { q:'desc',  t: ds ? '“' + ds + '”' : 'Descrição', on: !!ds },
-    { q:'valor', t: (vmin || vmax) ? ('R$ ' + (vmin || '0') + ' – ' + (vmax || '∞')) : 'Qualquer valor',
-      on: !!(vmin || vmax) }
-  ];
-
-  // data-q + um ouvinte só: nada de aspas dentro de aspas dentro de string,
-  // que foi exatamente o que quebrou o script inteiro uma vez.
-  var html = itens.map(function (i) {
-    return '<button type="button" data-q="' + i.q + '" class="pil' +
-      (i.on ? ' ativa' : '') + (i.travada ? ' pil--travada' : '') +
-      '"><span class="t">' + rcbEsc(i.t) +
-      '</span><span class="seta">▾</span></button>';
-  }).join('');
-
-  var ativos = itens.filter(function (i) { return i.on; }).length;
-  if (ativos) {
-    html += '<a href="' + window.location.pathname + '" class="pil pil--limpar">limpar tudo</a>';
-  }
-  document.getElementById('rcb-pilulas').innerHTML = html;
-
-  // O funil mostra quantos filtros estão valendo — com a fileira fechada,
-  // é o único aviso de que a lista não está inteira.
-  var badge = document.getElementById('rcb-funil-n');
-  if (badge) { badge.textContent = ativos; badge.hidden = (ativos === 0); }
-}
-
-document.addEventListener('click', function (ev) {
-  var pil = ev.target.closest ? ev.target.closest('#rcb-pilulas .pil[data-q]') : null;
-  if (pil) rcbAbrir(pil.dataset.q);
-});
-
-/* Abre/fecha a fileira de filtros — fechada é o estado normal. */
-function rcbAbrirFiltros() {
-  var fila = document.getElementById('rcb-pilulas');
-  var bt = document.getElementById('rcb-funil');
-  fila.hidden = !fila.hidden;
-  bt.setAttribute('aria-expanded', String(!fila.hidden));
-  if (!fila.hidden) fila.scrollIntoView({ block:'nearest' });
-}
-
-function rcbEsc(t) {
-  return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-}
-
-/* ── Navegar = aplicar ──────────────────────────────────────────── */
-function rcbIr(mudancas) {
-  var u = rcbUrl();
-  Object.keys(mudancas).forEach(function (k) {
-    u.searchParams.delete(k);
-    var v = mudancas[k];
-    if (v === null || v === undefined || v === '') return;
-    (Array.isArray(v) ? v : [v]).forEach(function (x) {
-      if (x !== '' && x !== null) u.searchParams.append(k, x);
-    });
-  });
-  window.location.href = u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '');
-}
-
-/* ── Folha ──────────────────────────────────────────────────────── */
-var RCB_TITULOS = { periodo:'Período', empresa:'Empresa', conta:'Conta bancária',
-                    status:'Situação', forma:'Forma de recebimento',
-                    desc:'Descrição', valor:'Faixa de valor' };
-
-function rcbAbrir(qual) {
-  if (qual === 'conta' && rcbTodosDe('empresa_id').length === 0) {
-    // Não abre a lista: sem empresa ela viria com conta de todas, misturado.
-    rcbAbrir('empresa');
+  if (!idEmp) {
+    cta.appendChild(new Option('Escolha a empresa primeiro', ''));
+    cta.disabled = true;
     return;
   }
-  folha.qual = qual;
-  var multi = (qual === 'empresa' || qual === 'conta');
-  folha.escolha = multi ? (qual === 'empresa' ? rcbTodosDe('empresa_id') : rcbTodosDe('conta_id')) : [];
-  folha.varias = multi && folha.escolha.length > 1;
 
-  document.getElementById('rcb-folha-tit').textContent = RCB_TITULOS[qual];
-  var bv = document.getElementById('rcb-varias');
-  bv.hidden = !multi;
-  bv.textContent = folha.varias ? 'escolher uma' : 'escolher várias';
-  document.getElementById('rcb-folha-pe').hidden =
-    !(folha.varias || qual === 'desc' || qual === 'valor' || qual === 'periodo');
-
-  rcbCorpo();
-  document.getElementById('rcb-folha').classList.add('on');
-  document.getElementById('rcb-fundo').classList.add('on');
-}
-function rcbFecharFolha() {
-  document.getElementById('rcb-folha').classList.remove('on');
-  document.getElementById('rcb-fundo').classList.remove('on');
-  folha.qual = null;
-}
-function rcbVarias() {
-  folha.varias = !folha.varias;
-  document.getElementById('rcb-varias').textContent = folha.varias ? 'escolher uma' : 'escolher várias';
-  document.getElementById('rcb-folha-pe').hidden = !folha.varias;
-  rcbCorpo();
-}
-
-function rcbCorpo() {
-  var q = folha.qual, html = '';
-
-  if (q === 'periodo') {
-    html = RCB_PERIODOS.map(function (p) {
-      return '<button type="button" class="op" onclick="rcbEscolher(\'periodo\',\'' + p.id + '\')">' +
-        '<span class="mk"></span>' + p.t + '</button>';
-    }).join('') +
-    '<div class="par" style="margin-top:.3rem">' +
-      '<input type="date" class="campo-fo" id="rcb-di" value="' + rcbUm('data_inicio') + '">' +
-      '<input type="date" class="campo-fo" id="rcb-df" value="' + rcbUm('data_fim') + '">' +
-    '</div>' +
-    '<div class="dica">Deixe as duas em branco para ver qualquer data.</div>';
+  var minhas = RCB_CONTAS.filter(function (c) { return String(c.cliente_id) === String(idEmp); });
+  if (!minhas.length) {
+    cta.appendChild(new Option('Nenhuma conta para esta empresa', ''));
+    cta.disabled = true;
+    return;
   }
 
-  else if (q === 'status') {
-    var st = rcbUm('status');
-    html = RCB_SITS.map(function (x) {
-      var on = (x.id === st);
-      return '<button type="button" class="op' + (on ? ' on' : '') +
-        '" onclick="rcbEscolher(\'status\',\'' + x.id + '\')">' +
-        '<span class="mk">' + (on ? '✓' : '') + '</span>' + x.t + '</button>';
-    }).join('');
-  }
-
-  else if (q === 'forma') {
-    var fr = rcbUm('forma_recebimento_id');
-    html = '<button type="button" class="op' + (!fr ? ' on' : '') +
-      '" onclick="rcbEscolher(\'forma\',\'\')"><span class="mk">' + (!fr ? '✓' : '') +
-      '</span>Qualquer forma</button>' +
-      RCB_FORMAS.map(function (f) {
-        var on = String(f.id) === fr;
-        return '<button type="button" class="op' + (on ? ' on' : '') +
-          '" onclick="rcbEscolher(\'forma\',\'' + f.id + '\')">' +
-          '<span class="mk">' + (on ? '✓' : '') + '</span>' + rcbEsc(f.nome) + '</button>';
-      }).join('');
-  }
-
-  else if (q === 'desc') {
-    html = '<div style="padding:.2rem .65rem">' +
-      '<input type="text" class="campo-fo" id="rcb-desc" value="' + rcbEsc(rcbUm('f_descricao')) +
-      '" placeholder="parte da descrição, ex.: BARAT" ' +
-      'onkeydown="if(event.key===\'Enter\')rcbAplicar()">' +
-      '<div class="dica" style="padding-left:0">Procura em qualquer parte do texto do lançamento.</div>' +
-      '</div>';
-  }
-
-  else if (q === 'valor') {
-    html = '<div class="par">' +
-      '<input type="text" class="campo-fo" id="rcb-vmin" placeholder="mín. 150,00" value="' + rcbEsc(rcbUm('valor_min')) + '">' +
-      '<input type="text" class="campo-fo" id="rcb-vmax" placeholder="máx. 2.000,00" value="' + rcbEsc(rcbUm('valor_max')) + '">' +
-      '</div><div class="dica">Deixe em branco para não limitar.</div>';
-  }
-
-  else if (q === 'empresa' || q === 'conta') {
-    var itens;
-    if (q === 'empresa') {
-      itens = RCB_EMPRESAS.map(function (e) { return { id:String(e.id), t:e.razao_social, s:'' }; });
-    } else {
-      var emps = rcbTodosDe('empresa_id');
-      itens = RCB_CONTAS
-        .filter(function (c) { return !emps.length || emps.indexOf(String(c.cliente_id)) >= 0; })
-        .map(function (c) {
-          return { id:String(c.id), t:(c.apelido || c.banco_nome || ('conta ' + c.id)),
-                   s:(c.empresa_nome || c.banco_nome || '') };
-        });
-    }
-
-    if (!itens.length) {
-      html = '<div class="dica" style="text-align:center;padding:1rem">' +
-        'Nenhuma conta para a empresa escolhida.</div>';
-    } else {
-      if (itens.length > 6) {
-        html += '<div style="padding:0 .65rem"><input type="search" class="campo-fo" ' +
-                'placeholder="buscar..." oninput="rcbBuscar(this)"></div>';
-      }
-      var nada = folha.escolha.length === 0;
-      html += '<button type="button" class="op' + (nada ? ' on' : '') +
-        '" onclick="rcbEscolher(\'' + q + '\',null)"><span class="mk">' + (nada ? '✓' : '') +
-        '</span>' + (q === 'empresa' ? 'Todas as empresas' : 'Todas as contas') + '</button>';
-      html += itens.map(function (i) {
-        var on = folha.escolha.indexOf(i.id) >= 0;
-        return '<button type="button" class="op' + (on ? ' on' : '') +
-          '" onclick="rcbEscolher(\'' + q + '\',\'' + i.id + '\')">' +
-          '<span class="mk">' + (on ? '✓' : '') + '</span><span>' + rcbEsc(i.t) +
-          (i.s ? '<span class="sub2">' + rcbEsc(i.s) + '</span>' : '') + '</span></button>';
-      }).join('');
-    }
-  }
-
-  document.getElementById('rcb-folha-corpo').innerHTML = html;
-}
-
-function rcbBuscar(inp) {
-  var termo = inp.value.toLowerCase();
-  document.querySelectorAll('#rcb-folha-corpo .op').forEach(function (o) {
-    o.style.display = o.textContent.toLowerCase().indexOf(termo) >= 0 ? '' : 'none';
+  cta.disabled = false;
+  cta.appendChild(new Option('Todas as contas', ''));
+  minhas.forEach(function (c) {
+    var rotulo = (c.apelido || '') + (c.banco_nome ? ' — ' + c.banco_nome : '');
+    var op = new Option(rotulo, c.id);
+    if (RCB_CONTA_SEL.indexOf(String(c.id)) >= 0) op.selected = true;
+    cta.appendChild(op);
   });
 }
 
-/* Um toque escolhe e já aplica. "Escolher várias" segura até o Pronto. */
-function rcbEscolher(qual, valor) {
-  if (qual === 'periodo') {
-    var hoje = new Date(), i, f;
-    if (valor === 'esc') return;                       // usa os campos de data abaixo
-    if (valor === 'mes') { i = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-                           f = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0); }
-    else if (valor === 'ant') { i = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
-                                f = new Date(hoje.getFullYear(), hoje.getMonth(), 0); }
-    else { i = new Date(hoje.getFullYear(), 0, 1); f = new Date(hoje.getFullYear(), 11, 31); }
-    function iso(d) {
-      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
-             '-' + String(d.getDate()).padStart(2, '0');
-    }
-    rcbIr({ data_inicio: iso(i), data_fim: iso(f) });
-    return;
-  }
-  if (qual === 'status') { rcbIr({ status: valor }); return; }
-  if (qual === 'forma')  { rcbIr({ forma_recebimento_id: valor }); return; }
-
-  // empresa / conta
-  if (valor === null) folha.escolha = [];
-  else if (folha.varias) {
-    var k = folha.escolha.indexOf(valor);
-    if (k >= 0) folha.escolha.splice(k, 1); else folha.escolha.push(valor);
+function rcbPeriodo(tipo) {
+  var hoje = new Date(), ini, fim;
+  if (tipo === 'mes_atual') {
+    ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+  } else if (tipo === 'mes_anterior') {
+    ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
   } else {
-    folha.escolha = [valor];
+    ini = new Date(hoje.getFullYear(), 0, 1);
+    fim = new Date(hoje.getFullYear(), 11, 31);
   }
-
-  if (folha.varias) { rcbCorpo(); return; }
-
-  if (qual === 'empresa') {
-    // Conta que não pertence mais à empresa escolhida não pode continuar no filtro.
-    var validas = rcbTodosDe('conta_id').filter(function (cid) {
-      var c = RCB_CONTAS.filter(function (x) { return String(x.id) === cid; })[0];
-      return c && (!folha.escolha.length || folha.escolha.indexOf(String(c.cliente_id)) >= 0);
-    });
-    rcbIr({ empresa_id: folha.escolha, conta_id: validas });
-  } else {
-    rcbIr({ conta_id: folha.escolha });
+  function iso(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+           '-' + String(d.getDate()).padStart(2, '0');
   }
-}
-
-/* Botão "Pronto": vale para multiescolha, datas, descrição e valor. */
-function rcbAplicar() {
-  var q = folha.qual;
-  if (q === 'periodo') {
-    rcbIr({ data_inicio: (document.getElementById('rcb-di') || {}).value || '',
-            data_fim:    (document.getElementById('rcb-df') || {}).value || '' });
-  } else if (q === 'desc') {
-    rcbIr({ f_descricao: (document.getElementById('rcb-desc') || {}).value.trim() });
-  } else if (q === 'valor') {
-    rcbIr({ valor_min: (document.getElementById('rcb-vmin') || {}).value.trim(),
-            valor_max: (document.getElementById('rcb-vmax') || {}).value.trim() });
-  } else if (q === 'empresa') {
-    var validas = rcbTodosDe('conta_id').filter(function (cid) {
-      var c = RCB_CONTAS.filter(function (x) { return String(x.id) === cid; })[0];
-      return c && (!folha.escolha.length || folha.escolha.indexOf(String(c.cliente_id)) >= 0);
-    });
-    rcbIr({ empresa_id: folha.escolha, conta_id: validas });
-  } else if (q === 'conta') {
-    rcbIr({ conta_id: folha.escolha });
-  } else {
-    rcbFecharFolha();
-  }
+  document.getElementById('rcb-di').value = iso(ini);
+  document.getElementById('rcb-df').value = iso(fim);
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-  rcbPilulas();
+  rcbContas();          // repõe as contas da empresa que já veio filtrada
   rcbAtualiza();
 });
 </script>
