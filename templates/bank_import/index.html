@@ -79,6 +79,25 @@ body > .container-fluid:has(#bnc){
   display:grid; place-items:center; margin-top:.15rem; }
 #bnc .passo__c{ flex:1; min-width:0; }
 #bnc .campo[disabled]{ background:#f2f5f9; color:#8b95a3; }
+
+/* Lista de escolha — o mesmo controle das outras abas. Nada de <select>:
+   no iPhone ele vira roda cinza e some com o resto da tela. */
+#bnc .lista{ border:1px solid var(--line-2); border-radius:10px; overflow:hidden;
+  background:#fff; max-height:238px; overflow-y:auto; }
+#bnc .item{ display:flex; align-items:center; gap:.55rem; width:100%;
+  padding:.6rem .65rem; border:0; border-bottom:1px solid #e7ebf1; background:#fff;
+  font-family:inherit; font-size:.86rem; text-align:left; color:#151d27;
+  cursor:pointer; }
+#bnc .item:last-child{ border-bottom:0; }
+#bnc .item:hover{ background:#f7f9fc; }
+#bnc .item.on{ background:#eaf1f9; color:var(--azul-deep); font-weight:800; }
+#bnc .item__t{ min-width:0; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; }
+#bnc .item__s{ display:block; font-size:.72rem; color:#6b7684; font-weight:500; }
+#bnc .item .tique{ margin-left:auto; color:var(--azul); flex:0 0 auto; }
+#bnc .lista .esperando{ padding:.75rem .65rem; font-size:.82rem; color:#8b95a3;
+  text-align:center; }
+#bnc .passo--pronto .passo__n{ background:#17963C; }
 #bnc .passos-txt b{ color:#151d27; }
 
 /* ── Botões de ação: alvo grande, um toque ───────────────────────── */
@@ -211,12 +230,15 @@ body > .container-fluid:has(#bnc){
             <label class="rot">Empresa</label>
             {# Uma empresa por vez: a conta que vem depois é dela, e o arquivo
                da pasta pertence a uma conta só. #}
-            <select id="dbxClienteId" class="campo" onchange="dbxCarregarContas(this.value)">
-              <option value="">Selecione a empresa</option>
+            <input type="hidden" id="dbxClienteId" value="">
+            <div class="lista" id="dbxEmpresas">
               {% for c in clientes %}
-              <option value="{{ c.id }}">{{ c.razao_social }}</option>
+              <button type="button" class="item"
+                      onclick="bncEmpresa('dbx', '{{ c.id }}', this)">
+                <span class="item__t">{{ c.razao_social }}</span>
+              </button>
               {% endfor %}
-            </select>
+            </div>
           </div>
         </div>
 
@@ -224,9 +246,10 @@ body > .container-fluid:has(#bnc){
           <span class="passo__n">2</span>
           <div class="passo__c">
             <label class="rot">Conta bancária</label>
-            <select id="dbxAccountId" class="campo" disabled>
-              <option value="">Escolha a empresa primeiro</option>
-            </select>
+            <input type="hidden" id="dbxAccountId" value="">
+            <div class="lista" id="dbxContas">
+              <div class="esperando">Escolha a empresa primeiro</div>
+            </div>
           </div>
         </div>
 
@@ -248,18 +271,21 @@ body > .container-fluid:has(#bnc){
       <div class="bloco__c"><i class="bi bi-cloud-arrow-up-fill"></i> Enviar arquivo do aparelho</div>
       <div class="bloco__b">
         <form method="POST" action="{{ url_for('bank_import.upload') }}"
-              enctype="multipart/form-data" id="uploadForm">
+              enctype="multipart/form-data" id="uploadForm" onsubmit="return upConfere();">
 
           <div class="passo">
             <span class="passo__n">1</span>
             <div class="passo__c">
               <label class="rot">Empresa</label>
-              <select id="upClienteId" class="campo" onchange="upContas(this.value)">
-                <option value="">Selecione a empresa</option>
+              <input type="hidden" id="upClienteId" value="">
+              <div class="lista" id="upEmpresas">
                 {% for c in clientes %}
-                <option value="{{ c.id }}">{{ c.razao_social }}</option>
+                <button type="button" class="item"
+                        onclick="bncEmpresa('up', '{{ c.id }}', this)">
+                  <span class="item__t">{{ c.razao_social }}</span>
+                </button>
                 {% endfor %}
-              </select>
+              </div>
             </div>
           </div>
 
@@ -267,9 +293,10 @@ body > .container-fluid:has(#bnc){
             <span class="passo__n">2</span>
             <div class="passo__c">
               <label class="rot">Conta bancária</label>
-              <select name="account_id" id="upAccountId" class="campo" required disabled>
-                <option value="">Escolha a empresa primeiro</option>
-              </select>
+              <input type="hidden" name="account_id" id="upAccountId" value="">
+              <div class="lista" id="upContas">
+                <div class="esperando">Escolha a empresa primeiro</div>
+              </div>
             </div>
           </div>
 
@@ -675,63 +702,107 @@ body > .container-fluid:has(#bnc){
        e nao gasta uma ida ao servidor. */
     var BNC_CONTAS = {{ contas | tojson }};
 
+    /* ── Escolha em lista: a mesma das outras abas ──────────────────
+       Uma mecânica só para as quatro listas (empresa e conta das duas
+       caixas). O valor vive num input escondido, então o resto do código
+       — e o formulário de upload — continua lendo .value como antes. */
+    function bncMarca(lista, botao) {
+      lista.querySelectorAll('.item').forEach(function (b) {
+        b.classList.remove('on');
+        var t = b.querySelector('.tique');
+        if (t) t.remove();
+      });
+      if (botao) {
+        botao.classList.add('on');
+        var i = document.createElement('i');
+        i.className = 'bi bi-check-lg tique';
+        botao.appendChild(i);
+      }
+    }
+    function bncPasso(el, pronto) {
+      var passo = el.closest('.passo');
+      if (passo) passo.classList.toggle('passo--pronto', !!pronto);
+    }
+
+    function bncEmpresa(caixa, id, botao) {
+      var campo = document.getElementById(caixa + 'ClienteId');
+      campo.value = id;
+      bncMarca(document.getElementById(caixa + 'Empresas'), botao);
+      bncPasso(campo, true);
+      if (caixa === 'dbx') dbxCarregarContas(id);
+      else upContas(id);
+    }
+
+    function bncPintaContas(caixa, contas) {
+      var cx = document.getElementById(caixa + 'Contas');
+      var campo = document.getElementById(caixa + 'AccountId');
+      campo.value = '';
+      campo.dataset.nome = '';
+      bncPasso(campo, false);
+      cx.innerHTML = '';
+      if (!contas.length) {
+        cx.innerHTML = '<div class="esperando">Nenhuma conta para esta empresa</div>';
+        return;
+      }
+      contas.forEach(function (c) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'item';
+        var t = document.createElement('span');
+        t.className = 'item__t';
+        t.textContent = (c.apelido || c.banco_nome || ('conta ' + c.id));
+        var det = [];
+        if (c.agencia) det.push('Ag ' + c.agencia);
+        if (c.conta) det.push(c.conta);
+        if (det.length) {
+          var sub = document.createElement('span');
+          sub.className = 'item__s';
+          sub.textContent = det.join(' · ');
+          t.appendChild(sub);
+        }
+        b.appendChild(t);
+        b.addEventListener('click', function () {
+          campo.value = c.id;
+          campo.dataset.nome = t.firstChild.textContent;
+          bncMarca(cx, b);
+          bncPasso(campo, true);
+        });
+        cx.appendChild(b);
+      });
+    }
+
     function upContas(clienteId) {
-      var sel = document.getElementById('upAccountId');
-      sel.innerHTML = '';
-      if (!clienteId) {
-        sel.appendChild(new Option('Escolha a empresa primeiro', ''));
-        sel.disabled = true;
-        return;
-      }
-      var minhas = BNC_CONTAS.filter(function (c) {
+      if (!clienteId) { bncPintaContas('up', []); return; }
+      bncPintaContas('up', BNC_CONTAS.filter(function (c) {
         return String(c.cliente_id) === String(clienteId);
-      });
-      if (!minhas.length) {
-        sel.appendChild(new Option('Nenhuma conta para esta empresa', ''));
-        sel.disabled = true;
-        return;
+      }));
+    }
+
+    /* Campo escondido não é validado pelo navegador: a checagem é aqui. */
+    function upConfere() {
+      if (!document.getElementById('upClienteId').value) {
+        alert('Escolha a empresa (passo 1).'); return false;
       }
-      sel.appendChild(new Option('Selecione a conta', ''));
-      minhas.forEach(function (c) {
-        var r = (c.apelido || c.banco_nome);
-        if (c.agencia) r += ' – Ag ' + c.agencia;
-        if (c.conta) r += ' / ' + c.conta;
-        sel.appendChild(new Option(r, c.id));
-      });
-      sel.disabled = false;
+      if (!document.getElementById('upAccountId').value) {
+        alert('Escolha a conta bancária (passo 2).'); return false;
+      }
+      if (!document.getElementById('ofxFile').files.length) {
+        alert('Escolha o arquivo OFX (passo 3).'); return false;
+      }
+      return true;
     }
 
 
     function dbxCarregarContas(clienteId) {
-        const selConta = document.getElementById('dbxAccountId');
-        selConta.innerHTML = '<option value="">Carregando...</option>';
-        selConta.disabled = true;
+        var cx = document.getElementById('dbxContas');
         dbxResetFileList();
-        if (!clienteId) {
-            selConta.innerHTML = '<option value="">— Selecione a empresa primeiro —</option>';
-            return;
-        }
+        if (!clienteId) { bncPintaContas('dbx', []); return; }
+        cx.innerHTML = '<div class="esperando">Carregando contas...</div>';
         fetch('{{ url_for("bank_import.api_contas") }}?cliente_id=' + encodeURIComponent(clienteId))
-            .then(r => r.json())
-            .then(contas => {
-                selConta.innerHTML = '<option value="">— Selecione a conta —</option>';
-                if (contas.length === 0) {
-                    selConta.innerHTML = '<option value="">Nenhuma conta cadastrada para esta empresa</option>';
-                    return;
-                }
-                contas.forEach(c => {
-                    const opt = document.createElement('option');
-                    opt.value = c.id;
-                    let label = c.apelido || c.banco_nome;
-                    if (c.agencia) label += ' – Ag ' + c.agencia;
-                    if (c.conta)   label += ' / ' + c.conta;
-                    opt.textContent = label;
-                    selConta.appendChild(opt);
-                });
-                selConta.disabled = false;
-            })
-            .catch(() => {
-                selConta.innerHTML = '<option value="">Erro ao carregar contas — tente recarregar a página</option>';
+            .then(function (r) { return r.json(); })
+            .then(function (contas) { bncPintaContas('dbx', contas); })
+            .catch(function () {
+                cx.innerHTML = '<div class="esperando">Erro ao carregar as contas — recarregue a página</div>';
             });
     }
 
@@ -778,7 +849,7 @@ body > .container-fluid:has(#bnc){
                     return;
                 }
                 if (!data.files || data.files.length === 0) {
-                    const contaNome = selConta.options[selConta.selectedIndex].text;
+                    const contaNome = selConta.dataset.nome || 'conta selecionada';
                     listDiv.innerHTML = `
                         <div class="alert alert-warning py-2 mb-0">
                             <i class="bi bi-search"></i>
@@ -802,7 +873,7 @@ body > .container-fluid:has(#bnc){
         if (filtradoSemResultado) {
             header.className = 'alert alert-warning py-2 mb-0';
             const selConta = document.getElementById('dbxAccountId');
-            const contaNome = selConta ? selConta.options[selConta.selectedIndex].text : '';
+            const contaNome = selConta ? (selConta.dataset.nome || 'conta selecionada') : '';
             header.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Nenhum arquivo encontrado automaticamente para a conta <strong>${contaNome}</strong>.<br>
                 <small>Coloque o arquivo correto na pasta e verifique de novo.</small>`;
             wrap.appendChild(header);
