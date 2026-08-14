@@ -4,546 +4,628 @@
 
 {% block styles %}
 <style>
-  .page-hero {
-    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
-    border-radius: .75rem;
-    padding: 1.5rem 2rem;
-    margin-bottom: 1.5rem;
-    color: #fff;
+/* ═══════════════════════════════════════════════════════════════════════
+   Recebimento — padrão de lista do sistema.
+   Mesma linguagem da Lista de fretes: cabeçalho em degradê, números em
+   grade, cartão por lançamento no celular e tabela no computador.
+   O MESMO markup serve aos dois: quem troca a apresentação é o CSS, não
+   uma segunda cópia da lista no HTML.
+   ═════════════════════════════════════════════════════════════════════ */
+#rcb{
+  --laranja:#E4923F; --laranja-deep:#CE722A;
+  --azul:#1D63A5; --azul-deep:#0C4C86;
+  --verde:#17963C;
+  --roxo:#6D48C8;
+  --ink:#1c2530; --muted:#6b7684; --line:#e6eaf0; --line-2:#d8dfe8;
+  --surface:#f7f9fc;
+  --ok:#1c6b34; --ok-bg:#e4f4e8;
+  --pend:#8a5a00; --pend-bg:#fdf0d6;
+  --ign:#4b5563; --ign-bg:#eceef1;
+  --danger:#a32d2d; --danger-bg:#fceaea;
+  color:var(--ink);
+}
+
+/* ── Cabeçalho ─────────────────────────────────────────────────────── */
+#rcb .hero{ background:linear-gradient(100deg, var(--laranja) 0%, var(--laranja-deep) 100%);
+  color:#fff; border-radius:14px; padding:.9rem 1.05rem; display:flex; align-items:center;
+  gap:.7rem; margin-bottom:.8rem; }
+#rcb .hero h4{ margin:0; font-size:1.12rem; font-weight:800; letter-spacing:-.01em; }
+#rcb .hero .sub{ font-size:.78rem; opacity:.85; }
+#rcb .hero .fil{ margin-left:auto; flex:0 0 auto; background:rgba(255,255,255,.18);
+  border:1px solid rgba(255,255,255,.38); color:#fff; border-radius:10px;
+  padding:.42rem .7rem; font-size:.82rem; font-weight:700; cursor:pointer;
+  display:inline-flex; align-items:center; gap:.35rem; }
+#rcb .hero .fil:hover{ background:rgba(255,255,255,.3); }
+
+/* ── Números ───────────────────────────────────────────────────────── */
+#rcb .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:.7rem; }
+@media (min-width:768px){ #rcb .nums{ grid-template-columns:repeat(4,1fr); } }
+#rcb .nums .n{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+  padding:.55rem .75rem; }
+#rcb .nums .r{ font-size:.74rem; color:var(--muted); font-weight:600; }
+#rcb .nums .v{ font-size:1.15rem; font-weight:800; letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums; line-height:1.25; }
+#rcb .v.azul{ color:var(--azul); } #rcb .v.verde{ color:var(--verde); }
+#rcb .v.amb{ color:var(--pend); } #rcb .v.cinza{ color:var(--muted); }
+
+/* ── Chips do filtro ───────────────────────────────────────────────── */
+#rcb .chips{ display:flex; gap:.35rem; flex-wrap:wrap; margin-bottom:.7rem; }
+#rcb .chip{ display:inline-flex; align-items:center; gap:.35rem; font-size:.74rem;
+  font-weight:700; background:#fff; border:1px solid var(--line-2); border-radius:999px;
+  padding:.2rem .55rem; }
+#rcb .chip .x{ cursor:pointer; color:var(--muted); font-weight:800; line-height:1;
+  background:none; border:0; padding:0 0 0 .1rem; font-size:.95rem; }
+#rcb .chip .x:hover{ color:var(--danger); }
+#rcb .chip--limpar{ color:var(--muted); text-decoration:none; }
+#rcb .chip--limpar:hover{ border-color:var(--azul); color:var(--azul); }
+
+/* ── Painel de filtros ─────────────────────────────────────────────── */
+#rcb .painel{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+  padding:.8rem .85rem; margin-bottom:.8rem; }
+#rcb .painel[hidden]{ display:none; }
+#rcb .painel .form-label{ font-size:.72rem; font-weight:700; color:#374151; margin-bottom:.1rem; }
+#rcb .painel .form-select, #rcb .painel .form-control{ font-size:.78rem; }
+#rcb .painel small.text-muted{ font-size:.66rem; }
+
+/* ── Lista ─────────────────────────────────────────────────────────── */
+#rcb .lst{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+  overflow:hidden; }
+#rcb .lst__cab{ display:none; }
+#rcb .lin{ border-bottom:1px solid var(--line); }
+#rcb .lin:last-child{ border-bottom:0; }
+
+/* celular: cartão */
+#rcb .lin{
+  display:grid; gap:.15rem .5rem; padding:.55rem .7rem; align-items:center;
+  grid-template-columns:auto 1fr auto;
+  grid-template-areas:
+    "chk   data   status"
+    "desc  desc   desc"
+    "doc   forma  forma"
+    "valor valor  acao";
+}
+#rcb .lin.sel{ background:#eef5fd; box-shadow:inset 3px 0 0 var(--azul); }
+#rcb .c-chk{ grid-area:chk; }
+#rcb .c-data{ grid-area:data; font-size:.76rem; color:var(--muted); font-weight:700;
+  font-variant-numeric:tabular-nums; }
+#rcb .c-status{ grid-area:status; text-align:right; }
+#rcb .c-desc{ grid-area:desc; font-size:.9rem; font-weight:700; letter-spacing:-.01em;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#rcb .c-doc{ grid-area:doc; font-size:.73rem; color:var(--muted);
+  font-family:ui-monospace,Menlo,Consolas,monospace; }
+#rcb .c-forma{ grid-area:forma; }
+#rcb .c-valor{ grid-area:valor; font-size:1.02rem; font-weight:800; color:var(--verde);
+  font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+#rcb .c-acao{ grid-area:acao; display:flex; gap:.35rem; justify-content:flex-end;
+  align-items:center; }
+
+/* computador: tabela */
+@media (min-width:992px){
+  #rcb .lst__cab{
+    display:grid; gap:.5rem; padding:.5rem .7rem; background:var(--surface);
+    border-bottom:2px solid var(--line-2);
+    font-size:.68rem; text-transform:uppercase; letter-spacing:.06em;
+    font-weight:800; color:var(--muted);
   }
-  .page-hero .hero-icon {
-    width: 3rem; height: 3rem;
-    background: rgba(255,255,255,.15);
-    border-radius: .6rem;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.5rem;
-    flex-shrink: 0;
+  #rcb .lst__cab, #rcb .lin{
+    grid-template-columns:26px 92px minmax(0,1fr) 158px 132px 128px 104px 84px;
+    grid-template-areas:"chk data desc doc forma valor status acao";
+    align-items:center;
   }
-  .stat-card-receb {
-    border: 0;
-    border-radius: .65rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,.07);
-    transition: box-shadow .2s;
-  }
-  .stat-card-receb:hover { box-shadow: 0 4px 16px rgba(0,0,0,.13); }
-  .stat-card-receb .stat-icon {
-    width: 2.6rem; height: 2.6rem;
-    border-radius: .5rem;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.2rem;
-    flex-shrink: 0;
-  }
-  #tbl-recebimento { font-size: 0.72rem; }
-  #tbl-recebimento thead th {
-    background: #1D63A5; color: #fff;
-    font-size: 0.68rem; font-weight: 700;
-    text-transform: uppercase; letter-spacing: .04em;
-    padding: 0.45rem 0.5rem; border: none; white-space: nowrap;
-  }
-  #tbl-recebimento tbody td { padding: 0.35rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; }
-  #tbl-recebimento tbody tr:hover td { background: #eef4ff; }
-  /* Filter card — smaller, more elegant typography */
-  #form-filtros .form-label,
-  #form-filtros .form-label-sm {
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.01em;
-    color: #374151;
-  }
-  #form-filtros .form-select,
-  #form-filtros .form-select-sm,
-  #form-filtros .form-control,
-  #form-filtros .form-control-sm {
-    font-size: 0.72rem;
-  }
-  #form-filtros small.text-muted { font-size: 0.65rem; }
-  .btn-xs {
-    padding: 0.15rem 0.35rem;
-    font-size: 0.72rem;
-    line-height: 1.3;
-    border-radius: 0.2rem;
-  }
-  /* Bulk-action toolbar */
-  #bulk-toolbar {
-    display: none;
-    background: #fff8e1;
-    border: 1px solid #ffc107;
-    border-radius: .45rem;
-    padding: .45rem .75rem;
-    margin-bottom: .6rem;
-    font-size: .78rem;
-    align-items: center;
-    gap: .5rem;
-    flex-wrap: wrap;
-  }
-  #bulk-toolbar.visible { display: flex; }
-  /* Checkbox column */
-  #tbl-recebimento thead th.col-chk,
-  #tbl-recebimento tbody td.col-chk {
-    width: 1.8rem;
-    text-align: center;
-    padding-left: .35rem;
-    padding-right: .35rem;
-  }
-  @media (max-width: 768px) {
-    #tbl-recebimento { font-size: 0.70rem; }
-  }
+  #rcb .lin{ padding:.42rem .7rem; }
+  #rcb .c-desc{ font-size:.82rem; font-weight:600; }
+  #rcb .c-valor{ font-size:.86rem; text-align:right; }
+  #rcb .c-status{ text-align:left; }
+  #rcb .c-acao{ justify-content:flex-end; }
+  #rcb .cab-valor{ text-align:right; }
+}
+
+#rcb .lin.oculta{ display:none; }
+#rcb .marca{ width:19px; height:19px; cursor:pointer; accent-color:var(--azul); }
+
+#rcb .selo{ display:inline-block; font-size:.68rem; font-weight:800; border-radius:6px;
+  padding:.1rem .42rem; white-space:nowrap; }
+#rcb .selo--ok{ background:var(--ok-bg); color:var(--ok); }
+#rcb .selo--pend{ background:var(--pend-bg); color:var(--pend); }
+#rcb .selo--ign{ background:var(--ign-bg); color:var(--ign); }
+#rcb .selo--forma{ background:rgba(109,72,200,.12); color:var(--roxo); }
+#rcb .selo--forn{ background:var(--surface); color:var(--muted); font-weight:600; }
+
+/* ── Ações da linha ────────────────────────────────────────────────── */
+#rcb .bt{ border:1px solid transparent; border-radius:9px; padding:.34rem .6rem;
+  font-size:.79rem; font-weight:700; cursor:pointer; display:inline-flex;
+  align-items:center; gap:.3rem; font-family:inherit; white-space:nowrap; }
+#rcb .bt--pri{ background:var(--azul); color:#fff; }
+#rcb .bt--pri:hover{ background:var(--azul-deep); color:#fff; }
+#rcb .bt--mais{ background:#fff; border-color:var(--line-2); color:var(--muted);
+  padding:.34rem .5rem; }
+#rcb .bt--mais:hover{ border-color:var(--azul); color:var(--azul); }
+#rcb .menu{ position:absolute; z-index:30; right:.7rem; margin-top:.2rem; min-width:190px;
+  background:#fff; border:1px solid var(--line-2); border-radius:10px;
+  box-shadow:0 8px 24px rgba(20,35,60,.16); overflow:hidden; }
+#rcb .menu[hidden]{ display:none; }
+#rcb .menu button{ display:flex; align-items:center; gap:.45rem; width:100%; text-align:left;
+  border:0; background:#fff; color:var(--ink); padding:.5rem .7rem; font-size:.83rem;
+  font-weight:600; cursor:pointer; font-family:inherit; border-bottom:1px solid var(--line); }
+#rcb .menu button:last-child{ border-bottom:0; }
+#rcb .menu button:hover{ background:var(--surface); }
+#rcb .menu .perigo{ color:var(--danger); }
+#rcb .lin{ position:relative; }
+
+/* ── Carregar mais ─────────────────────────────────────────────────── */
+#rcb .mais{ padding:.6rem .7rem; }
+#rcb .mais button{ width:100%; border:1px dashed var(--line-2); background:transparent;
+  color:var(--muted); border-radius:10px; padding:.5rem; font-size:.82rem; font-weight:700;
+  cursor:pointer; font-family:inherit; }
+#rcb .mais button:hover{ border-color:var(--azul); color:var(--azul); }
+
+/* ── Barra de lote ─────────────────────────────────────────────────── */
+#rcb .lote{ position:fixed; left:0; right:0; bottom:0; z-index:1040;
+  background:var(--azul-deep); color:#fff; padding:.6rem .8rem;
+  display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;
+  transform:translateY(110%); transition:transform .18s ease;
+  box-shadow:0 -6px 20px rgba(12,76,134,.25);
+  padding-bottom:calc(.6rem + env(safe-area-inset-bottom)); }
+#rcb .lote.on{ transform:translateY(0); }
+#rcb .lote .n{ font-weight:800; font-variant-numeric:tabular-nums; }
+#rcb .lote .todas{ background:none; border:0; color:#fff; text-decoration:underline;
+  cursor:pointer; font-size:.79rem; font-family:inherit; padding:0; }
+#rcb .lote .sep{ margin-left:auto; }
+#rcb .bl{ border:0; border-radius:9px; padding:.36rem .7rem; font-size:.8rem;
+  font-weight:800; cursor:pointer; background:rgba(255,255,255,.18); color:#fff;
+  font-family:inherit; }
+#rcb .bl:hover{ background:rgba(255,255,255,.3); }
+#rcb .bl--rev{ background:#fff; color:var(--azul-deep); }
+#rcb .rodape-folga{ height:4.5rem; }
+
+#rcb .vazio{ text-align:center; color:var(--muted); padding:2.2rem 1rem; font-size:.85rem; }
+#rcb .btn-xs{ padding:.15rem .4rem; font-size:.72rem; border-radius:.25rem; }
+#rcb :focus-visible{ outline:2px solid var(--azul); outline-offset:2px; }
+@media (prefers-reduced-motion: reduce){ #rcb *{ transition:none !important; } }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
+{# `next` volta para ESTA tela com ESTES filtros depois de qualquer ação —
+   sem ele, reverter um lançamento devolvia a lista zerada. #}
+{% set voltar_para = request.full_path if request.query_string else request.path %}
+<div id="rcb" class="container-fluid">
 
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb" class="mb-3">
-      <ol class="breadcrumb small">
-        <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Dashboard</a></li>
-        <li class="breadcrumb-item"><a href="/banco/" class="text-decoration-none">Importação Bancária</a></li>
-        <li class="breadcrumb-item active">Recebimento</li>
-      </ol>
-    </nav>
+  <nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb small mb-0">
+      <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="/banco/" class="text-decoration-none">Importação Bancária</a></li>
+      <li class="breadcrumb-item active">Recebimento</li>
+    </ol>
+  </nav>
 
-    <!-- Hero header -->
-    <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-      <div class="hero-icon"><i class="bi bi-arrow-down-circle-fill"></i></div>
-      <div class="flex-grow-1">
-        <h4 class="mb-0 fw-bold">Recebimento (Créditos Bancários)</h4>
-        <p class="mb-0 opacity-75 small">Créditos buscados diretamente de <code style="background:rgba(255,255,255,.15);padding:0 .3rem;border-radius:.2rem;">bank_transactions</code> (tipo CREDIT). Os valores aparecem assim que o extrato OFX for importado.</p>
-      </div>
+  <!-- ── Cabeçalho ───────────────────────────────────────────────────── -->
+  <div class="hero">
+    <div style="min-width:0">
+      <h4>Recebimento</h4>
+      <div class="sub">Créditos do extrato OFX</div>
     </div>
+    <button type="button" class="fil" onclick="rcbFiltros()" id="rcb-fil-bt">
+      <i class="bi bi-funnel"></i> Filtros
+    </button>
+  </div>
 
-    <!-- FILTROS -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-header d-flex align-items-center py-2"
-             style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-            <i class="bi bi-funnel me-1"></i> Filtros
+  <!-- ── Números ─────────────────────────────────────────────────────── -->
+  <div class="nums">
+    <div class="n"><div class="r">Lançamentos</div>
+      <div class="v azul">{{ transacoes|length }}</div></div>
+    <div class="n"><div class="r">Valor total</div>
+      <div class="v verde">R$ {{ "{:,.2f}".format(total_creditos or 0).replace(',','X').replace('.',',').replace('X','.') }}</div></div>
+    <div class="n"><div class="r">Conciliados</div>
+      <div class="v cinza">{{ total_conciliados }}</div></div>
+    <div class="n"><div class="r">Pendentes</div>
+      <div class="v amb">{{ total_pendentes }}</div></div>
+  </div>
+
+  <!-- ── Chips: o que está filtrando agora ───────────────────────────── -->
+  {% set tem_filtro = empresa_ids_filter or conta_ids_filter or forma_recebimento_id_filter
+                      or status_filter or data_inicio or data_fim or f_descricao
+                      or valor_min or valor_max %}
+  {% if tem_filtro %}
+  <div class="chips">
+    {% for e in empresas %}{% if e.id|string in (empresa_ids_filter or []) %}
+      <span class="chip">{{ e.razao_social }}
+        <button class="x" title="tirar" onclick="rcbTirar('empresa_id','{{ e.id }}')">&times;</button></span>
+    {% endif %}{% endfor %}
+    {% for c in contas %}{% if c.id|string in (conta_ids_filter or []) %}
+      <span class="chip">{{ c.apelido or c.banco_nome }}
+        <button class="x" title="tirar" onclick="rcbTirar('conta_id','{{ c.id }}')">&times;</button></span>
+    {% endif %}{% endfor %}
+    {% if forma_recebimento_id_filter %}
+      {% for f in formas %}{% if f.id|string == forma_recebimento_id_filter %}
+      <span class="chip">{{ f.nome }}
+        <button class="x" onclick="rcbTirar('forma_recebimento_id')">&times;</button></span>
+      {% endif %}{% endfor %}
+    {% endif %}
+    {% if status_filter %}
+      <span class="chip">{{ status_filter|capitalize }}
+        <button class="x" onclick="rcbTirar('status')">&times;</button></span>
+    {% endif %}
+    {% if data_inicio or data_fim %}
+      <span class="chip">{{ data_inicio or '…' }} a {{ data_fim or '…' }}
+        <button class="x" onclick="rcbTirar('data_inicio','',['data_fim'])">&times;</button></span>
+    {% endif %}
+    {% if f_descricao %}
+      <span class="chip">“{{ f_descricao }}”
+        <button class="x" onclick="rcbTirar('f_descricao')">&times;</button></span>
+    {% endif %}
+    {% if valor_min or valor_max %}
+      <span class="chip">R$ {{ valor_min or '0' }} – {{ valor_max or '∞' }}
+        <button class="x" onclick="rcbTirar('valor_min','',['valor_max'])">&times;</button></span>
+    {% endif %}
+    <a href="/financeiro/recebimento/" class="chip chip--limpar">limpar tudo</a>
+  </div>
+  {% endif %}
+
+  <!-- ── Painel de filtros (recolhido quando já há filtro) ────────────── -->
+  <div class="painel" id="rcb-painel" {% if tem_filtro %}hidden{% endif %}>
+    <form method="GET" id="form-filtros">
+      <div class="row g-2">
+        <div class="col-md-3">
+          <label class="form-label mb-0">Empresa <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
+          <select name="empresa_id" id="selEmpresasReceb" class="form-select form-select-sm" multiple size="4">
+            {% for e in empresas %}
+            <option value="{{ e.id }}" {% if e.id|string in (empresa_ids_filter or []) %}selected{% endif %}>
+              {{ e.razao_social }}</option>
+            {% endfor %}
+          </select>
         </div>
-        <div class="card-body py-2">
-            <form method="GET" id="form-filtros">
-            <div class="row g-2">
-                <!-- Empresa -->
-                <div class="col-md-3">
-                    <label class="form-label form-label-sm mb-0">Empresa <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
-                    <select name="empresa_id" id="selEmpresasReceb" class="form-select form-select-sm" multiple size="4">
-                        {% for e in empresas %}
-                        <option value="{{ e.id }}" {% if e.id|string in (empresa_ids_filter or []) %}selected{% endif %}>
-                            {{ e.razao_social }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <!-- Conta / Forma / Status -->
-                <div class="col-md-3">
-                    <div class="row g-1">
-                        <div class="col-12">
-                            <label class="form-label form-label-sm mb-0">Conta Bancária <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
-                            <select name="conta_id" id="selContasReceb" class="form-select form-select-sm" multiple size="4">
-                                <option value="" disabled>— Selecione uma empresa primeiro —</option>
-                            </select>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label form-label-sm mb-0">Forma de Recebimento</label>
-                            <select name="forma_recebimento_id" class="form-select form-select-sm">
-                                <option value="">— Todas —</option>
-                                {% for f in formas %}
-                                <option value="{{ f.id }}" {% if f.id|string == forma_recebimento_id_filter %}selected{% endif %}>
-                                    {{ f.nome }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label form-label-sm mb-0">Status</label>
-                            <select name="status" class="form-select form-select-sm">
-                                <option value="">— Todos —</option>
-                                <option value="pendente" {% if status_filter=='pendente' %}selected{% endif %}>Pendente</option>
-                                <option value="conciliado" {% if status_filter=='conciliado' %}selected{% endif %}>Conciliado</option>
-                                <option value="ignorado" {% if status_filter=='ignorado' %}selected{% endif %}>Ignorado</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-                <!-- Datas + atalhos + botões -->
-                <div class="col-md-6">
-                    <div class="row g-2">
-                        <div class="col-md-6">
-                            <label class="form-label form-label-sm mb-0">Data início</label>
-                            <input type="date" name="data_inicio" class="form-control form-control-sm"
-                                   value="{{ data_inicio or '' }}">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label form-label-sm mb-0">Data fim</label>
-                            <input type="date" name="data_fim" class="form-control form-control-sm"
-                                   value="{{ data_fim or '' }}">
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label form-label-sm mb-0">Descrição</label>
-                            <input type="text" name="f_descricao" class="form-control form-control-sm"
-                                   placeholder="Parte da descrição..." value="{{ f_descricao or '' }}">
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label form-label-sm mb-0">Valor mín. (R$)</label>
-                            <input type="text" name="valor_min" class="form-control form-control-sm"
-                                   placeholder="Ex: 150,00" value="{{ valor_min or '' }}">
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label form-label-sm mb-0">Valor máx. (R$)</label>
-                            <input type="text" name="valor_max" class="form-control form-control-sm"
-                                   placeholder="Ex: 2000,00" value="{{ valor_max or '' }}">
-                        </div>
-                        <div class="col-12">
-                            <div class="d-flex gap-1 flex-wrap mb-1">
-                                <span class="text-muted" style="font-size:0.72rem; line-height:1.8;">Período:</span>
-                                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoReceb('mes_atual')">Este mês</button>
-                                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoReceb('mes_anterior')">Mês anterior</button>
-                                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoReceb('ano_atual')">Este ano</button>
-                            </div>
-                        </div>
-                        <div class="col-12 d-flex gap-1">
-                            <button type="submit" class="btn btn-primary btn-sm flex-fill">
-                                <i class="bi bi-search"></i> Filtrar
-                            </button>
-                            <a href="/financeiro/recebimento/" class="btn btn-outline-secondary btn-sm">
-                                <i class="bi bi-x"></i> Limpar
-                            </a>
-                        </div>
-                    </div>
-                </div>
+        <div class="col-md-3">
+          <div class="row g-1">
+            <div class="col-12">
+              <label class="form-label mb-0">Conta Bancária <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
+              <select name="conta_id" id="selContasReceb" class="form-select form-select-sm" multiple size="4">
+                <option value="" disabled>— Selecione uma empresa primeiro —</option>
+              </select>
             </div>
-            </form>
+            <div class="col-12">
+              <label class="form-label mb-0">Forma de Recebimento</label>
+              <select name="forma_recebimento_id" class="form-select form-select-sm">
+                <option value="">— Todas —</option>
+                {% for f in formas %}
+                <option value="{{ f.id }}" {% if f.id|string == forma_recebimento_id_filter %}selected{% endif %}>
+                  {{ f.nome }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label mb-0">Status</label>
+              <select name="status" class="form-select form-select-sm">
+                <option value="">— Todos —</option>
+                <option value="pendente" {% if status_filter=='pendente' %}selected{% endif %}>Pendente</option>
+                <option value="conciliado" {% if status_filter=='conciliado' %}selected{% endif %}>Conciliado</option>
+                <option value="ignorado" {% if status_filter=='ignorado' %}selected{% endif %}>Ignorado</option>
+              </select>
+            </div>
+          </div>
         </div>
-    </div>
-
-    <!-- TABELA -->
-    <div class="card shadow-sm">
-        <div class="card-header d-flex justify-content-between align-items-center py-2"
-             style="background:#1D63A5;color:#fff;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-            <span><i class="bi bi-table me-1"></i> Transações de Crédito</span>
-            <span class="badge bg-white text-secondary" style="font-size:0.7rem;font-weight:600;">{{ transacoes|length }}</span>
-        </div>
-        <div class="card-body p-0">
-
-            <!-- Bulk-action toolbar (shown when ≥1 conciliado row is checked) -->
-            <div id="bulk-toolbar" class="mx-2 mt-2">
-                <i class="bi bi-check2-square text-warning"></i>
-                <strong id="bulk-count">0</strong> selecionada(s)
-                <form id="form-reverter-lote" method="POST"
-                      action="{{ url_for('financeiro.reverter_conciliacao_lote') }}"
-                      style="display:inline;"
-                      onsubmit="return confirmarReversaoLote();">
-                    <!-- tx_ids[] will be added dynamically by JS before submit -->
-                    <button type="submit" class="btn btn-warning btn-sm">
-                        <i class="bi bi-arrow-counterclockwise me-1"></i> Reverter selecionadas
-                    </button>
-                </form>
-                <form id="form-excluir-lote" method="POST"
-                      action="{{ url_for('financeiro.excluir_transacao_lote') }}"
-                      style="display:inline;"
-                      onsubmit="return confirmarExclusaoLote();">
-                    <!-- tx_ids[] will be added dynamically by JS before submit -->
-                    <button type="submit" class="btn btn-danger btn-sm">
-                        <i class="bi bi-trash me-1"></i> Excluir selecionadas
-                    </button>
-                </form>
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="desmarcarTodos()">
-                    <i class="bi bi-x"></i> Desmarcar
-                </button>
+        <div class="col-md-6">
+          <div class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label mb-0">Data início</label>
+              <input type="date" name="data_inicio" class="form-control form-control-sm" value="{{ data_inicio or '' }}">
             </div>
-
-            <div class="table-responsive">
-                <table class="table mb-0" id="tbl-recebimento">
-                    <thead>
-                        <tr>
-                            <th class="col-chk">
-                                <input type="checkbox" id="chk-all" title="Selecionar todas as conciliadas"
-                                       style="cursor:pointer;" onchange="toggleTodos(this.checked)">
-                            </th>
-                            <th>Data</th>
-                            <th>Descrição</th>
-                            <th>Conta</th>
-                            <th>CNPJ/CPF</th>
-                            <th>Forma de Recebimento</th>
-                            <th class="text-end">Valor (R$)</th>
-                            <th class="text-center">Status</th>
-                            <th class="text-center">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for t in transacoes %}
-                        <tr>
-                            <td class="col-chk">
-                                <input type="checkbox" class="row-chk" value="{{ t.id }}"
-                                       data-status="{{ t.status }}"
-                                       onchange="atualizarBulk()" style="cursor:pointer;">
-                            </td>
-                            <td>{{ t.data_transacao.strftime('%d/%m/%Y') if t.data_transacao else '—' }}</td>
-                            <td style="max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ t.descricao or '' }}">
-                                {{ t.descricao or t.memo or '—' }}
-                            </td>
-                            <td>{{ t.conta_apelido or t.banco_nome or '—' }}</td>
-                            <td style="font-family:monospace;font-size:0.72rem;color:#555;">{{ t.cnpj_cpf or '—' }}</td>
-                            <td>
-                                {% if t.forma_recebimento_nome %}
-                                    <span class="badge bg-success">{{ t.forma_recebimento_nome }}</span>
-                                {% elif t.fornecedor_nome %}
-                                    <span class="text-muted small">{{ t.fornecedor_nome }}</span>
-                                {% else %}
-                                    <span class="text-muted">—</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-end" style="color:#17963c;font-weight:600;">
-                                {{ "{:,.2f}".format(t.valor).replace(',','X').replace('.',',').replace('X','.') }}
-                            </td>
-                            <td class="text-center">
-                                {% if t.status == 'conciliado' %}
-                                    <span class="badge bg-success">Conciliado</span>
-                                {% elif t.status == 'ignorado' %}
-                                    <span class="badge bg-secondary">Ignorado</span>
-                                {% else %}
-                                    <span class="badge bg-warning text-dark">Pendente</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-center" style="white-space:nowrap;">
-                                {% if t.status == 'conciliado' %}
-                                <form method="POST"
-                                      action="{{ url_for('financeiro.reverter_conciliacao', tx_id=t.id) }}"
-                                      style="display:inline;"
-                                      onsubmit="return confirm('Reverter conciliação da transação #{{ t.id }}?\n\nA transação voltará ao status Pendente e poderá ser reconciliada.');">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning btn-xs" title="Reverter Conciliação">
-                                        <i class="bi bi-arrow-counterclockwise"></i>
-                                    </button>
-                                </form>
-                                {% endif %}
-                                <form method="POST"
-                                      action="{{ url_for('financeiro.excluir_transacao', tx_id=t.id) }}"
-                                      style="display:inline;"
-                                      onsubmit="return confirm('Excluir permanentemente a transação #{{ t.id }}?\n\nEsta ação não pode ser desfeita.');">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger btn-xs" title="Excluir transação">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="9" class="text-center text-muted py-4">
-                                <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
-                                <div class="mt-2" style="font-size:0.82rem;">
-                                {% if filtro_aplicado %}
-                                Nenhum crédito encontrado para os filtros selecionados.
-                                {% else %}
-                                Selecione uma <strong>Empresa</strong> ou <strong>Conta Bancária</strong> acima e clique em <strong>Filtrar</strong> para visualizar os recebimentos.
-                                {% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <div class="col-md-6">
+              <label class="form-label mb-0">Data fim</label>
+              <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ data_fim or '' }}">
             </div>
-        </div>
-    </div>
-
-    <!-- Stat cards (summary at bottom) -->
-    <div class="row g-3 mt-3 mb-2">
-      <div class="col-6 col-md-4">
-        <div class="card stat-card-receb h-100">
-          <div class="card-body d-flex align-items-center gap-3 py-3">
-            <div class="stat-icon" style="background:#e6f9ee;">
-              <i class="bi bi-cash-stack" style="color:#198754;"></i>
+            <div class="col-12">
+              <label class="form-label mb-0">Descrição</label>
+              <input type="text" name="f_descricao" class="form-control form-control-sm"
+                     placeholder="Parte da descrição..." value="{{ f_descricao or '' }}">
             </div>
-            <div>
-              <div class="fw-bold" style="color:#198754;font-size:1.05rem;">
-                R$ {{ "{:,.2f}".format(total_creditos or 0).replace(',','X').replace('.',',').replace('X','.') }}
+            <div class="col-6">
+              <label class="form-label mb-0">Valor mín. (R$)</label>
+              <input type="text" name="valor_min" class="form-control form-control-sm"
+                     placeholder="Ex: 150,00" value="{{ valor_min or '' }}">
+            </div>
+            <div class="col-6">
+              <label class="form-label mb-0">Valor máx. (R$)</label>
+              <input type="text" name="valor_max" class="form-control form-control-sm"
+                     placeholder="Ex: 2000,00" value="{{ valor_max or '' }}">
+            </div>
+            <div class="col-12">
+              <div class="d-flex gap-1 flex-wrap mb-1">
+                <span class="text-muted" style="font-size:.72rem;line-height:1.8;">Período:</span>
+                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoReceb('mes_atual')">Este mês</button>
+                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoReceb('mes_anterior')">Mês anterior</button>
+                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoReceb('ano_atual')">Este ano</button>
               </div>
-              <div class="text-muted small">Total Recebido</div>
+            </div>
+            <div class="col-12 d-flex gap-1">
+              <button type="submit" class="btn btn-primary btn-sm flex-fill">
+                <i class="bi bi-search"></i> Filtrar</button>
+              <a href="/financeiro/recebimento/" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-x"></i> Limpar</a>
             </div>
           </div>
         </div>
       </div>
-      <div class="col-6 col-md-4">
-        <div class="card stat-card-receb h-100">
-          <div class="card-body d-flex align-items-center gap-3 py-3">
-            <div class="stat-icon" style="background:#e8f0fb;">
-              <i class="bi bi-check-circle-fill" style="color:#1D63A5;"></i>
-            </div>
-            <div>
-              <div class="fs-4 fw-bold" style="color:#1D63A5;">{{ total_conciliados }}</div>
-              <div class="text-muted small">Conciliados</div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-md-4">
-        <div class="card stat-card-receb h-100">
-          <div class="card-body d-flex align-items-center gap-3 py-3">
-            <div class="stat-icon" style="background:#fff3cd;">
-              <i class="bi bi-hourglass-split" style="color:#856404;"></i>
-            </div>
-            <div>
-              <div class="fs-4 fw-bold" style="color:#856404;">{{ total_pendentes }}</div>
-              <div class="text-muted small">Pendentes</div>
-            </div>
-          </div>
-        </div>
-      </div>
+    </form>
+  </div>
+
+  <!-- ── Lista ───────────────────────────────────────────────────────── -->
+  <div class="lst">
+    <div class="lst__cab">
+      <span><input type="checkbox" class="marca" id="rcb-todos" onchange="rcbTodos(this.checked)"
+                   title="selecionar todos"></span>
+      <span>Data</span><span>Descrição</span><span>CNPJ/CPF</span><span>Forma</span>
+      <span class="cab-valor">Valor</span><span>Status</span><span></span>
     </div>
 
-    <div class="mt-3">
-        <a href="/banco/" class="btn btn-outline-primary btn-sm">
-            <i class="bi bi-arrow-left"></i> Importação Bancária
-        </a>
-        <a href="/banco/relatorio" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-file-earmark-text"></i> Relatório OFX Completo
-        </a>
+    {% for t in transacoes %}
+    <div class="lin{% if loop.index0 >= 25 %} oculta{% endif %}"
+         data-id="{{ t.id }}" data-status="{{ t.status }}" data-valor="{{ t.valor }}"
+         onclick="rcbClique(event, this)">
+      <div class="c-chk">
+        <input type="checkbox" class="marca rchk" value="{{ t.id }}" data-status="{{ t.status }}"
+               onclick="event.stopPropagation()" onchange="rcbMarcou(this)">
+      </div>
+      <div class="c-data">{{ t.data_transacao.strftime('%d/%m/%Y') if t.data_transacao else '—' }}</div>
+      <div class="c-desc" title="{{ t.descricao or t.memo or '' }}">{{ t.descricao or t.memo or '—' }}</div>
+      <div class="c-doc">{{ t.cnpj_cpf or '—' }}</div>
+      <div class="c-forma">
+        {% if t.forma_recebimento_nome %}<span class="selo selo--forma">{{ t.forma_recebimento_nome }}</span>
+        {% elif t.fornecedor_nome %}<span class="selo selo--forn">{{ t.fornecedor_nome }}</span>
+        {% else %}<span class="text-muted">—</span>{% endif %}
+      </div>
+      <div class="c-valor">R$ {{ "{:,.2f}".format(t.valor).replace(',','X').replace('.',',').replace('X','.') }}</div>
+      <div class="c-status">
+        {% if t.status == 'conciliado' %}<span class="selo selo--ok">Conciliado</span>
+        {% elif t.status == 'ignorado' %}<span class="selo selo--ign">Ignorado</span>
+        {% else %}<span class="selo selo--pend">Pendente</span>{% endif %}
+      </div>
+
+      <div class="c-acao">
+        {# Uma ação principal, a que faz sentido NESTE estado. O resto no ⋯ —
+           assim o Excluir sai de debaixo do dedo. #}
+        {% if t.status == 'conciliado' %}
+        <form method="POST" action="{{ url_for('financeiro.reverter_conciliacao', tx_id=t.id) }}"
+              onclick="event.stopPropagation()"
+              onsubmit="return confirm('Reverter a conciliação do lançamento #{{ t.id }}?\n\nEle volta para Pendente e pode ser conciliado de novo.');">
+          <input type="hidden" name="next" value="{{ voltar_para }}">
+          <button type="submit" class="bt bt--pri" title="Reverter conciliação">
+            <i class="bi bi-arrow-counterclockwise"></i> <span class="d-lg-none">Reverter</span>
+          </button>
+        </form>
+        {% endif %}
+        <button type="button" class="bt bt--mais" title="mais ações"
+                onclick="event.stopPropagation(); rcbMenu(this)">⋯</button>
+        <div class="menu" hidden onclick="event.stopPropagation()">
+          <form method="POST" action="{{ url_for('financeiro.excluir_transacao', tx_id=t.id) }}"
+                onsubmit="return confirm('Excluir o lançamento #{{ t.id }} de R$ {{ '%.2f'|format(t.valor) }}?\n\nNão tem volta.');">
+            <input type="hidden" name="next" value="{{ voltar_para }}">
+            <button type="submit" class="perigo"><i class="bi bi-trash"></i> Excluir lançamento</button>
+          </form>
+        </div>
+      </div>
     </div>
+    {% else %}
+    <div class="vazio">
+      <i class="bi bi-inbox" style="font-size:1.8rem;opacity:.4;"></i>
+      <div class="mt-2">
+        {% if filtro_aplicado %}Nenhum crédito encontrado para os filtros selecionados.
+        {% else %}Escolha uma <strong>empresa</strong> ou <strong>conta</strong> e clique em <strong>Filtrar</strong>.{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+
+    {% if transacoes|length > 25 %}
+    <div class="mais" id="rcb-mais">
+      <button type="button" onclick="rcbMais()">
+        mostrar mais — <span id="rcb-restam">{{ transacoes|length - 25 }}</span> de {{ transacoes|length }}
+      </button>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="mt-3">
+    <a href="/banco/" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-arrow-left"></i> Importação Bancária</a>
+    <a href="/banco/relatorio" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-file-earmark-text"></i> Relatório OFX Completo</a>
+  </div>
+
+  <div class="rodape-folga"></div>
+
+  <!-- ── Barra de ação em lote ───────────────────────────────────────── -->
+  <div class="lote" id="rcb-lote">
+    <span><span class="n" id="rcb-n">0</span> selecionadas</span>
+    <button type="button" class="todas" onclick="rcbTodos(true)">selecionar todas</button>
+    <span class="sep"></span>
+    <form method="POST" action="{{ url_for('financeiro.reverter_conciliacao_lote') }}"
+          id="form-reverter-lote" style="display:inline" onsubmit="return confirmarReversaoLote();">
+      <input type="hidden" name="next" value="{{ voltar_para }}">
+      <button type="submit" class="bl bl--rev">
+        <i class="bi bi-arrow-counterclockwise"></i> Reverter</button>
+    </form>
+    <form method="POST" action="{{ url_for('financeiro.excluir_transacao_lote') }}"
+          id="form-excluir-lote" style="display:inline" onsubmit="return confirmarExclusaoLote();">
+      <input type="hidden" name="next" value="{{ voltar_para }}">
+      <button type="submit" class="bl"><i class="bi bi-trash"></i> Excluir</button>
+    </form>
+    <button type="button" class="bl" onclick="rcbLimpar()">Limpar</button>
+  </div>
 </div>
 
 <script>
+/* ── Filtros: painel e chips ───────────────────────────────────────── */
+function rcbFiltros() {
+  var p = document.getElementById('rcb-painel');
+  p.hidden = !p.hidden;
+  if (!p.hidden) p.scrollIntoView({ block: 'nearest' });
+}
+
+/* Tira um filtro da URL. `valor` só é usado quando o parâmetro se repete
+   (empresa_id, conta_id): aí some apenas aquele, não a lista inteira. */
+function rcbTirar(nome, valor, juntos) {
+  var u = new URL(window.location.href);
+  if (valor) {
+    var restantes = u.searchParams.getAll(nome).filter(function (v) { return v !== String(valor); });
+    u.searchParams.delete(nome);
+    restantes.forEach(function (v) { u.searchParams.append(nome, v); });
+  } else {
+    u.searchParams.delete(nome);
+  }
+  (juntos || []).forEach(function (n) { u.searchParams.delete(n); });
+  window.location.href = u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '');
+}
+
+/* ── Seleção ───────────────────────────────────────────────────────── */
+function rcbLinhas() { return Array.prototype.slice.call(document.querySelectorAll('#rcb .lin')); }
+function rcbMarcadas() { return Array.prototype.slice.call(document.querySelectorAll('#rcb .rchk:checked')); }
+
+function rcbClique(ev, lin) {
+  // Clique em botão, link ou dentro de um menu não seleciona a linha.
+  if (ev.target.closest('button, a, form, .menu')) return;
+  var chk = lin.querySelector('.rchk');
+  chk.checked = !chk.checked;
+  rcbMarcou(chk);
+}
+function rcbMarcou(chk) {
+  chk.closest('.lin').classList.toggle('sel', chk.checked);
+  rcbAtualiza();
+}
+function rcbTodos(marcar) {
+  document.querySelectorAll('#rcb .rchk').forEach(function (c) {
+    c.checked = marcar;
+    c.closest('.lin').classList.toggle('sel', marcar);
+  });
+  rcbAtualiza();
+}
+function rcbLimpar() { rcbTodos(false); }
+
+function rcbAtualiza() {
+  var n = rcbMarcadas().length;
+  var total = document.querySelectorAll('#rcb .rchk').length;
+  document.getElementById('rcb-n').textContent = n;
+  document.getElementById('rcb-lote').classList.toggle('on', n > 0);
+  var todos = document.getElementById('rcb-todos');
+  if (todos) {
+    todos.checked = n > 0 && n === total;
+    todos.indeterminate = n > 0 && n < total;
+  }
+}
+
+/* ── Mais linhas ───────────────────────────────────────────────────── */
+function rcbMais() {
+  var ocultas = document.querySelectorAll('#rcb .lin.oculta');
+  Array.prototype.slice.call(ocultas, 0, 25).forEach(function (l) { l.classList.remove('oculta'); });
+  var restam = document.querySelectorAll('#rcb .lin.oculta').length;
+  if (restam === 0) { document.getElementById('rcb-mais').remove(); }
+  else { document.getElementById('rcb-restam').textContent = restam; }
+}
+
+/* ── Menu ⋯ ────────────────────────────────────────────────────────── */
+function rcbMenu(bt) {
+  var m = bt.parentNode.querySelector('.menu');
+  var abrindo = m.hidden;
+  document.querySelectorAll('#rcb .menu').forEach(function (o) { o.hidden = true; });
+  m.hidden = !abrindo;
+}
+document.addEventListener('click', function () {
+  document.querySelectorAll('#rcb .menu').forEach(function (m) { m.hidden = true; });
+});
+
+/* ── Lote: injeta os ids escolhidos no formulário ──────────────────── */
+function rcbInjetar(form, marcadas) {
+  form.querySelectorAll('input[name="tx_ids[]"]').forEach(function (el) { el.remove(); });
+  marcadas.forEach(function (c) {
+    var i = document.createElement('input');
+    i.type = 'hidden'; i.name = 'tx_ids[]'; i.value = c.value;
+    form.appendChild(i);
+  });
+}
+function confirmarReversaoLote() {
+  var cks = rcbMarcadas().filter(function (c) { return c.dataset.status === 'conciliado'; });
+  if (!cks.length) {
+    alert('Nenhum lançamento conciliado selecionado.\nReverter só vale para quem está conciliado.');
+    return false;
+  }
+  if (!confirm('Reverter a conciliação de ' + cks.length + ' lançamento(s)?\n\nEles voltam para Pendente.')) return false;
+  rcbInjetar(document.getElementById('form-reverter-lote'), cks);
+  return true;
+}
+function confirmarExclusaoLote() {
+  var cks = rcbMarcadas();
+  if (!cks.length) return false;
+  var soma = cks.reduce(function (a, c) {
+    return a + parseFloat(c.closest('.lin').dataset.valor || 0);
+  }, 0);
+  var conc = cks.filter(function (c) { return c.dataset.status === 'conciliado'; }).length;
+  var msg = 'Excluir ' + cks.length + ' lançamento(s), somando R$ ' +
+            soma.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
+            '?\n\nNão tem volta.';
+  if (conc) msg += '\n\nAtenção: ' + conc + ' está(ão) conciliado(s) — a conciliação se desfaz junto.';
+  if (!confirm(msg)) return false;
+  rcbInjetar(document.getElementById('form-excluir-lote'), cks);
+  return true;
+}
+
+/* ── Filtro: cascata empresa → conta ───────────────────────────────── */
 const _todasContasReceb = {{ contas | tojson }};
 const _contasSelecionadasReceb = ({{ (conta_ids_filter or []) | tojson }}).map(String);
 
 function atualizarContasReceb() {
-    var selEmp = document.getElementById('selEmpresasReceb');
-    var selCon = document.getElementById('selContasReceb');
-    if (!selEmp || !selCon) return;
-    var empsSel = Array.from(selEmp.selectedOptions).map(function(o) { return parseInt(o.value); });
-    selCon.innerHTML = '';
-    if (empsSel.length === 0) {
-        var opt = document.createElement('option');
-        opt.value = ''; opt.disabled = true;
-        opt.textContent = '— Selecione uma empresa primeiro —';
-        selCon.appendChild(opt);
-        return;
-    }
-    var filtradas = _todasContasReceb.filter(function(c) {
-        return empsSel.includes(parseInt(c.cliente_id));
-    });
-    if (filtradas.length === 0) {
-        var opt2 = document.createElement('option');
-        opt2.value = ''; opt2.disabled = true;
-        opt2.textContent = '— Nenhuma conta para a empresa selecionada —';
-        selCon.appendChild(opt2);
-        return;
-    }
-    filtradas.forEach(function(c) {
-        var opt = document.createElement('option');
-        opt.value = c.id;
-        opt.textContent = (c.apelido || '') + (c.banco_nome ? ' — ' + c.banco_nome : '') + (c.empresa_nome ? ' [' + c.empresa_nome + ']' : '');
-        if (_contasSelecionadasReceb.includes(String(c.id))) opt.selected = true;
-        selCon.appendChild(opt);
-    });
+  var selEmp = document.getElementById('selEmpresasReceb');
+  var selCon = document.getElementById('selContasReceb');
+  if (!selEmp || !selCon) return;
+  var empsSel = Array.from(selEmp.selectedOptions).map(function (o) { return parseInt(o.value); });
+  selCon.innerHTML = '';
+  if (empsSel.length === 0) {
+    var opt = document.createElement('option');
+    opt.value = ''; opt.disabled = true;
+    opt.textContent = '— Selecione uma empresa primeiro —';
+    selCon.appendChild(opt);
+    return;
+  }
+  var filtradas = _todasContasReceb.filter(function (c) { return empsSel.includes(parseInt(c.cliente_id)); });
+  if (filtradas.length === 0) {
+    var opt2 = document.createElement('option');
+    opt2.value = ''; opt2.disabled = true;
+    opt2.textContent = '— Nenhuma conta para a empresa selecionada —';
+    selCon.appendChild(opt2);
+    return;
+  }
+  filtradas.forEach(function (c) {
+    var o = document.createElement('option');
+    o.value = c.id;
+    o.textContent = (c.apelido || '') + (c.banco_nome ? ' — ' + c.banco_nome : '') +
+                    (c.empresa_nome ? ' [' + c.empresa_nome + ']' : '');
+    if (_contasSelecionadasReceb.includes(String(c.id))) o.selected = true;
+    selCon.appendChild(o);
+  });
 }
-
-document.addEventListener('DOMContentLoaded', function() {
-    var selEmp = document.getElementById('selEmpresasReceb');
-    if (selEmp) {
-        selEmp.addEventListener('change', atualizarContasReceb);
-        atualizarContasReceb();
-    }
-});
 
 function setPeriodoReceb(tipo) {
-    var hoje = new Date();
-    var ini, fim;
-    if (tipo === 'mes_atual') {
-        ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-        fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-    } else if (tipo === 'mes_anterior') {
-        ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
-        fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
-    } else {
-        ini = new Date(hoje.getFullYear(), 0, 1);
-        fim = new Date(hoje.getFullYear(), 11, 31);
-    }
-    function fmt(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
-    document.querySelector('input[name="data_inicio"]').value = fmt(ini);
-    document.querySelector('input[name="data_fim"]').value = fmt(fim);
+  var hoje = new Date(), ini, fim;
+  if (tipo === 'mes_atual') {
+    ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+  } else if (tipo === 'mes_anterior') {
+    ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+  } else {
+    ini = new Date(hoje.getFullYear(), 0, 1);
+    fim = new Date(hoje.getFullYear(), 11, 31);
+  }
+  function fmt(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+           '-' + String(d.getDate()).padStart(2, '0');
+  }
+  document.querySelector('input[name="data_inicio"]').value = fmt(ini);
+  document.querySelector('input[name="data_fim"]').value = fmt(fim);
 }
 
-/* ── Bulk-reversal helpers ─────────────────────────────────────────────── */
-function atualizarBulk() {
-    var cks = document.querySelectorAll('.row-chk:checked');
-    var total = document.querySelectorAll('.row-chk');
-    var toolbar = document.getElementById('bulk-toolbar');
-    var countEl = document.getElementById('bulk-count');
-    if (!toolbar || !countEl) return;
-    countEl.textContent = cks.length;
-    if (cks.length > 0) {
-        toolbar.classList.add('visible');
-    } else {
-        toolbar.classList.remove('visible');
-    }
-    // Update "select all" indeterminate state
-    var chkAll = document.getElementById('chk-all');
-    if (chkAll) {
-        if (cks.length === 0) {
-            chkAll.checked = false;
-            chkAll.indeterminate = false;
-        } else if (cks.length === total.length) {
-            chkAll.checked = true;
-            chkAll.indeterminate = false;
-        } else {
-            chkAll.checked = false;
-            chkAll.indeterminate = true;
-        }
-    }
-}
-
-function toggleTodos(checked) {
-    document.querySelectorAll('.row-chk').forEach(function(c) { c.checked = checked; });
-    atualizarBulk();
-}
-
-function desmarcarTodos() {
-    document.querySelectorAll('.row-chk').forEach(function(c) { c.checked = false; });
-    var chkAll = document.getElementById('chk-all');
-    if (chkAll) { chkAll.checked = false; chkAll.indeterminate = false; }
-    atualizarBulk();
-}
-
-function confirmarReversaoLote() {
-    var cks = Array.from(document.querySelectorAll('.row-chk:checked')).filter(function(c) {
-        return c.dataset.status === 'conciliado';
-    });
-    if (cks.length === 0) {
-        alert('Nenhuma transação conciliada selecionada para reverter.\nSelecione apenas transações com status "Conciliado".');
-        return false;
-    }
-    if (!confirm('Reverter a conciliação de ' + cks.length + ' transação(ões) selecionada(s)?\n\nElas voltarão ao status Pendente.')) return false;
-    // Inject hidden inputs with tx_ids into the form
-    var form = document.getElementById('form-reverter-lote');
-    form.querySelectorAll('input[name="tx_ids[]"]').forEach(function(el) { el.remove(); });
-    cks.forEach(function(c) {
-        var inp = document.createElement('input');
-        inp.type = 'hidden';
-        inp.name = 'tx_ids[]';
-        inp.value = c.value;
-        form.appendChild(inp);
-    });
-    return true;
-}
-
-function confirmarExclusaoLote() {
-    var cks = document.querySelectorAll('.row-chk:checked');
-    if (cks.length === 0) return false;
-    var conciliadoCount = Array.from(cks).filter(function(c) { return c.dataset.status === 'conciliado'; }).length;
-    var msg = 'Excluir permanentemente ' + cks.length + ' transação(ões) selecionada(s)?\n\nEsta ação não pode ser desfeita.';
-    if (conciliadoCount > 0) {
-        msg += '\n\n⚠️ Atenção: ' + conciliadoCount + ' transação(ões) conciliada(s) estão incluídas. A conciliação será desfeita ao excluir.';
-    }
-    if (!confirm(msg)) return false;
-    var form = document.getElementById('form-excluir-lote');
-    form.querySelectorAll('input[name="tx_ids[]"]').forEach(function(el) { el.remove(); });
-    cks.forEach(function(c) {
-        var inp = document.createElement('input');
-        inp.type = 'hidden';
-        inp.name = 'tx_ids[]';
-        inp.value = c.value;
-        form.appendChild(inp);
-    });
-    return true;
-}
+document.addEventListener('DOMContentLoaded', function () {
+  var selEmp = document.getElementById('selEmpresasReceb');
+  if (selEmp) { selEmp.addEventListener('change', atualizarContasReceb); atualizarContasReceb(); }
+  rcbAtualiza();
+});
 </script>
-
 {% endblock %}

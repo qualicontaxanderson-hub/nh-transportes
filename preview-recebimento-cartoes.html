@@ -1,0 +1,523 @@
+<title>Recebimento em Cartões</title>
+
+<style>
+/* ── Tokens ───────────────────────────────────────────────────────────────
+   Linguagem da tela "Lista de fretes": degradê laranja no cabeçalho, cartões
+   de número em grade 2×2, selos coloridos por estado. O azul e o verde vêm
+   dos valores que o app já usa.                                            */
+:root{
+  --laranja:#E4923F; --laranja-deep:#CE722A;
+  --azul:#1D63A5; --azul-deep:#0C4C86;
+  --verde:#17963C; --verde-deep:#0F6E2C;
+  --roxo:#6D48C8;
+  --ink:#1c2530; --muted:#6b7684; --line:#e6eaf0; --line-2:#d8dfe8;
+  --card:#ffffff; --ground:#f2f5f9; --surface:#f7f9fc;
+  --ok:#1c6b34; --ok-bg:#e4f4e8;
+  --pend:#8a5a00; --pend-bg:#fdf0d6;
+  --danger:#a32d2d; --danger-bg:#fceaea;
+  --sombra:0 1px 2px rgba(20,35,60,.05), 0 6px 18px rgba(20,35,60,.07);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --laranja:#C67F35; --laranja-deep:#A85F22;
+    --azul:#6CA9E2; --azul-deep:#9CC8F0;
+    --verde:#63c47f; --verde-deep:#8fd9a4;
+    --roxo:#a58ae8;
+    --ink:#e9eef5; --muted:#98a3b2; --line:#2b3441; --line-2:#36414f;
+    --card:#1b222c; --ground:#0f141b; --surface:#161d26;
+    --ok:#a5d9b4; --ok-bg:#17301f;
+    --pend:#e9c583; --pend-bg:#2f2515;
+    --danger:#efa5a5; --danger-bg:#331a1a;
+    --sombra:0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.32);
+  }
+}
+:root[data-theme="dark"]{
+  --laranja:#C67F35; --laranja-deep:#A85F22;
+  --azul:#6CA9E2; --azul-deep:#9CC8F0;
+  --verde:#63c47f; --verde-deep:#8fd9a4;
+  --roxo:#a58ae8;
+  --ink:#e9eef5; --muted:#98a3b2; --line:#2b3441; --line-2:#36414f;
+  --card:#1b222c; --ground:#0f141b; --surface:#161d26;
+  --ok:#a5d9b4; --ok-bg:#17301f;
+  --pend:#e9c583; --pend-bg:#2f2515;
+  --danger:#efa5a5; --danger-bg:#331a1a;
+  --sombra:0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.32);
+}
+
+*{ box-sizing:border-box; }
+body{ margin:0; background:var(--ground); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:15px; line-height:1.55; }
+.wrap{ max-width:1180px; margin:0 auto; padding:1.8rem 1rem 4rem; }
+h1{ font-size:1.55rem; margin:0 0 .3rem; letter-spacing:-.01em; text-wrap:balance; }
+h2{ font-size:1.02rem; margin:2.4rem 0 .7rem; }
+p{ margin:.55rem 0; max-width:66ch; }
+.lead{ color:var(--muted); max-width:66ch; margin:0; }
+.small{ font-size:.82rem; color:var(--muted); }
+code{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.82em;
+  background:var(--surface); border:1px solid var(--line); border-radius:4px; padding:.05em .3em; }
+
+/* ── Molduras ─────────────────────────────────────────────────────────── */
+.protos{ display:grid; gap:1.4rem; align-items:start; }
+@media (min-width:940px){ .protos{ grid-template-columns:372px 1fr; } }
+.moldura{ background:var(--card); border:1px solid var(--line-2); border-radius:16px;
+  box-shadow:var(--sombra); overflow:hidden; }
+.moldura__cap{ font-size:.7rem; text-transform:uppercase; letter-spacing:.07em; font-weight:700;
+  color:var(--muted); padding:.5rem .85rem; background:var(--surface);
+  border-bottom:1px solid var(--line); display:flex; justify-content:space-between; }
+
+/* ── Cabeçalho em degradê (o dos fretes) ──────────────────────────────── */
+.hero{ background:linear-gradient(100deg, var(--laranja) 0%, var(--laranja-deep) 100%);
+  color:#fff; border-radius:12px; margin:.7rem; padding:.85rem 1rem;
+  display:flex; align-items:center; gap:.6rem; }
+.hero h3{ margin:0; font-size:1.05rem; font-weight:800; letter-spacing:-.01em; }
+.hero .fil{ margin-left:auto; width:34px; height:34px; border-radius:9px; flex:0 0 auto;
+  background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.35);
+  display:grid; place-items:center; cursor:pointer; font-size:.95rem; }
+.hero .fil:hover{ background:rgba(255,255,255,.3); }
+
+/* ── Grade de números 2×2 ─────────────────────────────────────────────── */
+.nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; padding:0 .7rem; }
+.nums .n{ background:var(--card); border:1px solid var(--line-2); border-radius:11px;
+  padding:.5rem .7rem; }
+.nums .n .r{ font-size:.75rem; color:var(--muted); font-weight:600; }
+.nums .n .v{ font-size:1.16rem; font-weight:800; font-variant-numeric:tabular-nums;
+  letter-spacing:-.02em; line-height:1.25; }
+.v.azul{ color:var(--azul); } .v.verde{ color:var(--verde); }
+.v.amb{ color:var(--pend); } .v.cinza{ color:var(--muted); }
+
+/* ── Chips de filtro ──────────────────────────────────────────────────── */
+.chips{ display:flex; gap:.35rem; flex-wrap:wrap; padding:.6rem .7rem .1rem; }
+.chip{ display:inline-flex; align-items:center; gap:.3rem; font-size:.72rem; font-weight:700;
+  background:var(--surface); color:var(--ink); border:1px solid var(--line-2);
+  border-radius:999px; padding:.15rem .5rem; }
+.chip .x{ cursor:pointer; color:var(--muted); font-weight:800; }
+.chip .x:hover{ color:var(--danger); }
+.chip--add{ color:var(--muted); cursor:pointer; }
+
+.rotulo{ font-size:.7rem; text-transform:uppercase; letter-spacing:.09em; font-weight:800;
+  color:var(--muted); padding:.85rem .8rem .35rem; }
+
+/* ── Cartão de lançamento ─────────────────────────────────────────────── */
+.lista{ padding:0 .7rem .7rem; display:flex; flex-direction:column; gap:.55rem;
+  max-height:430px; overflow-y:auto; }
+.tx{ border:1px solid var(--line-2); border-radius:12px; background:var(--card);
+  overflow:hidden; transition:border-color .12s, box-shadow .12s; }
+.tx.sel{ border-color:var(--azul); box-shadow:0 0 0 2px rgba(29,99,165,.16); }
+.tx__topo{ display:flex; align-items:center; gap:.5rem; padding:.45rem .6rem;
+  background:var(--surface); border-bottom:1px solid var(--line); cursor:pointer;
+  user-select:none; }
+.marca{ width:19px; height:19px; border-radius:6px; border:1.5px solid var(--line-2);
+  background:var(--card); flex:0 0 auto; display:grid; place-items:center;
+  font-size:.72rem; color:#fff; font-weight:800; }
+.tx.sel .marca{ background:var(--azul); border-color:var(--azul); }
+.tx__id{ font-size:.76rem; font-weight:700; color:var(--muted); font-variant-numeric:tabular-nums; }
+.selos{ margin-left:auto; display:flex; gap:.3rem; flex-wrap:wrap; justify-content:flex-end; }
+.selo{ font-size:.68rem; font-weight:800; border-radius:6px; padding:.1rem .4rem; white-space:nowrap; }
+.selo--ok{ background:var(--ok-bg); color:var(--ok); }
+.selo--pend{ background:var(--pend-bg); color:var(--pend); }
+.selo--forma{ background:rgba(109,72,200,.12); color:var(--roxo); }
+
+.tx__corpo{ padding:.55rem .7rem .6rem; }
+.tx__nome{ font-size:.94rem; font-weight:800; letter-spacing:-.01em; line-height:1.3; }
+.tx__sub{ font-size:.78rem; color:var(--muted); margin-top:.05rem;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tx__vals{ display:grid; grid-template-columns:1fr 1fr; gap:.4rem; margin-top:.5rem; }
+.tx__vals .r{ font-size:.72rem; color:var(--muted); font-weight:600; }
+.tx__vals .v{ font-size:1.02rem; font-weight:800; font-variant-numeric:tabular-nums;
+  letter-spacing:-.02em; }
+
+/* ação: UMA principal + menu */
+.acoes{ display:flex; gap:.45rem; margin-top:.6rem; }
+.bt{ border:1px solid transparent; border-radius:9px; padding:.42rem .7rem; font-size:.83rem;
+  font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:.35rem;
+  font-family:inherit; }
+.bt--pri{ flex:1; justify-content:center; background:var(--azul); color:#fff; }
+.bt--pri:hover{ background:var(--azul-deep); }
+.bt--pri[disabled]{ background:var(--surface); color:var(--muted); cursor:not-allowed;
+  border-color:var(--line-2); }
+.bt--mais{ background:var(--card); border-color:var(--line-2); color:var(--muted);
+  padding:.42rem .6rem; }
+.bt--mais:hover{ border-color:var(--azul); color:var(--azul); }
+.menu{ margin-top:.45rem; border:1px solid var(--line-2); border-radius:9px; overflow:hidden; }
+.menu[hidden]{ display:none; }
+.menu button{ display:flex; align-items:center; gap:.4rem; width:100%; text-align:left;
+  border:0; background:var(--card); color:var(--ink); padding:.45rem .65rem;
+  font-size:.83rem; font-weight:600; cursor:pointer; font-family:inherit;
+  border-bottom:1px solid var(--line); }
+.menu button:last-child{ border-bottom:0; }
+.menu button:hover{ background:var(--surface); }
+.menu .perigo{ color:var(--danger); }
+
+.mais{ text-align:center; padding:.2rem .7rem 0; }
+.mais button{ width:100%; border:1px dashed var(--line-2); background:transparent;
+  color:var(--muted); border-radius:9px; padding:.45rem; font-size:.8rem; font-weight:700;
+  cursor:pointer; font-family:inherit; }
+.mais button:hover{ border-color:var(--azul); color:var(--azul); }
+
+/* ── Barra de lote ────────────────────────────────────────────────────── */
+.barra{ display:flex; align-items:center; gap:.45rem; padding:.55rem .7rem; flex-wrap:wrap;
+  background:var(--azul-deep); color:#fff;
+  max-height:0; overflow:hidden; transform:translateY(100%);
+  transition:max-height .18s ease, transform .18s ease; }
+.barra.on{ max-height:160px; transform:translateY(0); }
+.barra .n{ font-weight:800; font-variant-numeric:tabular-nums; }
+.barra .todas{ background:none; border:0; color:#fff; text-decoration:underline;
+  cursor:pointer; font-size:.78rem; font-family:inherit; padding:0; }
+.barra .sep{ margin-left:auto; }
+.bl{ border:0; border-radius:8px; padding:.32rem .65rem; font-size:.79rem; font-weight:800;
+  cursor:pointer; background:rgba(255,255,255,.18); color:#fff; font-family:inherit; }
+.bl:hover{ background:rgba(255,255,255,.3); }
+.bl--rev{ background:#fff; color:var(--azul-deep); }
+
+.aviso{ display:flex; align-items:center; gap:.5rem; margin:.6rem .7rem 0; padding:.5rem .65rem;
+  border-radius:9px; background:var(--ok-bg); color:var(--ok); font-size:.82rem; font-weight:700; }
+.aviso[hidden]{ display:none; }
+.aviso button{ margin-left:auto; background:none; border:0; color:inherit; font-weight:800;
+  text-decoration:underline; cursor:pointer; font-size:.8rem; font-family:inherit; }
+
+/* ── Tabela (computador) ──────────────────────────────────────────────── */
+.tab-wrap{ overflow-x:auto; max-height:430px; overflow-y:auto; padding:0 .7rem .7rem; }
+table{ width:100%; border-collapse:collapse; font-size:.79rem; }
+thead th{ position:sticky; top:0; z-index:2; background:var(--card); color:var(--muted);
+  text-align:left; font-size:.68rem; text-transform:uppercase; letter-spacing:.06em;
+  font-weight:800; padding:.5rem .55rem; border-bottom:2px solid var(--line-2); white-space:nowrap; }
+tbody td{ padding:.45rem .55rem; border-bottom:1px solid var(--line); vertical-align:middle; }
+tbody tr{ cursor:pointer; }
+tbody tr:hover td{ background:var(--surface); }
+tbody tr.sel td{ background:rgba(29,99,165,.07); }
+.num{ text-align:right; font-variant-numeric:tabular-nums; font-weight:800; color:var(--verde); }
+.mono{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.73rem; color:var(--muted); }
+.trunc{ max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+.regras{ display:grid; gap:.5rem; padding:0; margin:.7rem 0 0; list-style:none; }
+.regras li{ background:var(--card); border:1px solid var(--line-2); border-radius:11px;
+  padding:.6rem .8rem; font-size:.88rem; box-shadow:var(--sombra); }
+.regras b{ display:block; }
+.regras span{ color:var(--muted); font-size:.84rem; }
+.nota{ border-left:3px solid var(--laranja); background:var(--surface); padding:.6rem .8rem;
+  border-radius:0 9px 9px 0; font-size:.87rem; margin-top:1rem; }
+:focus-visible{ outline:2px solid var(--azul); outline-offset:2px; }
+@media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+</style>
+
+<div class="wrap">
+
+  <h1>Recebimento em cartões</h1>
+  <p class="lead">O mesmo Recebimento, agora na linguagem da <b>Lista de fretes</b>: degradê
+  laranja, números em grade, cartão por lançamento. Com uma diferença deliberada — <b>uma</b>
+  ação por cartão, não quatro.</p>
+
+  <div class="protos" style="margin-top:1.2rem">
+
+    <!-- ───────────────── CELULAR ───────────────── -->
+    <div class="moldura">
+      <div class="moldura__cap"><span>Celular</span><span>toque no topo do cartão</span></div>
+
+      <div class="hero">
+        <div><h3>Recebimento · Ago/2026</h3></div>
+        <div class="fil" title="filtros">⌕</div>
+      </div>
+
+      <div class="nums">
+        <div class="n"><div class="r">Lançamentos</div><div class="v azul" id="m-qtd">29</div></div>
+        <div class="n"><div class="r">Valor total</div><div class="v verde" id="m-tot">R$ 13.107,51</div></div>
+        <div class="n"><div class="r">Conciliados</div><div class="v cinza" id="m-conc">28</div></div>
+        <div class="n"><div class="r">Pendentes</div><div class="v amb" id="m-pend">1</div></div>
+      </div>
+
+      <div class="chips" id="m-chips"></div>
+
+      <div class="aviso" id="m-aviso" hidden></div>
+      <div class="rotulo">Recebimentos recentes</div>
+      <div class="lista" id="m-lista"></div>
+      <div class="mais" id="m-mais"></div>
+
+      <div class="barra" id="m-barra">
+        <span><span class="n" id="m-n">0</span> selecionadas</span>
+        <button class="todas" id="m-todas" onclick="marcarTodas('m')">selecionar todas</button>
+        <span class="sep"></span>
+        <button class="bl bl--rev" onclick="agir('m','reverter')">Reverter</button>
+        <button class="bl" onclick="agir('m','excluir')">Excluir</button>
+        <button class="bl" onclick="limpar('m')">Limpar</button>
+      </div>
+    </div>
+
+    <!-- ───────────────── COMPUTADOR ───────────────── -->
+    <div class="moldura">
+      <div class="moldura__cap"><span>Computador</span><span>clique na linha</span></div>
+
+      <div class="hero">
+        <div><h3>Recebimento · Ago/2026</h3></div>
+        <div class="fil" title="filtros">⌕</div>
+      </div>
+
+      <div class="nums" style="grid-template-columns:repeat(4,1fr)">
+        <div class="n"><div class="r">Lançamentos</div><div class="v azul" id="d-qtd">29</div></div>
+        <div class="n"><div class="r">Valor total</div><div class="v verde" id="d-tot">R$ 13.107,51</div></div>
+        <div class="n"><div class="r">Conciliados</div><div class="v cinza" id="d-conc">28</div></div>
+        <div class="n"><div class="r">Pendentes</div><div class="v amb" id="d-pend">1</div></div>
+      </div>
+
+      <div class="chips" id="d-chips"></div>
+      <div class="aviso" id="d-aviso" hidden></div>
+      <div class="rotulo">Recebimentos recentes</div>
+
+      <div class="tab-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:24px"><input type="checkbox" id="d-all" onchange="marcarTodas('d', this.checked)"></th>
+              <th>Data</th><th>Descrição</th><th>CNPJ/CPF</th><th>Forma</th>
+              <th style="text-align:right">Valor</th><th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="d-corpo"></tbody>
+        </table>
+      </div>
+      <div class="mais" id="d-mais"></div>
+
+      <div class="barra" id="d-barra">
+        <span><span class="n" id="d-n">0</span> selecionadas</span>
+        <button class="todas" onclick="marcarTodas('d', true)">selecionar todas</button>
+        <span class="sep"></span>
+        <button class="bl bl--rev" onclick="agir('d','reverter')">Reverter conciliação</button>
+        <button class="bl" onclick="agir('d','excluir')">Excluir</button>
+        <button class="bl" onclick="limpar('d')">Limpar</button>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="nota">
+    <b>O que mudou em relação ao cartão do frete:</b> a ação principal fica sozinha e ocupa a
+    largura; Editar, WhatsApp e Excluir moram no <b>⋯</b>. O cartão encolhe quase pela metade,
+    cabe o dobro na tela, e o Excluir sai de debaixo do dedo. No lançamento pendente a ação
+    principal muda sozinha para <b>Conciliar</b> — o botão diz o que fazer <em>naquele</em> estado,
+    como o "Emitir boleto" apagado do frete #2602.
+  </div>
+
+  <h2>Os cinco buracos que eu tinha apontado — resolvidos aqui</h2>
+  <ol class="regras">
+    <li><b>Volume</b><span>Carrega 8 por vez com "carregar mais". O topo sempre diz o total real
+      do filtro, não o que está na tela.</span></li>
+    <li><b>Selecionar todas</b><span>Na barra de lote, no celular também — não só no cabeçalho da
+      tabela.</span></li>
+    <li><b>Excluir sem volta</b><span>Pergunta antes, dizendo quantas e quanto soma. Reverter não
+      pergunta: tem "desfazer" no aviso.</span></li>
+    <li><b>Chips que funcionam</b><span>Toque no × e a lista refaz na hora. Aqui é maquete; no
+      sistema é a URL que muda.</span></li>
+    <li><b>Ação individual</b><span>Uma principal visível, o resto no ⋯.</span></li>
+  </ol>
+
+  <p class="small" style="margin-top:1.5rem">Nada foi alterado no sistema — isto é maquete.</p>
+</div>
+
+<script>
+var BASE = [
+  { id:9412, d:'12/08', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'', v:757.64,  st:'pendente'   },
+  { id:9408, d:'11/08', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix', v:589.17,  st:'conciliado' },
+  { id:9407, d:'11/08', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix', v:122.26,  st:'conciliado' },
+  { id:9401, d:'10/08', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix', v:945.36,  st:'conciliado' },
+  { id:9400, d:'10/08', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix', v:1687.71, st:'conciliado' },
+  { id:9388, d:'07/08', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix', v:713.73,  st:'conciliado' },
+  { id:9381, d:'06/08', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix', v:960.30,  st:'conciliado' },
+  { id:9375, d:'05/08', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix', v:461.53,  st:'conciliado' },
+  { id:9369, d:'04/08', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix', v:899.05,  st:'conciliado' },
+  { id:9362, d:'03/08', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix', v:507.35,  st:'conciliado' },
+  { id:9350, d:'31/07', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix', v:1001.02, st:'conciliado' },
+  { id:9344, d:'30/07', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix', v:844.17,  st:'conciliado' },
+  { id:9338, d:'29/07', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix', v:460.16,  st:'conciliado' },
+  { id:9331, d:'28/07', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix', v:1550.61, st:'conciliado' },
+  { id:9325, d:'27/07', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix', v:607.45,  st:'conciliado' }
+];
+
+var CHIPS = [
+  { k:'empresa', t:'Posto Novo Horizonte' },
+  { k:'conta',   t:'Sicoob NH' },
+  { k:'periodo', t:'jul–ago/2026' },
+  { k:'desc',    t:'"BARAT"' }
+];
+
+var S = {
+  linhas: BASE.slice(),
+  chips:  CHIPS.slice(),
+  sel:    { m:new Set(), d:new Set() },
+  mostra: { m:8, d:12 },
+  menu:   null,
+  desfazer:null
+};
+
+function moeda(v){ return 'R$ ' + v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+function pintar(){
+  ['m','d'].forEach(function(l){
+    var box = document.getElementById(l + '-chips');
+    box.innerHTML = S.chips.map(function(c){
+      return '<span class="chip">' + esc(c.t) + ' <span class="x" onclick="tirarChip(\'' + c.k + '\')">×</span></span>';
+    }).join('') + '<span class="chip chip--add">+ filtro</span>';
+
+    var qtd = S.linhas.length;
+    var conc = S.linhas.filter(function(t){ return t.st === 'conciliado'; }).length;
+    document.getElementById(l + '-qtd').textContent  = qtd;
+    document.getElementById(l + '-conc').textContent = conc;
+    document.getElementById(l + '-pend').textContent = qtd - conc;
+    document.getElementById(l + '-tot').textContent  =
+      moeda(S.linhas.reduce(function(a,t){ return a + t.v; }, 0));
+  });
+
+  // celular
+  var lista = document.getElementById('m-lista');
+  lista.innerHTML = '';
+  S.linhas.slice(0, S.mostra.m).forEach(function(t){
+    var sel = S.sel.m.has(t.id);
+    var conc = t.st === 'conciliado';
+    var el = document.createElement('div');
+    el.className = 'tx' + (sel ? ' sel' : '');
+    el.innerHTML =
+      '<div class="tx__topo" tabindex="0">' +
+        '<span class="marca">' + (sel ? '✓' : '') + '</span>' +
+        '<span class="tx__id">#' + t.id + ' · ' + t.d + '/2026</span>' +
+        '<span class="selos">' +
+          '<span class="selo ' + (conc ? 'selo--ok' : 'selo--pend') + '">' + (conc ? 'Conciliado' : 'Pendente') + '</span>' +
+          (t.forma ? '<span class="selo selo--forma">' + esc(t.forma) + '</span>' : '') +
+        '</span>' +
+      '</div>' +
+      '<div class="tx__corpo">' +
+        '<div class="tx__nome">BARATÃO DA CARNE</div>' +
+        '<div class="tx__sub">' + esc(t.desc) + '</div>' +
+        '<div class="tx__vals">' +
+          '<div><div class="r">Valor</div><div class="v" style="color:var(--verde)">' + moeda(t.v) + '</div></div>' +
+          '<div><div class="r">CNPJ</div><div class="v" style="font-size:.82rem;color:var(--muted)">' + t.cnpj + '</div></div>' +
+        '</div>' +
+        '<div class="acoes">' +
+          '<button class="bt bt--pri">' + (conc ? '↺ Reverter conciliação' : '✓ Conciliar') + '</button>' +
+          '<button class="bt bt--mais">⋯</button>' +
+        '</div>' +
+        '<div class="menu" hidden>' +
+          '<button>✎ Editar</button>' +
+          '<button>⇄ Trocar forma de recebimento</button>' +
+          '<button class="perigo">🗑 Excluir lançamento</button>' +
+        '</div>' +
+      '</div>';
+    el.querySelector('.tx__topo').onclick = function(){ alterna('m', t.id); };
+    el.querySelector('.tx__topo').onkeydown = function(e){
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); alterna('m', t.id); }
+    };
+    el.querySelector('.bt--mais').onclick = function(){
+      var m = el.querySelector('.menu'); m.hidden = !m.hidden;
+    };
+    el.querySelector('.bt--pri').onclick = function(){
+      S.sel.m = new Set([t.id]); agir('m', conc ? 'reverter' : 'conciliar');
+    };
+    lista.appendChild(el);
+  });
+
+  var restam = S.linhas.length - S.mostra.m;
+  document.getElementById('m-mais').innerHTML = restam > 0
+    ? '<button onclick="verMais(\'m\')">carregar mais ' + Math.min(8, restam) + ' de ' + restam + '</button>'
+    : '';
+
+  // computador
+  var corpo = document.getElementById('d-corpo');
+  corpo.innerHTML = '';
+  S.linhas.slice(0, S.mostra.d).forEach(function(t){
+    var sel = S.sel.d.has(t.id), conc = t.st === 'conciliado';
+    var tr = document.createElement('tr');
+    if (sel) tr.className = 'sel';
+    tr.innerHTML =
+      '<td><input type="checkbox" tabindex="-1"' + (sel ? ' checked' : '') + '></td>' +
+      '<td class="mono">' + t.d + '/2026</td>' +
+      '<td class="trunc" title="' + esc(t.desc) + '">' + esc(t.desc) + '</td>' +
+      '<td class="mono">' + t.cnpj + '</td>' +
+      '<td>' + (t.forma ? '<span class="selo selo--forma">' + esc(t.forma) + '</span>' : '—') + '</td>' +
+      '<td class="num">' + moeda(t.v) + '</td>' +
+      '<td><span class="selo ' + (conc ? 'selo--ok' : 'selo--pend') + '">' + (conc ? 'Conciliado' : 'Pendente') + '</span></td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="bt bt--mais" style="padding:.15rem .45rem;font-size:.75rem">' + (conc ? '↺' : '✓') + '</button> ' +
+        '<button class="bt bt--mais" style="padding:.15rem .45rem;font-size:.75rem">⋯</button>' +
+      '</td>';
+    tr.onclick = function(e){ if (e.target.tagName !== 'BUTTON') alterna('d', t.id); };
+    corpo.appendChild(tr);
+  });
+  var rd = S.linhas.length - S.mostra.d;
+  document.getElementById('d-mais').innerHTML = rd > 0
+    ? '<button onclick="verMais(\'d\')">carregar mais ' + Math.min(12, rd) + ' de ' + rd + '</button>' : '';
+
+  ['m','d'].forEach(function(l){
+    var n = S.sel[l].size;
+    document.getElementById(l + '-n').textContent = n;
+    document.getElementById(l + '-barra').classList.toggle('on', n > 0);
+  });
+  var all = document.getElementById('d-all');
+  all.checked = S.sel.d.size > 0 && S.sel.d.size === S.linhas.length;
+  all.indeterminate = S.sel.d.size > 0 && S.sel.d.size < S.linhas.length;
+}
+
+function alterna(l, id){ S.sel[l].has(id) ? S.sel[l].delete(id) : S.sel[l].add(id); pintar(); }
+function limpar(l){ S.sel[l] = new Set(); pintar(); }
+function verMais(l){ S.mostra[l] += (l === 'm' ? 8 : 12); pintar(); }
+function marcarTodas(l, v){
+  var marcar = (v === undefined) ? true : v;
+  S.sel[l] = marcar ? new Set(S.linhas.map(function(t){ return t.id; })) : new Set();
+  pintar();
+}
+function tirarChip(k){
+  S.chips = S.chips.filter(function(c){ return c.k !== k; });
+  if (k === 'desc') S.linhas = BASE.slice();          // maquete: "tirar BARAT" traria mais
+  pintar();
+}
+
+function agir(l, oque){
+  var ids = Array.prototype.slice.call(S.sel[l]);
+  if (!ids.length) return;
+  var soma = S.linhas.filter(function(t){ return ids.indexOf(t.id) >= 0; })
+                     .reduce(function(a,t){ return a + t.v; }, 0);
+
+  if (oque === 'excluir') {
+    var ok = confirm('Excluir ' + ids.length + (ids.length === 1 ? ' lançamento' : ' lançamentos') +
+                     ', somando ' + moeda(soma) + '?\n\nNão tem volta.');
+    if (!ok) return;
+    S.desfazer = null;
+    S.linhas = S.linhas.filter(function(t){ return ids.indexOf(t.id) < 0; });
+    aviso(l, ids.length + (ids.length === 1 ? ' lançamento excluído' : ' lançamentos excluídos') +
+             ' — filtros mantidos', false);
+  } else {
+    var antes = {};
+    S.linhas.forEach(function(t){
+      if (ids.indexOf(t.id) >= 0) {
+        antes[t.id] = { st:t.st, forma:t.forma };
+        if (oque === 'reverter') { t.st = 'pendente';   t.forma = ''; }
+        else                     { t.st = 'conciliado'; t.forma = 'Pix'; }
+      }
+    });
+    S.desfazer = antes;
+    aviso(l, ids.length + (oque === 'reverter'
+      ? (ids.length === 1 ? ' conciliação revertida' : ' conciliações revertidas')
+      : (ids.length === 1 ? ' lançamento conciliado' : ' lançamentos conciliados')) +
+      ' — filtros mantidos', true);
+  }
+  S.sel[l] = new Set();
+  pintar();
+}
+
+function aviso(l, texto, comDesfazer){
+  var a = document.getElementById(l + '-aviso');
+  a.hidden = false;
+  a.innerHTML = '✓ ' + texto + (comDesfazer ? '<button onclick="desfazer(\'' + l + '\')">desfazer</button>' : '');
+  clearTimeout(a._t);
+  a._t = setTimeout(function(){ a.hidden = true; }, 5000);
+}
+function desfazer(l){
+  if (!S.desfazer) return;
+  S.linhas.forEach(function(t){
+    if (S.desfazer[t.id]) { t.st = S.desfazer[t.id].st; t.forma = S.desfazer[t.id].forma; }
+  });
+  S.desfazer = null;
+  document.getElementById(l + '-aviso').hidden = true;
+  pintar();
+}
+
+pintar();
+</script>

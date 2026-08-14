@@ -1,0 +1,443 @@
+<title>Padrão Recebimento</title>
+
+<style>
+/* ── Tokens: os mesmos do app (conf_fornecedores_dfe) ─────────────────── */
+:root{
+  --line:#e8edf3; --line-2:#dde3ec; --muted:#68717f; --ink:#1f2937;
+  --blue:#1D63A5; --blue-deep:#07569C; --blue-soft:#eaf1f9;
+  --surface:#f6f8fb; --card:#ffffff; --ground:#eef2f7;
+  --ok:#27500a; --ok-bg:#eaf3de; --pend:#8a5a00; --pend-bg:#fbefd8;
+  --danger:#a32d2d; --danger-bg:#fcebeb;
+  --shadow:0 1px 2px rgba(16,32,56,.06), 0 4px 14px rgba(16,32,56,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --line:#2a3340; --line-2:#333e4d; --muted:#98a3b3; --ink:#e8edf4;
+    --blue:#5da2e0; --blue-deep:#8cc0f0; --blue-soft:#16283a;
+    --surface:#161c25; --card:#1b222c; --ground:#11161d;
+    --ok:#a8d98a; --ok-bg:#1e2c17; --pend:#e8c37a; --pend-bg:#2e2415;
+    --danger:#f0a3a3; --danger-bg:#33191a;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --line:#2a3340; --line-2:#333e4d; --muted:#98a3b3; --ink:#e8edf4;
+  --blue:#5da2e0; --blue-deep:#8cc0f0; --blue-soft:#16283a;
+  --surface:#161c25; --card:#1b222c; --ground:#11161d;
+  --ok:#a8d98a; --ok-bg:#1e2c17; --pend:#e8c37a; --pend-bg:#2e2415;
+  --danger:#f0a3a3; --danger-bg:#33191a;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+}
+
+*{ box-sizing:border-box; }
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:15px; line-height:1.55;
+}
+.wrap{ max-width:1120px; margin:0 auto; padding:2rem 1rem 5rem; }
+h1{ font-size:1.6rem; line-height:1.2; margin:0 0 .35rem; text-wrap:balance; letter-spacing:-.01em; }
+h2{ font-size:1.05rem; margin:2.6rem 0 .8rem; letter-spacing:-.005em; }
+h2 .num{ color:var(--blue-deep); font-variant-numeric:tabular-nums; margin-right:.4rem; }
+p{ margin:.6rem 0; max-width:66ch; }
+.lead{ color:var(--muted); max-width:66ch; margin:0 0 .2rem; }
+code{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.82em;
+  background:var(--surface); border:1px solid var(--line); border-radius:4px; padding:.05em .3em; }
+.small{ font-size:.82rem; color:var(--muted); }
+
+/* ── Achados ──────────────────────────────────────────────────────────── */
+.achados{ display:grid; gap:.7rem; }
+.ach{ background:var(--card); border:1px solid var(--line-2); border-left:3px solid var(--danger);
+  border-radius:10px; padding:.75rem .9rem; box-shadow:var(--shadow); }
+.ach h3{ margin:0 0 .25rem; font-size:.93rem; }
+.ach p{ margin:.2rem 0 0; font-size:.87rem; max-width:none; }
+.ach .onde{ display:block; margin-top:.4rem; font-size:.76rem; color:var(--muted);
+  font-family:ui-monospace,Menlo,Consolas,monospace; }
+
+/* ── Molduras dos protótipos ──────────────────────────────────────────── */
+.protos{ display:grid; gap:1.4rem; }
+@media (min-width:900px){ .protos{ grid-template-columns:340px 1fr; align-items:start; } }
+.moldura{ background:var(--card); border:1px solid var(--line-2); border-radius:14px;
+  box-shadow:var(--shadow); overflow:hidden; }
+.moldura__cap{ font-size:.72rem; text-transform:uppercase; letter-spacing:.06em;
+  font-weight:700; color:var(--muted); padding:.5rem .8rem; border-bottom:1px solid var(--line);
+  background:var(--surface); display:flex; justify-content:space-between; align-items:center; }
+
+/* ── App: cabeçalho da tela ───────────────────────────────────────────── */
+.tela{ display:flex; flex-direction:column; }
+.topo{ padding:.7rem .8rem; border-bottom:1px solid var(--line); }
+.topo__l1{ display:flex; align-items:baseline; gap:.5rem; flex-wrap:wrap; }
+.topo h4{ margin:0; font-size:.98rem; font-weight:700; }
+.topo .cont{ font-size:.72rem; color:var(--muted); font-variant-numeric:tabular-nums; }
+.topo .tot{ margin-left:auto; font-weight:800; font-variant-numeric:tabular-nums;
+  color:var(--ok); font-size:.95rem; }
+
+/* chips de filtro */
+.chips{ display:flex; gap:.35rem; flex-wrap:wrap; margin-top:.5rem; }
+.chip{ display:inline-flex; align-items:center; gap:.3rem; font-size:.72rem; font-weight:600;
+  background:var(--blue-soft); color:var(--blue-deep); border:1px solid transparent;
+  border-radius:999px; padding:.15rem .5rem .15rem .55rem; }
+.chip b{ font-weight:800; }
+.chip .x{ cursor:pointer; opacity:.65; font-weight:700; }
+.chip .x:hover{ opacity:1; }
+.chip--btn{ background:transparent; border-color:var(--line-2); color:var(--muted); cursor:pointer; }
+.chip--btn:hover{ border-color:var(--blue); color:var(--blue-deep); }
+
+/* ── Lista mobile: cartões ────────────────────────────────────────────── */
+.lista{ padding:.5rem; display:flex; flex-direction:column; gap:.4rem;
+  max-height:420px; overflow-y:auto; }
+.tx{ border:1px solid var(--line-2); border-radius:10px; padding:.5rem .6rem;
+  background:var(--card); cursor:pointer; user-select:none;
+  transition:border-color .12s, background .12s; }
+.tx:hover{ border-color:var(--blue); }
+.tx.sel{ border-color:var(--blue); background:var(--blue-soft); }
+.tx__l1{ display:flex; align-items:center; gap:.5rem; }
+.tx__data{ font-size:.74rem; color:var(--muted); font-variant-numeric:tabular-nums; }
+.tx__valor{ margin-left:auto; font-weight:800; font-variant-numeric:tabular-nums;
+  font-size:.9rem; color:var(--ok); }
+.tx__desc{ font-size:.8rem; margin-top:.15rem; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; }
+.tx__l3{ display:flex; align-items:center; gap:.35rem; margin-top:.35rem; flex-wrap:wrap; }
+.marca{ width:16px; height:16px; border-radius:5px; border:1.5px solid var(--line-2);
+  flex:0 0 auto; display:grid; place-items:center; font-size:.7rem; color:#fff; }
+.tx.sel .marca{ background:var(--blue); border-color:var(--blue); }
+.selo{ font-size:.68rem; font-weight:700; border-radius:5px; padding:.05rem .35rem;
+  text-transform:uppercase; letter-spacing:.03em; }
+.selo--ok{ background:var(--ok-bg); color:var(--ok); }
+.selo--pend{ background:var(--pend-bg); color:var(--pend); }
+.selo--forma{ background:var(--surface); color:var(--muted); text-transform:none;
+  letter-spacing:0; font-weight:600; }
+
+/* ── Lista desktop: tabela ────────────────────────────────────────────── */
+.tabela-wrap{ overflow-x:auto; max-height:420px; overflow-y:auto; }
+table{ width:100%; border-collapse:collapse; font-size:.78rem; }
+thead th{ position:sticky; top:0; z-index:2; background:var(--surface); color:var(--muted);
+  text-align:left; font-size:.68rem; text-transform:uppercase; letter-spacing:.05em;
+  font-weight:700; padding:.45rem .55rem; border-bottom:1px solid var(--line-2);
+  white-space:nowrap; }
+tbody td{ padding:.4rem .55rem; border-bottom:1px solid var(--line); vertical-align:middle; }
+tbody tr{ cursor:pointer; }
+tbody tr:hover td{ background:var(--surface); }
+tbody tr.sel td{ background:var(--blue-soft); }
+.num{ text-align:right; font-variant-numeric:tabular-nums; font-weight:700; color:var(--ok); }
+.mono{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.72rem; color:var(--muted); }
+.trunc{ max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.acao{ border:1px solid var(--line-2); background:var(--card); color:var(--muted);
+  border-radius:6px; padding:.1rem .35rem; cursor:pointer; font-size:.75rem; }
+.acao:hover{ border-color:var(--blue); color:var(--blue-deep); }
+
+/* ── Barra de ação em lote ────────────────────────────────────────────── */
+.barra{ display:flex; align-items:center; gap:.5rem; padding:.55rem .7rem;
+  background:var(--blue-deep); color:#fff; flex-wrap:wrap;
+  transform:translateY(100%); max-height:0; overflow:hidden;
+  transition:transform .18s ease, max-height .18s ease; }
+.barra.on{ transform:translateY(0); max-height:120px; }
+.barra .n{ font-weight:800; font-variant-numeric:tabular-nums; }
+.barra .sep{ margin-left:auto; }
+.bt{ border:0; border-radius:7px; padding:.3rem .6rem; font-size:.78rem; font-weight:700;
+  cursor:pointer; background:rgba(255,255,255,.16); color:#fff; }
+.bt:hover{ background:rgba(255,255,255,.28); }
+.bt--rev{ background:#fff; color:var(--blue-deep); }
+.bt--del{ background:rgba(255,255,255,.16); }
+.bt:focus-visible, .acao:focus-visible, .tx:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; }
+
+/* aviso de sucesso */
+.toast{ display:flex; align-items:center; gap:.45rem; margin:.5rem; padding:.45rem .6rem;
+  border-radius:8px; background:var(--ok-bg); color:var(--ok); font-size:.8rem;
+  font-weight:600; border:1px solid transparent; }
+.toast[hidden]{ display:none; }
+
+/* ── Regras do padrão ─────────────────────────────────────────────────── */
+.regras{ display:grid; gap:.55rem; padding:0; margin:.8rem 0 0; list-style:none; }
+.regras li{ background:var(--card); border:1px solid var(--line-2); border-radius:10px;
+  padding:.6rem .8rem; font-size:.88rem; box-shadow:var(--shadow); }
+.regras b{ display:block; margin-bottom:.1rem; }
+.regras span{ color:var(--muted); font-size:.84rem; }
+
+.nota{ border-left:3px solid var(--blue); background:var(--surface); padding:.6rem .8rem;
+  border-radius:0 8px 8px 0; font-size:.87rem; margin-top:1rem; }
+
+@media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+</style>
+
+<div class="wrap">
+
+  <h1>Recebimento — padrão novo</h1>
+  <p class="lead">Protótipo navegável da tela <code>/financeiro/recebimento</code>. Pode tocar:
+  selecione linhas, use a barra de ação, reverta. Nada aqui está ligado ao banco —
+  é só a prova de como fica.</p>
+
+  <h2><span class="num">1.</span>O que está quebrado hoje</h2>
+  <div class="achados">
+
+    <div class="ach">
+      <h3>O filtro se perde a cada ação — e é isso que te obriga a refazer tudo</h3>
+      <p>Ao reverter, o servidor manda o navegador para a tela <em>sem</em> a query string.
+      Todos os filtros (empresa, conta, período, "BARAT") somem e a tela volta ao padrão.
+      Repare que só os caminhos de <em>erro</em> preservam a origem — o de sucesso, não.</p>
+      <span class="onde">routes/financeiro.py:1803 e 1811 → redirect(url_for('financeiro.recebimento'))</span>
+    </div>
+
+    <div class="ach">
+      <h3>A ação em lote já existe — mas está inalcançável no celular</h3>
+      <p>Há uma barra com "Reverter selecionadas" e "Excluir selecionadas" que aparece quando
+      você marca linhas. Só que a caixa de seleção é a <b>primeira coluna</b> de uma tabela de
+      9 colunas em rolagem horizontal: no celular ela nasce fora da tela. Você nunca viu o
+      recurso porque nunca conseguiu chegar nele.</p>
+      <span class="onde">templates/financeiro/recebimento.html:227 (#bulk-toolbar) e :257 (#chk-all)</span>
+    </div>
+
+    <div class="ach">
+      <h3>Tabela de 9 colunas não cabe em telefone nenhum</h3>
+      <p><code>table-responsive</code> resolve o transbordo com barra de rolagem lateral — o que
+      no celular esconde justamente data e descrição, as duas colunas que identificam o
+      lançamento. Sobra "TO PIX", valor e status, como no seu print.</p>
+      <span class="onde">o mesmo padrão está em 84 templates do projeto</span>
+    </div>
+
+  </div>
+
+  <h2><span class="num">2.</span>Como fica</h2>
+  <p class="lead">Os dois lados do mesmo padrão. No telefone, cartões; no computador, tabela
+  densa. A seleção e a barra de ação são idênticas nos dois.</p>
+
+  <div class="protos">
+
+    <!-- ───────── MOBILE ───────── -->
+    <div class="moldura">
+      <div class="moldura__cap"><span>Celular</span><span>toque para selecionar</span></div>
+      <div class="tela">
+        <div class="topo">
+          <div class="topo__l1">
+            <h4>Recebimento</h4>
+            <span class="cont" id="m-cont">29 lançamentos</span>
+            <span class="tot" id="m-tot">R$ 13.107,51</span>
+          </div>
+          <div class="chips">
+            <span class="chip">Posto Novo Horizonte <span class="x" title="tirar filtro">×</span></span>
+            <span class="chip">Sicoob NH <span class="x">×</span></span>
+            <span class="chip">jul–ago <span class="x">×</span></span>
+            <span class="chip">"BARAT" <span class="x">×</span></span>
+            <span class="chip chip--btn">Filtros</span>
+          </div>
+        </div>
+
+        <div class="toast" id="m-toast" hidden></div>
+        <div class="lista" id="m-lista"></div>
+
+        <div class="barra" id="m-barra">
+          <span><span class="n" id="m-n">0</span> selecionadas</span>
+          <span class="sep"></span>
+          <button class="bt bt--rev" onclick="agir('m','reverter')">Reverter</button>
+          <button class="bt bt--del" onclick="agir('m','excluir')">Excluir</button>
+          <button class="bt" onclick="limpar('m')">Limpar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ───────── DESKTOP ───────── -->
+    <div class="moldura">
+      <div class="moldura__cap"><span>Computador</span><span>clique na linha</span></div>
+      <div class="tela">
+        <div class="topo">
+          <div class="topo__l1">
+            <h4>Recebimento (créditos bancários)</h4>
+            <span class="cont" id="d-cont">29 lançamentos</span>
+            <span class="tot" id="d-tot">R$ 13.107,51</span>
+          </div>
+          <div class="chips">
+            <span class="chip">Empresa: <b>Posto Novo Horizonte</b> <span class="x">×</span></span>
+            <span class="chip">Conta: <b>Sicoob NH</b> <span class="x">×</span></span>
+            <span class="chip">01/07 a 31/08/2026 <span class="x">×</span></span>
+            <span class="chip">Descrição: <b>BARAT</b> <span class="x">×</span></span>
+            <span class="chip chip--btn">+ filtro</span>
+          </div>
+        </div>
+
+        <div class="toast" id="d-toast" hidden></div>
+
+        <div class="tabela-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:26px"><input type="checkbox" id="d-all" onchange="todos(this.checked)"></th>
+                <th>Data</th><th>Descrição</th><th>Conta</th><th>CNPJ/CPF</th>
+                <th>Forma</th><th style="text-align:right">Valor</th><th>Status</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="d-corpo"></tbody>
+          </table>
+        </div>
+
+        <div class="barra" id="d-barra">
+          <span><span class="n" id="d-n">0</span> selecionadas</span>
+          <span class="sep"></span>
+          <button class="bt bt--rev" onclick="agir('d','reverter')">Reverter conciliação</button>
+          <button class="bt bt--del" onclick="agir('d','excluir')">Excluir</button>
+          <button class="bt" onclick="limpar('d')">Limpar seleção</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="nota">
+    <b>Teste o que importa:</b> selecione duas ou três, clique em <b>Reverter</b>. Os filtros
+    continuam no lugar, a contagem e o total se ajustam, e você segue trabalhando de onde
+    parou — sem refazer a consulta.
+  </div>
+
+  <h2><span class="num">3.</span>As regras do padrão</h2>
+  <p class="lead">É isto que se repete nas outras telas — não o visual de uma página só.</p>
+  <ol class="regras">
+    <li><b>Ação nunca perde o contexto</b><span>Todo POST volta para a mesma URL, com a mesma
+      query string, mesma rolagem. O filtro é estado da tela, não enfeite.</span></li>
+    <li><b>Filtro vira chip</b><span>O que está filtrando aparece como etiqueta removível com um
+      toque. O painel de filtros fica recolhido — quem precisa dele abre.</span></li>
+    <li><b>Seleção é do dedo, não da caixinha</b><span>Toque em qualquer lugar da linha ou do
+      cartão. A caixa de seleção continua lá para quem usa mouse e teclado.</span></li>
+    <li><b>Barra de ação sobe do rodapé</b><span>Aparece só quando há seleção, some quando
+      acaba. Sempre visível, sempre no mesmo lugar — no celular e no computador.</span></li>
+    <li><b>Tabela no computador, cartão no celular</b><span>O mesmo dado, duas formas. Nada de
+      rolagem lateral escondendo data e descrição.</span></li>
+    <li><b>A tela diz o que aconteceu</b><span>"3 conciliações revertidas" no lugar onde a
+      pessoa estava olhando, não uma tela nova.</span></li>
+  </ol>
+
+  <h2><span class="num">4.</span>O que isso custa</h2>
+  <p>Três frentes, e elas são independentes — dá pra fazer uma e parar:</p>
+  <ol class="regras">
+    <li><b>Preservar o filtro</b><span>Pequeno e imediato. Mexe só nos <code>redirect</code> de
+      <code>routes/financeiro.py</code> — reverter, excluir e os dois em lote. Resolve sozinho
+      a dor que você descreveu.</span></li>
+    <li><b>Lote alcançável + cartões no celular</b><span>Reescrita do corpo de
+      <code>templates/financeiro/recebimento.html</code>. É o desenho acima.</span></li>
+    <li><b>Virar padrão do site</b><span>Extrair isto para um bloco reaproveitável e aplicar
+      tela a tela, na ordem que você mandar. São 84 templates com o padrão antigo — não é
+      para fazer de uma vez.</span></li>
+  </ol>
+
+  <p class="small" style="margin-top:1.6rem">Nada foi alterado no sistema. Este arquivo é só a
+  prova visual.</p>
+</div>
+
+<script>
+// Dados reais do seu print (Sicoob NH, filtro "BARAT", jul–ago/2026).
+var DADOS = [
+  { d:'12/08/2026', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'', v:757.64,  st:'pendente'   },
+  { d:'11/08/2026', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix',  v:589.17,  st:'conciliado' },
+  { d:'11/08/2026', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix',  v:122.26,  st:'conciliado' },
+  { d:'10/08/2026', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix',  v:945.36,  st:'conciliado' },
+  { d:'10/08/2026', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix',  v:1687.71, st:'conciliado' },
+  { d:'07/08/2026', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix',  v:713.73,  st:'conciliado' },
+  { d:'06/08/2026', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix',  v:960.30,  st:'conciliado' },
+  { d:'05/08/2026', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix',  v:461.53,  st:'conciliado' },
+  { d:'04/08/2026', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix',  v:899.05,  st:'conciliado' },
+  { d:'03/08/2026', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix',  v:507.35,  st:'conciliado' },
+  { d:'31/07/2026', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix',  v:1001.02, st:'conciliado' },
+  { d:'30/07/2026', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix',  v:844.17,  st:'conciliado' },
+  { d:'29/07/2026', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix',  v:460.16,  st:'conciliado' },
+  { d:'28/07/2026', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix',  v:1550.61, st:'conciliado' },
+  { d:'27/07/2026', desc:'BARATAO DA CARNE - RECEBIMENTO PIX', cnpj:'04.518.744/0001-09', forma:'Pix',  v:607.45,  st:'conciliado' }
+];
+
+var estado = { m:new Set(), d:new Set(), vivos:DADOS.map(function(_,i){ return i; }) };
+
+function moeda(v){
+  return 'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+function pintar(){
+  var lista = document.getElementById('m-lista');
+  var corpo = document.getElementById('d-corpo');
+  lista.innerHTML = ''; corpo.innerHTML = '';
+
+  estado.vivos.forEach(function(i){
+    var t = DADOS[i];
+    var selM = estado.m.has(i), selD = estado.d.has(i);
+
+    // cartão (celular)
+    var card = document.createElement('div');
+    card.className = 'tx' + (selM ? ' sel' : '');
+    card.tabIndex = 0;
+    card.innerHTML =
+      '<div class="tx__l1"><span class="marca">' + (selM ? '✓' : '') + '</span>' +
+      '<span class="tx__data">' + t.d + '</span>' +
+      '<span class="tx__valor">' + moeda(t.v) + '</span></div>' +
+      '<div class="tx__desc">' + t.desc + '</div>' +
+      '<div class="tx__l3">' +
+        '<span class="selo ' + (t.st === 'conciliado' ? 'selo--ok' : 'selo--pend') + '">' +
+          (t.st === 'conciliado' ? 'conciliado' : 'pendente') + '</span>' +
+        (t.forma ? '<span class="selo selo--forma">' + t.forma + '</span>' : '') +
+        '<span class="tx__data" style="margin-left:auto">' + t.cnpj + '</span>' +
+      '</div>';
+    card.onclick = function(){ alterna('m', i); };
+    card.onkeydown = function(e){ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); alterna('m', i); } };
+    lista.appendChild(card);
+
+    // linha (computador)
+    var tr = document.createElement('tr');
+    if (selD) tr.className = 'sel';
+    tr.innerHTML =
+      '<td><input type="checkbox"' + (selD ? ' checked' : '') + ' tabindex="-1"></td>' +
+      '<td class="mono">' + t.d + '</td>' +
+      '<td class="trunc" title="' + t.desc + '">' + t.desc + '</td>' +
+      '<td>Sicoob NH</td>' +
+      '<td class="mono">' + t.cnpj + '</td>' +
+      '<td>' + (t.forma ? '<span class="selo selo--forma">' + t.forma + '</span>' : '—') + '</td>' +
+      '<td class="num">' + moeda(t.v) + '</td>' +
+      '<td><span class="selo ' + (t.st === 'conciliado' ? 'selo--ok' : 'selo--pend') + '">' +
+        (t.st === 'conciliado' ? 'conciliado' : 'pendente') + '</span></td>' +
+      '<td><button class="acao" title="ações desta linha" onclick="event.stopPropagation()">⋯</button></td>';
+    tr.onclick = function(){ alterna('d', i); };
+    corpo.appendChild(tr);
+  });
+
+  ['m','d'].forEach(function(lado){
+    var n = estado[lado].size;
+    document.getElementById(lado + '-n').textContent = n;
+    document.getElementById(lado + '-barra').classList.toggle('on', n > 0);
+    document.getElementById(lado + '-cont').textContent = estado.vivos.length + ' lançamentos';
+    var soma = estado.vivos.reduce(function(a,i){ return a + DADOS[i].v; }, 0);
+    document.getElementById(lado + '-tot').textContent = moeda(soma);
+  });
+
+  var all = document.getElementById('d-all');
+  all.checked = estado.d.size > 0 && estado.d.size === estado.vivos.length;
+  all.indeterminate = estado.d.size > 0 && estado.d.size < estado.vivos.length;
+}
+
+function alterna(lado, i){
+  if (estado[lado].has(i)) estado[lado].delete(i); else estado[lado].add(i);
+  pintar();
+}
+function todos(marcar){
+  estado.d = marcar ? new Set(estado.vivos) : new Set();
+  pintar();
+}
+function limpar(lado){ estado[lado] = new Set(); pintar(); }
+
+function agir(lado, oque){
+  var n = estado[lado].size;
+  if (!n) return;
+  var alvos = estado[lado];
+
+  if (oque === 'excluir') {
+    estado.vivos = estado.vivos.filter(function(i){ return !alvos.has(i); });
+  } else {
+    alvos.forEach(function(i){ DADOS[i].st = 'pendente'; DADOS[i].forma = ''; });
+  }
+  estado[lado] = new Set();
+  pintar();
+
+  var t = document.getElementById(lado + '-toast');
+  t.hidden = false;
+  t.textContent = (oque === 'excluir')
+    ? '✓ ' + n + (n === 1 ? ' lançamento excluído' : ' lançamentos excluídos') + ' — filtros mantidos'
+    : '✓ ' + n + (n === 1 ? ' conciliação revertida' : ' conciliações revertidas') + ' — filtros mantidos';
+  clearTimeout(t._tmr);
+  t._tmr = setTimeout(function(){ t.hidden = true; }, 3200);
+}
+
+pintar();
+</script>

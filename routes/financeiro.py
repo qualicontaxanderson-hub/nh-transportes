@@ -5,6 +5,7 @@ from utils.db import get_db_connection
 from utils.boletos import emitir_boleto_frete, emitir_boleto_multiplo, fetch_charge, fetch_boleto_pdf_stream, update_billet_expire, cancel_charge, _get_bearer_token, _ensure_credentials_from_env
 from datetime import datetime, date, timedelta
 from calendar import monthrange
+from urllib.parse import urlparse
 import os
 import requests
 import mysql.connector
@@ -1684,6 +1685,45 @@ def auto_conciliar_efi():
                         'message': f'Erro interno: {str(e)}'}), 500
 
 
+def _destino_pos_acao():
+    """Para onde voltar depois de uma ação da lista, PRESERVANDO o filtro.
+
+    O filtro é o estado da tela, não enfeite: voltar para a URL limpa obriga a
+    refazer empresa, conta, período e descrição a cada lançamento revertido —
+    era isso que acontecia ao reverter um a um.
+
+    Ordem: o campo `next` que a própria tela manda (explícito, imune a
+    Referrer-Policy), depois o referrer do navegador. Devolve None quando
+    nenhum dos dois serve, e aí quem chamou decide.
+
+    Só aceita caminho interno: nada de `//host`, esquema ou host de fora —
+    senão o POST vira redirecionamento aberto para um site qualquer.
+    """
+    def _interno(caminho):
+        if not caminho or not caminho.startswith('/') or caminho.startswith('//'):
+            return None
+        if '\\' in caminho or '\n' in caminho or '\r' in caminho:
+            return None
+        return caminho
+
+    destino = _interno((request.form.get('next') or '').strip())
+    if destino:
+        return destino
+
+    ref = (request.referrer or '').strip()
+    if ref:
+        try:
+            partes = urlparse(ref)
+        except Exception:
+            return None
+        # Mesmo host: o referrer de outro site não manda no nosso redirect.
+        if partes.netloc and partes.netloc != request.host:
+            return None
+        caminho = partes.path + (('?' + partes.query) if partes.query else '')
+        return _interno(caminho)
+    return None
+
+
 @financeiro_bp.route('/reverter-conciliacao/<int:tx_id>/', methods=['POST'])
 @login_required
 def reverter_conciliacao(tx_id):
@@ -1702,10 +1742,10 @@ def reverter_conciliacao(tx_id):
         tx = cursor.fetchone()
         if not tx:
             flash("Transação não encontrada.", "danger")
-            return redirect(request.referrer or url_for('financeiro.recebimento'))
+            return redirect(_destino_pos_acao() or url_for('financeiro.recebimento'))
         if tx['status'] != 'conciliado':
             flash("Apenas transações conciliadas podem ter a conciliação revertida.", "warning")
-            return redirect(request.referrer or url_for('financeiro.recebimento'))
+            return redirect(_destino_pos_acao() or url_for('financeiro.recebimento'))
 
         cursor_w = conn.cursor()
 
@@ -1798,6 +1838,14 @@ def reverter_conciliacao(tx_id):
         if account_ids:
             kwargs['account_id'] = account_ids
         return redirect(url_for('lancamentos_despesas.lista', **kwargs))
+
+    # Volta para a MESMA tela filtrada. Sem isto, reverter um lançamento
+    # devolvia a lista sem filtro nenhum e obrigava a refazer a consulta
+    # inteira antes de reverter o próximo.
+    destino = _destino_pos_acao()
+    if destino:
+        return redirect(destino)
+
     if source == 'pagamentos':
         return redirect(url_for('financeiro.pagamentos'))
     if source == 'recebimento':
@@ -1828,7 +1876,7 @@ def reverter_conciliacao_lote():
 
     if not tx_ids:
         flash("Nenhuma transação selecionada para reverter.", "warning")
-        return redirect(request.referrer or url_for('financeiro.recebimento'))
+        return redirect(_destino_pos_acao() or url_for('financeiro.recebimento'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -1935,7 +1983,7 @@ def reverter_conciliacao_lote():
     if erros:
         flash("Erros: " + "; ".join(erros), "warning")
 
-    return redirect(request.referrer or url_for('financeiro.recebimento'))
+    return redirect(_destino_pos_acao() or url_for('financeiro.recebimento'))
 
 
 @financeiro_bp.route('/excluir-transacao/<int:tx_id>/', methods=['POST'])
@@ -1954,7 +2002,7 @@ def excluir_transacao(tx_id):
         tx = cursor.fetchone()
         if not tx:
             flash("Transação não encontrada.", "danger")
-            return redirect(request.referrer or url_for('financeiro.recebimento'))
+            return redirect(_destino_pos_acao() or url_for('financeiro.recebimento'))
 
         cursor_w = conn.cursor()
 
@@ -2004,10 +2052,7 @@ def excluir_transacao(tx_id):
         except Exception:
             pass
 
-    referrer = request.referrer or ''
-    if 'pagamento' in referrer:
-        return redirect(referrer)
-    return redirect(url_for('financeiro.recebimento'))
+    return redirect(_destino_pos_acao() or url_for('financeiro.recebimento'))
 
 
 @financeiro_bp.route('/excluir-transacao-lote/', methods=['POST'])
@@ -2026,7 +2071,7 @@ def excluir_transacao_lote():
 
     if not tx_ids:
         flash("Nenhuma transação selecionada para excluir.", "warning")
-        return redirect(request.referrer or url_for('financeiro.recebimento'))
+        return redirect(_destino_pos_acao() or url_for('financeiro.recebimento'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -2105,10 +2150,7 @@ def excluir_transacao_lote():
     if erros:
         flash("Erros: " + "; ".join(erros), "warning")
 
-    referrer = request.referrer or ''
-    if 'pagamento' in referrer:
-        return redirect(referrer)
-    return redirect(url_for('financeiro.recebimento'))
+    return redirect(_destino_pos_acao() or url_for('financeiro.recebimento'))
 
 
 def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
