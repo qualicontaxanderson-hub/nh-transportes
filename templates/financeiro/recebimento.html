@@ -52,9 +52,37 @@
 #rcb .v.azul{ color:var(--azul); } #rcb .v.verde{ color:var(--verde); }
 #rcb .v.amb{ color:var(--pend); } #rcb .v.cinza{ color:var(--muted); }
 
-/* ── Filtros (collapse, igual ao da Lista de fretes) ──────────────── */
+/* ── Filtros (collapse do funil, como na Lista de fretes) ──────────
+   Empresa e Conta são listas de MARCAÇÃO, não <select multiple>: aceitam
+   várias, e a caixa de marcar funciona igual no iPhone, no Android e no
+   computador. A conta acompanha as empresas marcadas.                  */
 #rcb .form-label{ font-size:.72rem; color:#6b7280; font-weight:600; }
 #rcb .form-select, #rcb .form-control{ font-size:.8rem; }
+
+#rcb .gr__cab{ display:flex; align-items:baseline; gap:.4rem; margin-bottom:.25rem; }
+#rcb .gr__t{ font-size:.72rem; color:#6b7280; font-weight:700;
+  text-transform:uppercase; letter-spacing:.04em; }
+#rcb .gr__c{ font-size:.7rem; color:var(--muted); }
+#rcb .gr__a{ margin-left:auto; background:none; border:0; padding:0; cursor:pointer;
+  font-size:.72rem; font-weight:700; color:var(--azul); font-family:inherit; }
+#rcb .gr__a[hidden]{ display:none; }
+
+#rcb .opcs{ border:1px solid var(--line-2); border-radius:10px; overflow:hidden;
+  max-height:190px; overflow-y:auto; background:#fff; }
+@media (min-width:768px){
+  #rcb .opcs{ display:grid; grid-template-columns:1fr 1fr; max-height:230px; }
+}
+#rcb .opc{ display:flex; align-items:center; gap:.55rem; padding:.5rem .6rem;
+  border-bottom:1px solid var(--line); cursor:pointer; font-size:.82rem;
+  margin:0; min-width:0; }
+#rcb .opc:last-child{ border-bottom:0; }
+#rcb .opc:hover{ background:var(--surface); }
+#rcb .opc input{ width:18px; height:18px; accent-color:var(--azul); flex:0 0 auto; margin:0; }
+#rcb .opc__t{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+#rcb .opc__s{ display:block; font-size:.71rem; color:var(--muted); }
+#rcb .opc:has(input:checked){ background:#eaf1f9; }
+#rcb .opcs .vazio-f{ padding:.75rem .6rem; font-size:.78rem; color:var(--muted);
+  text-align:center; grid-column:1/-1; }
 #rcb .hero .fil .cnt{ background:#fff; color:var(--laranja-deep); border-radius:999px;
   width:8px; height:8px; display:inline-block; }
 
@@ -230,22 +258,30 @@
           <div class="row g-2">
 
             <div class="col-12">
-              <label class="form-label mb-1">Empresa</label>
-              <select name="empresa_id" id="rcb-empresa" class="form-select form-select-sm"
-                      onchange="rcbContas()">
-                <option value="">Todas</option>
+              <div class="gr__cab">
+                <span class="gr__t">Empresa</span>
+                <span class="gr__c" id="rcb-emp-c">todas</span>
+                <button type="button" class="gr__a" id="rcb-emp-a" onclick="rcbTodasEmpresas()">marcar todas</button>
+              </div>
+              <div class="opcs" id="rcb-emps">
                 {% for e in empresas %}
-                <option value="{{ e.id }}" {% if e.id|string in (empresa_ids_filter or []) %}selected{% endif %}>
-                  {{ e.razao_social }}</option>
+                <label class="opc">
+                  <input type="checkbox" name="empresa_id" value="{{ e.id }}"
+                         {% if e.id|string in (empresa_ids_filter or []) %}checked{% endif %}
+                         onchange="rcbContas()">
+                  <span class="opc__t">{{ e.razao_social }}</span>
+                </label>
                 {% endfor %}
-              </select>
+              </div>
             </div>
 
             <div class="col-12">
-              <label class="form-label mb-1">Conta bancária</label>
-              <select name="conta_id" id="rcb-conta" class="form-select form-select-sm" disabled>
-                <option value="">Escolha a empresa primeiro</option>
-              </select>
+              <div class="gr__cab">
+                <span class="gr__t">Conta bancária</span>
+                <span class="gr__c" id="rcb-cta-c"></span>
+                <button type="button" class="gr__a" id="rcb-cta-a" onclick="rcbTodasContas()" hidden>marcar todas</button>
+              </div>
+              <div class="opcs" id="rcb-ctas"></div>
             </div>
 
             <div class="col-6">
@@ -523,35 +559,105 @@ function confirmarExclusaoLote() {
 var RCB_CONTAS = {{ contas | tojson }};
 var RCB_CONTA_SEL = ({{ (conta_ids_filter or []) | tojson }}).map(String);
 
+function rcbEmpsMarcadas() {
+  return Array.prototype.slice
+    .call(document.querySelectorAll('#rcb-emps input[name="empresa_id"]:checked'))
+    .map(function (c) { return String(c.value); });
+}
+
+/* Monta as contas das empresas marcadas. Chamada a cada marcação, então
+   preserva o que já estava escolhido — trocar de empresa não pode apagar
+   uma conta que continua valendo. */
 function rcbContas() {
-  var emp = document.getElementById('rcb-empresa');
-  var cta = document.getElementById('rcb-conta');
-  if (!emp || !cta) return;
+  var caixa = document.getElementById('rcb-ctas');
+  if (!caixa) return;
+  var emps = rcbEmpsMarcadas();
 
-  var idEmp = emp.value;
-  cta.innerHTML = '';
+  var jaMarcadas = Array.prototype.slice
+    .call(caixa.querySelectorAll('input[name="conta_id"]:checked'))
+    .map(function (c) { return String(c.value); });
+  if (!jaMarcadas.length) jaMarcadas = RCB_CONTA_SEL;
 
-  if (!idEmp) {
-    cta.appendChild(new Option('Escolha a empresa primeiro', ''));
-    cta.disabled = true;
+  caixa.innerHTML = '';
+  var btTodas = document.getElementById('rcb-cta-a');
+
+  if (!emps.length) {
+    caixa.innerHTML = '<div class="vazio-f">Marque uma empresa para ver as contas dela.</div>';
+    btTodas.hidden = true;
+    rcbContadores();
     return;
   }
 
-  var minhas = RCB_CONTAS.filter(function (c) { return String(c.cliente_id) === String(idEmp); });
-  if (!minhas.length) {
-    cta.appendChild(new Option('Nenhuma conta para esta empresa', ''));
-    cta.disabled = true;
-    return;
-  }
-
-  cta.disabled = false;
-  cta.appendChild(new Option('Todas as contas', ''));
-  minhas.forEach(function (c) {
-    var rotulo = (c.apelido || '') + (c.banco_nome ? ' — ' + c.banco_nome : '');
-    var op = new Option(rotulo, c.id);
-    if (RCB_CONTA_SEL.indexOf(String(c.id)) >= 0) op.selected = true;
-    cta.appendChild(op);
+  var minhas = RCB_CONTAS.filter(function (c) {
+    return emps.indexOf(String(c.cliente_id)) >= 0;
   });
+
+  if (!minhas.length) {
+    caixa.innerHTML = '<div class="vazio-f">Nenhuma conta cadastrada para ' +
+      (emps.length === 1 ? 'esta empresa' : 'estas empresas') + '.</div>';
+    btTodas.hidden = true;
+    rcbContadores();
+    return;
+  }
+
+  btTodas.hidden = false;
+  // Com mais de uma empresa marcada, a conta precisa dizer de quem ela é.
+  var mostrarDono = emps.length > 1;
+  minhas.forEach(function (c) {
+    var lb = document.createElement('label');
+    lb.className = 'opc';
+    var inp = document.createElement('input');
+    inp.type = 'checkbox';
+    inp.name = 'conta_id';
+    inp.value = c.id;
+    inp.checked = jaMarcadas.indexOf(String(c.id)) >= 0;
+    inp.addEventListener('change', rcbContadores);
+    var txt = document.createElement('span');
+    txt.className = 'opc__t';
+    txt.textContent = (c.apelido || c.banco_nome || ('conta ' + c.id));
+    if (mostrarDono && c.empresa_nome) {
+      var sub = document.createElement('span');
+      sub.className = 'opc__s';
+      sub.textContent = c.empresa_nome;
+      txt.appendChild(sub);
+    }
+    lb.appendChild(inp);
+    lb.appendChild(txt);
+    caixa.appendChild(lb);
+  });
+
+  rcbContadores();
+}
+
+function rcbContadores() {
+  var emps = document.querySelectorAll('#rcb-emps input[name="empresa_id"]');
+  var empsOn = rcbEmpsMarcadas().length;
+  var ctas = document.querySelectorAll('#rcb-ctas input[name="conta_id"]');
+  var ctasOn = document.querySelectorAll('#rcb-ctas input[name="conta_id"]:checked').length;
+
+  var ce = document.getElementById('rcb-emp-c');
+  if (ce) ce.textContent = empsOn ? (empsOn + ' de ' + emps.length) : 'todas';
+  var cc = document.getElementById('rcb-cta-c');
+  if (cc) cc.textContent = ctas.length ? (ctasOn ? (ctasOn + ' de ' + ctas.length) : 'todas') : '';
+
+  var be = document.getElementById('rcb-emp-a');
+  if (be) be.textContent = (empsOn === emps.length && emps.length) ? 'desmarcar todas' : 'marcar todas';
+  var bc = document.getElementById('rcb-cta-a');
+  if (bc) bc.textContent = (ctasOn === ctas.length && ctas.length) ? 'desmarcar todas' : 'marcar todas';
+}
+
+function rcbTodasEmpresas() {
+  var todas = document.querySelectorAll('#rcb-emps input[name="empresa_id"]');
+  var marcar = rcbEmpsMarcadas().length !== todas.length;
+  todas.forEach(function (c) { c.checked = marcar; });
+  rcbContas();
+}
+function rcbTodasContas() {
+  var todas = document.querySelectorAll('#rcb-ctas input[name="conta_id"]');
+  var marcadas = document.querySelectorAll('#rcb-ctas input[name="conta_id"]:checked').length;
+  var marcar = marcadas !== todas.length;
+  todas.forEach(function (c) { c.checked = marcar; });
+  rcbContadores();
 }
 
 function rcbPeriodo(tipo) {
