@@ -36,6 +36,13 @@
   padding:.42rem .7rem; font-size:.82rem; font-weight:700; cursor:pointer;
   display:inline-flex; align-items:center; gap:.35rem; }
 #rcb .hero .fil:hover{ background:rgba(255,255,255,.3); }
+#rcb .hero .fil .cnt{ background:#fff; color:var(--laranja-deep); border-radius:999px;
+  min-width:19px; height:19px; display:inline-grid; place-items:center;
+  font-size:.7rem; font-weight:800; }
+#rcb .hero .fil .cnt[hidden]{ display:none; }
+#rcb .pilulas[hidden]{ display:none; }
+#rcb .pil--travada{ opacity:.55; }
+#rcb .pil--limpar{ border-style:dashed; color:var(--muted); }
 
 /* ── Números ───────────────────────────────────────────────────────── */
 #rcb .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:.7rem; }
@@ -248,9 +255,10 @@
       <h4>Recebimento</h4>
       <div class="sub">Créditos do extrato OFX</div>
     </div>
-    <a href="/financeiro/recebimento/" class="fil" title="tirar todos os filtros">
-      <i class="bi bi-x-circle"></i> Limpar
-    </a>
+    <button type="button" class="fil" id="rcb-funil" onclick="rcbAbrirFiltros()"
+            aria-expanded="false" aria-controls="rcb-pilulas" title="filtros">
+      <i class="bi bi-funnel"></i><span class="cnt" id="rcb-funil-n" hidden>0</span>
+    </button>
   </div>
 
   <!-- ── Números ─────────────────────────────────────────────────────── -->
@@ -272,7 +280,7 @@
   {% set tem_filtro = empresa_ids_filter or conta_ids_filter or forma_recebimento_id_filter
                       or status_filter or data_inicio or data_fim or f_descricao
                       or valor_min or valor_max %}
-  <div class="pilulas" id="rcb-pilulas"></div>
+  <div class="pilulas" id="rcb-pilulas" hidden></div>
 
   <div class="fundo" id="rcb-fundo" onclick="rcbFecharFolha()"></div>
 
@@ -545,10 +553,12 @@ function rcbPilulas() {
       t: emp.length === 0 ? 'Todas as empresas'
         : emp.length === 1 ? rcbNomeEmpresa(emp[0]) : emp.length + ' empresas',
       on: emp.length > 0 },
+    // Conta só abre depois da empresa: sem ela a lista traria conta de
+    // qualquer empresa e o filtro sairia misturado.
     { q:'conta',
-      t: cta.length === 0 ? 'Todas as contas'
+      t: cta.length === 0 ? (emp.length ? 'Todas as contas' : 'Conta (escolha a empresa)')
         : cta.length === 1 ? rcbNomeConta(cta[0]) : cta.length + ' contas',
-      on: cta.length > 0 },
+      on: cta.length > 0, travada: emp.length === 0 },
     { q:'status', t: st ? (RCB_SITS.filter(function (x) { return x.id === st; })[0] || {}).t : 'Todas as situações',
       on: !!st },
     { q:'forma', t: fr ? rcbNomeForma(fr) : 'Qualquer forma', on: !!fr },
@@ -557,12 +567,34 @@ function rcbPilulas() {
       on: !!(vmin || vmax) }
   ];
 
-  document.getElementById('rcb-pilulas').innerHTML = itens.map(function (i) {
+  var html = itens.map(function (i) {
     return '<button type="button" class="pil' + (i.on ? ' ativa' : '') +
-      '" onclick="rcbAbrir(\'' + i.q + '\')"><span class="t">' + rcbEsc(i.t) +
+      (i.travada ? ' pil--travada' : '') +
+      '" onclick="rcbAbrir('' + i.q + '')"><span class="t">' + rcbEsc(i.t) +
       '</span><span class="seta">▾</span></button>';
   }).join('');
+
+  var ativos = itens.filter(function (i) { return i.on; }).length;
+  if (ativos) {
+    html += '<a href="' + window.location.pathname + '" class="pil pil--limpar">limpar tudo</a>';
+  }
+  document.getElementById('rcb-pilulas').innerHTML = html;
+
+  // O funil mostra quantos filtros estão valendo — com a fileira fechada,
+  // é o único aviso de que a lista não está inteira.
+  var badge = document.getElementById('rcb-funil-n');
+  if (badge) { badge.textContent = ativos; badge.hidden = (ativos === 0); }
 }
+
+/* Abre/fecha a fileira de filtros — fechada é o estado normal. */
+function rcbAbrirFiltros() {
+  var fila = document.getElementById('rcb-pilulas');
+  var bt = document.getElementById('rcb-funil');
+  fila.hidden = !fila.hidden;
+  bt.setAttribute('aria-expanded', String(!fila.hidden));
+  if (!fila.hidden) fila.scrollIntoView({ block:'nearest' });
+}
+
 function rcbEsc(t) {
   return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 }
@@ -587,6 +619,11 @@ var RCB_TITULOS = { periodo:'Período', empresa:'Empresa', conta:'Conta bancári
                     desc:'Descrição', valor:'Faixa de valor' };
 
 function rcbAbrir(qual) {
+  if (qual === 'conta' && rcbTodosDe('empresa_id').length === 0) {
+    // Não abre a lista: sem empresa ela viria com conta de todas, misturado.
+    rcbAbrir('empresa');
+    return;
+  }
   folha.qual = qual;
   var multi = (qual === 'empresa' || qual === 'conta');
   folha.escolha = multi ? (qual === 'empresa' ? rcbTodosDe('empresa_id') : rcbTodosDe('conta_id')) : [];
