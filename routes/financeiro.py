@@ -2303,7 +2303,18 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
                                     AND EXISTS (
                                         SELECT 1 FROM lancamentos_despesas ld
                                         WHERE ld.bank_transaction_id = bt.id
-                                    )) AS is_despesa
+                                    )) AS is_despesa,
+                                   -- Qual despesa: a tela de Pagamentos mostrava so
+                                   -- "Despesa" sem dizer qual. Um pagamento pode ser
+                                   -- RATEADO em varias categorias, entao vem tambem a
+                                   -- contagem para a tela dizer "+2" em vez de mentir
+                                   -- que e uma so.
+                                   (SELECT COUNT(*) FROM lancamentos_despesas ld2
+                                     WHERE ld2.bank_transaction_id = bt.id) AS despesa_n,
+                                   (SELECT c2.nome FROM lancamentos_despesas ld3
+                                      LEFT JOIN categorias_despesas c2 ON c2.id = ld3.categoria_id
+                                     WHERE ld3.bank_transaction_id = bt.id
+                                     ORDER BY ld3.id LIMIT 1) AS despesa_categoria
                             FROM bank_transactions bt
                             INNER JOIN bank_accounts ba ON bt.account_id = ba.id
                             LEFT JOIN fornecedores f ON bt.fornecedor_id = f.id

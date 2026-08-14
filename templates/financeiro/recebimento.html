@@ -115,8 +115,9 @@ body > .container-fluid:has(#rcb){
 /* Linha do meio: forma de recebimento e banco. */
 #rcb .c-meio{ grid-area:meio; display:flex; align-items:center; gap:.35rem;
   min-width:0; }
-#rcb .c-meio .banco{ font-size:.73rem; color:var(--ink-2); font-weight:700;
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+/* Banco ancorado à direita, na mesma coluna do valor logo abaixo. */
+#rcb .c-meio .banco{ margin-left:auto; flex:0 0 auto; font-size:.73rem;
+  color:var(--ink-2); font-weight:700; white-space:nowrap; }
 #rcb .c-meio .tracin{ color:var(--line-2); font-weight:700; flex:0 0 auto; }
 /* Duas linhas: "Recebimento Pix BARATAO TECNOLOGIA LTDA" cortado em uma so
    escondia justamente o nome de quem pagou. */
@@ -149,7 +150,8 @@ body > .container-fluid:has(#rcb){
 #rcb .selo--ok{ background:var(--ok-bg); color:var(--ok); }
 #rcb .selo--pend{ background:var(--pend-bg); color:var(--pend); }
 #rcb .selo--ign{ background:var(--ign-bg); color:var(--ign); }
-#rcb .selo--forma{ background:rgba(109,72,200,.13); color:var(--roxo); }
+#rcb .selo--forma{ background:rgba(109,72,200,.13); color:var(--roxo);
+  min-width:0; overflow:hidden; text-overflow:ellipsis; }
 
 #rcb .bt{ border:1px solid transparent; border-radius:9px; padding:.3rem .55rem;
   font-size:.77rem; font-weight:700; cursor:pointer; display:inline-flex;
@@ -381,9 +383,6 @@ body > .container-fluid:has(#rcb){
         <div class="c-meio">
           {% if t.forma_recebimento_nome %}<span class="selo selo--forma">{{ t.forma_recebimento_nome }}</span>
           {% elif tipo %}<span class="selo selo--tipo">{{ tipo }}</span>{% endif %}
-          {% if (t.forma_recebimento_nome or tipo) and (t.conta_apelido or t.banco_nome) %}
-            <span class="tracin">·</span>
-          {% endif %}
           {% if t.conta_apelido or t.banco_nome %}
             <span class="banco">{{ t.conta_apelido or t.banco_nome }}</span>
           {% endif %}

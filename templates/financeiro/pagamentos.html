@@ -113,9 +113,16 @@ body > .container-fluid:has(#pag){
   min-width:0; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
   overflow:hidden; line-height:1.28; }
 #pag .c-meio{ grid-area:meio; display:flex; align-items:center; gap:.35rem; min-width:0; }
-#pag .c-meio .banco{ font-size:.73rem; color:var(--ink-2); font-weight:700;
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
-#pag .c-meio .tracin{ color:var(--line-2); font-weight:700; flex:0 0 auto; }
+/* O banco fica ANCORADO a direita, na mesma coluna do valor logo abaixo.
+   Antes o nome longo do fornecedor empurrava o banco para o meio da linha e
+   ele caia justamente em cima do valor. */
+#pag .c-meio .banco{ margin-left:auto; flex:0 0 auto; font-size:.73rem;
+  color:var(--ink-2); font-weight:700; white-space:nowrap; }
+/* Quem cede espaco e o vinculo, nao o banco. */
+#pag .c-meio .vinc{ min-width:0; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; }
+#pag .c-meio .desp-cat{ font-size:.72rem; color:var(--muted); font-weight:600;
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #pag .c-baixo{ grid-area:baixo; display:flex; align-items:center; gap:.35rem;
   min-width:0; margin-top:.12rem; }
 #pag .c-valor{ margin-left:auto; font-size:.95rem; font-weight:800; color:var(--vermelho);
@@ -130,7 +137,7 @@ body > .container-fluid:has(#pag){
 #pag .selo--pend{ background:var(--pend-bg); color:var(--pend); }
 #pag .selo--ign{ background:var(--ign-bg); color:var(--ign); }
 #pag .selo--forn{ background:rgba(109,72,200,.13); color:var(--roxo);
-  max-width:60vw; overflow:hidden; text-overflow:ellipsis; }
+  overflow:hidden; text-overflow:ellipsis; }
 #pag .selo--desp{ background:rgba(29,99,165,.12); color:var(--azul-deep);
   text-decoration:none; }
 #pag .selo--alerta{ background:var(--pend-bg); color:var(--pend); }
@@ -352,12 +359,19 @@ body > .container-fluid:has(#pag){
         {# Linha 2 — a quem o pagamento está vinculado, e o banco. #}
         <div class="c-meio">
           {% if t.fornecedor_nome %}
-            <span class="selo selo--forn">{{ t.fornecedor_nome }}</span>
+            <span class="selo selo--forn vinc">{{ t.fornecedor_nome }}</span>
           {% elif t.is_despesa %}
             {% set data_str = t.data_transacao.strftime('%Y-%m-%d') if t.data_transacao else '' %}
             <a class="selo selo--desp" onclick="event.stopPropagation()"
                href="/lancamentos_despesas/?cliente_id={{ t.empresa_id or '' }}&data_inicio={{ data_str }}&data_fim={{ data_str }}"
                title="ver o lançamento de despesa">Despesa &nearr;</a>
+            {# O espaço ao lado do selo estava vazio: agora diz QUAL despesa.
+               Pagamento rateado em várias categorias mostra a primeira e o
+               resto como "+N" — dizer só a primeira seria mentira. #}
+            {% if t.despesa_categoria %}
+              <span class="desp-cat">{{ t.despesa_categoria }}{% if (t.despesa_n or 0) > 1 %}
+                <b>+{{ t.despesa_n - 1 }}</b>{% endif %}</span>
+            {% endif %}
           {% elif t.status == 'conciliado' %}
             {# Conciliado sem fornecedor e sem despesa: o vínculo se perdeu. #}
             <span class="selo selo--alerta"
@@ -366,7 +380,6 @@ body > .container-fluid:has(#pag){
             <span class="selo selo--nada">sem destino</span>
           {% endif %}
           {% if t.conta_apelido or t.banco_nome %}
-            <span class="tracin">·</span>
             <span class="banco">{{ t.conta_apelido or t.banco_nome }}</span>
           {% endif %}
         </div>
