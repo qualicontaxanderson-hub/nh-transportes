@@ -71,7 +71,14 @@ body > .container-fluid:has(#bnc){
   font-size:.92rem; font-weight:800; color:#fff; cursor:pointer; font-family:inherit;
   background:linear-gradient(120deg,var(--azul-deep),var(--azul)); }
 #bnc .enviar[disabled]{ background:#c7ced8; cursor:not-allowed; }
-#bnc .passos-txt{ font-size:.78rem; color:#6b7684; margin:0 0 .7rem; }
+/* Passo a passo: o numero deixa a ordem obvia sem precisar de texto. */
+#bnc .passo{ display:flex; gap:.6rem; align-items:flex-start; margin-bottom:.75rem; }
+#bnc .passo:last-child{ margin-bottom:0; }
+#bnc .passo__n{ flex:0 0 auto; width:22px; height:22px; border-radius:50%;
+  background:var(--azul); color:#fff; font-size:.75rem; font-weight:800;
+  display:grid; place-items:center; margin-top:.15rem; }
+#bnc .passo__c{ flex:1; min-width:0; }
+#bnc .campo[disabled]{ background:#f2f5f9; color:#8b95a3; }
 #bnc .passos-txt b{ color:#151d27; }
 
 /* ── Botões de ação: alvo grande, um toque ───────────────────────── */
@@ -157,18 +164,8 @@ body > .container-fluid:has(#bnc){
         <a class="voltar" href="{{ url_for('index') }}">&larr; Dashboard</a>
         <div style="min-width:0">
           <h3>Banco</h3>
-          <div class="sub">
-            {%- if cliente_id_filter -%}
-              {%- for c in clientes if c.id == cliente_id_filter -%}{{ c.razao_social }}{%- endfor -%}
-            {%- else -%}Importação de extrato OFX e conciliação{%- endif -%}
-          </div>
+          <div class="sub">Importação de extrato OFX e conciliação</div>
         </div>
-        {% if clientes %}
-        <button type="button" class="fil" onclick="bncAbrirFiltro()">
-          <i class="bi bi-funnel"></i>
-          {% if cliente_id_filter %}<span class="b">1</span>{% endif %}
-        </button>
-        {% endif %}
       </div>
       <div class="abas">
         <a class="aba on" href="{{ url_for('bank_import.index') }}">Resumo</a>
@@ -202,78 +199,98 @@ body > .container-fluid:has(#bnc){
         <div class="r">Contas ativas</div><div class="v">{{ contas|length }}</div></div>
     </div>
 
-    {# O filtro desta tela é só a empresa, e ele mora no funil do cabeçalho,
-       como nas outras abas. Escolher já aplica — não há o que confirmar. #}
-    {% if clientes %}
-    <div class="escuro" id="bnc-escuro" onclick="bncFecharFiltro()"></div>
-    <div class="gav" id="bnc-gav">
-      <div class="gav__pega"></div>
-      <div class="gav__cab"><b>Empresa</b>
-        <span class="gav__n">{{ clientes|length }} com conta bancária</span></div>
-      <div class="gav__b">
-        <div class="opcs">
-          <a class="opc{% if not cliente_id_filter %} on{% endif %}"
-             href="{{ url_for('bank_import.index') }}">
-            <span class="opc__t">Todas as empresas</span>
-            {% if not cliente_id_filter %}<i class="bi bi-check-lg tique"></i>{% endif %}
-          </a>
-          {% for c in clientes %}
-          <a class="opc{% if cliente_id_filter == c.id %} on{% endif %}"
-             href="{{ url_for('bank_import.index') }}?empresa_id={{ c.id }}">
-            <span class="opc__t">{{ c.razao_social }}</span>
-            {% if cliente_id_filter == c.id %}<i class="bi bi-check-lg tique"></i>{% endif %}
-          </a>
-          {% endfor %}
-        </div>
-      </div>
-      <div class="gav__f">
-        <button type="button" class="bt-g bt-g--ca" onclick="bncFecharFiltro()">Fechar</button>
-      </div>
-    </div>
-    {% endif %}
 
-    <!-- Importar: a ação principal desta tela -->
+    <!-- Caixa A: o arquivo já está na pasta automática -->
     <div class="bloco">
-      <div class="bloco__c"><i class="bi bi-cloud-arrow-up-fill"></i> Importar extrato OFX</div>
+      <div class="bloco__c"><i class="bi bi-folder-symlink-fill"></i> Importar da pasta</div>
       <div class="bloco__b">
-        <p class="passos-txt">Exporte o <b>.ofx</b> no site do seu banco, escolha a conta e
-          envie o arquivo. Lançamento repetido é ignorado na importação.</p>
 
-        <form method="POST" action="{{ url_for('bank_import.upload') }}"
-              enctype="multipart/form-data" id="uploadForm">
-          <div class="mb-3">
-            <label class="rot">Conta bancária</label>
-            {% if contas %}
-            <select name="account_id" class="campo" required>
-              <option value="">Selecione a conta...</option>
-              {% for conta in contas %}
-              <option value="{{ conta.id }}">{{ conta.apelido or conta.banco_nome }}{% if conta.agencia %} – Ag {{ conta.agencia }}{% endif %}{% if conta.conta %} / {{ conta.conta }}{% endif %}{% if conta.empresa_nome %} [{{ conta.empresa_nome }}]{% endif %}</option>
+        <div class="passo">
+          <span class="passo__n">1</span>
+          <div class="passo__c">
+            <label class="rot">Empresa</label>
+            {# Uma empresa por vez: a conta que vem depois é dela, e o arquivo
+               da pasta pertence a uma conta só. #}
+            <select id="dbxClienteId" class="campo" onchange="dbxCarregarContas(this.value)">
+              <option value="">Selecione a empresa</option>
+              {% for c in clientes %}
+              <option value="{{ c.id }}">{{ c.razao_social }}</option>
               {% endfor %}
             </select>
-            {% else %}
-            <div class="alert alert-warning py-2 mb-0" style="font-size:.85rem">
-              <i class="bi bi-exclamation-triangle"></i> Nenhuma conta cadastrada.
-              <a href="#" data-bs-toggle="modal" data-bs-target="#modalNovaConta">Cadastre uma conta</a>.
+          </div>
+        </div>
+
+        <div class="passo">
+          <span class="passo__n">2</span>
+          <div class="passo__c">
+            <label class="rot">Conta bancária</label>
+            <select id="dbxAccountId" class="campo" disabled>
+              <option value="">Escolha a empresa primeiro</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="passo">
+          <span class="passo__n">3</span>
+          <div class="passo__c">
+            <button type="button" class="enviar" onclick="verificarPasta()">
+              <i class="bi bi-search"></i> Verificar arquivos
+            </button>
+          </div>
+        </div>
+
+        <div id="dbxFileList" class="mt-2"></div>
+      </div>
+    </div>
+
+    <!-- Caixa B: o arquivo está no aparelho -->
+    <div class="bloco">
+      <div class="bloco__c"><i class="bi bi-cloud-arrow-up-fill"></i> Enviar arquivo do aparelho</div>
+      <div class="bloco__b">
+        <form method="POST" action="{{ url_for('bank_import.upload') }}"
+              enctype="multipart/form-data" id="uploadForm">
+
+          <div class="passo">
+            <span class="passo__n">1</span>
+            <div class="passo__c">
+              <label class="rot">Empresa</label>
+              <select id="upClienteId" class="campo" onchange="upContas(this.value)">
+                <option value="">Selecione a empresa</option>
+                {% for c in clientes %}
+                <option value="{{ c.id }}">{{ c.razao_social }}</option>
+                {% endfor %}
+              </select>
             </div>
-            {% endif %}
           </div>
 
-          <div class="mb-3">
-            <label class="rot">Arquivo</label>
-            <div id="dropZone" class="solta" onclick="document.getElementById('ofxFile').click()">
-              <i class="bi bi-file-earmark-arrow-up"></i>
-              <p>Toque para escolher o arquivo OFX</p>
-              <small>aceita .ofx e .OFX</small>
-            </div>
-            <input type="file" id="ofxFile" name="ofx_file" accept=".ofx,.OFX" class="d-none" required>
-            <div id="fileInfo" class="mt-2 text-success d-none" style="font-size:.85rem;font-weight:700">
-              <i class="bi bi-check-circle"></i> <span id="fileName"></span>
+          <div class="passo">
+            <span class="passo__n">2</span>
+            <div class="passo__c">
+              <label class="rot">Conta bancária</label>
+              <select name="account_id" id="upAccountId" class="campo" required disabled>
+                <option value="">Escolha a empresa primeiro</option>
+              </select>
             </div>
           </div>
 
-          <button type="submit" class="enviar" {% if not contas %}disabled{% endif %}>
-            <i class="bi bi-upload"></i> Importar extrato
-          </button>
+          <div class="passo">
+            <span class="passo__n">3</span>
+            <div class="passo__c">
+              <label class="rot">Arquivo</label>
+              <div id="dropZone" class="solta" onclick="document.getElementById('ofxFile').click()">
+                <i class="bi bi-file-earmark-arrow-up"></i>
+                <p>Toque para escolher o arquivo OFX</p>
+                <small>aceita .ofx e .OFX</small>
+              </div>
+              <input type="file" id="ofxFile" name="ofx_file" accept=".ofx,.OFX" class="d-none" required>
+              <div id="fileInfo" class="mt-2 text-success d-none" style="font-size:.85rem;font-weight:700">
+                <i class="bi bi-check-circle"></i> <span id="fileName"></span>
+              </div>
+              <button type="submit" class="enviar mt-2" {% if not contas %}disabled{% endif %}>
+                <i class="bi bi-upload"></i> Importar extrato
+              </button>
+            </div>
+          </div>
         </form>
       </div>
     </div>
@@ -652,15 +669,296 @@ body > .container-fluid:has(#bnc){
 
 {% block scripts %}
 <script>
-/* Funil da empresa: escolher já aplica, então não há botão de confirmar. */
-function bncAbrirFiltro() {
-  document.getElementById('bnc-gav').classList.add('on');
-  document.getElementById('bnc-escuro').classList.add('on');
-}
-function bncFecharFiltro() {
-  document.getElementById('bnc-gav').classList.remove('on');
-  document.getElementById('bnc-escuro').classList.remove('on');
-}
+
+    /* ── Contas da empresa escolhida ────────────────────────────────
+       As contas ja vieram com cliente_id, entao filtrar aqui e instantaneo
+       e nao gasta uma ida ao servidor. */
+    var BNC_CONTAS = {{ contas | tojson }};
+
+    function upContas(clienteId) {
+      var sel = document.getElementById('upAccountId');
+      sel.innerHTML = '';
+      if (!clienteId) {
+        sel.appendChild(new Option('Escolha a empresa primeiro', ''));
+        sel.disabled = true;
+        return;
+      }
+      var minhas = BNC_CONTAS.filter(function (c) {
+        return String(c.cliente_id) === String(clienteId);
+      });
+      if (!minhas.length) {
+        sel.appendChild(new Option('Nenhuma conta para esta empresa', ''));
+        sel.disabled = true;
+        return;
+      }
+      sel.appendChild(new Option('Selecione a conta', ''));
+      minhas.forEach(function (c) {
+        var r = (c.apelido || c.banco_nome);
+        if (c.agencia) r += ' – Ag ' + c.agencia;
+        if (c.conta) r += ' / ' + c.conta;
+        sel.appendChild(new Option(r, c.id));
+      });
+      sel.disabled = false;
+    }
+
+
+    function dbxCarregarContas(clienteId) {
+        const selConta = document.getElementById('dbxAccountId');
+        selConta.innerHTML = '<option value="">Carregando...</option>';
+        selConta.disabled = true;
+        dbxResetFileList();
+        if (!clienteId) {
+            selConta.innerHTML = '<option value="">— Selecione a empresa primeiro —</option>';
+            return;
+        }
+        fetch('{{ url_for("bank_import.api_contas") }}?cliente_id=' + encodeURIComponent(clienteId))
+            .then(r => r.json())
+            .then(contas => {
+                selConta.innerHTML = '<option value="">— Selecione a conta —</option>';
+                if (contas.length === 0) {
+                    selConta.innerHTML = '<option value="">Nenhuma conta cadastrada para esta empresa</option>';
+                    return;
+                }
+                contas.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.id;
+                    let label = c.apelido || c.banco_nome;
+                    if (c.agencia) label += ' – Ag ' + c.agencia;
+                    if (c.conta)   label += ' / ' + c.conta;
+                    opt.textContent = label;
+                    selConta.appendChild(opt);
+                });
+                selConta.disabled = false;
+            })
+            .catch(() => {
+                selConta.innerHTML = '<option value="">Erro ao carregar contas — tente recarregar a página</option>';
+            });
+    }
+
+    function dbxResetFileList() {
+        document.getElementById('dbxFileList').innerHTML =
+            '<div class="text-muted text-center py-3"><i class="bi bi-cloud fs-2 text-primary"></i>' +
+            '<p class="mt-1 mb-0">Selecione a <strong>Conta</strong> e clique em <strong>Verificar</strong>.</p></div>';
+    }
+
+    function verificarPasta() {
+        const selCliente = document.getElementById('dbxClienteId');
+        const selConta   = document.getElementById('dbxAccountId');
+        const clienteId  = selCliente ? selCliente.value : '';
+        const accountId  = selConta   ? selConta.value   : '';
+
+        if (!clienteId) {
+            alert('Por favor, selecione a Empresa e a Conta antes de verificar.');
+            return;
+        }
+        if (!accountId) {
+            alert('Por favor, selecione a Conta antes de verificar.');
+            return;
+        }
+
+        const listDiv = document.getElementById('dbxFileList');
+        listDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm" style="color:#0061FE;"></div> Procurando arquivos...</div>';
+
+        const url = '{{ url_for("bank_import.api_dropbox_files") }}?account_id=' + encodeURIComponent(accountId);
+
+        fetch(url)
+            .then(r => {
+                const ct = r.headers.get('content-type') || '';
+                if (!ct.includes('application/json')) {
+                    listDiv.innerHTML = '<div class="alert alert-warning py-2">Resposta inesperada do servidor. Tente recarregar a página.</div>';
+                    return null;
+                }
+                return r.json();
+            })
+            .then(data => {
+                if (!data) return;
+                if (!data.success) {
+                    const msg = data.message || 'Erro desconhecido.';
+                    listDiv.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle"></i> ${msg}</div>`;
+                    return;
+                }
+                if (!data.files || data.files.length === 0) {
+                    const contaNome = selConta.options[selConta.selectedIndex].text;
+                    listDiv.innerHTML = `
+                        <div class="alert alert-warning py-2 mb-0">
+                            <i class="bi bi-search"></i>
+                            Nenhum arquivo <code>.ofx</code> encontrado para a conta <strong>${contaNome}</strong>.<br>
+                            <small class="text-muted">Coloque o arquivo na pasta de entrada e verifique de novo.</small>
+                        </div>`;
+                    return;
+                }
+                renderArquivos(data.files, data.filtrado, data.filtrado_sem_resultado, data.ultima_data_importacao || null);
+            })
+            .catch(err => {
+                listDiv.innerHTML = `<div class="alert alert-danger py-2">Erro ao verificar: ${err}</div>`;
+            });
+    }
+
+    function renderArquivos(files, filtrado, filtradoSemResultado, ultimaDataImportacao) {
+        const listDiv = document.getElementById('dbxFileList');
+        const wrap = document.createElement('div');
+
+        const header = document.createElement('div');
+        if (filtradoSemResultado) {
+            header.className = 'alert alert-warning py-2 mb-0';
+            const selConta = document.getElementById('dbxAccountId');
+            const contaNome = selConta ? selConta.options[selConta.selectedIndex].text : '';
+            header.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Nenhum arquivo encontrado automaticamente para a conta <strong>${contaNome}</strong>.<br>
+                <small>Coloque o arquivo correto na pasta e verifique de novo.</small>`;
+            wrap.appendChild(header);
+            listDiv.innerHTML = '';
+            listDiv.appendChild(wrap);
+            return;
+        } else {
+            header.className = filtrado ? 'alert alert-success py-2 mb-3' : 'alert alert-info py-2 mb-3';
+            let headerHtml = filtrado
+                ? `<i class="bi bi-funnel-fill text-success"></i> <strong>${files.length}</strong> arquivo(s) encontrado(s) para a conta selecionada.`
+                : `<i class="bi bi-check-circle"></i> <strong>${files.length}</strong> arquivo(s) OFX encontrado(s). <small class="text-muted">(selecione uma conta para filtrar)</small>`;
+            if (ultimaDataImportacao) {
+                const ultFormatted = ultimaDataImportacao.split('-').reverse().join('/');
+                headerHtml += ` <span class="ms-2 badge bg-secondary" title="Último extrato já importado para esta conta"><i class="bi bi-calendar-check"></i> Último importado: ${ultFormatted}</span>`;
+            }
+            header.innerHTML = headerHtml;
+        }
+        wrap.appendChild(header);
+
+        // Helper: parse ISO date string to Date (noon UTC to avoid TZ shifts)
+        function _parseIso(s) {
+            if (!s) return null;
+            const p = s.split('-');
+            return p.length === 3 ? new Date(Date.UTC(+p[0], +p[1]-1, +p[2], 12)) : null;
+        }
+        const hoje = new Date(); hoje.setHours(12, 0, 0, 0);
+        const ultDate = _parseIso(ultimaDataImportacao);
+        const dias90 = new Date(hoje); dias90.setDate(hoje.getDate() - 90);
+
+        const tableWrap = document.createElement('div');
+        tableWrap.className = 'table-responsive';
+        const t = document.createElement('table');
+        t.className = 'table table-sm table-hover';
+        t.style.fontSize = '0.88rem';
+        t.innerHTML = `<thead class="table-light"><tr><th>Arquivo</th><th>Data (extrato)</th><th>Modificado</th><th>Tamanho</th><th class="text-center">Ação</th></tr></thead>`;
+        const tbody = document.createElement('tbody');
+
+        files.forEach(f => {
+            const kb = (f.tamanho / 1024).toFixed(1);
+            const tr = document.createElement('tr');
+
+            const tdNome = document.createElement('td');
+            tdNome.innerHTML = '<i class="bi bi-file-earmark-text" style="color:#0061FE;"></i> ';
+            const strong = document.createElement('strong');
+            strong.textContent = f.nome;
+            tdNome.appendChild(strong);
+
+            // ── Date badge logic ──
+            const tdData = document.createElement('td');
+            const fDate = _parseIso(f.data_arquivo);
+            let badgeHtml = '<span class="badge bg-danger" title="Nome do arquivo sem data — obrigatório incluir DDMMAAAA no nome"><i class="bi bi-calendar-x"></i> sem data (obrigatório)</span>';
+            let bloqueado = false;
+            let aviso90 = false;
+            let dataArquivoIso = f.data_arquivo || null;
+
+            if (!fDate) {
+                // Sem data no nome — bloquear
+                bloqueado = true;
+            } else {
+                const fDateStr = f.data_arquivo.split('-').reverse().join('/');
+                if (fDate > hoje) {
+                    // Futuro — bloquear
+                    badgeHtml = `<span class="badge bg-danger" title="Data futura — não é possível importar"><i class="bi bi-calendar-x"></i> ${fDateStr} (futuro)</span>`;
+                    bloqueado = true;
+                } else if (ultDate && fDate <= ultDate) {
+                    // Período já importado — bloquear
+                    const ultStr = ultimaDataImportacao.split('-').reverse().join('/');
+                    badgeHtml = `<span class="badge bg-warning text-dark" title="Período já importado (último: ${ultStr})"><i class="bi bi-lock-fill"></i> ${fDateStr} (já importado)</span>`;
+                    bloqueado = true;
+                } else if (fDate < dias90) {
+                    // Mais de 90 dias — aviso (não bloqueia)
+                    badgeHtml = `<span class="badge bg-secondary" title="Data com mais de 90 dias — confirme antes de importar"><i class="bi bi-exclamation-circle"></i> ${fDateStr} (>90 dias)</span>`;
+                    aviso90 = true;
+                } else {
+                    // OK
+                    badgeHtml = `<span class="badge bg-success"><i class="bi bi-calendar-check"></i> ${fDateStr}</span>`;
+                }
+            }
+            tdData.innerHTML = badgeHtml;
+
+            const tdMod = document.createElement('td');
+            tdMod.textContent = f.modificado;
+
+            const tdSize = document.createElement('td');
+            tdSize.textContent = kb + ' KB';
+
+            const tdAcao = document.createElement('td');
+            tdAcao.className = 'text-center';
+            const btn = document.createElement('button');
+            btn.dataset.nomeArquivo = f.nome;
+            btn.dataset.dataArquivo = dataArquivoIso || '';
+            btn.dataset.aviso90 = aviso90 ? '1' : '';
+            if (bloqueado) {
+                btn.className = 'btn btn-sm btn-secondary';
+                btn.disabled = true;
+                btn.title = 'Importação bloqueada para este arquivo';
+                btn.innerHTML = '<i class="bi bi-lock"></i> Bloqueado';
+            } else {
+                btn.className = 'btn btn-sm btn-success';
+                btn.innerHTML = '<i class="bi bi-cloud-download"></i> Importar este arquivo';
+                btn.addEventListener('click', function() {
+                    importarArquivo(this.dataset.nomeArquivo, this.dataset.dataArquivo, this.dataset.aviso90 === '1');
+                });
+            }
+            tdAcao.appendChild(btn);
+
+            tr.appendChild(tdNome);
+            tr.appendChild(tdData);
+            tr.appendChild(tdMod);
+            tr.appendChild(tdSize);
+            tr.appendChild(tdAcao);
+            tbody.appendChild(tr);
+        });
+
+        t.appendChild(tbody);
+        tableWrap.appendChild(t);
+        wrap.appendChild(tableWrap);
+        listDiv.innerHTML = '';
+        listDiv.appendChild(wrap);
+    }
+
+    function importarArquivo(nomeArquivo, dataArquivoIso, aviso90) {
+        const sel = document.getElementById('dbxAccountId');
+        const accountId = sel ? sel.value : '';
+        if (!accountId) {
+            alert('Selecione uma conta bancária antes de importar.');
+            return;
+        }
+
+        // Aviso para extratos muito antigos (>90 dias)
+        if (aviso90 && dataArquivoIso) {
+            const dataStr = dataArquivoIso.split('-').reverse().join('/');
+            if (!confirm(
+                `Atenção: o extrato "${nomeArquivo}" tem data ${dataStr}, que é há mais de 90 dias.\n\n` +
+                `Tem certeza que deseja importar este período?\n\n` +
+                `Clique em OK para confirmar ou Cancelar para revisar.`
+            )) return;
+        }
+
+        if (!confirm(`Importar "${nomeArquivo}" para a conta selecionada?
+
+Depois de importado, o arquivo sai da pasta de entrada.`)) return;
+
+        fetch('{{ url_for("bank_import.importar_dropbox") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account_id: accountId, nome_arquivo: nomeArquivo })
+        })
+        .then(r => r.json())
+        .then(data => { mostrarResultadoImportacao(data); })
+        .catch(() => alert('Erro ao importar o arquivo.'));
+    }
+
+    {% if not dropbox_oauth2 %}
+    {% endif %}
+
 
     // ---------------------------------------------------------------
     // Duplicatas na importação: modal interativo
