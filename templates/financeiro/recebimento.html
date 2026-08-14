@@ -567,10 +567,12 @@ function rcbPilulas() {
       on: !!(vmin || vmax) }
   ];
 
+  // data-q + um ouvinte só: nada de aspas dentro de aspas dentro de string,
+  // que foi exatamente o que quebrou o script inteiro uma vez.
   var html = itens.map(function (i) {
-    return '<button type="button" class="pil' + (i.on ? ' ativa' : '') +
-      (i.travada ? ' pil--travada' : '') +
-      '" onclick="rcbAbrir('' + i.q + '')"><span class="t">' + rcbEsc(i.t) +
+    return '<button type="button" data-q="' + i.q + '" class="pil' +
+      (i.on ? ' ativa' : '') + (i.travada ? ' pil--travada' : '') +
+      '"><span class="t">' + rcbEsc(i.t) +
       '</span><span class="seta">▾</span></button>';
   }).join('');
 
@@ -585,6 +587,11 @@ function rcbPilulas() {
   var badge = document.getElementById('rcb-funil-n');
   if (badge) { badge.textContent = ativos; badge.hidden = (ativos === 0); }
 }
+
+document.addEventListener('click', function (ev) {
+  var pil = ev.target.closest ? ev.target.closest('#rcb-pilulas .pil[data-q]') : null;
+  if (pil) rcbAbrir(pil.dataset.q);
+});
 
 /* Abre/fecha a fileira de filtros — fechada é o estado normal. */
 function rcbAbrirFiltros() {
