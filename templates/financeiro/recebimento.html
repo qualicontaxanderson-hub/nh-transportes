@@ -11,6 +11,18 @@
    dia inteiro. O filtro conduz — empresa, depois conta, depois o resto —
    e por isso é impossível pedir conta sem empresa.
    ═════════════════════════════════════════════════════════════════════ */
+/* O layout base envolve TUDO num painel branco com 2rem de padding
+   (static/css/style.css, "body > .container-fluid"). No celular isso vira uma
+   moldura branca de 32px de cada lado e a tela nunca enche. Aqui essa moldura
+   e desligada — so nesta pagina, pelo :has(#rcb). */
+body > .container-fluid:has(#rcb){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.5rem .5rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#rcb){ padding:1rem 1.1rem 0; }
+}
+
 #rcb{
   --laranja:#E4923F; --laranja-deep:#CE722A;
   --azul:#1D63A5; --azul-deep:#0C4C86; --azul-claro:#eaf1f9;
@@ -22,6 +34,7 @@
   --ign:#4b5563; --ign-bg:#eceef1;
   --danger:#a32d2d;
   color:var(--ink);
+  overflow-x:hidden;
 }
 
 /* ── Topo: voltar, título, funil e abas ───────────────────────────── */
