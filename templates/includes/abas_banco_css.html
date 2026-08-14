@@ -1,0 +1,46 @@
+{#- Topo padrão do módulo Banco, para as telas que ainda não têm o seu.
+
+    O seletor vem de fora para a regra não vazar para o resto da página:
+      {% with esc = '#frt' %}{% include 'includes/abas_banco_css.html' %}{% endwith %}
+
+    As telas que já foram refeitas (Resumo, Recebimentos, Pagamentos,
+    Transferências, Regras) trazem essas mesmas regras dentro do próprio
+    bloco de estilo — os valores aqui são os mesmos, de propósito.
+-#}
+<style>
+/* O layout base envolve tudo num painel branco com 2rem de padding
+   (static/css/style.css, "body > .container-fluid"). No celular isso vira uma
+   moldura de 32px de cada lado e a tela nunca enche. */
+body > .container-fluid:has({{ esc }}-topo){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has({{ esc }}-topo){ padding:.7rem 1rem 0; }
+}
+{{ esc }}-topo{ background:linear-gradient(120deg,#0C4C86,#1D63A5); color:#fff;
+  border-radius:14px; padding:.6rem .8rem .15rem; margin-bottom:.7rem; }
+{{ esc }}-topo .topo__l1{ display:flex; align-items:center; gap:.5rem; }
+{{ esc }}-topo h3{ margin:0; font-size:1.05rem; font-weight:800; letter-spacing:-.01em;
+  color:#fff; }
+{{ esc }}-topo .voltar{ display:inline-flex; align-items:center; gap:.3rem;
+  background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.28); color:#fff;
+  border-radius:99px; padding:.22rem .62rem; font-size:.75rem; font-weight:700;
+  text-decoration:none; flex:0 0 auto; }
+{{ esc }}-topo .voltar:hover{ background:rgba(255,255,255,.3); color:#fff; }
+{{ esc }}-topo .acao{ margin-left:auto; flex:0 0 auto; background:rgba(255,255,255,.2);
+  border:1px solid rgba(255,255,255,.35); color:#fff; border-radius:10px;
+  padding:.32rem .6rem; font-size:.78rem; font-weight:800; cursor:pointer;
+  display:inline-flex; align-items:center; gap:.32rem; font-family:inherit;
+  text-decoration:none; white-space:nowrap; }
+{{ esc }}-topo .acao:hover{ background:rgba(255,255,255,.3); color:#fff; }
+{{ esc }}-topo .abas{ display:flex; gap:.35rem; overflow-x:auto; padding:.55rem 0 .5rem;
+  scrollbar-width:none; }
+{{ esc }}-topo .abas::-webkit-scrollbar{ display:none; }
+{{ esc }}-topo .aba{ flex:0 0 auto; border-radius:99px; padding:.32rem .8rem;
+  font-size:.79rem; font-weight:800; white-space:nowrap; color:#fff;
+  text-decoration:none; background:rgba(255,255,255,.14);
+  border:1px solid rgba(255,255,255,.22); }
+{{ esc }}-topo .aba:hover{ background:rgba(255,255,255,.26); color:#fff; }
+{{ esc }}-topo .aba.on{ background:#fff; color:#0C4C86; border-color:#fff; }
+</style>

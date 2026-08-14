@@ -301,12 +301,7 @@ body > .container-fluid:has(#reg){
       </button>
     </div>
     <div class="abas">
-      <a class="aba" href="{{ url_for('bank_import.index') }}">Resumo</a>
-      <a class="aba" href="{{ url_for('financeiro.recebimento') }}">Recebimentos</a>
-      <a class="aba" href="{{ url_for('financeiro.pagamentos') }}">Pagamentos</a>
-      <a class="aba" href="{{ url_for('financeiro.transferencias') }}">Transferências</a>
-      <a class="aba on" href="{{ url_for('conciliacao_regras.lista') }}">Regras</a>
-      <a class="aba" href="{{ url_for('conciliacao_regras.memorias') }}">Memorizações</a>
+      {% with ativa = 'regras' %}{% include 'includes/abas_banco.html' %}{% endwith %}
     </div>
   </div>
 
