@@ -1,0 +1,378 @@
+<title>Banco com Abas</title>
+
+<style>
+:root{
+  --azul:#1D63A5; --azul-esc:#0C4C86; --azul-mais:#083a68; --azul-claro:#eaf1f9;
+  --verde:#17963C; --verde-esc:#0f6b2b;
+  --laranja:#E4923F; --laranja-esc:#CE722A;
+  --roxo:#6D48C8; --vermelho:#C0392B;
+  --ink:#141b24; --ink-2:#37424f; --muted:#6b7684;
+  --line:#e7ebf1; --line-2:#d9e0e8;
+  --card:#fff; --ground:#eef2f7; --surface:#f7f9fc;
+  --ok:#146b31; --ok-bg:#e2f4e7; --pend:#8a5a00; --pend-bg:#fdf0d6;
+  --sombra:0 1px 2px rgba(20,35,60,.05), 0 8px 24px rgba(20,35,60,.08);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --azul:#6CA9E2; --azul-esc:#9CC8F0; --azul-mais:#b9dbf7; --azul-claro:#16283a;
+    --verde:#63c47f; --verde-esc:#8fd9a4;
+    --laranja:#C67F35; --laranja-esc:#A85F22;
+    --roxo:#a58ae8; --vermelho:#e08a80;
+    --ink:#e9eef5; --ink-2:#c3ccd8; --muted:#95a1b1;
+    --line:#2a3341; --line-2:#36414f;
+    --card:#1b222c; --ground:#0e1319; --surface:#161d26;
+    --ok:#a5d9b4; --ok-bg:#17301f; --pend:#e9c583; --pend-bg:#2f2515;
+    --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.34);
+  }
+}
+:root[data-theme="dark"]{
+  --azul:#6CA9E2; --azul-esc:#9CC8F0; --azul-mais:#b9dbf7; --azul-claro:#16283a;
+  --verde:#63c47f; --verde-esc:#8fd9a4;
+  --laranja:#C67F35; --laranja-esc:#A85F22;
+  --roxo:#a58ae8; --vermelho:#e08a80;
+  --ink:#e9eef5; --ink-2:#c3ccd8; --muted:#95a1b1;
+  --line:#2a3341; --line-2:#36414f;
+  --card:#1b222c; --ground:#0e1319; --surface:#161d26;
+  --ok:#a5d9b4; --ok-bg:#17301f; --pend:#e9c583; --pend-bg:#2f2515;
+  --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.34);
+}
+*{ box-sizing:border-box; }
+body{ margin:0; background:var(--ground); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:15px; line-height:1.55; }
+.wrap{ max-width:1180px; margin:0 auto; padding:2rem 1rem 4rem; }
+h1{ font-size:1.6rem; margin:0 0 .35rem; letter-spacing:-.015em; text-wrap:balance; }
+.lead{ color:var(--muted); max-width:64ch; margin:0; }
+.small{ font-size:.82rem; color:var(--muted); }
+h2{ font-size:1.05rem; margin:2.2rem 0 .5rem; }
+
+.dupla{ display:grid; gap:1.6rem; margin-top:1.5rem; align-items:start; }
+@media (min-width:900px){ .dupla{ grid-template-columns:390px 1fr; } }
+
+.fone{ background:var(--card); border:1px solid var(--line-2); border-radius:22px;
+  box-shadow:var(--sombra); overflow:hidden; }
+.fone__b{ background:linear-gradient(100deg,#E8A055,#7FC3E8); height:8px; }
+.tela{ height:700px; overflow-y:auto; background:var(--ground); }
+.tela::-webkit-scrollbar{ width:5px; }
+.tela::-webkit-scrollbar-thumb{ background:var(--line-2); border-radius:9px; }
+
+/* ── topo: voltar + título + abas ─────────────────────────────────── */
+.topo{ background:linear-gradient(120deg,var(--azul-esc),var(--azul)); color:#fff;
+  padding:.6rem .8rem .1rem; position:sticky; top:0; z-index:9; }
+.topo__l1{ display:flex; align-items:center; gap:.5rem; }
+.voltar{ display:inline-flex; align-items:center; gap:.3rem; background:rgba(255,255,255,.18);
+  border:1px solid rgba(255,255,255,.28); color:#fff; border-radius:99px;
+  padding:.22rem .6rem .22rem .45rem; font-size:.75rem; font-weight:700;
+  text-decoration:none; }
+.voltar:hover{ background:rgba(255,255,255,.3); }
+.topo h3{ margin:0; font-size:1.02rem; font-weight:800; letter-spacing:-.01em; }
+.topo .fil{ margin-left:auto; background:rgba(255,255,255,.2);
+  border:1px solid rgba(255,255,255,.35); color:#fff; border-radius:10px;
+  padding:.32rem .6rem; font-size:.78rem; font-weight:800; cursor:pointer;
+  display:inline-flex; align-items:center; gap:.3rem; }
+.topo .fil .b{ background:#fff; color:var(--azul-esc); border-radius:99px; min-width:17px;
+  height:17px; display:grid; place-items:center; font-size:.66rem; }
+
+.abas{ display:flex; gap:.35rem; overflow-x:auto; padding:.55rem 0 .5rem; }
+.abas::-webkit-scrollbar{ display:none; }
+.aba{ flex:0 0 auto; border-radius:99px; padding:.34rem .8rem; font-size:.8rem;
+  font-weight:800; white-space:nowrap; cursor:pointer; color:#fff;
+  background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22); }
+.aba.on{ background:#fff; color:var(--azul-esc); border-color:#fff; }
+
+/* ── números ──────────────────────────────────────────────────────── */
+.nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; padding:.7rem .7rem .2rem; }
+.n{ border-radius:13px; padding:.55rem .7rem; color:#fff;
+  box-shadow:0 2px 8px rgba(20,35,60,.12); }
+.n .r{ font-size:.66rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em;
+  opacity:.9; }
+.n .v{ font-size:1.16rem; font-weight:800; letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums; line-height:1.25; }
+.n--a{ background:linear-gradient(135deg,#2E6FB0,#1D63A5); }
+.n--b{ background:linear-gradient(135deg,#22A24B,#17963C); }
+.n--c{ background:linear-gradient(135deg,#5B6B7F,#465565); }
+.n--d{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
+
+/* ── lista ────────────────────────────────────────────────────────── */
+.lst{ margin:.6rem .7rem 0; background:var(--card); border:1px solid var(--line-2);
+  border-radius:14px; overflow:hidden; }
+.lst__topo{ display:flex; align-items:center; gap:.5rem; padding:.5rem .65rem;
+  border-bottom:1px solid var(--line); font-size:.78rem; font-weight:700; color:var(--muted); }
+.lst__topo .t{ margin-left:auto; color:var(--azul-esc); font-variant-numeric:tabular-nums; }
+.mk{ width:17px; height:17px; border-radius:5px; border:1.5px solid var(--line-2);
+  flex:0 0 auto; display:grid; place-items:center; font-size:.6rem; color:#fff;
+  cursor:pointer; }
+.mk.on{ background:var(--azul); border-color:var(--azul); }
+
+.dia{ display:flex; align-items:center; gap:.5rem; padding:.32rem .65rem;
+  background:var(--azul-claro); color:var(--azul-esc); font-size:.73rem; font-weight:800;
+  border-bottom:1px solid var(--line-2); position:sticky; top:0; z-index:2; }
+.dia .t{ margin-left:auto; font-variant-numeric:tabular-nums; }
+
+/* linha densa, com rótulos — o que dá clareza no app verde */
+.lin{ display:grid; grid-template-columns:auto 1fr auto; gap:.05rem .55rem;
+  padding:.42rem .65rem; border-bottom:1px solid var(--line); align-items:center; }
+.lin:last-child{ border-bottom:0; }
+.lin.on{ background:var(--azul-claro); }
+.lin__t{ font-size:.84rem; font-weight:700; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; min-width:0; letter-spacing:-.01em; }
+.lin__v{ font-size:.92rem; font-weight:800; color:var(--verde);
+  font-variant-numeric:tabular-nums; letter-spacing:-.02em; text-align:right; }
+.lin__d{ grid-column:2/4; display:flex; align-items:center; gap:.4rem; min-width:0; }
+.rot{ font-size:.62rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
+  font-weight:800; }
+.dado{ font-size:.72rem; color:var(--ink-2); font-weight:600;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.selo{ font-size:.63rem; font-weight:800; border-radius:5px; padding:.06rem .35rem;
+  white-space:nowrap; }
+.selo--ok{ background:var(--ok-bg); color:var(--ok); }
+.selo--pe{ background:var(--pend-bg); color:var(--pend); }
+.selo--fo{ background:rgba(109,72,200,.13); color:var(--roxo); }
+.acoes{ margin-left:auto; display:flex; gap:.15rem; flex:0 0 auto; }
+.ic{ width:26px; height:26px; border-radius:7px; border:1px solid transparent;
+  background:none; display:grid; place-items:center; font-size:.82rem; cursor:pointer;
+  color:var(--muted); }
+.ic:hover{ background:var(--surface); border-color:var(--line-2); }
+.ic--rev{ color:var(--azul); }
+.ic--del{ color:var(--vermelho); }
+
+.mais{ padding:.5rem .65rem; }
+.mais button{ width:100%; border:1px dashed var(--line-2); background:transparent;
+  color:var(--muted); border-radius:10px; padding:.42rem; font-size:.78rem; font-weight:700;
+  cursor:pointer; }
+.barra{ position:sticky; bottom:0; background:var(--azul-esc); color:#fff;
+  padding:.5rem .7rem; display:flex; align-items:center; gap:.45rem; font-size:.78rem;
+  font-weight:800; margin-top:.6rem; }
+.barra .b{ background:rgba(255,255,255,.2); border-radius:8px; padding:.24rem .55rem; }
+.barra .b--w{ background:#fff; color:var(--azul-esc); }
+
+.pe{ padding:.7rem; }
+.pe a{ display:inline-flex; align-items:center; gap:.3rem; font-size:.78rem; font-weight:700;
+  color:var(--azul); text-decoration:none; background:var(--card);
+  border:1px solid var(--line-2); border-radius:9px; padding:.35rem .6rem; }
+
+.antes-depois{ display:grid; gap:.55rem; }
+.ad{ background:var(--card); border:1px solid var(--line-2); border-radius:12px;
+  padding:.65rem .85rem; box-shadow:var(--sombra); }
+.ad h4{ margin:0 0 .15rem; font-size:.92rem; }
+.ad p{ margin:0; font-size:.85rem; color:var(--muted); }
+.ad .n1{ color:var(--vermelho); font-weight:800; }
+.ad .n2{ color:var(--verde-esc); font-weight:800; }
+</style>
+
+<div class="wrap">
+
+  <h1>Banco com abas</h1>
+  <p class="lead">O que você apontou no outro app, aplicado aqui: abas que trocam de tela no
+  topo, linha densa com rótulo, voltar com seta e cartão de número com peso. Pode tocar nas
+  abas e nas linhas.</p>
+
+  <div class="dupla">
+
+    <div class="fone"><div class="fone__b"></div><div class="tela">
+
+      <div class="topo">
+        <div class="topo__l1">
+          <a class="voltar" href="#">← Banco</a>
+          <h3 id="tit">Recebimentos</h3>
+          <button class="fil">⌕ <span class="b">4</span></button>
+        </div>
+        <div class="abas" id="abas">
+          <span class="aba" data-a="Resumo">Resumo</span>
+          <span class="aba on" data-a="Recebimentos">Recebimentos</span>
+          <span class="aba" data-a="Pagamentos">Pagamentos</span>
+          <span class="aba" data-a="Transferências">Transferências</span>
+          <span class="aba" data-a="Regras">Regras</span>
+        </div>
+      </div>
+
+      <div class="nums">
+        <div class="n n--a"><div class="r">Lançamentos</div><div class="v">29</div></div>
+        <div class="n n--b"><div class="r">Valor total</div><div class="v">R$ 27.241,66</div></div>
+        <div class="n n--c"><div class="r">Conciliados</div><div class="v">27</div></div>
+        <div class="n n--d"><div class="r">Pendentes</div><div class="v">2</div></div>
+      </div>
+
+      <div class="lst">
+        <div class="lst__topo"><span class="mk"></span> selecionar todos · 29
+          <span class="t">R$ 27.241,66</span></div>
+
+        <div class="dia"><span class="mk"></span> 12/08/2026 · qua <span class="t">R$ 757,64</span></div>
+        <div class="lin">
+          <span class="mk"></span>
+          <span class="lin__t">BARATÃO TECNOLOGIA</span>
+          <span class="lin__v">R$ 757,64</span>
+          <span class="lin__d">
+            <span class="selo selo--pe">Pendente</span>
+            <span class="rot">CNPJ</span><span class="dado">04.518.744/0001-09</span>
+            <span class="acoes"><button class="ic ic--rev">✓</button><button class="ic">⋯</button></span>
+          </span>
+        </div>
+
+        <div class="dia"><span class="mk on">✓</span> 11/08/2026 · ter <span class="t">R$ 1.656,79</span></div>
+        <div class="lin on">
+          <span class="mk on">✓</span>
+          <span class="lin__t">BARATÃO TECNOLOGIA</span>
+          <span class="lin__v">R$ 589,17</span>
+          <span class="lin__d">
+            <span class="selo selo--ok">Conciliado</span><span class="selo selo--fo">Pix</span>
+            <span class="rot">Conta</span><span class="dado">Sicoob NH</span>
+            <span class="acoes"><button class="ic ic--rev">↺</button><button class="ic">⋯</button></span>
+          </span>
+        </div>
+        <div class="lin on">
+          <span class="mk on">✓</span>
+          <span class="lin__t">BARATÃO TECNOLOGIA</span>
+          <span class="lin__v">R$ 122,26</span>
+          <span class="lin__d">
+            <span class="selo selo--ok">Conciliado</span><span class="selo selo--fo">Pix</span>
+            <span class="rot">Conta</span><span class="dado">Sicoob NH</span>
+            <span class="acoes"><button class="ic ic--rev">↺</button><button class="ic">⋯</button></span>
+          </span>
+        </div>
+        <div class="lin on">
+          <span class="mk on">✓</span>
+          <span class="lin__t">BARATÃO TECNOLOGIA</span>
+          <span class="lin__v">R$ 945,36</span>
+          <span class="lin__d">
+            <span class="selo selo--ok">Conciliado</span><span class="selo selo--fo">Pix</span>
+            <span class="rot">Conta</span><span class="dado">Sicoob NH</span>
+            <span class="acoes"><button class="ic ic--rev">↺</button><button class="ic">⋯</button></span>
+          </span>
+        </div>
+
+        <div class="dia"><span class="mk"></span> 10/08/2026 · seg <span class="t">R$ 2.633,07</span></div>
+        <div class="lin">
+          <span class="mk"></span>
+          <span class="lin__t">BARATÃO TECNOLOGIA</span>
+          <span class="lin__v">R$ 1.687,71</span>
+          <span class="lin__d">
+            <span class="selo selo--ok">Conciliado</span><span class="selo selo--fo">Pix</span>
+            <span class="rot">Conta</span><span class="dado">Sicoob NH</span>
+            <span class="acoes"><button class="ic ic--rev">↺</button><button class="ic">⋯</button></span>
+          </span>
+        </div>
+        <div class="lin">
+          <span class="mk"></span>
+          <span class="lin__t">BARATÃO TECNOLOGIA</span>
+          <span class="lin__v">R$ 945,36</span>
+          <span class="lin__d">
+            <span class="selo selo--ok">Conciliado</span><span class="selo selo--fo">Pix</span>
+            <span class="rot">Conta</span><span class="dado">Sicoob NH</span>
+            <span class="acoes"><button class="ic ic--rev">↺</button><button class="ic">⋯</button></span>
+          </span>
+        </div>
+
+        <div class="dia"><span class="mk"></span> 07/08/2026 · qui <span class="t">R$ 713,73</span></div>
+        <div class="lin">
+          <span class="mk"></span>
+          <span class="lin__t">BARATÃO TECNOLOGIA</span>
+          <span class="lin__v">R$ 713,73</span>
+          <span class="lin__d">
+            <span class="selo selo--ok">Conciliado</span><span class="selo selo--fo">Pix</span>
+            <span class="rot">Conta</span><span class="dado">Sicoob NH</span>
+            <span class="acoes"><button class="ic ic--rev">↺</button><button class="ic">⋯</button></span>
+          </span>
+        </div>
+
+        <div class="dia"><span class="mk"></span> 06/08/2026 · qua <span class="t">R$ 960,30</span></div>
+        <div class="lin">
+          <span class="mk"></span>
+          <span class="lin__t">BARATÃO TECNOLOGIA</span>
+          <span class="lin__v">R$ 960,30</span>
+          <span class="lin__d">
+            <span class="selo selo--ok">Conciliado</span><span class="selo selo--fo">Pix</span>
+            <span class="rot">Conta</span><span class="dado">Sicoob NH</span>
+            <span class="acoes"><button class="ic ic--rev">↺</button><button class="ic">⋯</button></span>
+          </span>
+        </div>
+
+        <div class="mais"><button>mostrar mais — 21 de 29</button></div>
+      </div>
+
+      <div class="barra"><span>3 marcados · R$ 1.656,79</span>
+        <span style="margin-left:auto"></span>
+        <span class="b b--w">Reverter</span><span class="b">Excluir</span></div>
+
+      <div class="pe"><a href="#">← Voltar para o Dashboard</a></div>
+    </div></div>
+
+    <div>
+      <h2 style="margin-top:0">O que mudou, e por quê</h2>
+      <div class="antes-depois">
+
+        <div class="ad">
+          <h4>Abas no topo trocam de tela</h4>
+          <p>Resumo · Recebimentos · Pagamentos · Transferências · Regras — como o
+          <b>ENTRADAS / SAÍDAS</b> do outro app. Hoje, para ir de Recebimento a Pagamentos você
+          volta ao menu. Aqui é um toque, e as abas ficam grudadas no topo enquanto você rola.</p>
+        </div>
+
+        <div class="ad">
+          <h4>A linha encolheu quase pela metade</h4>
+          <p>Antes cada lançamento gastava <span class="n1">duas linhas altas</span> — a segunda
+          quase vazia, com "Pendente –". Agora é <span class="n2">uma linha densa</span>:
+          descrição e valor em cima, e embaixo os selos, o rótulo do dado (CONTA, CNPJ) e os
+          botões. Cabem <b>9 lançamentos</b> na tela contra 4.</p>
+        </div>
+
+        <div class="ad">
+          <h4>Rótulo em cima do dado</h4>
+          <p>É o que deixa o app verde legível: <b>Nº/SÉRIE</b>, <b>EMISSÃO</b>, <b>ITENS</b>.
+          Aqui viram CONTA e CNPJ em maiúscula miúda, com o valor logo ao lado. Você lê sem
+          precisar adivinhar o que é cada número.</p>
+        </div>
+
+        <div class="ad">
+          <h4>Ações viraram ícones, no lugar certo</h4>
+          <p>Reverter e o menu ⋯ ficam no fim da própria linha, pequenos e discretos — não mais
+          um botão azul grande no meio da tela. No pendente, o ícone principal vira
+          <b>conciliar</b>.</p>
+        </div>
+
+        <div class="ad">
+          <h4>Voltar com seta, e um caminho de saída no fim</h4>
+          <p>No topo, <b>← Banco</b> como no seu "← Configurações". No rodapé, um
+          <b>← Voltar para o Dashboard</b>. A migalha "Dashboard / Importação Bancária /
+          Recebimento" sai: ocupava três linhas para dizer o que a seta diz num toque.</p>
+        </div>
+
+        <div class="ad">
+          <h4>Cartão de número com peso</h4>
+          <p>Fundo colorido em degradê, como os do outro app. Dá hierarquia ao topo e faz o
+          valor total saltar sem precisar de fonte gigante.</p>
+        </div>
+
+        <div class="ad">
+          <h4>Dia com o dia da semana</h4>
+          <p><b>12/08/2026 · qua</b>. Na conferência contra extrato, saber que foi quarta ajuda
+          mais do que parece.</p>
+        </div>
+      </div>
+
+      <p class="small" style="margin-top:1rem">O filtro em três passos que você aprovou continua
+      igual — só o botão mudou de lugar, para dentro da faixa azul.</p>
+    </div>
+  </div>
+
+  <p class="small" style="margin-top:1.6rem">Maquete. Nada foi alterado no sistema.</p>
+</div>
+
+<script>
+document.querySelectorAll('#abas .aba').forEach(function (a) {
+  a.addEventListener('click', function () {
+    document.querySelectorAll('#abas .aba').forEach(function (o) { o.classList.remove('on'); });
+    a.classList.add('on');
+    document.getElementById('tit').textContent = a.dataset.a;
+  });
+});
+document.querySelectorAll('.lin').forEach(function (l) {
+  l.addEventListener('click', function (ev) {
+    if (ev.target.closest('button')) return;
+    l.classList.toggle('on');
+    var m = l.querySelector('.mk');
+    m.classList.toggle('on');
+    m.textContent = m.classList.contains('on') ? '✓' : '';
+  });
+});
+</script>
