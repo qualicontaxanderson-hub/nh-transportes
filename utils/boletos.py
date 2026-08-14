@@ -146,6 +146,26 @@ def _extract_charge_id(resp):
         return None
 
 
+# Endereco que a EFI usa para AVISAR que o boleto foi pago. Ele e gravado em
+# CADA cobranca no momento da emissao — se estiver errado, os boletos daquele
+# lote nunca avisam, e a falha e silenciosa dos dois lados.
+#
+# O default apontava para o servidor antigo do Render, que saiu do ar quando o
+# app mudou para o Railway. Resultado: a EFI vinha batendo num 503 e a baixa
+# so acontecia quando alguem clicava em "Reconciliar EFI" na mao.
+_APP_URL_PADRAO = "https://app.postonovohorizonte.com.br"
+
+
+def _notification_url():
+    """URL do webhook da EFI. EFI_NOTIFICATION_URL manda; senao, monta a partir
+    de APP_BASE_URL; senao, o dominio de producao."""
+    direto = (os.getenv("EFI_NOTIFICATION_URL") or "").strip()
+    if direto:
+        return direto
+    base = (os.getenv("APP_BASE_URL") or _APP_URL_PADRAO).strip().rstrip("/")
+    return base + "/webhooks/efi"
+
+
 def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
     cpf_cnpj = (frete.get("cliente_cnpj") or "").replace(".", "").replace("-", "").replace("/", "").strip()
     telefone = (frete.get("cliente_telefone") or "").replace("(", "").replace(")", "").replace("-", "").replace(" ", "").strip()
@@ -172,14 +192,14 @@ def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
             },
         },
     }
-    metadata = {"custom_id": str(frete["id"]), "notification_url": os.getenv("EFI_NOTIFICATION_URL", "https://nh-transportes.onrender.com/webhooks/efi")}
+    metadata = {"custom_id": str(frete["id"]), "notification_url": _notification_url()}
     body = {"items": items, "payment": {"banking_billet": banking_billet}, "metadata": metadata}
     return body
 
 
 def _build_charge_payload(frete, descricao_frete, data_vencimento, valor_total_centavos):
     items = [{"name": descricao_frete[:80], "amount": 1, "value": valor_total_centavos}]
-    metadata = {"custom_id": str(frete["id"]), "notification_url": os.getenv("EFI_NOTIFICATION_URL", "https://nh-transportes.onrender.com/webhooks/efi")}
+    metadata = {"custom_id": str(frete["id"]), "notification_url": _notification_url()}
     return {"items": items, "metadata": metadata}
 
 
@@ -1017,7 +1037,7 @@ def _build_charge_payload_multi(client_data, items, custom_id, data_vencimento):
     items: lista de dicts {"name", "amount", "value"} em centavos.
     custom_id: string livre para rastrear (ex: "multi:1,2,3:TIMESTAMP")
     """
-    metadata = {"custom_id": custom_id, "notification_url": os.getenv("EFI_NOTIFICATION_URL", "https://nh-transportes.onrender.com/webhooks/efi")}
+    metadata = {"custom_id": custom_id, "notification_url": _notification_url()}
     body = {"items": items, "metadata": metadata}
     return body
 

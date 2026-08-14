@@ -493,6 +493,15 @@ def create_app():
     except Exception:
         app.logger.warning("[els_sched] nao foi possivel iniciar o scheduler.", exc_info=True)
 
+    # Agendador da baixa automatica dos boletos da EFI. O caminho normal e o
+    # webhook; este e a rede de seguranca para quando a notificacao nao chega —
+    # que e uma falha silenciosa dos dois lados. Falha aqui NAO derruba o app.
+    try:
+        from integrations.efi_scheduler import iniciar_scheduler as iniciar_efi
+        iniciar_efi(app)
+    except Exception:
+        app.logger.warning("[efi_sched] nao foi possivel iniciar o scheduler.", exc_info=True)
+
     return app
 
 
