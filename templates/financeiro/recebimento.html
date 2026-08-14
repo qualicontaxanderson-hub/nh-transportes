@@ -264,9 +264,8 @@ body > .container-fluid:has(#rcb){
 #rcb .escolher span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #rcb .escolher i{ margin-left:auto; color:var(--muted); font-size:.8rem; flex:0 0 auto; }
 #rcb .escolher.aberto i{ transform:rotate(180deg); }
-#rcb .lista-f[hidden]{ display:none; }
 #rcb .busca-f{ margin:.4rem 0 .35rem; }
-#rcb .opcs--f{ max-height:230px; }
+#rcb .opcs--f{ max-height:52vh; }
 #rcb .fam{ position:sticky; top:0; background:var(--surface); color:var(--muted);
   font-size:.63rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em;
   padding:.3rem .6rem; border-bottom:1px solid var(--line); z-index:1; }
@@ -563,14 +562,18 @@ Não tem volta.');">
                  value="{{ forma_recebimento_id_filter or '' }}">
           <button type="button" class="escolher" id="rcb-forma-bt" onclick="rcbFormasAbrir()">
             <span id="rcb-forma-rot">Todas as formas</span>
-            <i class="bi bi-chevron-down"></i>
+            <i class="bi bi-chevron-right"></i>
           </button>
-          <div class="lista-f" id="rcb-forma-lista" hidden>
-            <input type="search" class="campo busca-f" id="rcb-forma-busca"
-                   placeholder="buscar forma..." oninput="rcbFormasPintar()">
-            <div class="opcs opcs--f" id="rcb-forma-opcs"></div>
-          </div>
         </div>
+      </div>
+
+      <!-- Tela da forma de recebimento: um passo como os outros, para o
+           teclado não subir por cima do filtro inteiro. -->
+      <div class="etapa" id="rcb-etapa-forma" hidden>
+        <input type="search" class="campo busca-f" id="rcb-forma-busca"
+               placeholder="digite para procurar — ex.: elo, prazo, pix"
+               oninput="rcbFormasPintar()">
+        <div class="opcs opcs--f" id="rcb-forma-opcs"></div>
       </div>
     </div>
 
@@ -712,9 +715,11 @@ var RCB_CONTAS = {{ contas | tojson }};
 var RCB_CONTA_SEL = ({{ (conta_ids_filter or []) | tojson }}).map(String);
 var RCB_PASSOS = ['Escolha a empresa', 'Escolha a conta', 'Período, valor e o resto'];
 var rcbPassoAtual = 0;
+var rcbTelaForma = false;   // dentro da tela da forma?
 
 function rcbAbrirFiltro() {
   rcbPassoAtual = 0;
+  rcbTelaForma = false;
   rcbContas();
   rcbDesenhaPasso();
   document.getElementById('rcb-gav').classList.add('on');
@@ -726,17 +731,33 @@ function rcbFecharFiltro() {
 }
 function rcbDesenhaPasso() {
   for (var i = 0; i < 3; i++) {
-    document.getElementById('rcb-etapa-' + i).hidden = (i !== rcbPassoAtual);
+    document.getElementById('rcb-etapa-' + i).hidden = (rcbTelaForma || i !== rcbPassoAtual);
     document.getElementById('rcb-p' + i).classList.toggle('on', i <= rcbPassoAtual);
   }
-  document.getElementById('rcb-pnome').innerHTML =
-    'Passo ' + (rcbPassoAtual + 1) + ' de 3 &middot; <b>' + RCB_PASSOS[rcbPassoAtual] + '</b>';
-  document.getElementById('rcb-volta').textContent = rcbPassoAtual === 0 ? 'Cancelar' : 'Voltar';
-  document.getElementById('rcb-segue').textContent = rcbPassoAtual === 2 ? 'Filtrar' : 'Continuar';
+  document.getElementById('rcb-etapa-forma').hidden = !rcbTelaForma;
+
+  if (rcbTelaForma) {
+    document.getElementById('rcb-pnome').innerHTML =
+      'Passo 3 &middot; <b>Forma de recebimento</b>';
+    document.getElementById('rcb-volta').textContent = 'Voltar';
+    document.getElementById('rcb-segue').textContent = 'Todas as formas';
+  } else {
+    document.getElementById('rcb-pnome').innerHTML =
+      'Passo ' + (rcbPassoAtual + 1) + ' de 3 &middot; <b>' + RCB_PASSOS[rcbPassoAtual] + '</b>';
+    document.getElementById('rcb-volta').textContent = rcbPassoAtual === 0 ? 'Cancelar' : 'Voltar';
+    document.getElementById('rcb-segue').textContent = rcbPassoAtual === 2 ? 'Filtrar' : 'Continuar';
+  }
   var corpo = document.querySelector('#rcb .gav__b');
   if (corpo) corpo.scrollTop = 0;
 }
 function rcbPasso(d) {
+  // Na tela da forma, "Voltar" volta para o passo 3 e o outro botão limpa a
+  // escolha — nenhum dos dois envia o filtro sem querer.
+  if (rcbTelaForma) {
+    if (d > 0) rcbFormaEscolher('');
+    else rcbFormasVoltar();
+    return;
+  }
   if (d > 0 && rcbPassoAtual === 2) { document.getElementById('rcb-gav').submit(); return; }
   if (d < 0 && rcbPassoAtual === 0) { rcbFecharFiltro(); return; }
   rcbPassoAtual += d;
@@ -856,16 +877,18 @@ function rcbResto(nome) {
   return p.length > 1 ? p.slice(1).join(' - ').trim() : nome;
 }
 
+/* Entra na tela da forma. Nada de focar a busca sozinho: era isso que
+   fazia o teclado subir e empurrar o filtro todo para cima. */
 function rcbFormasAbrir() {
-  var cx = document.getElementById('rcb-forma-lista');
-  var bt = document.getElementById('rcb-forma-bt');
-  cx.hidden = !cx.hidden;
-  bt.classList.toggle('aberto', !cx.hidden);
-  if (!cx.hidden) {
-    rcbFormasPintar();
-    var b = document.getElementById('rcb-forma-busca');
-    if (b) b.focus();
-  }
+  rcbTelaForma = true;
+  rcbFormasPintar();
+  rcbDesenhaPasso();
+}
+function rcbFormasVoltar() {
+  rcbTelaForma = false;
+  var b = document.getElementById('rcb-forma-busca');
+  if (b) { b.value = ''; }
+  rcbDesenhaPasso();
 }
 
 function rcbFormasPintar() {
@@ -927,8 +950,7 @@ function rcbFormasPintar() {
 function rcbFormaEscolher(id) {
   document.getElementById('rcb-forma').value = id || '';
   rcbFormaRotulo();
-  document.getElementById('rcb-forma-lista').hidden = true;
-  document.getElementById('rcb-forma-bt').classList.remove('aberto');
+  rcbFormasVoltar();          // escolheu, volta para o passo 3
 }
 function rcbFormaRotulo() {
   var id = document.getElementById('rcb-forma').value;
