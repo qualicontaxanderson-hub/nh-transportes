@@ -763,7 +763,7 @@ body > .container-fluid:has(#cnc){
               <label class="form-label fw-semibold">
                 <i class="bi bi-wallet-fill text-success"></i> Forma de Recebimento (Crédito)
               </label>
-              <input type="text" id="buscaForma" class="form-control form-control-sm mb-1"
+              <input hidden type="text" id="buscaForma" class="form-control form-control-sm mb-1"
                      placeholder="Buscar forma de recebimento..." oninput="filtrarFormas()">
               <select name="forma_recebimento_id" id="selectForma" class="form-select" size="7">
                 {% for f in formas_recebimento %}
@@ -852,7 +852,7 @@ body > .container-fluid:has(#cnc){
 
             <!-- Aba Fornecedor -->
             <div id="aba_fornecedor">
-              <input type="text" id="buscaFornecedor" class="form-control form-control-sm mb-1"
+              <input hidden type="text" id="buscaFornecedor" class="form-control form-control-sm mb-1"
                      placeholder="Buscar fornecedor..." oninput="filtrarFornecedores()">
               <select name="fornecedor_id" id="selectFornecedor" class="form-select" size="6">
                 {% for f in fornecedores %}
@@ -1046,7 +1046,7 @@ body > .container-fluid:has(#cnc){
         <div class="tab-content">
           <div class="tab-pane fade show active" id="tabLoteCredito">
             <p class="small text-muted mb-1">Forma de recebimento para os <strong>créditos</strong> selecionados:</p>
-            <input type="text" id="buscaFormaLote" class="form-control form-control-sm mb-1"
+            <input hidden type="text" id="buscaFormaLote" class="form-control form-control-sm mb-1"
                    placeholder="Buscar..." oninput="filtrarFormasLote()">
             <select id="selectFormaLote" class="form-select" size="7">
               {% for f in formas_recebimento %}
@@ -1103,7 +1103,7 @@ body > .container-fluid:has(#cnc){
             <!-- Painel Fornecedor -->
             <div id="lote_aba_fornecedor">
               <p class="small text-muted mb-1">Fornecedor para os <strong>débitos</strong> selecionados:</p>
-              <input type="text" id="buscaFornLote" class="form-control form-control-sm mb-1"
+              <input hidden type="text" id="buscaFornLote" class="form-control form-control-sm mb-1"
                      placeholder="Buscar..." oninput="filtrarFornLote()">
               <select id="selectFornLote" class="form-select" size="7">
                 {% for f in fornecedores %}
