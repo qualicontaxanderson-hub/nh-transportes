@@ -148,6 +148,34 @@
   .rot-modal{ font-size:.69rem; font-weight:800; text-transform:uppercase;
     letter-spacing:.05em; color:#6b7684; margin-bottom:.3rem; display:block; }
 
+  /* Campo que abre a lista. Fechado ocupa uma linha; aberto mostra a mesma
+     lista de sempre, com a borda azul ligando os dois. */
+  .abre{ width:100%; display:flex; align-items:center; gap:.5rem;
+    border:1px solid #d9e0e8; border-radius:10px; background:#fff; color:#151d27;
+    padding:.58rem .7rem; font-size:.88rem; font-weight:600; cursor:pointer;
+    font-family:inherit; text-align:left; }
+  .abre:hover{ border-color:#1D63A5; }
+  .abre span{ min-width:0; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; }
+  .abre .seta{ margin-left:auto; color:#6b7684; flex:0 0 auto; font-size:.8rem;
+    transition:transform .16s; }
+  .abre.vazio span{ color:#8b95a3; font-weight:500; }
+  .abre.aberto{ border-color:#1D63A5; border-radius:10px 10px 0 0; }
+  .abre.aberto .seta{ transform:rotate(180deg); color:#1D63A5; }
+  .abre[disabled]{ background:#f2f5f9; color:#8b95a3; cursor:not-allowed; }
+  .abre[disabled] span{ color:#8b95a3; font-weight:500; }
+  .gav{ border:1px solid #1D63A5; border-top:0; border-radius:0 0 10px 10px;
+    overflow:hidden; background:#fff; }
+  .gav[hidden]{ display:none; }
+  .gav .escolha{ border:0; border-radius:0; max-height:15rem; }
+  .gav .busca{ position:relative; padding:.5rem; border-bottom:1px solid #e7ebf1;
+    background:#f7f9fc; }
+  .gav .busca[hidden]{ display:none; }
+  .gav .busca i{ position:absolute; left:1.05rem; top:50%;
+    transform:translateY(-50%); color:#6b7684; font-size:.85rem; }
+  .gav .busca input{ width:100%; border:1px solid #d9e0e8; border-radius:8px;
+    padding:.46rem .6rem .46rem 1.95rem; font-size:.85rem; font-family:inherit; }
+
   /* Searchable dropdown for coligadas table */
   .csel-wrap { position: relative; min-width: 200px; }
   .csel-drop { display:none; position:absolute; z-index:1055; background:#fff;
@@ -325,24 +353,33 @@
         <div class="mb-3">
           <label class="rot-modal">Empresa</label>
           <input type="hidden" id="nc_cliente_id" value="">
-          <div class="escolha" id="nc_empresas">
-            <button type="button" class="escolha__i on"
-                    onclick="ctaEscolheEmpresa('nc', '', this)">
-              <span>Sem empresa vinculada</span>
-            </button>
-            {% for cl in clientes %}
-            <button type="button" class="escolha__i"
-                    onclick="ctaEscolheEmpresa('nc', '{{ cl.id }}', this)">
-              <span>{{ cl.razao_social }}{% if cl.nome_fantasia and cl.nome_fantasia != cl.razao_social %} ({{ cl.nome_fantasia }}){% endif %}</span>
-            </button>
-            {% endfor %}
+          <button type="button" class="abre vazio" id="nc_empresa_bt"
+                  onclick="ctaAbre('nc', 'empresa')">
+            <span>Escolher a empresa</span><i class="bi bi-chevron-down seta"></i>
+          </button>
+          <div class="gav" id="nc_empresa_gav" hidden>
+            <div class="busca" id="nc_empresa_busca" hidden>
+              <i class="bi bi-search"></i>
+              <input type="text" placeholder="Procurar empresa" autocomplete="off"
+                     oninput="ctaPintaEmpresas('nc', this.value)">
+            </div>
+            <div class="escolha" id="nc_empresas"></div>
           </div>
         </div>
         <div class="mb-3">
           <label class="rot-modal">Plano de contas</label>
           <input type="hidden" id="nc_plano_contas_conta_id" value="">
-          <div class="escolha" id="nc_planos">
-            <div class="escolha__vazio">Escolha a empresa primeiro</div>
+          <button type="button" class="abre vazio" id="nc_plano_bt" disabled
+                  onclick="ctaAbre('nc', 'plano')">
+            <span>Escolha a empresa primeiro</span><i class="bi bi-chevron-down seta"></i>
+          </button>
+          <div class="gav" id="nc_plano_gav" hidden>
+            <div class="busca" id="nc_plano_busca" hidden>
+              <i class="bi bi-search"></i>
+              <input type="text" placeholder="Procurar conta contábil" autocomplete="off"
+                     oninput="ctaPintaPlanos('nc', null, null, this.value)">
+            </div>
+            <div class="escolha" id="nc_planos"></div>
           </div>
         </div>
         <div class="mb-3">
@@ -392,24 +429,33 @@
         <div class="mb-3">
           <label class="rot-modal">Empresa</label>
           <input type="hidden" id="ed_cliente_id" value="">
-          <div class="escolha" id="ed_empresas">
-            <button type="button" class="escolha__i on"
-                    onclick="ctaEscolheEmpresa('ed', '', this)">
-              <span>Sem empresa vinculada</span>
-            </button>
-            {% for cl in clientes %}
-            <button type="button" class="escolha__i"
-                    onclick="ctaEscolheEmpresa('ed', '{{ cl.id }}', this)">
-              <span>{{ cl.razao_social }}{% if cl.nome_fantasia and cl.nome_fantasia != cl.razao_social %} ({{ cl.nome_fantasia }}){% endif %}</span>
-            </button>
-            {% endfor %}
+          <button type="button" class="abre vazio" id="ed_empresa_bt"
+                  onclick="ctaAbre('ed', 'empresa')">
+            <span>Escolher a empresa</span><i class="bi bi-chevron-down seta"></i>
+          </button>
+          <div class="gav" id="ed_empresa_gav" hidden>
+            <div class="busca" id="ed_empresa_busca" hidden>
+              <i class="bi bi-search"></i>
+              <input type="text" placeholder="Procurar empresa" autocomplete="off"
+                     oninput="ctaPintaEmpresas('ed', this.value)">
+            </div>
+            <div class="escolha" id="ed_empresas"></div>
           </div>
         </div>
         <div class="mb-3">
           <label class="rot-modal">Plano de contas</label>
           <input type="hidden" id="ed_plano_contas_conta_id" value="">
-          <div class="escolha" id="ed_planos">
-            <div class="escolha__vazio">Escolha a empresa primeiro</div>
+          <button type="button" class="abre vazio" id="ed_plano_bt" disabled
+                  onclick="ctaAbre('ed', 'plano')">
+            <span>Escolha a empresa primeiro</span><i class="bi bi-chevron-down seta"></i>
+          </button>
+          <div class="gav" id="ed_plano_gav" hidden>
+            <div class="busca" id="ed_plano_busca" hidden>
+              <i class="bi bi-search"></i>
+              <input type="text" placeholder="Procurar conta contábil" autocomplete="off"
+                     oninput="ctaPintaPlanos('ed', null, null, this.value)">
+            </div>
+            <div class="escolha" id="ed_planos"></div>
           </div>
         </div>
         <div class="mb-3">
@@ -460,6 +506,10 @@ const BASE = '{{ url_for("bank_import.api_contas") }}';
 const TODOS_CLIENTES = {{ todos_clientes | tojson }};
 const PLANO_CONTAS   = {{ plano_contas   | tojson }};
 const CLIENTE_GRUPO_MAP = {{ cliente_grupo_map | tojson }};
+const CTA_CLIENTES      = {{ clientes | tojson }};
+// Acima de quantos itens a busca aparece. Com cinco empresas ela so
+// atrapalha; quando o grupo crescer, ela nasce sozinha.
+const CTA_LIMIAR_BUSCA  = 8;
 
 function showAlert(msg, type) {
   const box = document.getElementById('alertBox');
@@ -468,100 +518,189 @@ function showAlert(msg, type) {
   setTimeout(() => box.innerHTML = '', 5000);
 }
 
-/* ── Escolha em lista, no lugar do <select> ───────────────────────────
-   O valor vive num input escondido, então salvarNovaConta/salvarEdicao
-   continuam lendo .value como antes. Campo escondido não dispara 'change',
-   por isso o encadeamento empresa → plano é feito na chamada. */
-function ctaMarca(caixa, botao) {
-  caixa.querySelectorAll('.escolha__i').forEach(function (b) {
-    b.classList.remove('on');
-    var t = b.querySelector('.tique');
-    if (t) t.remove();
+/* ── Campo que abre a lista ───────────────────────────────────────────
+   O valor vive num input escondido, então salvarNovaConta e salvarEdicao
+   continuam lendo .value como antes. Fechado, o campo mostra o que foi
+   escolhido; aberto, mostra a mesma lista de sempre. */
+var CTA_ABERTO = null;
+
+function ctaAbre(pre, qual) {
+  var bt = document.getElementById(pre + '_' + qual + '_bt');
+  if (bt.disabled) return;
+  var gav = document.getElementById(pre + '_' + qual + '_gav');
+  var abrir = gav.hidden;
+  ctaFechaTudo();
+  if (!abrir) return;
+  gav.hidden = false;
+  bt.classList.add('aberto');
+  CTA_ABERTO = pre + '_' + qual;
+  var busca = gav.querySelector('.busca:not([hidden]) input');
+  if (busca) busca.focus();
+}
+
+function ctaFechaTudo() {
+  document.querySelectorAll('.gav').forEach(function (g) { g.hidden = true; });
+  document.querySelectorAll('.abre').forEach(function (b) {
+    b.classList.remove('aberto');
   });
-  if (botao) {
-    botao.classList.add('on');
+  document.querySelectorAll('.gav .busca input').forEach(function (i) { i.value = ''; });
+  CTA_ABERTO = null;
+}
+
+function ctaRotulo(pre, qual, texto, vazio) {
+  var bt = document.getElementById(pre + '_' + qual + '_bt');
+  bt.querySelector('span').textContent = texto;
+  bt.classList.toggle('vazio', !!vazio);
+}
+
+function ctaItem(rotulo, marcado, aoClicar) {
+  var b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'escolha__i' + (marcado ? ' on' : '');
+  var s = document.createElement('span');
+  s.textContent = rotulo;
+  b.appendChild(s);
+  if (marcado) {
     var i = document.createElement('i');
     i.className = 'bi bi-check-lg tique';
-    botao.appendChild(i);
+    b.appendChild(i);
   }
+  b.addEventListener('click', aoClicar);
+  return b;
 }
 
-/* Só o plano de contas do grupo contábil daquela empresa. */
-function ctaPintaPlanos(pre, clienteId, selecionado) {
-  var caixa = document.getElementById(pre + '_planos');
-  var campo = document.getElementById(pre + '_plano_contas_conta_id');
-  campo.value = '';
-  caixa.innerHTML = '';
+/* ── Empresa ────────────────────────────────────────────────────────── */
+function ctaPintaEmpresas(pre, termo) {
+  var cx = document.getElementById(pre + '_empresas');
+  var atual = document.getElementById(pre + '_cliente_id').value;
+  var q = (termo || '').trim().toLowerCase();
 
-  var grupoId = clienteId ? (CLIENTE_GRUPO_MAP[clienteId] || null) : null;
-  if (!grupoId) {
-    caixa.innerHTML = '<div class="escolha__vazio">' +
-      (clienteId ? 'Esta empresa não tem plano de contas' : 'Escolha a empresa primeiro') +
-      '</div>';
-    return;
-  }
-  var doGrupo = PLANO_CONTAS.filter(function (pc) { return pc.grupo_id === grupoId; });
-  if (!doGrupo.length) {
-    caixa.innerHTML = '<div class="escolha__vazio">Nenhuma conta neste plano</div>';
-    return;
-  }
-
-  var semVinculo = document.createElement('button');
-  semVinculo.type = 'button';
-  semVinculo.className = 'escolha__i';
-  semVinculo.innerHTML = '<span>Sem vínculo contábil</span>';
-  semVinculo.addEventListener('click', function () {
-    campo.value = '';
-    ctaMarca(caixa, semVinculo);
-  });
-  caixa.appendChild(semVinculo);
-
-  var marcado = null;
-  doGrupo.forEach(function (pc) {
-    var b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'escolha__i';
-    var t = document.createElement('span');
-    t.textContent = pc.codigo + ' – ' + pc.nome;
-    b.appendChild(t);
-    b.addEventListener('click', function () {
-      campo.value = pc.id;
-      ctaMarca(caixa, b);
-    });
-    caixa.appendChild(b);
-    if (selecionado && String(pc.id) === String(selecionado)) marcado = b;
+  var lista = [{ id: '', nome: 'Sem empresa vinculada' }];
+  CTA_CLIENTES.forEach(function (c) {
+    var nome = c.razao_social;
+    if (c.nome_fantasia && c.nome_fantasia !== c.razao_social) {
+      nome += ' (' + c.nome_fantasia + ')';
+    }
+    lista.push({ id: String(c.id), nome: nome });
   });
 
-  if (marcado) {
-    campo.value = selecionado;
-    ctaMarca(caixa, marcado);
-  } else {
-    ctaMarca(caixa, semVinculo);
+  document.getElementById(pre + '_empresa_busca').hidden =
+    lista.length <= CTA_LIMIAR_BUSCA;
+
+  var itens = lista.filter(function (e) {
+    return !q || e.nome.toLowerCase().indexOf(q) >= 0;
+  });
+  cx.innerHTML = '';
+  if (!itens.length) {
+    cx.innerHTML = '<div class="escolha__vazio">Nenhuma empresa com esse nome</div>';
+    return;
   }
+  itens.forEach(function (e) {
+    cx.appendChild(ctaItem(e.nome, String(atual) === e.id, function () {
+      ctaEscolheEmpresa(pre, e.id, e.nome);
+    }));
+  });
 }
 
-function ctaEscolheEmpresa(pre, id, botao) {
+function ctaEscolheEmpresa(pre, id, nome) {
   document.getElementById(pre + '_cliente_id').value = id;
-  ctaMarca(document.getElementById(pre + '_empresas'), botao);
+  ctaRotulo(pre, 'empresa', id ? nome : 'Sem empresa vinculada', !id);
+  ctaFechaTudo();
+  ctaPintaEmpresas(pre, '');
   ctaPintaPlanos(pre, id ? parseInt(id, 10) : null, null);
 }
 
-/* Acende a empresa certa a partir do valor — usado ao abrir o editar.
-   O nome tem "Escolhe" de proposito: `ctaEmpresa`, sem o verbo, ja e a
-   variavel do filtro de pastilhas la em cima. Funcao e var com o mesmo nome
-   no mesmo escopo: a atribuicao da var vence, e a funcao some. */
-function ctaAcendeEmpresa(pre, clienteId) {
-  var caixa = document.getElementById(pre + '_empresas');
-  var alvo = null;
-  caixa.querySelectorAll('.escolha__i').forEach(function (b) {
-    var m = /ctaEscolheEmpresa\('\w+', '([^']*)'/.exec(b.getAttribute('onclick') || '');
-    if (m && m[1] === String(clienteId === null || clienteId === undefined ? '' : clienteId)) {
-      alvo = b;
+/* Acende a empresa certa a partir do valor — usado ao abrir o editar. */
+function ctaDefineEmpresa(pre, clienteId) {
+  var id = (clienteId === null || clienteId === undefined) ? '' : String(clienteId);
+  document.getElementById(pre + '_cliente_id').value = id;
+  var achado = null;
+  CTA_CLIENTES.forEach(function (c) {
+    if (String(c.id) === id) {
+      achado = c.razao_social;
+      if (c.nome_fantasia && c.nome_fantasia !== c.razao_social) {
+        achado += ' (' + c.nome_fantasia + ')';
+      }
     }
   });
-  ctaMarca(caixa, alvo);
-  document.getElementById(pre + '_cliente_id').value =
-    (clienteId === null || clienteId === undefined) ? '' : String(clienteId);
+  ctaRotulo(pre, 'empresa', achado || 'Sem empresa vinculada', !achado);
+  ctaPintaEmpresas(pre, '');
+}
+
+/* ── Plano de contas ────────────────────────────────────────────────── */
+function ctaPintaPlanos(pre, clienteId, selecionado, termo) {
+  var cx = document.getElementById(pre + '_planos');
+  var campo = document.getElementById(pre + '_plano_contas_conta_id');
+  var bt = document.getElementById(pre + '_plano_bt');
+
+  /* Redesenho por causa da busca: mantém empresa e escolha de agora. */
+  if (clienteId === null && termo !== undefined) {
+    var v = document.getElementById(pre + '_cliente_id').value;
+    clienteId = v ? parseInt(v, 10) : null;
+    selecionado = campo.value || null;
+  } else {
+    campo.value = '';
+  }
+
+  var grupoId = clienteId ? (CLIENTE_GRUPO_MAP[clienteId] || null) : null;
+  if (!grupoId) {
+    cx.innerHTML = '';
+    bt.disabled = true;
+    ctaRotulo(pre, 'plano',
+      clienteId ? 'Esta empresa não tem plano de contas' : 'Escolha a empresa primeiro',
+      true);
+    return;
+  }
+
+  var doGrupo = PLANO_CONTAS.filter(function (pc) { return pc.grupo_id === grupoId; });
+  if (!doGrupo.length) {
+    cx.innerHTML = '';
+    bt.disabled = true;
+    ctaRotulo(pre, 'plano', 'Nenhuma conta neste plano', true);
+    return;
+  }
+
+  bt.disabled = false;
+  document.getElementById(pre + '_plano_busca').hidden =
+    doGrupo.length + 1 <= CTA_LIMIAR_BUSCA;
+
+  var q = (termo || '').trim().toLowerCase();
+  var rotulo = function (pc) { return pc.codigo + ' – ' + pc.nome; };
+
+  /* Qual conta está escolhida se resolve ANTES de desenhar. Marcando o
+     "Sem vínculo" primeiro, ele acendia junto com a conta de verdade. */
+  var alvo = String(selecionado || campo.value || '');
+  var escolhido = doGrupo.filter(function (pc) {
+    return String(pc.id) === alvo;
+  })[0] || null;
+  campo.value = escolhido ? escolhido.id : '';
+
+  var itens = doGrupo.filter(function (pc) {
+    return !q || rotulo(pc).toLowerCase().indexOf(q) >= 0;
+  });
+
+  cx.innerHTML = '';
+  if (!q) {
+    cx.appendChild(ctaItem('Sem vínculo contábil', !escolhido, function () {
+      campo.value = '';
+      ctaFechaTudo();
+      ctaPintaPlanos(pre, null, null, '');
+    }));
+  }
+  if (!itens.length && q) {
+    cx.innerHTML = '<div class="escolha__vazio">Nenhuma conta com esse nome</div>';
+  }
+  itens.forEach(function (pc) {
+    cx.appendChild(ctaItem(rotulo(pc), !!escolhido && pc.id === escolhido.id,
+      function () {
+        campo.value = pc.id;
+        ctaFechaTudo();
+        ctaPintaPlanos(pre, null, null, '');
+      }));
+  });
+
+  ctaRotulo(pre, 'plano',
+    escolhido ? rotulo(escolhido) : 'Sem vínculo contábil', !escolhido);
 }
 
 /* ── Abrir a conta ────────────────────────────────────────────────────
@@ -647,7 +786,8 @@ document.getElementById('modalNovaConta').addEventListener('show.bs.modal', func
   document.getElementById('nc_conta').value = '';
   document.getElementById('nc_apelido').value = '';
   document.getElementById('nc_banco').classList.remove('is-invalid');
-  ctaAcendeEmpresa('nc', '');
+  ctaFechaTudo();
+  ctaDefineEmpresa('nc', '');
   ctaPintaPlanos('nc', null, null);
 });
 
@@ -811,7 +951,8 @@ function abrirEditar(id, banco, agencia, conta, apelido, clienteId, planoId) {
   document.getElementById('ed_agencia').value = agencia;
   document.getElementById('ed_conta').value = conta;
   document.getElementById('ed_apelido').value = apelido;
-  ctaAcendeEmpresa('ed', clienteId);
+  ctaFechaTudo();
+  ctaDefineEmpresa('ed', clienteId);
   ctaPintaPlanos('ed', clienteId, planoId);
 
   // Reset coligadas section
@@ -892,6 +1033,11 @@ function salvarEdicao() {
   })
   .catch(err => showAlert('Erro: ' + err, 'danger'));
 }
+
+ctaDefineEmpresa('nc', '');
+ctaPintaPlanos('nc', null, null);
+ctaDefineEmpresa('ed', '');
+ctaPintaPlanos('ed', null, null);
 
 // ---- Excluir / Desativar ----
 function excluirConta(id, nome) {
