@@ -129,6 +129,25 @@
   #cta-corpo .pe a:hover{ border-color:var(--azul); }
   #cta-corpo :focus-visible{ outline:2px solid var(--azul); outline-offset:2px; }
 
+  /* Lista de escolha dos modais — o mesmo controle do resto do módulo.
+     Nada de <select>: no iPhone ele vira roda cinza e esconde o formulário. */
+  .escolha{ border:1px solid #d9e0e8; border-radius:10px; overflow:hidden;
+    background:#fff; max-height:190px; overflow-y:auto; }
+  .escolha__i{ display:flex; align-items:center; gap:.55rem; width:100%;
+    padding:.55rem .65rem; border:0; border-bottom:1px solid #e7ebf1; background:#fff;
+    font-family:inherit; font-size:.85rem; text-align:left; color:#151d27;
+    cursor:pointer; }
+  .escolha__i:last-child{ border-bottom:0; }
+  .escolha__i:hover{ background:#f7f9fc; }
+  .escolha__i.on{ background:#eaf1f9; color:#0C4C86; font-weight:800; }
+  .escolha__i span{ min-width:0; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; }
+  .escolha__i .tique{ margin-left:auto; color:#1D63A5; flex:0 0 auto; }
+  .escolha__vazio{ padding:.7rem .65rem; font-size:.82rem; color:#8b95a3;
+    text-align:center; }
+  .rot-modal{ font-size:.69rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; color:#6b7684; margin-bottom:.3rem; display:block; }
+
   /* Searchable dropdown for coligadas table */
   .csel-wrap { position: relative; min-width: 200px; }
   .csel-drop { display:none; position:absolute; z-index:1055; background:#fff;
@@ -304,19 +323,27 @@
       </div>
       <div class="modal-body">
         <div class="mb-3">
-          <label class="form-label fw-semibold form-label-sm">Empresa</label>
-          <select id="nc_cliente_id" class="form-select form-select-sm">
-            <option value="">— Sem empresa vinculada —</option>
+          <label class="rot-modal">Empresa</label>
+          <input type="hidden" id="nc_cliente_id" value="">
+          <div class="escolha" id="nc_empresas">
+            <button type="button" class="escolha__i on"
+                    onclick="ctaEscolheEmpresa('nc', '', this)">
+              <span>Sem empresa vinculada</span>
+            </button>
             {% for cl in clientes %}
-            <option value="{{ cl.id }}">{{ cl.razao_social }}{% if cl.nome_fantasia and cl.nome_fantasia != cl.razao_social %} ({{ cl.nome_fantasia }}){% endif %}</option>
+            <button type="button" class="escolha__i"
+                    onclick="ctaEscolheEmpresa('nc', '{{ cl.id }}', this)">
+              <span>{{ cl.razao_social }}{% if cl.nome_fantasia and cl.nome_fantasia != cl.razao_social %} ({{ cl.nome_fantasia }}){% endif %}</span>
+            </button>
             {% endfor %}
-          </select>
+          </div>
         </div>
         <div class="mb-3">
-          <label class="form-label fw-semibold form-label-sm">Plano de Contas</label>
-          <select id="nc_plano_contas_conta_id" class="form-select form-select-sm">
-            <option value="">— Selecione uma empresa primeiro —</option>
-          </select>
+          <label class="rot-modal">Plano de contas</label>
+          <input type="hidden" id="nc_plano_contas_conta_id" value="">
+          <div class="escolha" id="nc_planos">
+            <div class="escolha__vazio">Escolha a empresa primeiro</div>
+          </div>
         </div>
         <div class="mb-3">
           <label class="form-label fw-semibold form-label-sm">Nome do Banco <span class="text-danger">*</span></label>
@@ -363,19 +390,27 @@
       <div class="modal-body">
         <input type="hidden" id="ed_id">
         <div class="mb-3">
-          <label class="form-label fw-semibold form-label-sm">Empresa</label>
-          <select id="ed_cliente_id" class="form-select form-select-sm">
-            <option value="">— Sem empresa vinculada —</option>
+          <label class="rot-modal">Empresa</label>
+          <input type="hidden" id="ed_cliente_id" value="">
+          <div class="escolha" id="ed_empresas">
+            <button type="button" class="escolha__i on"
+                    onclick="ctaEscolheEmpresa('ed', '', this)">
+              <span>Sem empresa vinculada</span>
+            </button>
             {% for cl in clientes %}
-            <option value="{{ cl.id }}">{{ cl.razao_social }}{% if cl.nome_fantasia and cl.nome_fantasia != cl.razao_social %} ({{ cl.nome_fantasia }}){% endif %}</option>
+            <button type="button" class="escolha__i"
+                    onclick="ctaEscolheEmpresa('ed', '{{ cl.id }}', this)">
+              <span>{{ cl.razao_social }}{% if cl.nome_fantasia and cl.nome_fantasia != cl.razao_social %} ({{ cl.nome_fantasia }}){% endif %}</span>
+            </button>
             {% endfor %}
-          </select>
+          </div>
         </div>
         <div class="mb-3">
-          <label class="form-label fw-semibold form-label-sm">Plano de Contas</label>
-          <select id="ed_plano_contas_conta_id" class="form-select form-select-sm">
-            <option value="">— Sem vínculo —</option>
-          </select>
+          <label class="rot-modal">Plano de contas</label>
+          <input type="hidden" id="ed_plano_contas_conta_id" value="">
+          <div class="escolha" id="ed_planos">
+            <div class="escolha__vazio">Escolha a empresa primeiro</div>
+          </div>
         </div>
         <div class="mb-3">
           <label class="form-label fw-semibold form-label-sm">Nome do Banco <span class="text-danger">*</span></label>
@@ -433,36 +468,101 @@ function showAlert(msg, type) {
   setTimeout(() => box.innerHTML = '', 5000);
 }
 
-// ---- Populate "Plano de Contas" select filtered by empresa's grupo_contabil_id ----
-function _populatePlanoSelect(selectEl, clienteId, selectedId) {
-  const grupoId = clienteId ? (CLIENTE_GRUPO_MAP[clienteId] || null) : null;
-  const filtered = grupoId
-    ? PLANO_CONTAS.filter(pc => pc.grupo_id === grupoId)
-    : [];
-  let html = '';
-  if (!grupoId) {
-    html = '<option value="">— Empresa sem Plano de Contas —</option>';
-  } else if (filtered.length === 0) {
-    html = '<option value="">— Nenhuma conta neste plano —</option>';
-  } else {
-    html = '<option value="">— Sem vínculo —</option>';
-    filtered.forEach(pc => {
-      const sel = selectedId && String(pc.id) === String(selectedId) ? ' selected' : '';
-      html += `<option value="${pc.id}"${sel}>${pc.codigo} – ${pc.nome} (${pc.grupo_nome})</option>`;
-    });
+/* ── Escolha em lista, no lugar do <select> ───────────────────────────
+   O valor vive num input escondido, então salvarNovaConta/salvarEdicao
+   continuam lendo .value como antes. Campo escondido não dispara 'change',
+   por isso o encadeamento empresa → plano é feito na chamada. */
+function ctaMarca(caixa, botao) {
+  caixa.querySelectorAll('.escolha__i').forEach(function (b) {
+    b.classList.remove('on');
+    var t = b.querySelector('.tique');
+    if (t) t.remove();
+  });
+  if (botao) {
+    botao.classList.add('on');
+    var i = document.createElement('i');
+    i.className = 'bi bi-check-lg tique';
+    botao.appendChild(i);
   }
-  selectEl.innerHTML = html;
 }
 
-// Wire empresa dropdowns → filter plano de contas options
-document.getElementById('nc_cliente_id').addEventListener('change', function() {
-  const clienteId = this.value ? parseInt(this.value, 10) : null;
-  _populatePlanoSelect(document.getElementById('nc_plano_contas_conta_id'), clienteId, null);
-});
-document.getElementById('ed_cliente_id').addEventListener('change', function() {
-  const clienteId = this.value ? parseInt(this.value, 10) : null;
-  _populatePlanoSelect(document.getElementById('ed_plano_contas_conta_id'), clienteId, null);
-});
+/* Só o plano de contas do grupo contábil daquela empresa. */
+function ctaPintaPlanos(pre, clienteId, selecionado) {
+  var caixa = document.getElementById(pre + '_planos');
+  var campo = document.getElementById(pre + '_plano_contas_conta_id');
+  campo.value = '';
+  caixa.innerHTML = '';
+
+  var grupoId = clienteId ? (CLIENTE_GRUPO_MAP[clienteId] || null) : null;
+  if (!grupoId) {
+    caixa.innerHTML = '<div class="escolha__vazio">' +
+      (clienteId ? 'Esta empresa não tem plano de contas' : 'Escolha a empresa primeiro') +
+      '</div>';
+    return;
+  }
+  var doGrupo = PLANO_CONTAS.filter(function (pc) { return pc.grupo_id === grupoId; });
+  if (!doGrupo.length) {
+    caixa.innerHTML = '<div class="escolha__vazio">Nenhuma conta neste plano</div>';
+    return;
+  }
+
+  var semVinculo = document.createElement('button');
+  semVinculo.type = 'button';
+  semVinculo.className = 'escolha__i';
+  semVinculo.innerHTML = '<span>Sem vínculo contábil</span>';
+  semVinculo.addEventListener('click', function () {
+    campo.value = '';
+    ctaMarca(caixa, semVinculo);
+  });
+  caixa.appendChild(semVinculo);
+
+  var marcado = null;
+  doGrupo.forEach(function (pc) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'escolha__i';
+    var t = document.createElement('span');
+    t.textContent = pc.codigo + ' – ' + pc.nome;
+    b.appendChild(t);
+    b.addEventListener('click', function () {
+      campo.value = pc.id;
+      ctaMarca(caixa, b);
+    });
+    caixa.appendChild(b);
+    if (selecionado && String(pc.id) === String(selecionado)) marcado = b;
+  });
+
+  if (marcado) {
+    campo.value = selecionado;
+    ctaMarca(caixa, marcado);
+  } else {
+    ctaMarca(caixa, semVinculo);
+  }
+}
+
+function ctaEscolheEmpresa(pre, id, botao) {
+  document.getElementById(pre + '_cliente_id').value = id;
+  ctaMarca(document.getElementById(pre + '_empresas'), botao);
+  ctaPintaPlanos(pre, id ? parseInt(id, 10) : null, null);
+}
+
+/* Acende a empresa certa a partir do valor — usado ao abrir o editar.
+   O nome tem "Escolhe" de proposito: `ctaEmpresa`, sem o verbo, ja e a
+   variavel do filtro de pastilhas la em cima. Funcao e var com o mesmo nome
+   no mesmo escopo: a atribuicao da var vence, e a funcao some. */
+function ctaAcendeEmpresa(pre, clienteId) {
+  var caixa = document.getElementById(pre + '_empresas');
+  var alvo = null;
+  caixa.querySelectorAll('.escolha__i').forEach(function (b) {
+    var m = /ctaEscolheEmpresa\('\w+', '([^']*)'/.exec(b.getAttribute('onclick') || '');
+    if (m && m[1] === String(clienteId === null || clienteId === undefined ? '' : clienteId)) {
+      alvo = b;
+    }
+  });
+  ctaMarca(caixa, alvo);
+  document.getElementById(pre + '_cliente_id').value =
+    (clienteId === null || clienteId === undefined) ? '' : String(clienteId);
+}
 
 /* ── Abrir a conta ────────────────────────────────────────────────────
    Um só caminho, do clique na linha e do lápis: os dados vêm do data- da
@@ -542,12 +642,13 @@ function ctaSoSemPlano() {
 
 // Reset nova conta modal fields on open
 document.getElementById('modalNovaConta').addEventListener('show.bs.modal', function() {
-  document.getElementById('nc_cliente_id').value = '';
   document.getElementById('nc_banco').value = '';
   document.getElementById('nc_agencia').value = '';
   document.getElementById('nc_conta').value = '';
   document.getElementById('nc_apelido').value = '';
-  _populatePlanoSelect(document.getElementById('nc_plano_contas_conta_id'), null, null);
+  document.getElementById('nc_banco').classList.remove('is-invalid');
+  ctaAcendeEmpresa('nc', '');
+  ctaPintaPlanos('nc', null, null);
 });
 
 // ---- Nova Conta ----
@@ -575,16 +676,6 @@ function salvarNovaConta() {
     if (d.success) { location.reload(); }
     else { showAlert('Erro: ' + d.message, 'danger'); }
   });
-}
-
-// ---- Build plano de contas select options HTML ----
-function buildPlanoOptions(selectedId) {
-  let html = '<option value="">— Não configurado —</option>';
-  PLANO_CONTAS.forEach(pc => {
-    const sel = selectedId && String(pc.id) === String(selectedId) ? ' selected' : '';
-    html += `<option value="${pc.id}"${sel}>${pc.codigo} – ${pc.nome} (${pc.grupo_nome})</option>`;
-  });
-  return html;
 }
 
 // ---- Searchable dropdown helpers (for coligadas table) ----
@@ -720,9 +811,8 @@ function abrirEditar(id, banco, agencia, conta, apelido, clienteId, planoId) {
   document.getElementById('ed_agencia').value = agencia;
   document.getElementById('ed_conta').value = conta;
   document.getElementById('ed_apelido').value = apelido;
-  document.getElementById('ed_cliente_id').value = clienteId !== null ? String(clienteId) : '';
-  // Populate plano de contas filtered by this empresa's grupo_contabil_id
-  _populatePlanoSelect(document.getElementById('ed_plano_contas_conta_id'), clienteId, planoId);
+  ctaAcendeEmpresa('ed', clienteId);
+  ctaPintaPlanos('ed', clienteId, planoId);
 
   // Reset coligadas section
   const container = document.getElementById('ed_coligadas_container');
