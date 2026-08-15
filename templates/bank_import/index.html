@@ -431,148 +431,6 @@ body > .container-fluid:has(#bnc){
       <a href="{{ url_for('bank_import.relatorio') }}">Relatório OFX completo</a>
     </div>
 
-    <!-- OFX Inbox (watch-folder) -->
-    <div class="row mt-4">
-        <div class="col-12">
-
-
-            {# ── Estado A: sem config ou /tmp ── use upload direto #}
-            {# Estado A (sem pasta configurada) nao mostra nada: as duas
-               caixas de importacao ja estao logo acima. #}
-            {% if inbox_is_tmp and not is_windows_path %}
-
-            {# ── Estado B: caminho Windows (ex: C:\Users\...) ── erro de configuração #}
-            {% elif is_windows_path %}
-            <div class="card shadow-sm border-danger">
-                <div class="card-header d-flex align-items-center gap-2" style="background:#f8d7da;">
-                    <i class="bi bi-exclamation-octagon-fill text-danger fs-5"></i>
-                    <h5 class="mb-0 text-danger">Pasta de Entrada OFX — caminho Windows inválido</h5>
-                </div>
-                <div class="card-body">
-                    <div class="alert alert-danger mb-3">
-                        <strong><i class="bi bi-x-circle-fill"></i>
-                        Caminho configurado: <code>{{ ofx_dir_configured }}</code></strong>
-                        <hr class="my-2">
-                        Este é um caminho <strong>Windows</strong> — o servidor roda <strong>Linux</strong> no Railway
-                        e não tem acesso a pastas do seu computador.
-                        <br><br>
-                        <strong>Solução:</strong> remova a variável <code>OFX_INBOX_DIR</code> nas
-                        <strong>Variables</strong> do serviço no Railway e use o upload direto
-                        pelo navegador.
-                    </div>
-                    <div class="alert alert-success mb-0">
-                        <strong><i class="bi bi-check-circle-fill"></i> Como importar agora (upload direto):</strong>
-                        <ol class="mb-0 mt-2">
-                            <li>Role para cima até o card <strong>"Importar Extrato OFX"</strong></li>
-                            <li>Selecione a conta e o arquivo <code>.ofx</code> do seu computador</li>
-                            <li>Clique em <strong>"Importar Extrato"</strong> ✅</li>
-                        </ol>
-                    </div>
-                </div>
-            </div>
-
-            {# ── Estado C: caminho Linux válido mas diretório não existe no servidor ── precisa de Volume #}
-            {% elif inbox_dir_missing %}
-            <div class="card shadow-sm border-warning">
-                <div class="card-header d-flex justify-content-between align-items-center"
-                     style="background:#fff3cd;">
-                    <h5 class="mb-0 text-warning">
-                        <i class="bi bi-folder-x"></i> Pasta de Entrada OFX —
-                        <small class="fw-normal">diretório ainda não existe no servidor</small>
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div class="alert alert-warning mb-3">
-                        <strong><i class="bi bi-exclamation-triangle-fill"></i>
-                        Caminho configurado: <code>{{ ofx_dir_configured }}</code></strong>
-                        <hr class="my-2">
-                        Este diretório <strong>não existe no servidor</strong>.
-                        Para usá-lo você precisa adicionar um <strong>Volume</strong> no Railway:
-                        <ol class="mb-0 mt-2">
-                            <li>No painel Railway, vá no serviço do app → aba <strong>Volumes</strong></li>
-                            <li>Clique em <strong>New Volume</strong></li>
-                            <li>Configure <strong>Mount Path:</strong> <code>/data</code></li>
-                            <li>Clique em <strong>Save</strong> e aguarde o redeploy</li>
-                            <li>O diretório <code>{{ ofx_dir_configured }}</code> será criado automaticamente</li>
-                        </ol>
-                        <hr class="my-2">
-                        <span class="text-muted" style="font-size:0.85rem;">
-                            Enquanto o Volume não for adicionado, use o card <strong>"Importar Extrato OFX"</strong>
-                            acima para importar diretamente do navegador.
-                        </span>
-                    </div>
-                </div>
-            </div>
-
-            {# ── Estado D: caminho existe — UI completa de pasta local #}
-            {% else %}
-            <div class="card shadow-sm">
-                <div class="card-header d-flex justify-content-between align-items-center"
-                     style="background:#6f42c1;color:white;">
-                    <h5 class="mb-0">
-                        <i class="bi bi-folder-check"></i> Pasta de Entrada OFX
-                        <small class="fw-normal ms-2" style="font-size:0.78rem;opacity:0.85;">
-                            Envie arquivos OFX para a pasta e importe quando quiser
-                        </small>
-                    </h5>
-                    <button class="btn btn-sm btn-light" onclick="verificarPasta()">
-                        <i class="bi bi-arrow-clockwise"></i> Verificar Pasta
-                    </button>
-                </div>
-                <div class="card-body">
-                    <div class="d-flex gap-2 align-items-center mb-3">
-                        <div class="flex-grow-1">
-                            <div class="alert alert-light border py-2 mb-1" style="font-size:0.82rem;">
-                                <i class="bi bi-folder2-open text-primary"></i>
-                                <strong>Pasta NOVO (leitura):</strong>
-                                <code id="inboxPath">carregando...</code>
-                            </div>
-                            <div class="alert alert-light border py-2 mb-0" style="font-size:0.82rem;">
-                                <i class="bi bi-folder-check text-success"></i>
-                                <strong>Pasta IMPORTADOS (após importar):</strong>
-                                <code id="inboxProcessedPath">carregando...</code>
-                            </div>
-                        </div>
-                        <button class="btn btn-outline-primary btn-sm align-self-center"
-                                onclick="document.getElementById('inboxUploadInput').click()">
-                            <i class="bi bi-folder-plus"></i> Enviar OFX para Pasta
-                        </button>
-                        <input type="file" id="inboxUploadInput" accept=".ofx,.OFX" class="d-none">
-                    </div>
-
-                    {% if contas %}
-                    <div class="row g-2 align-items-end mb-3">
-                        <div class="col-sm-5">
-                            <label class="form-label fw-semibold mb-1" style="font-size:0.88rem;">
-                                Conta para importar arquivos da pasta:
-                            </label>
-                            <select id="inboxAccountId" class="form-select form-select-sm">
-                                <option value="">Selecione a conta...</option>
-                                {% for conta in contas %}
-                                <option value="{{ conta.id }}">
-                                    {{ conta.apelido or conta.banco_nome }}
-                                    {%- if conta.agencia %} – Ag {{ conta.agencia }}{% endif %}
-                                    {%- if conta.conta %} / {{ conta.conta }}{% endif %}
-                                    {%- if conta.empresa_nome %} [{{ conta.empresa_nome }}]{% endif %}
-                                </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                    </div>
-                    {% endif %}
-
-                    <div id="inboxFileList">
-                        <div class="text-muted text-center py-3">
-                            <i class="bi bi-folder2 fs-2"></i>
-                            <p class="mt-1 mb-0">Clique em <strong>Verificar Pasta</strong> para listar os arquivos OFX.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-
-        </div>
-    </div>
 </div>
 
 
@@ -586,15 +444,23 @@ body > .container-fluid:has(#bnc){
             </div>
             <div class="modal-body">
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Empresa *</label>
-                    <select id="nc_cliente_id" class="form-select" required>
-                        <option value="">Selecione a empresa...</option>
-                        {% for c in clientes %}
-                        <option value="{{ c.id }}">{{ c.razao_social }}{% if c.nome_fantasia and c.nome_fantasia != c.razao_social %} ({{ c.nome_fantasia }}){% endif %}</option>
-                        {% endfor %}
-                    </select>
-                    <div class="invalid-feedback">Selecione a empresa.</div>
-                    <div class="form-text">Apenas empresas com produtos cadastrados aparecem aqui.</div>
+                    <label class="rot-modal">Empresa</label>
+                    <input type="hidden" id="nc_cliente_id" value="">
+                    <button type="button" class="abre vazio" id="nc_empresa_bt"
+                            onclick="ncAbre()">
+                      <span>Escolher a empresa</span><i class="bi bi-chevron-down seta"></i>
+                    </button>
+                    <div class="gav" id="nc_empresa_gav" hidden>
+                      <div class="busca" id="nc_empresa_busca" hidden>
+                        <i class="bi bi-search"></i>
+                        <input type="text" placeholder="Procurar empresa" autocomplete="off"
+                               oninput="ncPintaEmpresas(this.value)">
+                      </div>
+                      <div class="escolha" id="nc_empresas"></div>
+                    </div>
+                    <div class="form-text" id="nc_empresa_erro" hidden
+                         style="color:#a32d2d;font-weight:700;">Escolha a empresa.</div>
+                    <div class="form-text">Só aparecem empresas com produtos cadastrados.</div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Nome do Banco *</label>
@@ -1298,13 +1164,84 @@ Depois de importado, o arquivo sai da pasta de entrada.`)) return;
     }
 
     // Salvar nova conta
+    /* ── Nova conta: a empresa no campo que abre a lista ────────────── */
+    function ncAbre() {
+      var gav = document.getElementById('nc_empresa_gav');
+      var abrir = gav.hidden;
+      ncFecha();
+      if (!abrir) return;
+      gav.hidden = false;
+      document.getElementById('nc_empresa_bt').classList.add('aberto');
+      var b = gav.querySelector('.busca:not([hidden]) input');
+      if (b) b.focus();
+    }
+    function ncFecha() {
+      var gav = document.getElementById('nc_empresa_gav');
+      gav.hidden = true;
+      document.getElementById('nc_empresa_bt').classList.remove('aberto');
+      var b = gav.querySelector('.busca input');
+      if (b) b.value = '';
+    }
+    function ncPintaEmpresas(termo) {
+      var cx = document.getElementById('nc_empresas');
+      var campo = document.getElementById('nc_cliente_id');
+      var q = (termo || '').trim().toLowerCase();
+      document.getElementById('nc_empresa_busca').hidden =
+        BNC_CLIENTES.length <= EXP_LIMIAR_BUSCA;
+      var itens = BNC_CLIENTES.filter(function (c) {
+        var nome = c.razao_social + ' ' + (c.nome_fantasia || '');
+        return !q || nome.toLowerCase().indexOf(q) >= 0;
+      });
+      cx.innerHTML = '';
+      if (!itens.length) {
+        cx.innerHTML = '<div class="escolha__vazio">Nenhuma empresa com esse nome</div>';
+        return;
+      }
+      itens.forEach(function (c) {
+        var nome = c.razao_social;
+        if (c.nome_fantasia && c.nome_fantasia !== c.razao_social) {
+          nome += ' (' + c.nome_fantasia + ')';
+        }
+        var marcado = String(campo.value) === String(c.id);
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'escolha__i' + (marcado ? ' on' : '');
+        var t = document.createElement('span');
+        t.textContent = nome;
+        b.appendChild(t);
+        if (marcado) {
+          var i = document.createElement('i');
+          i.className = 'bi bi-check-lg tique';
+          b.appendChild(i);
+        }
+        b.addEventListener('click', function () {
+          campo.value = c.id;
+          var bt = document.getElementById('nc_empresa_bt');
+          bt.querySelector('span').textContent = nome;
+          bt.classList.remove('vazio');
+          document.getElementById('nc_empresa_erro').hidden = true;
+          ncFecha();
+          ncPintaEmpresas('');
+        });
+        cx.appendChild(b);
+      });
+    }
+    document.getElementById('modalNovaConta').addEventListener('show.bs.modal', function () {
+      document.getElementById('nc_cliente_id').value = '';
+      var bt = document.getElementById('nc_empresa_bt');
+      bt.querySelector('span').textContent = 'Escolher a empresa';
+      bt.classList.add('vazio');
+      document.getElementById('nc_empresa_erro').hidden = true;
+      ncFecha();
+      ncPintaEmpresas('');
+    });
+
     function salvarConta() {
         const banco_nome = document.getElementById('nc_banco').value.trim();
-        const clienteSel = document.getElementById('nc_cliente_id');
-        const cliente_id = clienteSel.value;
+        const cliente_id = document.getElementById('nc_cliente_id').value;
 
-        // Inline validation
-        clienteSel.classList.toggle('is-invalid', !cliente_id);
+        /* Campo escondido não é validado pelo navegador: o aviso é aqui. */
+        document.getElementById('nc_empresa_erro').hidden = !!cliente_id;
         document.getElementById('nc_banco').classList.toggle('is-invalid', !banco_nome);
         if (!cliente_id || !banco_nome) return;
 
@@ -1326,162 +1263,7 @@ Depois de importado, o arquivo sai da pasta de entrada.`)) return;
         });
     }
 
-    // ---------------------------------------------------------------
-    // Pasta de Entrada OFX – renderizado apenas quando o diretório existe (Estado D)
-    // ---------------------------------------------------------------
-    {% if not inbox_is_tmp and not inbox_dir_missing and not is_windows_path %}
-
-    // Enviar para a pasta (salvar sem processar)
-    document.getElementById('inboxUploadInput').addEventListener('change', function() {
-        const file = this.files[0];
-        if (!file) return;
-        if (!file.name.toLowerCase().endsWith('.ofx')) {
-            alert('Apenas arquivos .ofx são aceitos.');
-            this.value = '';
-            return;
-        }
-        const formData = new FormData();
-        formData.append('ofx_file', file);
-        const btn = document.querySelector('button[onclick*="inboxUploadInput"]');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Enviando...'; }
-
-        fetch('{{ url_for("bank_import.api_inbox_upload") }}', { method: 'POST', body: formData })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    verificarPasta();
-                    alert(data.message);
-                } else {
-                    alert('Erro: ' + data.message);
-                }
-            })
-            .catch(() => alert('Erro ao enviar arquivo para a pasta.'))
-            .finally(() => {
-                this.value = '';
-                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-folder-plus"></i> Enviar OFX para Pasta'; }
-            });
-    });
-
-    function verificarPasta() {
-        const listDiv = document.getElementById('inboxFileList');
-        listDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Verificando pasta...</div>';
-
-        fetch('{{ url_for("bank_import.api_inbox_files") }}')
-            .then(r => {
-                // Proteção: se o servidor retornou HTML em vez de JSON (ex.: redirecionamento para login),
-                // mostra mensagem amigável em vez de um SyntaxError confuso.
-                const ct = r.headers.get('content-type') || '';
-                if (!r.ok || !ct.includes('application/json')) {
-                    listDiv.innerHTML = '<div class="alert alert-warning py-2">Não foi possível verificar a pasta (resposta inesperada do servidor). Tente recarregar a página.</div>';
-                    return null;
-                }
-                return r.json();
-            })
-            .then(data => {
-                if (!data) return;
-                if (data.pasta) {
-                    document.getElementById('inboxPath').textContent = data.pasta;
-                }
-                if (data.pasta_processados) {
-                    document.getElementById('inboxProcessedPath').textContent = data.pasta_processados;
-                }
-                if (!data.success) {
-                    listDiv.innerHTML = `<div class="alert alert-danger py-2">${data.message}</div>`;
-                    return;
-                }
-                if (!data.files || data.files.length === 0) {
-                    listDiv.innerHTML = `
-                        <div class="alert alert-info py-2 mb-0">
-                            <i class="bi bi-info-circle"></i>
-                            Nenhum arquivo <code>.ofx</code> encontrado na pasta.
-                            Coloque arquivos OFX em: <code>${data.pasta}</code>
-                        </div>`;
-                    return;
-                }
-                renderInboxFiles(data.files);
-            })
-            .catch(err => {
-                listDiv.innerHTML = `<div class="alert alert-danger py-2">Erro ao verificar pasta: ${err}</div>`;
-            });
-    }
-
-    function renderInboxFiles(files) {
-        const listDiv = document.getElementById('inboxFileList');
-        const table = document.createElement('div');
-
-        const header = document.createElement('div');
-        header.className = 'alert alert-success py-2 mb-3';
-        header.innerHTML = `<i class="bi bi-check-circle"></i> <strong>${files.length}</strong> arquivo(s) OFX encontrado(s) na pasta.`;
-        table.appendChild(header);
-
-        const wrap = document.createElement('div');
-        wrap.className = 'table-responsive';
-        const t = document.createElement('table');
-        t.className = 'table table-sm table-hover';
-        t.style.fontSize = '0.88rem';
-        t.innerHTML = `<thead class="table-light"><tr><th>Arquivo</th><th>Modificado</th><th>Tamanho</th><th class="text-center">Ação</th></tr></thead>`;
-        const tbody = document.createElement('tbody');
-
-        files.forEach(f => {
-            const kb = (f.tamanho / 1024).toFixed(1);
-            const tr = document.createElement('tr');
-
-            const tdNome = document.createElement('td');
-            tdNome.innerHTML = '<i class="bi bi-file-earmark-text text-primary"></i> ';
-            const strong = document.createElement('strong');
-            strong.textContent = f.nome;
-            tdNome.appendChild(strong);
-
-            const tdMod = document.createElement('td');
-            tdMod.textContent = f.modificado;
-
-            const tdSize = document.createElement('td');
-            tdSize.textContent = kb + ' KB';
-
-            const tdAcao = document.createElement('td');
-            tdAcao.className = 'text-center';
-            const btn = document.createElement('button');
-            btn.className = 'btn btn-sm btn-success';
-            btn.dataset.nomeArquivo = f.nome;   // nome do arquivo sem escape HTML
-            btn.innerHTML = '<i class="bi bi-cloud-upload"></i> Importar';
-            btn.addEventListener('click', function() {
-                importarArquivoInbox(this.dataset.nomeArquivo);
-            });
-            tdAcao.appendChild(btn);
-
-            tr.appendChild(tdNome);
-            tr.appendChild(tdMod);
-            tr.appendChild(tdSize);
-            tr.appendChild(tdAcao);
-            tbody.appendChild(tr);
-        });
-
-        t.appendChild(tbody);
-        wrap.appendChild(t);
-        table.appendChild(wrap);
-        listDiv.innerHTML = '';
-        listDiv.appendChild(table);
-    }
-
-    function importarArquivoInbox(nomeArquivo) {
-        const accountId = document.getElementById('inboxAccountId') ? document.getElementById('inboxAccountId').value : '';
-        if (!accountId) {
-            alert('Selecione uma conta bancária antes de importar.');
-            return;
-        }
-        if (!confirm(`Importar "${nomeArquivo}" para a conta selecionada?`)) return;
-
-        fetch('{{ url_for("bank_import.scan_inbox") }}', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ account_id: accountId, nome_arquivo: nomeArquivo })
-        })
-        .then(r => r.json())
-        .then(data => { mostrarResultadoImportacao(data); })
-        .catch(() => alert('Erro ao processar arquivo.'));
-    }
-
-    {% endif %}
+    
 
 
     // ---------------------------------------------------------------
@@ -1541,6 +1323,7 @@ Depois de importado, o arquivo sai da pasta de entrada.`)) return;
           bt.classList.remove('vazio');
           udFecha();
           udPintaEmpresas('');
+    ncPintaEmpresas('');
           carregarUltimoDiaImportado();
         });
         cx.appendChild(b);
