@@ -151,6 +151,26 @@ body > .container-fluid:has(#bnc){
   text-align:center; }
 .rot-modal{ font-size:.69rem; font-weight:800; text-transform:uppercase;
   letter-spacing:.05em; color:#6b7684; margin-bottom:.3rem; display:block; }
+
+/* Resultado do "ultimo dia": uma linha por conta, com o atraso a direita. */
+.udl{ border:1px solid #d9e0e8; border-radius:12px; overflow:hidden; background:#fff; }
+.udl__i{ display:flex; align-items:center; gap:.6rem; padding:.6rem .7rem;
+  border-bottom:1px solid #e7ebf1; }
+.udl__i:last-child{ border-bottom:0; }
+.udl__t{ min-width:0; flex:1 1 auto; }
+.udl__n{ font-size:.86rem; font-weight:800; letter-spacing:-.01em; color:#151d27;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.udl__s{ font-size:.72rem; color:#6b7684; font-weight:600;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+.udl__d{ flex:0 0 auto; text-align:right; }
+.udl__data{ font-size:.86rem; font-weight:800; font-variant-numeric:tabular-nums;
+  white-space:nowrap; }
+.udl__atraso{ font-size:.68rem; font-weight:700; display:block; }
+.ud--ok    .udl__data{ color:#1c6b34; } .ud--ok    .udl__atraso{ color:#1c6b34; }
+.ud--alerta .udl__data{ color:#8a5a00; } .ud--alerta .udl__atraso{ color:#8a5a00; }
+.ud--tarde .udl__data{ color:#a32d2d; } .ud--tarde .udl__atraso{ color:#a32d2d; }
+.ud--nunca .udl__data{ color:#6b7684; } .ud--nunca .udl__atraso{ color:#6b7684; }
+.ud-vazio{ padding:1.6rem 1rem; text-align:center; color:#8b95a3; font-size:.85rem; }
 #bnc .passos-txt b{ color:#151d27; }
 
 /* ── Botões de ação: alvo grande, um toque ───────────────────────── */
@@ -616,15 +636,25 @@ body > .container-fluid:has(#bnc){
             </div>
             <div class="modal-body">
                 <div class="mb-3">
-                    <label class="form-label fw-semibold mb-1" style="font-size:0.88rem;">Selecione a Empresa:</label>
-                    <select id="ultimoDiaEmpresaId" class="form-select form-select-sm" onchange="carregarUltimoDiaImportado()">
-                        <option value="">— Selecione a empresa —</option>
-                        {% for c in clientes %}
-                        <option value="{{ c.id }}">{{ c.razao_social }}</option>
-                        {% endfor %}
-                    </select>
+                    <label class="rot-modal">Empresa</label>
+                    <input type="hidden" id="ultimoDiaEmpresaId" value="">
+                    <button type="button" class="abre vazio" id="ud_empresa_bt"
+                            onclick="udAbre()">
+                      <span>Escolher a empresa</span><i class="bi bi-chevron-down seta"></i>
+                    </button>
+                    <div class="gav" id="ud_empresa_gav" hidden>
+                      <div class="busca" id="ud_empresa_busca" hidden>
+                        <i class="bi bi-search"></i>
+                        <input type="text" placeholder="Procurar empresa" autocomplete="off"
+                               oninput="udPintaEmpresas(this.value)">
+                      </div>
+                      <div class="escolha" id="ud_empresas"></div>
+                    </div>
                 </div>
-                <div id="ultimoDiaResultado"></div>
+                <div id="ultimoDiaResultado">
+                  <div class="ud-vazio">Escolha a empresa para ver até onde cada
+                    conta foi importada.</div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
@@ -1457,49 +1487,168 @@ Depois de importado, o arquivo sai da pasta de entrada.`)) return;
     // ---------------------------------------------------------------
     // Consulta Último Dia Importado
     // ---------------------------------------------------------------
+    /* ── Último dia importado ────────────────────────────────────────
+       O <select> virou o campo que abre a lista, como nas outras telas.
+       Campo escondido não dispara 'change', então a busca é chamada aqui. */
+    function udAbre() {
+      var gav = document.getElementById('ud_empresa_gav');
+      var abrir = gav.hidden;
+      udFecha();
+      if (!abrir) return;
+      gav.hidden = false;
+      document.getElementById('ud_empresa_bt').classList.add('aberto');
+      var b = gav.querySelector('.busca:not([hidden]) input');
+      if (b) b.focus();
+    }
+    function udFecha() {
+      var gav = document.getElementById('ud_empresa_gav');
+      gav.hidden = true;
+      document.getElementById('ud_empresa_bt').classList.remove('aberto');
+      var b = gav.querySelector('.busca input');
+      if (b) b.value = '';
+    }
+    function udPintaEmpresas(termo) {
+      var cx = document.getElementById('ud_empresas');
+      var campo = document.getElementById('ultimoDiaEmpresaId');
+      var q = (termo || '').trim().toLowerCase();
+      document.getElementById('ud_empresa_busca').hidden =
+        BNC_CLIENTES.length <= EXP_LIMIAR_BUSCA;
+      var itens = BNC_CLIENTES.filter(function (c) {
+        return !q || (c.razao_social || '').toLowerCase().indexOf(q) >= 0;
+      });
+      cx.innerHTML = '';
+      if (!itens.length) {
+        cx.innerHTML = '<div class="escolha__vazio">Nenhuma empresa com esse nome</div>';
+        return;
+      }
+      itens.forEach(function (c) {
+        var marcado = String(campo.value) === String(c.id);
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'escolha__i' + (marcado ? ' on' : '');
+        var t = document.createElement('span');
+        t.textContent = c.razao_social;
+        b.appendChild(t);
+        if (marcado) {
+          var i = document.createElement('i');
+          i.className = 'bi bi-check-lg tique';
+          b.appendChild(i);
+        }
+        b.addEventListener('click', function () {
+          campo.value = c.id;
+          var bt = document.getElementById('ud_empresa_bt');
+          bt.querySelector('span').textContent = c.razao_social;
+          bt.classList.remove('vazio');
+          udFecha();
+          udPintaEmpresas('');
+          carregarUltimoDiaImportado();
+        });
+        cx.appendChild(b);
+      });
+    }
+
+    /* Quantos dias desde a última importação. É o dado que interessa: a data
+       sozinha obriga a fazer a conta de cabeça. */
+    function udAtraso(iso) {
+      if (!iso) return null;
+      var p = iso.split('-');
+      var d = new Date(+p[0], +p[1] - 1, +p[2]);
+      var hoje = new Date();
+      hoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+      return Math.round((hoje - d) / 86400000);
+    }
+    function udComoEsta(dias) {
+      if (dias === null) return { cls: 'ud--nunca', txt: 'nunca importado' };
+      if (dias <= 0)  return { cls: 'ud--ok', txt: 'hoje' };
+      if (dias === 1) return { cls: 'ud--ok', txt: 'ontem' };
+      if (dias <= 7)  return { cls: 'ud--ok', txt: 'há ' + dias + ' dias' };
+      if (dias <= 30) return { cls: 'ud--alerta', txt: 'há ' + dias + ' dias' };
+      return { cls: 'ud--tarde', txt: 'há ' + dias + ' dias' };
+    }
+
     function carregarUltimoDiaImportado() {
-        const sel = document.getElementById('ultimoDiaEmpresaId');
-        const empresaId = sel ? sel.value : '';
-        const res = document.getElementById('ultimoDiaResultado');
+        var empresaId = document.getElementById('ultimoDiaEmpresaId').value;
+        var res = document.getElementById('ultimoDiaResultado');
         if (!empresaId) {
-            res.innerHTML = '';
+            res.innerHTML = '<div class="ud-vazio">Escolha a empresa para ver até'
+                          + ' onde cada conta foi importada.</div>';
             return;
         }
-        res.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Carregando...</div>';
+        res.innerHTML = '<div class="ud-vazio">Consultando…</div>';
 
-        fetch('{{ url_for("bank_import.api_ultimo_dia_importado") }}?empresa_id=' + encodeURIComponent(empresaId))
-            .then(r => r.json())
-            .then(data => {
+        fetch('{{ url_for("bank_import.api_ultimo_dia_importado") }}?empresa_id='
+              + encodeURIComponent(empresaId))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
                 if (!data.success) {
-                    res.innerHTML = `<div class="alert alert-danger py-2">${data.message || 'Erro desconhecido.'}</div>`;
+                    res.innerHTML = '<div class="ud-vazio">'
+                                  + (data.message || 'Não deu para consultar.') + '</div>';
                     return;
                 }
-                if (!data.contas || data.contas.length === 0) {
-                    res.innerHTML = '<div class="alert alert-info py-2">Nenhuma conta bancária ativa encontrada para esta empresa.</div>';
+                if (!data.contas || !data.contas.length) {
+                    res.innerHTML = '<div class="ud-vazio">Esta empresa não tem conta'
+                                  + ' bancária ativa.</div>';
                     return;
                 }
-                const fmtDate = s => s ? s.split('-').reverse().join('/') : null;
-                let html = '<div class="table-responsive"><table class="table table-sm table-hover mb-0" style="font-size:0.88rem;">';
-                html += '<thead class="table-light"><tr><th>Conta Bancária</th><th class="text-center">Último Dia Importado</th></tr></thead><tbody>';
-                data.contas.forEach(c => {
-                    const dtStr = fmtDate(c.ultima_data_importacao);
-                    const badge = dtStr
-                        ? `<span class="badge bg-success"><i class="bi bi-calendar-check"></i> ${dtStr}</span>`
-                        : `<span class="badge bg-secondary"><i class="bi bi-dash-circle"></i> Nunca importado</span>`;
-                    html += `<tr><td>${c.titulo}</td><td class="text-center">${badge}</td></tr>`;
+                var cx = document.createElement('div');
+                cx.className = 'udl';
+                data.contas.forEach(function (c) {
+                    var dias = udAtraso(c.ultima_data_importacao);
+                    var como = udComoEsta(dias);
+                    var linha = document.createElement('div');
+                    linha.className = 'udl__i ' + como.cls;
+
+                    var esq = document.createElement('div');
+                    esq.className = 'udl__t';
+                    var n = document.createElement('div');
+                    n.className = 'udl__n';
+                    n.textContent = c.nome || c.titulo;
+                    esq.appendChild(n);
+                    var det = [];
+                    if (c.agencia) det.push('Ag ' + c.agencia);
+                    if (c.conta) det.push(c.conta);
+                    if (det.length) {
+                        var sub = document.createElement('div');
+                        sub.className = 'udl__s';
+                        sub.textContent = det.join(' · ');
+                        esq.appendChild(sub);
+                    }
+                    linha.appendChild(esq);
+
+                    var dir = document.createElement('div');
+                    dir.className = 'udl__d';
+                    var dt = document.createElement('div');
+                    dt.className = 'udl__data';
+                    dt.textContent = c.ultima_data_importacao
+                        ? c.ultima_data_importacao.split('-').reverse().join('/')
+                        : '—';
+                    dir.appendChild(dt);
+                    var at = document.createElement('small');
+                    at.className = 'udl__atraso';
+                    at.textContent = como.txt;
+                    dir.appendChild(at);
+                    linha.appendChild(dir);
+
+                    cx.appendChild(linha);
                 });
-                html += '</tbody></table></div>';
-                res.innerHTML = html;
+                res.innerHTML = '';
+                res.appendChild(cx);
             })
-            .catch(err => {
-                res.innerHTML = `<div class="alert alert-danger py-2">Erro ao carregar: ${err}</div>`;
+            .catch(function (e) {
+                res.innerHTML = '<div class="ud-vazio">Não deu para consultar: '
+                              + e.message + '</div>';
             });
     }
 
-    // Ao abrir o modal, limpa resultados anteriores
+    // Ao abrir o modal, volta ao começo.
     document.getElementById('modalDiasImportados').addEventListener('show.bs.modal', function() {
         document.getElementById('ultimoDiaEmpresaId').value = '';
-        document.getElementById('ultimoDiaResultado').innerHTML = '';
+        var bt = document.getElementById('ud_empresa_bt');
+        bt.querySelector('span').textContent = 'Escolher a empresa';
+        bt.classList.add('vazio');
+        udFecha();
+        udPintaEmpresas('');
+        carregarUltimoDiaImportado();
     });
 
     /* ── Exportação contábil: os dois campos que abrem a lista ──────
@@ -1647,6 +1796,7 @@ Depois de importado, o arquivo sai da pasta de entrada.`)) return;
       });
     expPintaEmpresas('');
     expPintaContas('');
+    udPintaEmpresas('');
 
     // ---- Exportação Contábil ----
     function exportarContabil() {

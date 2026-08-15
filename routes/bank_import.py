@@ -4517,7 +4517,17 @@ def api_ultimo_dia_importado():
             label += f" – Ag {r['agencia']}"
         if r.get('conta'):
             label += f" / {r['conta']}"
-        contas.append({'id': r['id'], 'titulo': label, 'ultima_data_importacao': ultima})
+        # `titulo` continua indo montado para nao quebrar quem ja lia assim; as
+        # partes vao junto para a tela poder desenhar banco e conta separados.
+        contas.append({
+            'id': r['id'],
+            'titulo': label,
+            'nome': r['titulo'] or r['banco_nome'] or ('Conta #%s' % r['id']),
+            'banco_nome': r.get('banco_nome'),
+            'agencia': r.get('agencia'),
+            'conta': r.get('conta'),
+            'ultima_data_importacao': ultima,
+        })
 
     return jsonify({'success': True, 'contas': contas})
 
