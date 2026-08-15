@@ -2554,9 +2554,9 @@ def conciliar():
 
     total_pages = max(1, (total + per_page - 1) // per_page)
 
-    # Busca Troco PIX pendentes de conciliação bancária para o modal de débitos.
-    # Graceful: se a coluna bank_transaction_id não existir ainda, retorna lista vazia.
-    troco_pix_pendentes = _get_troco_pix_sem_banco()
+    # O Troco PIX saiu do modal de débitos: o vínculo com o banco é feito em
+    # /troco_pix/, que roda os mesmos UPDATEs e tem "desvincular". Com isso cai
+    # também a consulta que rodava a cada abertura desta tela.
 
     return render_template(
         'bank_import/conciliar.html',
@@ -2568,7 +2568,6 @@ def conciliar():
         clientes=clientes,
         todas_contas=todas_contas,
         todas_contas_map=todas_contas_map,
-        troco_pix_pendentes=troco_pix_pendentes,
         page=page,
         total_pages=total_pages,
         total=total,
