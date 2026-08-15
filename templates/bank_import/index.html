@@ -110,6 +110,47 @@ body > .container-fluid:has(#bnc){
 #bnc .lista .esperando{ padding:.75rem .65rem; font-size:.82rem; color:#8b95a3;
   text-align:center; }
 #bnc .passo--pronto .passo__n{ background:#17963C; }
+
+/* Campo que abre a lista, nos modais. Fechado ocupa uma linha; aberto mostra
+   a lista com a borda ligando as duas. Mesmo controle da tela de Contas. */
+.abre{ width:100%; display:flex; align-items:center; gap:.5rem;
+  border:1px solid #d9e0e8; border-radius:10px; background:#fff; color:#151d27;
+  padding:.58rem .7rem; font-size:.88rem; font-weight:600; cursor:pointer;
+  font-family:inherit; text-align:left; }
+.abre:hover{ border-color:#1D63A5; }
+.abre span{ min-width:0; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; }
+.abre .seta{ margin-left:auto; color:#6b7684; flex:0 0 auto; font-size:.8rem;
+  transition:transform .16s; }
+.abre.vazio span{ color:#8b95a3; font-weight:500; }
+.abre.aberto{ border-color:#1D63A5; border-radius:10px 10px 0 0; }
+.abre.aberto .seta{ transform:rotate(180deg); color:#1D63A5; }
+.gav{ border:1px solid #1D63A5; border-top:0; border-radius:0 0 10px 10px;
+  overflow:hidden; background:#fff; }
+.gav[hidden]{ display:none; }
+.gav .busca{ position:relative; padding:.5rem; border-bottom:1px solid #e7ebf1;
+  background:#f7f9fc; }
+.gav .busca[hidden]{ display:none; }
+.gav .busca i{ position:absolute; left:1.05rem; top:50%; transform:translateY(-50%);
+  color:#6b7684; font-size:.85rem; }
+.gav .busca input{ width:100%; border:1px solid #d9e0e8; border-radius:8px;
+  padding:.46rem .6rem .46rem 1.95rem; font-size:.85rem; font-family:inherit; }
+.escolha{ max-height:15rem; overflow-y:auto; }
+.escolha__i{ display:flex; align-items:center; gap:.55rem; width:100%;
+  padding:.55rem .65rem; border:0; border-bottom:1px solid #e7ebf1; background:#fff;
+  font-family:inherit; font-size:.85rem; text-align:left; color:#151d27;
+  cursor:pointer; }
+.escolha__i:last-child{ border-bottom:0; }
+.escolha__i:hover{ background:#f7f9fc; }
+.escolha__i.on{ background:#eaf1f9; color:#0C4C86; font-weight:800; }
+.escolha__i span{ min-width:0; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; }
+.escolha__i small{ display:block; font-size:.71rem; color:#6b7684; font-weight:500; }
+.escolha__i .tique{ margin-left:auto; color:#1D63A5; flex:0 0 auto; }
+.escolha__vazio{ padding:.7rem .65rem; font-size:.82rem; color:#8b95a3;
+  text-align:center; }
+.rot-modal{ font-size:.69rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.05em; color:#6b7684; margin-bottom:.3rem; display:block; }
 #bnc .passos-txt b{ color:#151d27; }
 
 /* ── Botões de ação: alvo grande, um toque ───────────────────────── */
@@ -645,41 +686,56 @@ body > .container-fluid:has(#bnc){
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <p class="text-muted small mb-3">Gera uma planilha Excel com os lançamentos bancários conciliados no formato contábil: <strong>DATA / DESCRIÇÃO / VALOR / Nº CONTA CRÉDITO / DESCRIÇÃO CONTA CRÉDITO / Nº CONTA DÉBITO / DESCRIÇÃO CONTA DÉBITO</strong>.</p>
         <div class="mb-3">
-          <label class="form-label fw-semibold form-label-sm">Empresa</label>
-          <select id="exp_empresa_id" class="form-select form-select-sm">
-            <option value="">— Todas as empresas —</option>
-            {% for c in clientes %}
-            <option value="{{ c.id }}">{{ c.razao_social }}</option>
-            {% endfor %}
-          </select>
+          <label class="rot-modal">Empresa</label>
+          <input type="hidden" id="exp_empresa_id" value="">
+          <button type="button" class="abre vazio" id="exp_empresa_bt"
+                  onclick="expAbre('empresa')">
+            <span>Todas as empresas</span><i class="bi bi-chevron-down seta"></i>
+          </button>
+          <div class="gav" id="exp_empresa_gav" hidden>
+            <div class="busca" id="exp_empresa_busca" hidden>
+              <i class="bi bi-search"></i>
+              <input type="text" placeholder="Procurar empresa" autocomplete="off"
+                     oninput="expPintaEmpresas(this.value)">
+            </div>
+            <div class="escolha" id="exp_empresas"></div>
+          </div>
         </div>
+
         <div class="mb-3">
-          <label class="form-label fw-semibold form-label-sm">Conta Bancária</label>
-          <select id="exp_account_id" class="form-select form-select-sm">
-            <option value="">— Todas as contas —</option>
-            {% if contas %}
-            {% for conta in contas %}
-            <option value="{{ conta.id }}">{{ conta.apelido or conta.banco_nome }}{% if conta.empresa_nome %} — {{ conta.empresa_nome }}{% endif %}</option>
-            {% endfor %}
-            {% endif %}
-          </select>
+          <label class="rot-modal">Conta bancária</label>
+          <input type="hidden" id="exp_account_id" value="">
+          <button type="button" class="abre vazio" id="exp_conta_bt"
+                  onclick="expAbre('conta')">
+            <span>Todas as contas</span><i class="bi bi-chevron-down seta"></i>
+          </button>
+          <div class="gav" id="exp_conta_gav" hidden>
+            <div class="busca" id="exp_conta_busca" hidden>
+              <i class="bi bi-search"></i>
+              <input type="text" placeholder="Procurar banco, agência ou conta"
+                     autocomplete="off" oninput="expPintaContas(this.value)">
+            </div>
+            <div class="escolha" id="exp_contas"></div>
+          </div>
         </div>
+
         <div class="row g-2">
           <div class="col-6">
-            <label class="form-label form-label-sm">Data Inicial</label>
+            <label class="rot-modal">De</label>
             <input type="date" id="exp_data_ini" class="form-control form-control-sm">
           </div>
           <div class="col-6">
-            <label class="form-label form-label-sm">Data Final</label>
+            <label class="rot-modal">Até</label>
             <input type="date" id="exp_data_fim" class="form-control form-control-sm">
           </div>
         </div>
-        <div class="alert alert-info mt-3 mb-0 py-2 small">
-          <i class="bi bi-info-circle me-1"></i>
-          Apenas transações <strong>conciliadas</strong> são exportadas. As contas contábeis de coligadas são configuradas em <a href="{{ url_for('bank_import.gerenciar_contas') }}">Gerenciar Contas</a>.
-        </div>
+
+        <p class="mt-3 mb-0" style="font-size:.78rem;color:#6b7684;line-height:1.45;">
+          Só entram os lançamentos já <strong>conciliados</strong>. As contas
+          contábeis das coligadas ficam em
+          <a href="{{ url_for('bank_import.gerenciar_contas') }}">Gerenciar contas</a>.
+        </p>
       </div>
       <div class="modal-footer py-2">
         <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -698,7 +754,8 @@ body > .container-fluid:has(#bnc){
     /* ── Contas da empresa escolhida ────────────────────────────────
        As contas ja vieram com cliente_id, entao filtrar aqui e instantaneo
        e nao gasta uma ida ao servidor. */
-    var BNC_CONTAS = {{ contas | tojson }};
+    var BNC_CONTAS   = {{ contas | tojson }};
+    var BNC_CLIENTES = {{ clientes | tojson }};
 
     /* ── Escolha em lista: a mesma das outras abas ──────────────────
        Uma mecânica só para as quatro listas (empresa e conta das duas
@@ -1445,6 +1502,152 @@ Depois de importado, o arquivo sai da pasta de entrada.`)) return;
         document.getElementById('ultimoDiaResultado').innerHTML = '';
     });
 
+    /* ── Exportação contábil: os dois campos que abrem a lista ──────
+       O valor vive num input escondido, então exportarContabil() continua
+       lendo .value como antes. */
+    var EXP_LIMIAR_BUSCA = 8;
+
+    function expAbre(qual) {
+      var gav = document.getElementById('exp_' + qual + '_gav');
+      var abrir = gav.hidden;
+      expFechaTudo();
+      if (!abrir) return;
+      gav.hidden = false;
+      document.getElementById('exp_' + qual + '_bt').classList.add('aberto');
+      var busca = gav.querySelector('.busca:not([hidden]) input');
+      if (busca) busca.focus();
+    }
+    function expFechaTudo() {
+      ['empresa', 'conta'].forEach(function (q) {
+        document.getElementById('exp_' + q + '_gav').hidden = true;
+        document.getElementById('exp_' + q + '_bt').classList.remove('aberto');
+        var b = document.getElementById('exp_' + q + '_gav').querySelector('.busca input');
+        if (b) b.value = '';
+      });
+    }
+    function expRotulo(qual, texto, vazio) {
+      var bt = document.getElementById('exp_' + qual + '_bt');
+      bt.querySelector('span').textContent = texto;
+      bt.classList.toggle('vazio', !!vazio);
+    }
+    function expItem(rotulo, detalhe, marcado, aoClicar) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'escolha__i' + (marcado ? ' on' : '');
+      var t = document.createElement('span');
+      t.textContent = rotulo;
+      if (detalhe) {
+        var s = document.createElement('small');
+        s.textContent = detalhe;
+        t.appendChild(s);
+      }
+      b.appendChild(t);
+      if (marcado) {
+        var i = document.createElement('i');
+        i.className = 'bi bi-check-lg tique';
+        b.appendChild(i);
+      }
+      b.addEventListener('click', aoClicar);
+      return b;
+    }
+
+    function expPintaEmpresas(termo) {
+      var cx = document.getElementById('exp_empresas');
+      var campo = document.getElementById('exp_empresa_id');
+      var q = (termo || '').trim().toLowerCase();
+      var lista = [{ id: '', nome: 'Todas as empresas' }];
+      BNC_CLIENTES.forEach(function (c) {
+        lista.push({ id: String(c.id), nome: c.razao_social });
+      });
+      document.getElementById('exp_empresa_busca').hidden =
+        lista.length <= EXP_LIMIAR_BUSCA;
+
+      var itens = lista.filter(function (e) {
+        return !q || e.nome.toLowerCase().indexOf(q) >= 0;
+      });
+      cx.innerHTML = '';
+      if (!itens.length) {
+        cx.innerHTML = '<div class="escolha__vazio">Nenhuma empresa com esse nome</div>';
+        return;
+      }
+      itens.forEach(function (e) {
+        cx.appendChild(expItem(e.nome, '', String(campo.value) === e.id, function () {
+          campo.value = e.id;
+          expRotulo('empresa', e.nome, !e.id);
+          expFechaTudo();
+          expPintaEmpresas('');
+          /* Conta de outra empresa não pode continuar escolhida em silêncio:
+             a planilha sairia vazia sem explicação. */
+          document.getElementById('exp_account_id').value = '';
+          expRotulo('conta', 'Todas as contas', true);
+          expPintaContas('');
+        }));
+      });
+    }
+
+    function expPintaContas(termo) {
+      var cx = document.getElementById('exp_contas');
+      var campo = document.getElementById('exp_account_id');
+      var empresa = document.getElementById('exp_empresa_id').value;
+      var q = (termo || '').trim().toLowerCase();
+
+      var minhas = BNC_CONTAS.filter(function (c) {
+        return !empresa || String(c.cliente_id) === String(empresa);
+      });
+      document.getElementById('exp_conta_busca').hidden =
+        minhas.length + 1 <= EXP_LIMIAR_BUSCA;
+
+      var texto = function (c) {
+        return (c.apelido || c.banco_nome || ('conta ' + c.id));
+      };
+      var detalhe = function (c) {
+        var d = [];
+        if (c.agencia) d.push('Ag ' + c.agencia);
+        if (c.conta) d.push(c.conta);
+        if (!empresa && c.empresa_nome) d.push(c.empresa_nome);
+        return d.join(' · ');
+      };
+      var itens = minhas.filter(function (c) {
+        return !q || (texto(c) + ' ' + detalhe(c)).toLowerCase().indexOf(q) >= 0;
+      });
+
+      cx.innerHTML = '';
+      if (!q) {
+        cx.appendChild(expItem('Todas as contas', '', !campo.value, function () {
+          campo.value = '';
+          expRotulo('conta', 'Todas as contas', true);
+          expFechaTudo();
+          expPintaContas('');
+        }));
+      }
+      if (!itens.length) {
+        if (!minhas.length) {
+          cx.innerHTML = '<div class="escolha__vazio">Esta empresa não tem conta cadastrada</div>';
+        } else if (q) {
+          cx.innerHTML = '<div class="escolha__vazio">Nenhuma conta com esse nome</div>';
+        }
+        return;
+      }
+      itens.forEach(function (c) {
+        cx.appendChild(expItem(texto(c), detalhe(c),
+          String(campo.value) === String(c.id), function () {
+            campo.value = c.id;
+            expRotulo('conta', texto(c), false);
+            expFechaTudo();
+            expPintaContas('');
+          }));
+      });
+    }
+
+    document.getElementById('modalExportacaoContabil')
+      .addEventListener('show.bs.modal', function () {
+        expFechaTudo();
+        expPintaEmpresas('');
+        expPintaContas('');
+      });
+    expPintaEmpresas('');
+    expPintaContas('');
+
     // ---- Exportação Contábil ----
     function exportarContabil() {
         const empresa_id  = document.getElementById('exp_empresa_id').value;
@@ -1460,6 +1663,7 @@ Depois de importado, o arquivo sai da pasta de entrada.`)) return;
 
         const url = '{{ url_for("bank_import.exportar_contabil") }}' + (params.toString() ? '?' + params.toString() : '');
         window.location.href = url;
+        return url;   // devolvido para dar pra conferir o link montado
     }
 </script>
 {% endblock %}
