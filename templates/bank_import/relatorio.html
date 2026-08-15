@@ -1,376 +1,712 @@
 {% extends "base.html" %}
 
-{% block title %}Relatório Bancário — Auditoria - NH Transportes{% endblock %}
+{% block title %}Relatório do banco - NH Transportes{% endblock %}
+
+{% block styles %}
+<style>
+/* ═══════════════════════════════════════════════════════════════════════
+   Relatório do banco — mesmo padrão das outras telas do módulo.
+
+   É a tela de auditoria: mostra TUDO o que entrou, conciliado ou não. Por
+   isso a lista é dia a dia, com o total de cada dia — é assim que se
+   confere contra o extrato, uma folha por vez.
+   ═════════════════════════════════════════════════════════════════════ */
+body > .container-fluid:has(#rel){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#rel){ padding:.7rem 1rem 0; }
+}
+#rel.container-fluid{ padding-left:0; padding-right:0; }
+
+#rel{
+  --azul:#1D63A5; --azul-deep:#0C4C86; --azul-claro:#eaf1f9;
+  --verde:#17963C; --roxo:#6D48C8;
+  --ink:#151d27; --ink-2:#3a4655; --muted:#6b7684;
+  --line:#e7ebf1; --line-2:#d9e0e8; --surface:#f7f9fc;
+  --ok:#1c6b34; --ok-bg:#e4f4e8;
+  --pend:#8a5a00; --pend-bg:#fdf0d6;
+  --ign:#4b5563; --ign-bg:#eceef1;
+  --danger:#a32d2d; --danger-bg:#fbe9e9;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  color:var(--ink);
+  overflow-x:hidden;
+}
+
+/* ── Topo ─────────────────────────────────────────────────────────── */
+#rel .topo{ background:linear-gradient(120deg,var(--azul-deep),var(--azul)); color:#fff;
+  border-radius:14px; padding:.6rem .8rem .15rem; margin-bottom:.7rem; }
+#rel .topo__l1{ display:flex; align-items:center; gap:.5rem; }
+#rel .topo h3{ margin:0; font-size:1.05rem; font-weight:800; letter-spacing:-.01em; }
+#rel .voltar{ display:inline-flex; align-items:center; gap:.3rem;
+  background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.28); color:#fff;
+  border-radius:99px; padding:.22rem .62rem; font-size:.75rem; font-weight:700;
+  text-decoration:none; flex:0 0 auto; }
+#rel .voltar:hover{ background:rgba(255,255,255,.3); color:#fff; }
+#rel .topo .fil{ margin-left:auto; flex:0 0 auto; background:rgba(255,255,255,.2);
+  border:1px solid rgba(255,255,255,.35); color:#fff; border-radius:10px;
+  padding:.32rem .6rem; font-size:.8rem; font-weight:800; cursor:pointer;
+  display:inline-flex; align-items:center; gap:.32rem; font-family:inherit; }
+#rel .topo .fil:hover{ background:rgba(255,255,255,.3); }
+#rel .topo .fil .b{ background:#fff; color:var(--azul-deep); border-radius:99px;
+  min-width:17px; height:17px; display:grid; place-items:center; font-size:.66rem; }
+#rel .abas{ display:flex; gap:.35rem; overflow-x:auto; padding:.55rem 0 .5rem;
+  scrollbar-width:none; }
+#rel .abas::-webkit-scrollbar{ display:none; }
+#rel .aba{ flex:0 0 auto; border-radius:99px; padding:.32rem .8rem; font-size:.79rem;
+  font-weight:800; white-space:nowrap; color:#fff; text-decoration:none;
+  background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22); }
+#rel .aba:hover{ background:rgba(255,255,255,.26); color:#fff; }
+#rel .aba.on{ background:#fff; color:var(--azul-deep); border-color:#fff; }
+
+/* ── Números ──────────────────────────────────────────────────────── */
+#rel .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:.7rem; }
+@media (min-width:768px){ #rel .nums{ grid-template-columns:repeat(4,1fr); } }
+#rel .nums .n{ border-radius:13px; padding:.55rem .75rem; color:#fff;
+  box-shadow:0 2px 8px rgba(20,35,60,.12); text-decoration:none; display:block; }
+#rel .nums a.n:hover{ color:#fff; filter:brightness(1.06); }
+#rel .nums .r{ font-size:.66rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.06em; opacity:.92; }
+#rel .nums .v{ font-size:1.02rem; font-weight:800; letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums; line-height:1.28; }
+/* Os totais passam de R$ 50 milhões: no celular, dois quadros por linha,
+   o número precisa caber sem quebrar. */
+#rel .nums .v--dinheiro{ font-size:.92rem; }
+@media (min-width:420px){ #rel .nums .v--dinheiro{ font-size:1.02rem; } }
+#rel .n--a{ background:linear-gradient(135deg,#2E6FB0,#1D63A5); }
+#rel .n--b{ background:linear-gradient(135deg,#22A24B,#17963C); }
+#rel .n--c{ background:linear-gradient(135deg,#C2504A,#A32D2D); }
+#rel .n--d{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
+
+/* ── Lista ────────────────────────────────────────────────────────── */
+#rel .lst{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+  overflow:hidden; }
+#rel .topo-lst{ display:flex; align-items:center; gap:.55rem; padding:.55rem .7rem;
+  border-bottom:1px solid var(--line); font-size:.78rem; font-weight:700;
+  color:var(--muted); }
+#rel .topo-lst .tot{ margin-left:auto; color:var(--azul-deep);
+  font-variant-numeric:tabular-nums; }
+#rel .dia{ display:flex; align-items:center; gap:.5rem; padding:.45rem .7rem;
+  background:var(--azul-claro); color:var(--azul-deep); font-size:.79rem;
+  font-weight:800; border-bottom:1px solid var(--line-2); position:sticky; top:0;
+  z-index:3; }
+#rel .dia .tot{ margin-left:auto; font-variant-numeric:tabular-nums; }
+
+#rel .lin{ display:grid; grid-template-columns:auto minmax(0,1fr); gap:.1rem .55rem;
+  grid-template-areas:"chk desc" "chk meio" "chk baixo";
+  padding:.5rem .6rem; border-bottom:1px solid var(--line); align-items:center; }
+#rel .lin:last-child{ border-bottom:0; }
+#rel .lin--sem-chk{ grid-template-columns:minmax(0,1fr);
+  grid-template-areas:"desc" "meio" "baixo"; }
+#rel .c-chk{ grid-area:chk; align-self:center; }
+#rel .c-desc{ grid-area:desc; font-size:.85rem; font-weight:700; letter-spacing:-.01em;
+  min-width:0; line-height:1.28; display:-webkit-box; -webkit-line-clamp:2;
+  -webkit-box-orient:vertical; overflow:hidden; }
+#rel .c-meio{ grid-area:meio; display:flex; align-items:center; gap:.35rem; min-width:0; }
+#rel .conta{ font-size:.72rem; color:var(--muted); font-weight:600; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#rel .c-valor{ margin-left:auto; flex:0 0 auto; font-size:.95rem; font-weight:800;
+  font-variant-numeric:tabular-nums; letter-spacing:-.02em; white-space:nowrap; }
+#rel .c-valor--e{ color:var(--verde); }
+#rel .c-valor--s{ color:var(--danger); }
+#rel .c-baixo{ grid-area:baixo; display:flex; align-items:center; gap:.3rem;
+  min-width:0; margin-top:.14rem; flex-wrap:wrap; }
+#rel .doc{ font-family:var(--mono); font-size:.7rem; color:var(--muted);
+  font-weight:600; white-space:nowrap; }
+#rel .c-acao{ margin-left:auto; flex:0 0 auto; }
+#rel .ic{ width:27px; height:27px; border-radius:7px; border:1px solid var(--line-2);
+  background:#fff; display:grid; place-items:center; font-size:.85rem; cursor:pointer;
+  color:var(--pend); padding:0; font-family:inherit; }
+#rel .ic:hover{ background:var(--pend-bg); }
+#rel .marca{ width:19px; height:19px; cursor:pointer; accent-color:var(--azul); margin:0; }
+
+#rel .selo{ display:inline-block; font-size:.66rem; font-weight:800; border-radius:5px;
+  padding:.08rem .38rem; white-space:nowrap; max-width:100%; overflow:hidden;
+  text-overflow:ellipsis; }
+#rel .selo--ok{ background:var(--ok-bg); color:var(--ok); }
+#rel .selo--pend{ background:var(--pend-bg); color:var(--pend); }
+#rel .selo--ign{ background:var(--ign-bg); color:var(--ign); }
+#rel .selo--forma{ background:rgba(109,72,200,.13); color:var(--roxo); min-width:0; }
+#rel .selo--forn{ background:rgba(29,99,165,.12); color:var(--azul-deep); min-width:0; }
+#rel .selo--desp{ background:var(--pend-bg); color:var(--pend); }
+#rel .selo--pix{ background:rgba(109,72,200,.13); color:var(--roxo); }
+#rel .selo--como{ background:var(--surface); color:var(--muted);
+  border:1px solid var(--line-2); }
+#rel .vazio{ text-align:center; color:var(--muted); padding:2.4rem 1rem; font-size:.85rem; }
+#rel .vazio b{ display:block; color:var(--ink); font-size:.95rem; margin-bottom:.25rem; }
+
+/* ── Páginas ──────────────────────────────────────────────────────── */
+#rel .paginas{ display:flex; align-items:center; gap:.45rem; padding:.6rem .7rem;
+  border-top:1px solid var(--line); background:var(--surface); }
+#rel .paginas .qual{ margin:0 auto; font-size:.79rem; font-weight:700;
+  color:var(--muted); font-variant-numeric:tabular-nums; }
+#rel .pg{ display:inline-flex; align-items:center; gap:.3rem; font-size:.79rem;
+  font-weight:800; color:var(--azul); text-decoration:none; background:#fff;
+  border:1px solid var(--line-2); border-radius:10px; padding:.35rem .65rem; }
+#rel .pg:hover{ border-color:var(--azul); }
+#rel .pg--off{ color:#b9c1cb; border-color:var(--line); pointer-events:none; }
+
+/* ── Barra de lote (só na visão "ignorados") ──────────────────────── */
+#rel .lote{ position:fixed; left:0; right:0; bottom:0; z-index:1040;
+  background:var(--azul-deep); color:#fff; padding:.6rem .8rem; display:flex;
+  align-items:center; gap:.5rem; flex-wrap:wrap; transform:translateY(110%);
+  transition:transform .18s ease; box-shadow:0 -6px 20px rgba(12,76,134,.25);
+  padding-bottom:calc(.6rem + env(safe-area-inset-bottom)); }
+#rel .lote.on{ transform:translateY(0); }
+#rel .lote .n{ font-weight:800; font-variant-numeric:tabular-nums; }
+#rel .lote .sep{ margin-left:auto; }
+#rel .bl{ border:0; border-radius:9px; padding:.36rem .7rem; font-size:.8rem;
+  font-weight:800; cursor:pointer; background:rgba(255,255,255,.18); color:#fff;
+  font-family:inherit; }
+#rel .bl--fim{ background:#fff; color:var(--azul-deep); }
+#rel .rodape-folga{ height:4.5rem; }
+
+/* ── Saída da tela ────────────────────────────────────────────────── */
+#rel .pe{ display:flex; gap:.45rem; flex-wrap:wrap; margin-top:.8rem; }
+#rel .pe a{ display:inline-flex; align-items:center; gap:.3rem; font-size:.79rem;
+  font-weight:700; color:var(--azul); text-decoration:none; background:#fff;
+  border:1px solid var(--line-2); border-radius:10px; padding:.4rem .7rem; }
+#rel .pe a:hover{ border-color:var(--azul); }
+
+/* ── Filtro em passos ─────────────────────────────────────────────── */
+#rel .escuro{ position:fixed; inset:0; background:rgba(12,25,42,.45); z-index:1050;
+  opacity:0; pointer-events:none; transition:opacity .2s; }
+#rel .escuro.on{ opacity:1; pointer-events:auto; }
+#rel .gav{ position:fixed; left:0; right:0; bottom:0; z-index:1051; background:#fff;
+  border-radius:18px 18px 0 0; max-height:88vh; display:flex; flex-direction:column;
+  transform:translateY(101%); transition:transform .24s cubic-bezier(.22,.7,.3,1);
+  box-shadow:0 -10px 30px rgba(12,25,42,.3); }
+#rel .gav.on{ transform:translateY(0); }
+@media (min-width:992px){
+  #rel .gav{ left:50%; right:auto; bottom:auto; top:8vh; width:520px; border-radius:16px;
+    transform:translate(-50%,10px); opacity:0; pointer-events:none;
+    transition:opacity .16s ease, transform .16s ease; max-height:84vh; }
+  #rel .gav.on{ transform:translate(-50%,0); opacity:1; pointer-events:auto; }
+  #rel .gav__pega{ display:none; }
+}
+#rel .gav__pega{ width:36px; height:4px; background:var(--line-2); border-radius:9px;
+  margin:.5rem auto .1rem; flex:0 0 auto; }
+#rel .passos{ display:flex; gap:.3rem; padding:.4rem .9rem .1rem; }
+#rel .passo{ flex:1; height:3px; border-radius:9px; background:var(--line-2); }
+#rel .passo.on{ background:var(--azul); }
+#rel .pnome{ padding:.35rem .9rem .4rem; font-size:.76rem; color:var(--muted);
+  font-weight:700; }
+#rel .pnome b{ color:var(--ink); font-size:.95rem; }
+#rel .gav__b{ overflow-y:auto; padding:0 .9rem .7rem; }
+#rel .gav__f{ border-top:1px solid var(--line); padding:.65rem .9rem; display:flex;
+  gap:.5rem; background:#fff;
+  padding-bottom:calc(.65rem + env(safe-area-inset-bottom)); }
+#rel .bt-g{ border:0; border-radius:10px; padding:.55rem .8rem; font-size:.87rem;
+  font-weight:800; cursor:pointer; font-family:inherit; }
+#rel .bt-g--ok{ flex:1; background:var(--azul); color:#fff; }
+#rel .bt-g--ca{ background:var(--surface); color:var(--muted);
+  border:1px solid var(--line-2); }
+#rel .etapa[hidden]{ display:none; }
+#rel .gr{ margin-bottom:.85rem; }
+#rel .gr__t{ font-size:.69rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--muted); margin-bottom:.3rem; }
+#rel .opcs{ border:1px solid var(--line-2); border-radius:10px; overflow:hidden;
+  max-height:250px; overflow-y:auto; }
+#rel .opc{ display:flex; align-items:center; gap:.5rem; width:100%; padding:.5rem .6rem;
+  border:0; border-bottom:1px solid var(--line); background:#fff; font-family:inherit;
+  font-size:.85rem; text-align:left; color:var(--ink); cursor:pointer; min-width:0; }
+#rel .opc:last-child{ border-bottom:0; }
+#rel .opc:hover{ background:var(--surface); }
+#rel .opc.on{ background:var(--azul-claro); color:var(--azul-deep); font-weight:800; }
+#rel .opc span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+#rel .opc small{ display:block; font-size:.71rem; color:var(--muted); font-weight:500; }
+#rel .opc .tique{ margin-left:auto; color:var(--azul); flex:0 0 auto; }
+#rel .seg{ display:flex; gap:2px; background:var(--surface); border:1px solid var(--line-2);
+  border-radius:10px; padding:2px; }
+#rel .seg button{ flex:1; border:0; background:none; border-radius:8px; padding:.42rem .2rem;
+  font-size:.79rem; font-weight:700; color:var(--muted); cursor:pointer;
+  font-family:inherit; white-space:nowrap; }
+#rel .seg button.on{ background:#fff; color:var(--azul-deep);
+  box-shadow:0 1px 2px rgba(20,35,60,.1); }
+#rel .campo{ width:100%; border:1px solid var(--line-2); border-radius:10px;
+  padding:.5rem .65rem; font-size:.85rem; background:#fff; color:var(--ink);
+  font-family:inherit; }
+#rel .par{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; }
+#rel .chips{ display:flex; flex-wrap:wrap; gap:.35rem; }
+#rel .chip{ border:1px solid var(--line-2); background:#fff; color:var(--ink-2);
+  border-radius:99px; padding:.32rem .7rem; font-size:.78rem; font-weight:700;
+  cursor:pointer; font-family:inherit; }
+#rel .chip.on{ background:var(--azul); border-color:var(--azul); color:#fff; }
+#rel .dica{ font-size:.75rem; color:var(--muted); margin-top:.3rem; }
+#rel :focus-visible{ outline:2px solid var(--azul); outline-offset:2px; }
+@media (prefers-reduced-motion: reduce){ #rel *{ transition:none !important; } }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <nav aria-label="breadcrumb" class="mt-2 mb-3">
-        <ol class="breadcrumb" style="font-size:0.85rem;">
-            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="{{ url_for('bank_import.index') }}">Importação Bancária</a></li>
-            <li class="breadcrumb-item active">Relatório / Auditoria</li>
-        </ol>
-    </nav>
+{% set n_filtros = (1 if filtros.empresa_id else 0) + (1 if filtros.account_id else 0)
+                   + (1 if filtros.tipo else 0) + (1 if filtros.status else 0)
+                   + (1 if (filtros.data_ini or filtros.data_fim) else 0) %}
+{% set so_ignorados = filtros.status == 'ignorado' %}
+{% macro milhar(v) -%}
+{{ '{:,}'.format(v or 0)|replace(',','.') }}
+{%- endmacro %}
 
-    <!-- Filters -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-header" style="background:#1D63A5;color:white;">
-            <h5 class="mb-0"><i class="bi bi-funnel"></i> Filtros</h5>
-        </div>
-        <div class="card-body">
-            <form method="GET" class="row g-2 align-items-end">
-                <div class="col-md-3">
-                    <label class="form-label mb-1" style="font-size:0.85rem;">Empresa</label>
-                    <select name="empresa_id" class="form-select form-select-sm">
-                        <option value="">— Todas as Empresas —</option>
-                        {% for c in clientes %}
-                        <option value="{{ c.id }}" {% if filtros.empresa_id == c.id|string %}selected{% endif %}>
-                            {{ c.razao_social }}{% if c.nome_fantasia and c.nome_fantasia != c.razao_social %} ({{ c.nome_fantasia }}){% endif %}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label mb-1" style="font-size:0.85rem;">Conta</label>
-                    <select name="account_id" class="form-select form-select-sm">
-                        <option value="">Todas as contas</option>
-                        {% for conta in contas %}
-                        <option value="{{ conta.id }}" {% if filtros.account_id == conta.id|string %}selected{% endif %}>
-                            {{ conta.apelido or conta.banco_nome }}{% if conta.empresa_nome %} [{{ conta.empresa_nome }}]{% endif %}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-1">
-                    <label class="form-label mb-1" style="font-size:0.85rem;">Tipo</label>
-                    <select name="tipo" class="form-select form-select-sm">
-                        <option value="">Todos</option>
-                        <option value="CREDIT" {% if filtros.tipo == 'CREDIT' %}selected{% endif %}>Crédito</option>
-                        <option value="DEBIT"  {% if filtros.tipo == 'DEBIT'  %}selected{% endif %}>Débito</option>
-                    </select>
-                </div>
-                <div class="col-md-1">
-                    <label class="form-label mb-1" style="font-size:0.85rem;">Status</label>
-                    <select name="status" class="form-select form-select-sm">
-                        <option value="">Todos</option>
-                        <option value="pendente"   {% if filtros.status == 'pendente'   %}selected{% endif %}>Pendente</option>
-                        <option value="conciliado" {% if filtros.status == 'conciliado' %}selected{% endif %}>Conciliado</option>
-                        <option value="ignorado"   {% if filtros.status == 'ignorado'   %}selected{% endif %}>Ignorado</option>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label mb-1" style="font-size:0.85rem;">Data Início</label>
-                    <input type="date" name="data_ini" class="form-control form-control-sm" value="{{ filtros.data_ini }}">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label mb-1" style="font-size:0.85rem;">Data Fim</label>
-                    <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ filtros.data_fim }}">
-                </div>
-                <div class="col-md-1 d-flex gap-1">
-                    <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
-                        <i class="bi bi-search"></i>
-                    </button>
-                    <a href="{{ url_for('bank_import.relatorio') }}" class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-x"></i>
-                    </a>
-                </div>
-            </form>
-        </div>
+<div class="container-fluid" id="rel">
+
+  <div class="topo">
+    <div class="topo__l1">
+      <a class="voltar" href="{{ url_for('bank_import.index') }}">
+        <i class="bi bi-chevron-left"></i> Banco
+      </a>
+      <h3>Relatório</h3>
+      <button type="button" class="fil" onclick="relAbrirFiltro()">
+        <i class="bi bi-sliders"></i>
+        {% if n_filtros %}<span class="b">{{ n_filtros }}</span>{% endif %}
+      </button>
+    </div>
+    <div class="abas">
+      {% with ativa = 'relatorio' %}{% include 'includes/abas_banco.html' %}{% endwith %}
+    </div>
+  </div>
+
+  {% set base = url_for('bank_import.relatorio') %}
+  <div class="nums">
+    <div class="n n--a">
+      <div class="r">Lançamentos</div>
+      <div class="v">{{ milhar(total_rows) }}</div>
+    </div>
+    <div class="n n--b">
+      <div class="r">Entradas</div>
+      <div class="v v--dinheiro">{{ totais.total_creditos | formatar_moeda }}</div>
+    </div>
+    <div class="n n--c">
+      <div class="r">Saídas</div>
+      <div class="v v--dinheiro">{{ totais.total_debitos | formatar_moeda }}</div>
+    </div>
+    <div class="n n--d">
+      <div class="r">Pendentes</div>
+      <div class="v">{{ milhar(totais.total_pendentes) }}</div>
+    </div>
+  </div>
+
+  <div class="lst">
+    <div class="topo-lst">
+      {% if so_ignorados %}
+      <input type="checkbox" class="marca" id="checkAllIgnorados">
+      Selecionar os desta página
+      {% else %}
+      <i class="bi bi-clipboard-check"></i> Tudo o que entrou, conciliado ou não
+      {% endif %}
+      <span class="tot">{{ milhar(total_rows) }} no total</span>
     </div>
 
-    <!-- Totals -->
-    {% if totais %}
-    <div class="row g-3 mb-3">
-        <div class="col-sm-6 col-lg-3">
-            <div class="card border-0 shadow-sm text-center">
-                <div class="card-body py-2">
-                    <div class="fw-bold text-secondary fs-5">{{ totais.total_transacoes or 0 }}</div>
-                    <div class="text-muted small">Total Transações</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-sm-6 col-lg-3">
-            <div class="card border-0 shadow-sm text-center">
-                <div class="card-body py-2">
-                    <div class="fw-bold text-danger fs-5">{{ (totais.total_debitos or 0) | formatar_moeda }}</div>
-                    <div class="text-muted small">Total Débitos</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-sm-6 col-lg-3">
-            <div class="card border-0 shadow-sm text-center">
-                <div class="card-body py-2">
-                    <div class="fw-bold text-success fs-5">{{ (totais.total_creditos or 0) | formatar_moeda }}</div>
-                    <div class="text-muted small">Total Créditos</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-sm-6 col-lg-3">
-            <div class="card border-0 shadow-sm text-center">
-                <div class="card-body py-2">
-                    <div class="fw-bold {% if totais.total_pendentes %}text-warning{% else %}text-secondary{% endif %} fs-5">
-                        {{ totais.total_pendentes or 0 }}
-                    </div>
-                    <div class="text-muted small">Pendentes de Conciliação</div>
-                </div>
-            </div>
-        </div>
-    </div>
+    {% if not transacoes %}
+      <div class="vazio">
+        <b>Nenhum lançamento por aqui.</b>
+        {% if n_filtros %}Nada corresponde ao filtro. <a href="{{ base }}">Limpar</a>.
+        {% else %}Importe um extrato OFX para começar.{% endif %}
+      </div>
     {% endif %}
 
-    <!-- Table header with export -->
-    <div class="card shadow-sm">
-        <div class="card-header d-flex justify-content-between align-items-center"
-             style="background:#343a40;color:white;">
-            <div>
-                <h5 class="mb-0 d-inline"><i class="bi bi-table"></i> Transações</h5>
-                <span class="badge bg-secondary ms-2">{{ total_rows }} no total</span>
-                {% if total_rows > per_page %}
-                <small class="text-warning ms-1" style="font-size:0.78rem;">
-                    — mostrando pág. {{ page }}/{{ total_pages }}
-                </small>
-                {% endif %}
-            </div>
-            <div class="d-flex gap-2 align-items-center">
-                {% if filtros.status == 'ignorado' %}
-                <button type="button" class="btn btn-sm btn-warning" id="btnReverterSelecionados" disabled
-                        onclick="reverterSelecionados()">
-                    <i class="bi bi-arrow-counterclockwise me-1"></i> Reverter Selecionados
-                    (<span id="contadorReverter">0</span>)
-                </button>
-                {% endif %}
-                <a href="{{ url_for('bank_import.relatorio_exportar_csv',
-                            account_id=filtros.account_id, empresa_id=filtros.empresa_id,
-                            status=filtros.status, tipo=filtros.tipo,
-                            data_ini=filtros.data_ini, data_fim=filtros.data_fim) }}"
-                   class="btn btn-sm btn-success">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Exportar CSV ({{ total_rows }})
-                </a>
-            </div>
+    {# Dia a dia: é assim que se confere contra o extrato, uma folha por vez. #}
+    {% set ns = namespace(dia=None) %}
+    {% for tx in transacoes %}
+      {% if tx.data_transacao != ns.dia %}
+        {% set ns.dia = tx.data_transacao %}
+        {% set doDia = transacoes | selectattr('data_transacao', 'equalto', tx.data_transacao) | list %}
+        <div class="dia">
+          <i class="bi bi-calendar3"></i>
+          {{ tx.data_transacao.strftime('%d/%m/%Y') if tx.data_transacao else 'sem data' }}
+          <span class="tot">{{ doDia | length }} lanç.</span>
         </div>
-        <div class="card-body p-0">
-            {% if transacoes %}
-            <div class="table-responsive">
-                <table class="table table-hover table-sm mb-0" style="font-size:0.83rem;">
-                    <thead class="table-light">
-                        <tr>
-                            {% if filtros.status == 'ignorado' %}
-                            <th style="width:32px;"><input type="checkbox" id="checkAllIgnorados" title="Selecionar todos"></th>
-                            {% endif %}
-                            <th style="white-space:nowrap;">Data</th>
-                            <th>Tipo</th>
-                            <th>Valor</th>
-                            <th>Descrição</th>
-                            <th style="white-space:nowrap;">CNPJ/CPF</th>
-                            <th>Fornecedor / Forma Rec.</th>
-                            <th>Conta / Empresa</th>
-                            <th>Status</th>
-                            <th style="white-space:nowrap;" title="Tipo de Conciliação">Conc. Tipo</th>
-                            <th title="Vínculos: Lançamento Despesa / Troco PIX">Vínculos</th>
-                            {% if filtros.status == 'ignorado' %}
-                            <th class="text-center">Ação</th>
-                            {% endif %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for tx in transacoes %}
-                        <tr>
-                            {% if filtros.status == 'ignorado' %}
-                            <td><input type="checkbox" class="ignor-check" value="{{ tx.id }}"></td>
-                            {% endif %}
-                            <td style="white-space:nowrap;">{{ tx.data_transacao.strftime('%d/%m/%Y') if tx.data_transacao else '-' }}</td>
-                            <td>
-                                {% if tx.tipo == 'DEBIT' %}
-                                <span class="badge bg-danger">Débito</span>
-                                {% else %}
-                                <span class="badge bg-success">Crédito</span>
-                                {% endif %}
-                            </td>
-                            <td class="fw-semibold text-end" style="white-space:nowrap;">{{ tx.valor | formatar_moeda }}</td>
-                            <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                                title="{{ tx.descricao or '' }}">{{ tx.descricao or '-' }}</td>
-                            <td>{% if tx.cnpj_cpf %}<code style="font-size:0.78rem;">{{ tx.cnpj_cpf }}</code>{% else %}—{% endif %}</td>
-                            <td>
-                                {% if tx.tipo == 'DEBIT' %}
-                                    {{ tx.fornecedor_nome or '—' }}
-                                {% else %}
-                                    {% if tx.forma_recebimento_nome %}
-                                    <span class="badge bg-primary" style="font-size:0.75rem;">{{ tx.forma_recebimento_nome }}</span>
-                                    {% else %}
-                                    <span class="text-muted">—</span>
-                                    {% endif %}
-                                {% endif %}
-                            </td>
-                            <td>
-                                <div style="font-size:0.83rem;">{{ tx.conta_apelido or tx.banco_nome }}</div>
-                                {% if tx.empresa_nome %}
-                                <small class="text-muted" style="font-size:0.75rem;">{{ tx.empresa_nome }}</small>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if tx.status == 'conciliado' %}
-                                <span class="badge bg-success">Conciliado</span>
-                                {% elif tx.status == 'ignorado' %}
-                                <span class="badge bg-secondary">Ignorado</span>
-                                {% else %}
-                                <span class="badge bg-warning text-dark">Pendente</span>
-                                {% endif %}
-                            </td>
-                            <td style="font-size:0.78rem;">
-                                {% if tx.tipo_conciliacao %}
-                                <span class="badge bg-light text-dark border" style="font-size:0.72rem;">{{ tx.tipo_conciliacao }}</span>
-                                {% else %}
-                                <span class="text-muted">—</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if tx.tem_lancamento_despesa %}
-                                <span class="badge bg-info text-dark" title="Tem lançamento de despesa vinculado">
-                                    <i class="bi bi-receipt"></i> Desp.
-                                </span>
-                                {% endif %}
-                                {% if tx.tem_troco_pix %}
-                                <span class="badge bg-purple text-white" style="background:#6f42c1!important;" title="Tem Troco PIX vinculado">
-                                    <i class="bi bi-phone"></i> PIX
-                                </span>
-                                {% endif %}
-                                {% if not tx.tem_lancamento_despesa and not tx.tem_troco_pix %}
-                                <span class="text-muted" style="font-size:0.78rem;">—</span>
-                                {% endif %}
-                            </td>
-                            {% if filtros.status == 'ignorado' %}
-                            <td class="text-center">
-                                <button type="button" class="btn btn-sm btn-outline-warning btn-reverter-unico"
-                                        data-tx-id="{{ tx.id }}" title="Reverter para Pendente">
-                                    <i class="bi bi-arrow-counterclockwise"></i>
-                                </button>
-                            </td>
-                            {% endif %}
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+      {% endif %}
 
-            <!-- Pagination -->
-            {% if total_pages > 1 %}
-            {% set bp_args = dict(
-                account_id=filtros.account_id,
-                empresa_id=filtros.empresa_id,
-                status=filtros.status,
-                tipo=filtros.tipo,
-                data_ini=filtros.data_ini,
-                data_fim=filtros.data_fim
-            ) %}
-            <div class="d-flex justify-content-center py-3 border-top">
-                <nav>
-                    <ul class="pagination pagination-sm mb-0">
-                        {% if page > 1 %}
-                        <li class="page-item">
-                            <a class="page-link" href="{{ url_for('bank_import.relatorio', page=1, **bp_args) }}">«</a>
-                        </li>
-                        <li class="page-item">
-                            <a class="page-link" href="{{ url_for('bank_import.relatorio', page=page-1, **bp_args) }}">‹</a>
-                        </li>
-                        {% endif %}
-                        <li class="page-item disabled">
-                            <span class="page-link">{{ page }} / {{ total_pages }}</span>
-                        </li>
-                        {% if page < total_pages %}
-                        <li class="page-item">
-                            <a class="page-link" href="{{ url_for('bank_import.relatorio', page=page+1, **bp_args) }}">›</a>
-                        </li>
-                        <li class="page-item">
-                            <a class="page-link" href="{{ url_for('bank_import.relatorio', page=total_pages, **bp_args) }}">»</a>
-                        </li>
-                        {% endif %}
-                    </ul>
-                </nav>
-            </div>
-            {% endif %}
+      <div class="lin{{ '' if so_ignorados else ' lin--sem-chk' }}">
+        {% if so_ignorados %}
+        <span class="c-chk">
+          <input type="checkbox" class="marca ignor-check" value="{{ tx.id }}"
+                 aria-label="Selecionar o lançamento {{ tx.id }}">
+        </span>
+        {% endif %}
 
-            {% else %}
-            <div class="p-4 text-center text-muted">
-                <i class="bi bi-inbox fs-1"></i>
-                <p class="mt-2 mb-0">Nenhuma transação encontrada para os filtros selecionados.</p>
-            </div>
-            {% endif %}
+        <div class="c-desc">{{ tx.descricao or '—' }}</div>
+
+        <div class="c-meio">
+          <span class="conta">{{ tx.conta_apelido or tx.banco_nome }}{% if tx.empresa_nome %} · {{ tx.empresa_nome }}{% endif %}</span>
+          <span class="c-valor c-valor--{{ 's' if tx.tipo == 'DEBIT' else 'e' }}">
+            {{ '−' if tx.tipo == 'DEBIT' else '+' }} {{ tx.valor | formatar_moeda }}
+          </span>
         </div>
+
+        <div class="c-baixo">
+          {% if tx.status == 'conciliado' %}
+            <span class="selo selo--ok">Conciliado</span>
+          {% elif tx.status == 'ignorado' %}
+            <span class="selo selo--ign">Ignorado</span>
+          {% else %}
+            <span class="selo selo--pend">Pendente</span>
+          {% endif %}
+
+          {% if tx.tipo == 'DEBIT' and tx.fornecedor_nome %}
+            <span class="selo selo--forn">{{ tx.fornecedor_nome }}</span>
+          {% elif tx.tipo != 'DEBIT' and tx.forma_recebimento_nome %}
+            <span class="selo selo--forma">{{ tx.forma_recebimento_nome }}</span>
+          {% endif %}
+
+          {% if tx.tem_lancamento_despesa %}<span class="selo selo--desp">despesa</span>{% endif %}
+          {% if tx.tem_troco_pix %}<span class="selo selo--pix">troco PIX</span>{% endif %}
+          {% if tx.tipo_conciliacao %}
+            <span class="selo selo--como">{{ tx.tipo_conciliacao }}</span>
+          {% endif %}
+          {% if tx.cnpj_cpf %}<span class="doc">{{ tx.cnpj_cpf }}</span>{% endif %}
+
+          {% if so_ignorados %}
+          <span class="c-acao">
+            <button type="button" class="ic btn-reverter-unico" data-tx-id="{{ tx.id }}"
+                    title="Voltar para pendente">
+              <i class="bi bi-arrow-counterclockwise"></i>
+            </button>
+          </span>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+
+    {% if total_pages > 1 %}
+    {% set qs = {'empresa_id': filtros.empresa_id or None,
+                 'account_id': filtros.account_id or None,
+                 'tipo': filtros.tipo or None, 'status': filtros.status or None,
+                 'data_ini': filtros.data_ini or None,
+                 'data_fim': filtros.data_fim or None} %}
+    <div class="paginas">
+      <a class="pg{{ ' pg--off' if page <= 1 }}"
+         href="{{ url_for('bank_import.relatorio', page=page-1, **qs) }}">
+        <i class="bi bi-chevron-left"></i> Anterior
+      </a>
+      <span class="qual">{{ page }} de {{ milhar(total_pages) }}</span>
+      <a class="pg{{ ' pg--off' if page >= total_pages }}"
+         href="{{ url_for('bank_import.relatorio', page=page+1, **qs) }}">
+        Próxima <i class="bi bi-chevron-right"></i>
+      </a>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="pe">
+    <a href="{{ url_for('bank_import.relatorio_exportar_csv', **filtros) }}">
+      <i class="bi bi-filetype-csv"></i> Baixar em CSV
+    </a>
+    <a href="{{ url_for('bank_import.conciliar') }}">
+      <i class="bi bi-check2-square"></i> Conciliação
+    </a>
+    <a href="{{ url_for('bank_import.index') }}">
+      <i class="bi bi-arrow-left"></i> Voltar para o Banco
+    </a>
+  </div>
+
+  <div class="rodape-folga"></div>
+
+  {% if so_ignorados %}
+  <div class="lote" id="relLote">
+    <span class="n"><span id="contadorReverter">0</span> selecionado(s)</span>
+    <span class="sep"></span>
+    <button type="button" class="bl" onclick="relLimpar()">Limpar</button>
+    <button type="button" class="bl bl--fim" id="btnReverterSelecionados"
+            onclick="reverterSelecionados()">
+      <i class="bi bi-arrow-counterclockwise"></i> Voltar para pendente
+    </button>
+  </div>
+  {% endif %}
+
+  <!-- Filtro em passos -->
+  <div class="escuro" id="rel-escuro" onclick="relFecharFiltro()"></div>
+  <form class="gav" id="rel-gav" method="get" action="{{ url_for('bank_import.relatorio') }}">
+    <div class="gav__pega"></div>
+    <div class="passos">
+      <span class="passo on" id="rel-p1"></span>
+      <span class="passo" id="rel-p2"></span>
+      <span class="passo" id="rel-p3"></span>
+    </div>
+    <div class="pnome">Passo <span id="rel-pn">1</span> de 3 — <b id="rel-pt">Empresa</b></div>
+
+    <input type="hidden" name="empresa_id" id="rel-empresa" value="{{ filtros.empresa_id }}">
+    <input type="hidden" name="account_id" id="rel-conta"   value="{{ filtros.account_id }}">
+    <input type="hidden" name="tipo"       id="rel-tipo"    value="{{ filtros.tipo }}">
+    <input type="hidden" name="status"     id="rel-status"  value="{{ filtros.status }}">
+
+    <div class="gav__b">
+      <div class="etapa" id="rel-e1">
+        <div class="gr">
+          <div class="gr__t">De qual empresa</div>
+          <div class="opcs">
+            <button type="button" class="opc{{ ' on' if not filtros.empresa_id }}"
+                    data-campo="rel-empresa" data-valor="">
+              <span>Todas as empresas</span>
+            </button>
+            {% for c in clientes %}
+            <button type="button" class="opc{{ ' on' if filtros.empresa_id == c.id|string }}"
+                    data-campo="rel-empresa" data-valor="{{ c.id }}">
+              <span>{{ c.razao_social }}</span>
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="etapa" id="rel-e2" hidden>
+        <div class="gr">
+          <div class="gr__t">De qual conta</div>
+          <div class="opcs" id="rel-contas"></div>
+          <div class="dica">Só as contas da empresa escolhida.</div>
+        </div>
+      </div>
+
+      <div class="etapa" id="rel-e3" hidden>
+        <div class="gr">
+          <div class="gr__t">Período</div>
+          <div class="par">
+            <input type="date" class="campo" name="data_ini" id="rel-ini" value="{{ filtros.data_ini }}">
+            <input type="date" class="campo" name="data_fim" id="rel-fim" value="{{ filtros.data_fim }}">
+          </div>
+          <div class="chips" style="margin-top:.5rem;">
+            <button type="button" class="chip" onclick="relPeriodo('mes')">Este mês</button>
+            <button type="button" class="chip" onclick="relPeriodo('anterior')">Mês passado</button>
+            <button type="button" class="chip" onclick="relPeriodo('90')">Últimos 90 dias</button>
+            <button type="button" class="chip" onclick="relPeriodo('limpa')">Sem período</button>
+          </div>
+        </div>
+        <div class="gr">
+          <div class="gr__t">Entrada ou saída</div>
+          <div class="seg">
+            <button type="button" data-campo="rel-tipo" data-valor=""
+                    class="{{ 'on' if not filtros.tipo }}">Tudo</button>
+            <button type="button" data-campo="rel-tipo" data-valor="CREDIT"
+                    class="{{ 'on' if filtros.tipo == 'CREDIT' }}">Entrada</button>
+            <button type="button" data-campo="rel-tipo" data-valor="DEBIT"
+                    class="{{ 'on' if filtros.tipo == 'DEBIT' }}">Saída</button>
+          </div>
+        </div>
+        <div class="gr">
+          <div class="gr__t">Situação</div>
+          <div class="chips">
+            {% for v, rot in [('','Todas'), ('pendente','Pendente'),
+                              ('conciliado','Conciliado'), ('ignorado','Ignorado')] %}
+            <button type="button" class="chip{{ ' on' if filtros.status == v }}"
+                    data-campo="rel-status" data-valor="{{ v }}">{{ rot }}</button>
+            {% endfor %}
+          </div>
+          <div class="dica">Em “Ignorado” aparece o botão de voltar para pendente.</div>
+        </div>
+      </div>
     </div>
 
-    <div class="mt-3 d-flex gap-2">
-        <a href="{{ url_for('bank_import.index') }}" class="btn btn-secondary btn-sm">
-            <i class="bi bi-arrow-left"></i> Voltar
-        </a>
-        <a href="{{ url_for('bank_import.conciliar') }}" class="btn btn-outline-warning btn-sm">
-            <i class="bi bi-arrow-left-right"></i> Ir para Conciliação
-        </a>
+    <div class="gav__f">
+      <button type="button" class="bt-g bt-g--ca" id="rel-voltar" onclick="relPasso(-1)" hidden>Voltar</button>
+      <button type="button" class="bt-g bt-g--ok" id="rel-seguir" onclick="relPasso(1)">Continuar</button>
+      <button type="submit" class="bt-g bt-g--ok" id="rel-aplicar" hidden>Aplicar filtro</button>
     </div>
+  </form>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ── Filtro em passos ─────────────────────────────────────────────────
+   As contas já vêm com cliente_id, então filtrar aqui é instantâneo e não
+   custa uma ida ao servidor. */
+var REL_CONTAS = {{ contas | tojson }};
+var relN = 1;
+var REL_NOMES = ['Empresa', 'Conta', 'Refinar'];
+
+function relAbrirFiltro() {
+  document.getElementById('rel-gav').classList.add('on');
+  document.getElementById('rel-escuro').classList.add('on');
+  relIr(1);
+}
+function relFecharFiltro() {
+  document.getElementById('rel-gav').classList.remove('on');
+  document.getElementById('rel-escuro').classList.remove('on');
+}
+function relIr(n) {
+  relN = Math.min(3, Math.max(1, n));
+  for (var i = 1; i <= 3; i++) {
+    document.getElementById('rel-e' + i).hidden = (i !== relN);
+    document.getElementById('rel-p' + i).classList.toggle('on', i <= relN);
+  }
+  document.getElementById('rel-pn').textContent = relN;
+  document.getElementById('rel-pt').textContent = REL_NOMES[relN - 1];
+  document.getElementById('rel-voltar').hidden  = (relN === 1);
+  document.getElementById('rel-seguir').hidden  = (relN === 3);
+  document.getElementById('rel-aplicar').hidden = (relN !== 3);
+}
+function relPasso(d) { relIr(relN + d); }
+
+function relTique(b) {
+  var i = document.createElement('i');
+  i.className = 'bi bi-check-lg tique';
+  b.appendChild(i);
+}
+
+function relPintaContas(empresaId) {
+  var cx = document.getElementById('rel-contas');
+  var campo = document.getElementById('rel-conta');
+  var atual = campo.value;
+  var minhas = REL_CONTAS.filter(function (c) {
+    return !empresaId || String(c.cliente_id) === String(empresaId);
+  });
+  /* Conta de outra empresa não pode ficar escolhida em silêncio. */
+  if (atual && !minhas.some(function (c) { return String(c.id) === String(atual); })) {
+    campo.value = '';
+    atual = '';
+  }
+  cx.innerHTML = '';
+
+  var todas = document.createElement('button');
+  todas.type = 'button';
+  todas.className = 'opc' + (atual ? '' : ' on');
+  todas.innerHTML = '<span>Todas as contas</span>';
+  todas.addEventListener('click', function () {
+    campo.value = '';
+    relPintaContas(empresaId);
+    relPasso(1);
+  });
+  if (!atual) relTique(todas);
+  cx.appendChild(todas);
+
+  minhas.forEach(function (c) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'opc' + (String(c.id) === String(atual) ? ' on' : '');
+    var t = document.createElement('span');
+    t.textContent = c.apelido || c.banco_nome;
+    var det = [];
+    if (c.agencia) det.push('Ag ' + c.agencia);
+    if (c.conta) det.push(c.conta);
+    if (det.length) {
+      var s = document.createElement('small');
+      s.textContent = det.join(' · ');
+      t.appendChild(s);
+    }
+    b.appendChild(t);
+    if (String(c.id) === String(atual)) relTique(b);
+    b.addEventListener('click', function () {
+      campo.value = c.id;
+      relPintaContas(empresaId);
+      relPasso(1);
+    });
+    cx.appendChild(b);
+  });
+}
+
+/* Atalhos de período: a conta de "mês passado" na mão é onde mais se erra. */
+function relPeriodo(qual) {
+  var ini = document.getElementById('rel-ini');
+  var fim = document.getElementById('rel-fim');
+  if (qual === 'limpa') { ini.value = ''; fim.value = ''; return; }
+  var hoje = new Date(), a, b;
+  if (qual === 'mes') {
+    a = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    b = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+  } else if (qual === 'anterior') {
+    a = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    b = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+  } else {
+    b = hoje;
+    a = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 89);
+  }
+  var iso = function (d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+           '-' + String(d.getDate()).padStart(2, '0');
+  };
+  ini.value = iso(a);
+  fim.value = iso(b);
+}
+
+document.querySelectorAll('#rel-gav [data-campo]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    document.getElementById(b.dataset.campo).value = b.dataset.valor;
+    b.parentElement.querySelectorAll('[data-campo="' + b.dataset.campo + '"]')
+      .forEach(function (o) {
+        o.classList.remove('on');
+        var t = o.querySelector('.tique');
+        if (t) t.remove();
+      });
+    b.classList.add('on');
+    if (b.classList.contains('opc')) {
+      relTique(b);
+      if (b.dataset.campo === 'rel-empresa') {
+        relPintaContas(b.dataset.valor);
+        relPasso(1);
+      }
+    }
+  });
+});
+document.querySelectorAll('#rel-gav .opc.on').forEach(relTique);
+relPintaContas(document.getElementById('rel-empresa').value);
+</script>
 
 {% if filtros.status == 'ignorado' %}
 <script>
 (function () {
   'use strict';
-
   var REVERTER_URL = '{{ url_for("bank_import.api_reimportar_duplicatas") }}';
+  var barra    = document.getElementById('relLote');
+  var checkAll = document.getElementById('checkAllIgnorados');
+  var btnBulk  = document.getElementById('btnReverterSelecionados');
+  var contador = document.getElementById('contadorReverter');
 
-  var checkAll  = document.getElementById('checkAllIgnorados');
-  var btnBulk   = document.getElementById('btnReverterSelecionados');
-  var contador  = document.getElementById('contadorReverter');
-
-  function getChecked() {
-    return [...document.querySelectorAll('.ignor-check:checked')].map(c => parseInt(c.value, 10));
+  function marcados() {
+    return [].slice.call(document.querySelectorAll('.ignor-check:checked'))
+             .map(function (c) { return parseInt(c.value, 10); });
   }
-
-  function atualizarContador() {
-    var n = getChecked().length;
-    if (contador) contador.textContent = n;
-    if (btnBulk) btnBulk.disabled = n === 0;
+  function atualizar() {
+    var todas = document.querySelectorAll('.ignor-check');
+    var n = marcados().length;
+    contador.textContent = n;
+    barra.classList.toggle('on', n > 0);
+    if (checkAll) checkAll.checked = n > 0 && n === todas.length;
   }
-
+  window.relLimpar = function () {
+    document.querySelectorAll('.ignor-check').forEach(function (c) { c.checked = false; });
+    if (checkAll) checkAll.checked = false;
+    atualizar();
+  };
   if (checkAll) {
     checkAll.addEventListener('change', function () {
-      document.querySelectorAll('.ignor-check').forEach(c => c.checked = this.checked);
-      atualizarContador();
+      document.querySelectorAll('.ignor-check').forEach(function (c) {
+        c.checked = checkAll.checked;
+      });
+      atualizar();
     });
   }
+  document.querySelectorAll('.ignor-check').forEach(function (c) {
+    c.addEventListener('change', atualizar);
+  });
 
-  document.querySelectorAll('.ignor-check').forEach(c => c.addEventListener('change', atualizarContador));
-
-  function reverterIds(ids, btn) {
-    if (!ids.length) return;
-    if (!confirm('Reverter ' + ids.length + ' transação(ões) para Pendente?')) return;
-    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
+  function reverter(ids, btn) {
+    if (!ids.length) { alert('Selecione ao menos um lançamento.'); return; }
+    if (!confirm('Voltar ' + ids.length + ' lançamento(s) para pendente?')) return;
+    if (btn) btn.disabled = true;
     fetch(REVERTER_URL, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ids: ids})
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: ids })
     })
-    .then(r => r.json())
-    .then(data => {
-      if (data.success) {
-        location.reload();
-      } else {
-        alert('Erro ao reverter: ' + (data.message || 'desconhecido'));
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i>'; }
-      }
-    })
-    .catch(() => {
-      alert('Erro de comunicação. Tente novamente.');
-      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i>'; }
-    });
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.success) { location.reload(); return; }
+        alert('Erro ao reverter: ' + (d.message || 'desconhecido'));
+        if (btn) btn.disabled = false;
+      })
+      .catch(function () {
+        alert('Erro de comunicação. Tente novamente.');
+        if (btn) btn.disabled = false;
+      });
   }
-
-  window.reverterSelecionados = function () {
-    reverterIds(getChecked(), btnBulk);
-  };
-
-  document.querySelectorAll('.btn-reverter-unico').forEach(btn => {
+  window.reverterSelecionados = function () { reverter(marcados(), btnBulk); };
+  document.querySelectorAll('.btn-reverter-unico').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      reverterIds([parseInt(this.dataset.txId, 10)], this);
+      reverter([parseInt(btn.dataset.txId, 10)], btn);
     });
   });
+  atualizar();
 })();
 </script>
 {% endif %}
