@@ -1,7 +1,6 @@
 """CRUD de regras de conciliação automática (bank_conciliacao_regras)."""
 
 import logging
-import mysql.connector
 import pytz
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
@@ -436,129 +435,152 @@ def excluir_lote():
     return redirect(destino_pos_acao() or url_for('conciliacao_regras.lista'))
 
 
+# Quantas memorizações por página. São mais de 17 mil no banco: a tela antiga
+# desenhava todas de uma vez, o que dava um HTML de dezenas de MB no celular.
+_MEM_POR_PAGINA = 50
+
+# Colunas que a busca varre. Ficam aqui porque a lista precisa casar com o que
+# a tela promete no campo de busca.
+_MEM_BUSCA = (
+    "bsm.cnpj_cpf", "bsm.descricao_chave", "f.razao_social", "fr.nome",
+    "td.nome", "cd.nome", "ba.apelido", "ba.banco_nome", "bsm.tipo_debito",
+)
+
+# O de/para completo. Precisa ser idêntico na contagem e na listagem, senão o
+# total da paginação não bate com o que aparece.
+_MEM_DE_PARA = """
+    FROM bank_supplier_mapping bsm
+    LEFT JOIN fornecedores f ON f.id = bsm.fornecedor_id
+    LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
+    LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
+    LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
+    LEFT JOIN bank_accounts ba ON ba.id = bsm.conta_destino_id
+"""
+
+
 @bp.route('/memorias')
 @login_required
 def memorias():
-    """Lista as memorizações de conciliação (bank_supplier_mapping)."""
+    """Lista as memorizações de conciliação (bank_supplier_mapping).
+
+    Busca, ordenação e paginação são feitas no banco. A versão anterior trazia
+    a tabela inteira para a memória, convertia o fuso de cada linha e filtrava
+    em Python — com 17 mil registros isso custava caro dos dois lados.
+    """
     _ensure_descricao_chave()
+
     filtro_q = (request.args.get('q') or '').strip()
+    filtro_tipo = (request.args.get('tipo') or '').strip()
+    filtro_destino = (request.args.get('destino') or '').strip()
+    ordem = (request.args.get('ordem') or 'uso').strip()
+    try:
+        pagina = max(1, int(request.args.get('pagina') or 1))
+    except ValueError:
+        pagina = 1
+
+    if filtro_tipo not in ('cnpj', 'texto'):
+        filtro_tipo = ''
+
+    _DESTINOS = {
+        'forma':         "bsm.forma_recebimento_id IS NOT NULL",
+        'fornecedor':    "bsm.fornecedor_id IS NOT NULL",
+        'despesa':       "bsm.titulo_id IS NOT NULL",
+        'transferencia': "bsm.conta_destino_id IS NOT NULL",
+        'nenhum':        ("bsm.forma_recebimento_id IS NULL AND bsm.fornecedor_id IS NULL"
+                          " AND bsm.titulo_id IS NULL AND bsm.conta_destino_id IS NULL"),
+    }
+    if filtro_destino not in _DESTINOS:
+        filtro_destino = ''
+
+    _ORDENS = {
+        'uso':     "bsm.total_conciliacoes DESC, bsm.id DESC",
+        'recente': "bsm.atualizado_em DESC, bsm.id DESC",
+        'parada':  "bsm.total_conciliacoes ASC, bsm.atualizado_em ASC",
+    }
+    if ordem not in _ORDENS:
+        ordem = 'uso'
+
+    where, params = [], []
+    if filtro_q:
+        where.append("(" + " OR ".join(c + " LIKE %s" for c in _MEM_BUSCA) + ")")
+        params += ['%' + filtro_q + '%'] * len(_MEM_BUSCA)
+    if filtro_tipo:
+        where.append("bsm.tipo_chave = %s")
+        params.append(filtro_tipo)
+    if filtro_destino:
+        where.append("(" + _DESTINOS[filtro_destino] + ")")
+    clausula = ("WHERE " + " AND ".join(where)) if where else ""
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
+    memorias_list, total, resumo = [], 0, {}
+    try:
+        cursor.execute(
+            "SELECT COUNT(*) AS n, COALESCE(SUM(bsm.total_conciliacoes),0) AS usos"
+            + _MEM_DE_PARA + clausula,
+            params or None,
+        )
+        linha = cursor.fetchone() or {}
+        total = int(linha.get('n') or 0)
+        resumo['usos'] = int(linha.get('usos') or 0)
 
-    # Tried in order from newest schema to oldest; on ProgrammingError errno=1054
-    # (unknown column) the next simpler query is attempted so the page stays
-    # functional even when optional migration columns (descricao_chave,
-    # tipo_debito, conta_destino_id, titulo_id/categoria_id) haven't been
-    # applied to the production DB yet.
-    _QUERIES = [
-        # Level 1 — full schema (all columns added through all migrations)
-        (
+        # Números do topo: sempre do conjunto inteiro, não da página.
+        cursor.execute(
+            "SELECT SUM(tipo_chave='cnpj') AS por_cnpj, SUM(tipo_chave='texto') AS por_texto,"
+            " SUM(total_conciliacoes = 0 OR total_conciliacoes IS NULL) AS paradas"
+            " FROM bank_supplier_mapping"
+        )
+        geral = cursor.fetchone() or {}
+        resumo['por_cnpj'] = int(geral.get('por_cnpj') or 0)
+        resumo['por_texto'] = int(geral.get('por_texto') or 0)
+        resumo['paradas'] = int(geral.get('paradas') or 0)
+
+        paginas = max(1, -(-total // _MEM_POR_PAGINA))
+        pagina = min(pagina, paginas)
+        cursor.execute(
             "SELECT bsm.id, bsm.cnpj_cpf, bsm.descricao_chave, bsm.tipo_chave,"
             " bsm.total_conciliacoes, bsm.criado_em, bsm.atualizado_em,"
+            " bsm.tipo_debito,"
             " f.razao_social AS fornecedor_nome, fr.nome AS forma_nome,"
             " td.nome AS titulo_nome, cd.nome AS categoria_nome,"
-            " ba.apelido AS conta_destino_apelido,"
-            " ba.banco_nome AS conta_destino_banco, bsm.tipo_debito"
-            " FROM bank_supplier_mapping bsm"
-            " LEFT JOIN fornecedores f ON f.id = bsm.fornecedor_id"
-            " LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id"
-            " LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id"
-            " LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id"
-            " LEFT JOIN bank_accounts ba ON ba.id = bsm.conta_destino_id"
-            " ORDER BY bsm.atualizado_em DESC"
-        ),
-        # Level 2 — without descricao_chave, tipo_debito, conta_destino_id
-        #   (handles migrations 20260223_add_transfer_fields and
-        #    20260309_add_descricao_chave not yet applied)
-        (
-            "SELECT bsm.id, bsm.cnpj_cpf, '' AS descricao_chave, bsm.tipo_chave,"
-            " bsm.total_conciliacoes, bsm.criado_em, bsm.atualizado_em,"
-            " f.razao_social AS fornecedor_nome, fr.nome AS forma_nome,"
-            " td.nome AS titulo_nome, cd.nome AS categoria_nome,"
-            " NULL AS conta_destino_apelido, NULL AS conta_destino_banco,"
-            " NULL AS tipo_debito"
-            " FROM bank_supplier_mapping bsm"
-            " LEFT JOIN fornecedores f ON f.id = bsm.fornecedor_id"
-            " LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id"
-            " LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id"
-            " LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id"
-            " ORDER BY bsm.id DESC"
-        ),
-        # Level 3 — minimal: only columns present since the original schema
-        #   (handles 20260223_add_despesa_to_mapping also not yet applied)
-        (
-            "SELECT bsm.id, bsm.cnpj_cpf, '' AS descricao_chave, bsm.tipo_chave,"
-            " bsm.total_conciliacoes, bsm.criado_em, bsm.atualizado_em,"
-            " f.razao_social AS fornecedor_nome, fr.nome AS forma_nome,"
-            " NULL AS titulo_nome, NULL AS categoria_nome,"
-            " NULL AS conta_destino_apelido, NULL AS conta_destino_banco,"
-            " NULL AS tipo_debito"
-            " FROM bank_supplier_mapping bsm"
-            " LEFT JOIN fornecedores f ON f.id = bsm.fornecedor_id"
-            " LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id"
-            " ORDER BY bsm.id DESC"
-        ),
-    ]
-
-    memorias_list = []
-    try:
-        for lvl, sql in enumerate(_QUERIES):
-            try:
-                cursor.execute(sql)
-                memorias_list = cursor.fetchall()
-                break
-            except mysql.connector.errors.ProgrammingError as _e:
-                if _e.errno != 1054 or lvl == len(_QUERIES) - 1:
-                    raise
-                conn.rollback()
-                logger.warning(
-                    "memorias: unknown column at level %d, trying simpler query: %s",
-                    lvl + 1, _e,
-                )
+            " ba.apelido AS conta_destino_apelido, ba.banco_nome AS conta_destino_banco"
+            + _MEM_DE_PARA + clausula
+            + " ORDER BY " + _ORDENS[ordem]
+            + " LIMIT %s OFFSET %s",
+            params + [_MEM_POR_PAGINA, (pagina - 1) * _MEM_POR_PAGINA],
+        )
+        memorias_list = cursor.fetchall()
     except Exception:
         logger.exception("Erro ao carregar memorizações de conciliação")
-        memorias_list = []
+        memorias_list, total, paginas = [], 0, 1
     finally:
         cursor.close()
         conn.close()
 
-    # Converte timestamps UTC → horário de Brasília para exibição
+    # UTC → Brasília. Agora só nas 50 linhas da página.
     for m in memorias_list:
-        for field in ('atualizado_em', 'criado_em'):
-            val = m.get(field)
+        for campo in ('atualizado_em', 'criado_em'):
+            val = m.get(campo)
             if val is not None:
                 try:
-                    # MySQL datetime sem tzinfo → assume UTC
                     utc_dt = pytz.utc.localize(val) if val.tzinfo is None else val
-                    m[field] = utc_dt.astimezone(_BRASILIA)
+                    m[campo] = utc_dt.astimezone(_BRASILIA)
                 except Exception:
-                    pass  # mantém o valor original em caso de erro inesperado
+                    pass
 
-    if filtro_q:
-        filtro = filtro_q.casefold()
-        campos_busca = (
-            'cnpj_cpf',
-            'descricao_chave',
-            'fornecedor_nome',
-            'forma_nome',
-            'titulo_nome',
-            'categoria_nome',
-            'conta_destino_apelido',
-            'conta_destino_banco',
-            'tipo_debito',
-        )
-        memorias_list = [
-            m for m in memorias_list
-            if any(
-                (m.get(c) is not None) and (filtro in str(m.get(c)).casefold())
-                for c in campos_busca
-            )
-        ]
-
+    paginas = max(1, -(-total // _MEM_POR_PAGINA))
     return render_template(
         'bank_import/regras/memorias.html',
         memorias=memorias_list,
         filtro_q=filtro_q,
+        filtro_tipo=filtro_tipo,
+        filtro_destino=filtro_destino,
+        ordem=ordem,
+        pagina=min(pagina, paginas),
+        paginas=paginas,
+        total=total,
+        por_pagina=_MEM_POR_PAGINA,
+        resumo=resumo,
     )
 
 
@@ -579,9 +601,7 @@ def excluir_memoria(memoria_id):
     finally:
         cursor.close()
         conn.close()
-    if filtro_q:
-        return redirect(url_for('conciliacao_regras.memorias', q=filtro_q))
-    return redirect(url_for('conciliacao_regras.memorias'))
+    return redirect(destino_pos_acao() or url_for('conciliacao_regras.memorias'))
 
 
 @bp.route('/memorias/excluir-lote', methods=['POST'])
@@ -622,9 +642,7 @@ def excluir_memorias_lote():
         cursor.close()
         conn.close()
 
-    if filtro_q:
-        return redirect(url_for('conciliacao_regras.memorias', q=filtro_q))
-    return redirect(url_for('conciliacao_regras.memorias'))
+    return redirect(destino_pos_acao() or url_for('conciliacao_regras.memorias'))
 
 
 

@@ -1,403 +1,593 @@
 {% extends "base.html" %}
-{% block title %}Memorizações de Conciliação{% endblock %}
+
+{% block title %}Memorizações - NH Transportes{% endblock %}
 
 {% block styles %}
 <style>
-  .page-hero {
-    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
-    border-radius: .75rem; padding: 1.25rem 1.75rem; margin-bottom: 1.25rem; color: #fff;
-  }
-  .page-hero .hero-icon {
-    width: 2.75rem; height: 2.75rem; background: rgba(255,255,255,.15);
-    border-radius: .5rem; display: flex; align-items: center; justify-content: center;
-    font-size: 1.35rem; flex-shrink: 0;
-  }
-  #tbl-memorias thead th {
-    background: #1D63A5; color: #fff;
-    font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
-    padding: 0.45rem 0.5rem; border: none; white-space: nowrap;
-  }
-  #tbl-memorias tbody td { padding: 0.35rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; font-size: 0.8rem; }
-  #tbl-memorias thead th.col-check,
-  #tbl-memorias tbody td.col-check {
-    width: 2rem;
-    text-align: center;
-    padding-left: .35rem;
-    padding-right: .35rem;
-  }
-  #bulk-actions {
-    display: none;
-  }
-  #bulk-actions.visible {
-    display: flex;
-  }
+/* ═══════════════════════════════════════════════════════════════════════
+   Memorizações — mesmo padrão das outras telas do Banco.
+
+   São mais de 17 mil. A tela antiga desenhava todas de uma vez, o que dava
+   dezenas de MB de HTML no celular; agora vêm 50 por vez, e a busca é feita
+   no banco.
+
+   A chave é texto literal comparado com a descrição do extrato, então
+   aparece em fonte monoespaçada — um espaço a mais muda o resultado.
+   ═════════════════════════════════════════════════════════════════════ */
+body > .container-fluid:has(#mem){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#mem){ padding:.7rem 1rem 0; }
+}
+#mem.container-fluid{ padding-left:0; padding-right:0; }
+
+#mem{
+  --azul:#1D63A5; --azul-deep:#0C4C86; --azul-claro:#eaf1f9;
+  --verde:#17963C; --roxo:#6D48C8;
+  --ink:#151d27; --ink-2:#3a4655; --muted:#6b7684;
+  --line:#e7ebf1; --line-2:#d9e0e8; --surface:#f7f9fc;
+  --ok:#1c6b34; --ok-bg:#e4f4e8;
+  --pend:#8a5a00; --pend-bg:#fdf0d6;
+  --ign:#4b5563; --ign-bg:#eceef1;
+  --danger:#a32d2d; --danger-bg:#fbe9e9;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  color:var(--ink);
+  overflow-x:hidden;
+}
+
+/* ── Topo ─────────────────────────────────────────────────────────── */
+#mem .topo{ background:linear-gradient(120deg,var(--azul-deep),var(--azul)); color:#fff;
+  border-radius:14px; padding:.6rem .8rem .15rem; margin-bottom:.7rem; }
+#mem .topo__l1{ display:flex; align-items:center; gap:.5rem; }
+#mem .topo h3{ margin:0; font-size:1.05rem; font-weight:800; letter-spacing:-.01em; }
+#mem .voltar{ display:inline-flex; align-items:center; gap:.3rem;
+  background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.28); color:#fff;
+  border-radius:99px; padding:.22rem .62rem; font-size:.75rem; font-weight:700;
+  text-decoration:none; flex:0 0 auto; }
+#mem .voltar:hover{ background:rgba(255,255,255,.3); color:#fff; }
+#mem .topo .fil{ margin-left:auto; flex:0 0 auto; background:rgba(255,255,255,.2);
+  border:1px solid rgba(255,255,255,.35); color:#fff; border-radius:10px;
+  padding:.32rem .6rem; font-size:.8rem; font-weight:800; cursor:pointer;
+  display:inline-flex; align-items:center; gap:.32rem; font-family:inherit; }
+#mem .topo .fil:hover{ background:rgba(255,255,255,.3); }
+#mem .topo .fil .b{ background:#fff; color:var(--azul-deep); border-radius:99px;
+  min-width:17px; height:17px; display:grid; place-items:center; font-size:.66rem; }
+#mem .abas{ display:flex; gap:.35rem; overflow-x:auto; padding:.55rem 0 .5rem;
+  scrollbar-width:none; }
+#mem .abas::-webkit-scrollbar{ display:none; }
+#mem .aba{ flex:0 0 auto; border-radius:99px; padding:.32rem .8rem; font-size:.79rem;
+  font-weight:800; white-space:nowrap; color:#fff; text-decoration:none;
+  background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22); }
+#mem .aba:hover{ background:rgba(255,255,255,.26); color:#fff; }
+#mem .aba.on{ background:#fff; color:var(--azul-deep); border-color:#fff; }
+
+/* ── Números ──────────────────────────────────────────────────────── */
+#mem .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:.7rem; }
+@media (min-width:768px){ #mem .nums{ grid-template-columns:repeat(4,1fr); } }
+#mem .nums .n{ border-radius:13px; padding:.55rem .75rem; color:#fff;
+  box-shadow:0 2px 8px rgba(20,35,60,.12); text-decoration:none; display:block; }
+#mem .nums a.n:hover{ color:#fff; filter:brightness(1.06); }
+#mem .nums .r{ font-size:.66rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.06em; opacity:.92; }
+#mem .nums .v{ font-size:1.16rem; font-weight:800; letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums; line-height:1.25; }
+#mem .n--a{ background:linear-gradient(135deg,#2E6FB0,#1D63A5); }
+#mem .n--b{ background:linear-gradient(135deg,#22A24B,#17963C); }
+#mem .n--c{ background:linear-gradient(135deg,#5B6B7F,#465565); }
+#mem .n--d{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
+
+/* ── Avisos ───────────────────────────────────────────────────────── */
+#mem .av{ display:flex; align-items:flex-start; gap:.5rem; border-radius:12px;
+  padding:.55rem .7rem; font-size:.82rem; margin-bottom:.6rem; line-height:1.35; }
+#mem .av--ok{ background:var(--ok-bg); color:var(--ok); border:1px solid #bfe3c9; }
+#mem .av--alerta{ background:var(--pend-bg); color:#6b4600; border:1px solid #f0dcae; }
+#mem .av--erro{ background:var(--danger-bg); color:var(--danger); border:1px solid #f0c6c6; }
+#mem .av i{ flex:0 0 auto; margin-top:.1rem; }
+#mem .av .fechar{ margin-left:auto; background:none; border:0; color:inherit;
+  opacity:.55; cursor:pointer; font-size:.9rem; padding:0 .1rem; flex:0 0 auto; }
+
+/* ── Lista ────────────────────────────────────────────────────────── */
+#mem .lst{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+  overflow:hidden; }
+#mem .topo-lst{ display:flex; align-items:center; gap:.55rem; padding:.55rem .7rem;
+  border-bottom:1px solid var(--line); font-size:.78rem; font-weight:700;
+  color:var(--muted); cursor:pointer; user-select:none; margin:0; }
+#mem .topo-lst .tot{ margin-left:auto; color:var(--azul-deep);
+  font-variant-numeric:tabular-nums; }
+
+#mem .lin{ display:grid; grid-template-columns:auto minmax(0,1fr); gap:.1rem .55rem;
+  grid-template-areas:"chk desc" "chk meio" "chk baixo";
+  padding:.5rem .6rem; border-bottom:1px solid var(--line); align-items:center;
+  cursor:pointer; }
+#mem .lin:last-child{ border-bottom:0; }
+#mem .lin.sel{ background:var(--azul-claro); }
+#mem .c-chk{ grid-area:chk; align-self:center; }
+#mem .c-desc{ grid-area:desc; font-family:var(--mono); font-size:.81rem; font-weight:700;
+  letter-spacing:-.01em; min-width:0; line-height:1.3; word-break:break-word;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  overflow:hidden; }
+#mem .c-desc.vazia{ font-family:inherit; font-weight:600; color:var(--muted);
+  font-style:italic; }
+#mem .c-meio{ grid-area:meio; display:flex; align-items:center; gap:.35rem; min-width:0; }
+#mem .doc{ font-family:var(--mono); font-size:.72rem; color:var(--ink-2);
+  font-weight:600; white-space:nowrap; }
+#mem .c-usos{ margin-left:auto; flex:0 0 auto; font-size:.92rem; font-weight:800;
+  color:var(--verde); font-variant-numeric:tabular-nums; letter-spacing:-.02em;
+  white-space:nowrap; }
+#mem .c-usos small{ font-size:.64rem; font-weight:700; color:var(--muted);
+  margin-left:.15rem; }
+#mem .c-usos--zero{ color:var(--pend); }
+#mem .c-baixo{ grid-area:baixo; display:flex; align-items:center; gap:.35rem;
+  min-width:0; margin-top:.14rem; }
+#mem .quando{ font-size:.7rem; color:var(--muted); font-weight:600;
+  font-variant-numeric:tabular-nums; white-space:nowrap; }
+#mem .c-acao{ display:flex; gap:.1rem; align-items:center; margin-left:auto;
+  flex:0 0 auto; padding-left:.3rem; }
+#mem .c-acao form{ display:inline; margin:0; }
+#mem .ic{ width:27px; height:27px; border-radius:7px; border:1px solid transparent;
+  background:none; display:grid; place-items:center; font-size:.85rem; cursor:pointer;
+  color:var(--muted); padding:0; font-family:inherit; }
+#mem .ic--perigo:hover{ background:var(--danger-bg); border-color:#f0c6c6;
+  color:var(--danger); }
+
+#mem .marca{ width:19px; height:19px; cursor:pointer; accent-color:var(--azul); margin:0; }
+#mem .selo{ display:inline-block; font-size:.66rem; font-weight:800; border-radius:5px;
+  padding:.08rem .38rem; white-space:nowrap; max-width:100%; overflow:hidden;
+  text-overflow:ellipsis; }
+#mem .selo--forma{ background:rgba(109,72,200,.13); color:var(--roxo); min-width:0; }
+#mem .selo--forn{ background:rgba(29,99,165,.12); color:var(--azul-deep); min-width:0; }
+#mem .selo--desp{ background:var(--pend-bg); color:var(--pend); min-width:0; }
+#mem .selo--trf{ background:var(--ok-bg); color:var(--ok); min-width:0; }
+#mem .selo--nada{ background:var(--danger-bg); color:var(--danger); }
+#mem .selo--cnpj{ background:var(--ign-bg); color:var(--ign); }
+#mem .vazio{ text-align:center; color:var(--muted); padding:2.4rem 1rem; font-size:.85rem; }
+#mem .vazio b{ display:block; color:var(--ink); font-size:.95rem; margin-bottom:.25rem; }
+
+/* ── Páginas ──────────────────────────────────────────────────────── */
+#mem .paginas{ display:flex; align-items:center; gap:.45rem; padding:.6rem .7rem;
+  border-top:1px solid var(--line); background:var(--surface); }
+#mem .paginas .qual{ margin:0 auto; font-size:.79rem; font-weight:700;
+  color:var(--muted); font-variant-numeric:tabular-nums; }
+#mem .pg{ display:inline-flex; align-items:center; gap:.3rem; font-size:.79rem;
+  font-weight:800; color:var(--azul); text-decoration:none; background:#fff;
+  border:1px solid var(--line-2); border-radius:10px; padding:.35rem .65rem; }
+#mem .pg:hover{ border-color:var(--azul); }
+#mem .pg--off{ color:#b9c1cb; border-color:var(--line); pointer-events:none; }
+
+/* ── Barra de lote ────────────────────────────────────────────────── */
+#mem .lote{ position:fixed; left:0; right:0; bottom:0; z-index:1040;
+  background:var(--azul-deep); color:#fff; padding:.6rem .8rem; display:flex;
+  align-items:center; gap:.5rem; flex-wrap:wrap; transform:translateY(110%);
+  transition:transform .18s ease; box-shadow:0 -6px 20px rgba(12,76,134,.25);
+  padding-bottom:calc(.6rem + env(safe-area-inset-bottom)); }
+#mem .lote.on{ transform:translateY(0); }
+#mem .lote .n{ font-weight:800; font-variant-numeric:tabular-nums; }
+#mem .lote .sep{ margin-left:auto; }
+#mem .bl{ border:0; border-radius:9px; padding:.36rem .7rem; font-size:.8rem;
+  font-weight:800; cursor:pointer; background:rgba(255,255,255,.18); color:#fff;
+  font-family:inherit; }
+#mem .bl:hover{ background:rgba(255,255,255,.3); }
+#mem .bl--fim{ background:#fff; color:var(--danger); }
+#mem .rodape-folga{ height:4.5rem; }
+
+/* ── Saída da tela ────────────────────────────────────────────────── */
+#mem .pe{ display:flex; gap:.45rem; flex-wrap:wrap; margin-top:.8rem; }
+#mem .pe a{ display:inline-flex; align-items:center; gap:.3rem; font-size:.79rem;
+  font-weight:700; color:var(--azul); text-decoration:none; background:#fff;
+  border:1px solid var(--line-2); border-radius:10px; padding:.4rem .7rem; }
+#mem .pe a:hover{ border-color:var(--azul); }
+
+/* ── Filtro em passos ─────────────────────────────────────────────── */
+#mem .escuro{ position:fixed; inset:0; background:rgba(12,25,42,.45); z-index:1050;
+  opacity:0; pointer-events:none; transition:opacity .2s; }
+#mem .escuro.on{ opacity:1; pointer-events:auto; }
+#mem .gav{ position:fixed; left:0; right:0; bottom:0; z-index:1051; background:#fff;
+  border-radius:18px 18px 0 0; max-height:88vh; display:flex; flex-direction:column;
+  transform:translateY(101%); transition:transform .24s cubic-bezier(.22,.7,.3,1);
+  box-shadow:0 -10px 30px rgba(12,25,42,.3); }
+#mem .gav.on{ transform:translateY(0); }
+@media (min-width:992px){
+  #mem .gav{ left:50%; right:auto; bottom:auto; top:8vh; width:520px; border-radius:16px;
+    transform:translate(-50%,10px); opacity:0; pointer-events:none;
+    transition:opacity .16s ease, transform .16s ease; max-height:84vh; }
+  #mem .gav.on{ transform:translate(-50%,0); opacity:1; pointer-events:auto; }
+  #mem .gav__pega{ display:none; }
+}
+#mem .gav__pega{ width:36px; height:4px; background:var(--line-2); border-radius:9px;
+  margin:.5rem auto .1rem; flex:0 0 auto; }
+#mem .passos{ display:flex; gap:.3rem; padding:.4rem .9rem .1rem; }
+#mem .passo{ flex:1; height:3px; border-radius:9px; background:var(--line-2); }
+#mem .passo.on{ background:var(--azul); }
+#mem .pnome{ padding:.35rem .9rem .4rem; font-size:.76rem; color:var(--muted);
+  font-weight:700; }
+#mem .pnome b{ color:var(--ink); font-size:.95rem; }
+#mem .gav__b{ overflow-y:auto; padding:0 .9rem .7rem; }
+#mem .gav__f{ border-top:1px solid var(--line); padding:.65rem .9rem; display:flex;
+  gap:.5rem; background:#fff;
+  padding-bottom:calc(.65rem + env(safe-area-inset-bottom)); }
+#mem .bt-g{ border:0; border-radius:10px; padding:.55rem .8rem; font-size:.87rem;
+  font-weight:800; cursor:pointer; font-family:inherit; }
+#mem .bt-g--ok{ flex:1; background:var(--azul); color:#fff; }
+#mem .bt-g--ca{ background:var(--surface); color:var(--muted);
+  border:1px solid var(--line-2); }
+#mem .etapa[hidden]{ display:none; }
+#mem .gr{ margin-bottom:.85rem; }
+#mem .gr__t{ font-size:.69rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--muted); margin-bottom:.3rem; }
+#mem .campo{ width:100%; border:1px solid var(--line-2); border-radius:10px;
+  padding:.5rem .65rem; font-size:.85rem; background:#fff; color:var(--ink);
+  font-family:inherit; }
+#mem .seg{ display:flex; gap:2px; background:var(--surface); border:1px solid var(--line-2);
+  border-radius:10px; padding:2px; }
+#mem .seg button{ flex:1; border:0; background:none; border-radius:8px; padding:.42rem .2rem;
+  font-size:.79rem; font-weight:700; color:var(--muted); cursor:pointer;
+  font-family:inherit; white-space:nowrap; }
+#mem .seg button.on{ background:#fff; color:var(--azul-deep);
+  box-shadow:0 1px 2px rgba(20,35,60,.1); }
+#mem .chips{ display:flex; flex-wrap:wrap; gap:.35rem; }
+#mem .chip{ border:1px solid var(--line-2); background:#fff; color:var(--ink-2);
+  border-radius:99px; padding:.32rem .7rem; font-size:.78rem; font-weight:700;
+  cursor:pointer; font-family:inherit; }
+#mem .chip.on{ background:var(--azul); border-color:var(--azul); color:#fff; }
+#mem .dica{ font-size:.75rem; color:var(--muted); margin-top:.3rem; }
+#mem :focus-visible{ outline:2px solid var(--azul); outline-offset:2px; }
+@media (prefers-reduced-motion: reduce){ #mem *{ transition:none !important; } }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-2">
-  {% set memoria_cols = 8 %}
+{# `next` devolve a MESMA página com o MESMO filtro depois de excluir. #}
+{% set voltar_para = request.full_path if request.query_string else request.path %}
+{% set n_filtros = (1 if filtro_q else 0) + (1 if filtro_tipo else 0)
+                   + (1 if filtro_destino else 0) + (1 if ordem != 'uso' else 0) %}
+{% macro milhar(v) -%}
+{{ '{:,}'.format(v or 0)|replace(',','.') }}
+{%- endmacro %}
 
-  <!-- Hero header -->
-  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-    <div class="hero-icon"><i class="bi bi-bookmark-star-fill"></i></div>
-    <div class="flex-grow-1">
-      <h4 class="mb-0 fw-bold">Memorizações de Conciliação</h4>
-      <p class="mb-0 opacity-75" style="font-size:0.8rem;">Vínculos aprendidos automaticamente ao conciliar transações bancárias.</p>
+<div class="container-fluid" id="mem">
+
+  <div class="topo">
+    <div class="topo__l1">
+      <a class="voltar" href="{{ url_for('conciliacao_regras.lista') }}">
+        <i class="bi bi-chevron-left"></i> Regras
+      </a>
+      <h3>Memorizações</h3>
+      <button type="button" class="fil" onclick="memAbrirFiltro()">
+        <i class="bi bi-sliders"></i>
+        {% if n_filtros %}<span class="b">{{ n_filtros }}</span>{% endif %}
+      </button>
     </div>
-    <a href="{{ url_for('conciliacao_regras.lista') }}" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);">
-      <i class="bi bi-arrow-left"></i> Voltar para Regras
+    <div class="abas">
+      {% with ativa = 'memorias' %}{% include 'includes/abas_banco.html' %}{% endwith %}
+    </div>
+  </div>
+
+  {% set base = url_for('conciliacao_regras.memorias') %}
+  <div class="nums">
+    <a class="n n--a" href="{{ base }}">
+      <div class="r">Memorizações</div>
+      <div class="v">{{ milhar(resumo.get('por_cnpj', 0) + resumo.get('por_texto', 0)) }}</div>
+    </a>
+    <div class="n n--b">
+      <div class="r">Conciliações</div>
+      <div class="v">{{ milhar(resumo.get('usos')) }}</div>
+    </div>
+    <a class="n n--c" href="{{ base }}?tipo=cnpj">
+      <div class="r">Por CNPJ/CPF</div>
+      <div class="v">{{ milhar(resumo.get('por_cnpj')) }}</div>
+    </a>
+    <a class="n n--d" href="{{ base }}?ordem=parada">
+      <div class="r">Nunca usadas</div>
+      <div class="v">{{ milhar(resumo.get('paradas')) }}</div>
     </a>
   </div>
 
-  <div class="alert alert-info py-2 mb-2">
-    <i class="bi bi-info-circle"></i>
-    Estas memorizações são criadas <strong>automaticamente</strong> ao clicar em
-    <strong>Conciliar</strong> na tela de conciliação. Elas associam
-    <code>CNPJ/CPF + Descrição</code> da transação bancária a um destino (fornecedor, forma de
-    recebimento, despesa ou conta). Na próxima importação, o sistema usa esse vínculo para sugerir
-    ou aplicar a conciliação automaticamente.
-    <br>
-    Você pode excluir uma memorização caso ela esteja incorreta.
-  </div>
-
-  <!-- ── Painel: O que é salvo por tipo de opção ──────────────────────────── -->
-  <div class="card mb-3 border-warning">
-    <div class="card-header bg-warning text-dark py-2 d-flex align-items-center gap-2"
-         style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#painelRegras">
-      <i class="bi bi-question-circle-fill"></i>
-      <strong>O que é memorizado para cada opção na Conciliação?</strong>
-      <i class="bi bi-chevron-down ms-auto"></i>
-    </div>
-    <div class="collapse" id="painelRegras">
-      <div class="card-body py-3">
-        <p class="text-muted small mb-3">
-          Ao clicar em <strong>Conciliar</strong>, o sistema salva automaticamente uma entrada
-          em <code>bank_supplier_mapping</code> usando a chave
-          <code>(CNPJ/CPF&nbsp;+&nbsp;Descrição)</code> da transação.
-          Nas próximas importações/conciliações, essa chave é consultada para pré-preencher
-          os campos ou para conciliar automaticamente.
-        </p>
-        <div class="row g-3">
-
-          <!-- CRÉDITO -->
-          <div class="col-md-6">
-            <div class="card h-100 border-success">
-              <div class="card-header bg-success text-white py-1">
-                <i class="bi bi-arrow-down-circle-fill"></i> Crédito &rarr; Forma de Recebimento
-              </div>
-              <div class="card-body py-2 small">
-                <p class="mb-1"><strong>Quando ocorre:</strong> transação do tipo <code>CREDIT</code> e você seleciona uma <em>Forma de Recebimento</em>.</p>
-                <p class="mb-1"><strong>O que é salvo:</strong></p>
-                <ul class="mb-0">
-                  <li>CNPJ/CPF + Descrição da transação</li>
-                  <li>Forma de Recebimento escolhida (<code>forma_recebimento_id</code>)</li>
-                </ul>
-                <p class="mt-2 mb-0 text-muted">
-                  <i class="bi bi-lightning-charge"></i>
-                  <em>Na próxima importação o sistema sugere automaticamente a mesma forma para transações com mesmo CNPJ + descrição.</em>
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <!-- DÉBITO – FORNECEDOR -->
-          <div class="col-md-6">
-            <div class="card h-100 border-primary">
-              <div class="card-header bg-primary text-white py-1">
-                <i class="bi bi-arrow-up-circle-fill"></i> Débito &rarr; Fornecedor
-              </div>
-              <div class="card-body py-2 small">
-                <p class="mb-1"><strong>Quando ocorre:</strong> transação do tipo <code>DEBIT</code>, opção <strong>Fornecedor</strong> selecionada.</p>
-                <p class="mb-1"><strong>O que é salvo:</strong></p>
-                <ul class="mb-0">
-                  <li>CNPJ/CPF + Descrição da transação</li>
-                  <li>Fornecedor escolhido (<code>fornecedor_id</code>)</li>
-                </ul>
-                <p class="mt-2 mb-0 text-muted">
-                  <i class="bi bi-lightning-charge"></i>
-                  <em>Da próxima vez, o fornecedor é pré-sugerido automaticamente.</em>
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <!-- DÉBITO – DESPESA -->
-          <div class="col-md-6">
-            <div class="card h-100 border-warning">
-              <div class="card-header bg-warning text-dark py-1">
-                <i class="bi bi-receipt-cutoff"></i> Débito &rarr; Despesa (lançamento único)
-              </div>
-              <div class="card-body py-2 small">
-                <p class="mb-1"><strong>Quando ocorre:</strong> opção <strong>Despesa</strong>, com apenas <em>uma</em> linha de despesa preenchida.</p>
-                <p class="mb-1"><strong>O que é salvo:</strong></p>
-                <ul class="mb-0">
-                  <li>CNPJ/CPF + Descrição da transação</li>
-                  <li>Título de Despesa (<code>titulo_id</code>)</li>
-                  <li>Categoria (<code>categoria_id</code>) e Subcategoria (se informada)</li>
-                </ul>
-                <p class="mt-2 mb-0 text-warning-emphasis">
-                  <i class="bi bi-exclamation-triangle-fill"></i>
-                  <em><strong>Despesas divididas (split) NÃO são memorizadas</strong> — ficam para conciliação manual.</em>
-                </p>
-                <p class="mt-1 mb-0 text-muted">
-                  <i class="bi bi-lightning-charge"></i>
-                  <em>Na próxima importação, o <code>lancamento_despesa</code> é criado automaticamente.</em>
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <!-- DÉBITO – TRANSFERÊNCIA -->
-          <div class="col-md-6">
-            <div class="card h-100 border-info">
-              <div class="card-header bg-info text-dark py-1">
-                <i class="bi bi-arrow-left-right"></i> Débito &rarr; Transferência entre contas
-              </div>
-              <div class="card-body py-2 small">
-                <p class="mb-1"><strong>Quando ocorre:</strong> opção <strong>Transferência</strong> e você seleciona a conta destino.</p>
-                <p class="mb-1"><strong>O que é salvo:</strong></p>
-                <ul class="mb-0">
-                  <li>CNPJ/CPF + Descrição da transação</li>
-                  <li>Conta bancária destino (<code>conta_destino_id</code>)</li>
-                  <li>Tipo <code>transferencia</code></li>
-                </ul>
-                <p class="mt-2 mb-0 text-muted">
-                  <i class="bi bi-lightning-charge"></i>
-                  <em>Na próxima importação, a transferência é sugerida/aplicada automaticamente.</em>
-                </p>
-              </div>
-            </div>
-          </div>
-
-        </div><!-- /row -->
-
-        <hr class="my-3">
-        <p class="small mb-1"><strong><i class="bi bi-x-circle-fill text-danger"></i> Casos em que NÃO é criada memorização:</strong></p>
-        <ul class="small mb-0">
-          <li><strong>Troco PIX</strong> — vincula apenas ao registro de troco, sem aprender CNPJ.</li>
-          <li><strong>Despesa dividida (split)</strong> — múltiplas linhas de despesa na mesma transação.</li>
-          <li><strong>Modo "sem aprendizado"</strong> — quando o parâmetro interno <code>salvar_mapeamento=False</code> é usado (ex.: conciliações programáticas ou fluxos que não devem criar regra automática).</li>
-          <li><strong>Ignorar transação</strong> — ao clicar em "Ignorar", nenhuma memorização é gerada.</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-  <!-- ── /Painel ──────────────────────────────────────────────────────────── -->
-
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in messages %}
-      <div class="alert alert-{{ cat }} alert-dismissible fade show py-2" role="alert">
-        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      <div class="av av--{{ 'erro' if cat in ('danger','error') else ('alerta' if cat == 'warning' else 'ok') }}">
+        <i class="bi bi-info-circle-fill"></i>
+        <div>{{ msg }}</div>
+        <button type="button" class="fechar" onclick="this.parentElement.remove()">✕</button>
       </div>
     {% endfor %}
   {% endwith %}
 
-  <div class="card shadow-sm">
-    <div class="card-header bg-white py-2">
-      <form method="get" class="row g-2 align-items-center">
-        <div class="col-md-8">
-          <input type="text"
-                 name="q"
-                 class="form-control form-control-sm"
-                 value="{{ filtro_q or '' }}"
-                 placeholder="Filtrar por chave (CNPJ/CPF/descrição) ou vínculo (fornecedor/forma/título/categoria/conta/tipo)">
-        </div>
-        <div class="col-md-4 d-flex gap-1">
-          <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
-            <i class="bi bi-search"></i> Filtrar
-          </button>
-          <a href="{{ url_for('conciliacao_regras.memorias') }}" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-x"></i> Limpar
-          </a>
-        </div>
-      </form>
+  {# O formulário do lote fica FORA da lista: form dentro de form é descartado
+     pelo navegador, e o botão da linha acabaria disparando o excluir em lote. #}
+  <form method="post" action="{{ url_for('conciliacao_regras.excluir_memorias_lote') }}"
+        id="formLote">
+    <input type="hidden" name="next" value="{{ voltar_para }}">
+  </form>
+
+  <div class="lst">
+    <label class="topo-lst">
+      <input type="checkbox" class="marca" id="marcaTudo">
+      Selecionar as desta página
+      <span class="tot">{{ milhar(total) }} no total</span>
+    </label>
+
+    {% if not memorias %}
+      <div class="vazio">
+        <b>Nenhuma memorização por aqui.</b>
+        {% if n_filtros %}Nada corresponde ao filtro.
+          <a href="{{ base }}">Limpar</a>.
+        {% else %}Elas nascem sozinhas: toda vez que você concilia um lançamento,
+          o sistema guarda o vínculo para repetir da próxima.{% endif %}
+      </div>
+    {% endif %}
+
+    {% for m in memorias %}
+    <div class="lin" data-id="{{ m.id }}">
+      <span class="c-chk">
+        <input type="checkbox" form="formLote" name="memoria_ids[]" value="{{ m.id }}"
+               class="marca chk"
+               aria-label="Selecionar a memorização {{ m.descricao_chave or m.cnpj_cpf }}">
+      </span>
+
+      {% if m.descricao_chave %}
+        <div class="c-desc">{{ m.descricao_chave }}</div>
+      {% else %}
+        <div class="c-desc vazia">sem descrição-chave (memorização antiga)</div>
+      {% endif %}
+
+      <div class="c-meio">
+        {% if m.cnpj_cpf %}<span class="doc">{{ m.cnpj_cpf }}</span>{% endif %}
+        <span class="c-usos{{ ' c-usos--zero' if not m.total_conciliacoes }}">
+          {{ milhar(m.total_conciliacoes) }}<small>×</small>
+        </span>
+      </div>
+
+      <div class="c-baixo">
+        {% if m.forma_nome %}
+          <span class="selo selo--forma">{{ m.forma_nome }}</span>
+        {% endif %}
+        {% if m.fornecedor_nome %}
+          <span class="selo selo--forn">{{ m.fornecedor_nome }}</span>
+        {% endif %}
+        {% if m.titulo_nome %}
+          <span class="selo selo--desp">{{ m.titulo_nome }}{% if m.categoria_nome %} › {{ m.categoria_nome }}{% endif %}</span>
+        {% endif %}
+        {% if m.conta_destino_apelido %}
+          <span class="selo selo--trf">→ {{ m.conta_destino_banco }} {{ m.conta_destino_apelido }}</span>
+        {% endif %}
+        {% if not m.forma_nome and not m.fornecedor_nome and not m.titulo_nome and not m.conta_destino_apelido %}
+          <span class="selo selo--nada">sem destino</span>
+        {% endif %}
+        {% if m.tipo_chave == 'texto' %}<span class="selo selo--cnpj">por texto</span>{% endif %}
+        {% if m.atualizado_em %}
+          <span class="quando">{{ m.atualizado_em.strftime('%d/%m/%y') }}</span>
+        {% endif %}
+
+        <span class="c-acao">
+          <form method="post"
+                action="{{ url_for('conciliacao_regras.excluir_memoria', memoria_id=m.id) }}"
+                class="f-excluir"
+                data-nome="{{ m.descricao_chave or m.cnpj_cpf or ('#' ~ m.id) }}">
+            <input type="hidden" name="next" value="{{ voltar_para }}">
+            <button class="ic ic--perigo" title="Esquecer esta memorização">
+              <i class="bi bi-trash"></i>
+            </button>
+          </form>
+        </span>
+      </div>
     </div>
-    <div class="card-body p-0">
-      <div class="px-3 pt-2 pb-1 text-muted small border-bottom">
-        <strong>{{ memorias|length }}</strong> memorização(ões) registrada(s)
+    {% endfor %}
+
+    {% if paginas > 1 %}
+    {% set qs = {'q': filtro_q or None, 'tipo': filtro_tipo or None,
+                 'destino': filtro_destino or None,
+                 'ordem': ordem if ordem != 'uso' else None} %}
+    <div class="paginas">
+      <a class="pg{{ ' pg--off' if pagina <= 1 }}"
+         href="{{ url_for('conciliacao_regras.memorias', pagina=pagina-1, **qs) }}">
+        <i class="bi bi-chevron-left"></i> Anterior
+      </a>
+      <span class="qual">{{ pagina }} de {{ milhar(paginas) }}</span>
+      <a class="pg{{ ' pg--off' if pagina >= paginas }}"
+         href="{{ url_for('conciliacao_regras.memorias', pagina=pagina+1, **qs) }}">
+        Próxima <i class="bi bi-chevron-right"></i>
+      </a>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="pe">
+    <a href="{{ url_for('conciliacao_regras.lista') }}">
+      <i class="bi bi-funnel"></i> Regras de conciliação
+    </a>
+    <a href="{{ url_for('bank_import.conciliar') }}">
+      <i class="bi bi-check2-square"></i> Conciliação
+    </a>
+    <a href="{{ url_for('bank_import.index') }}">
+      <i class="bi bi-arrow-left"></i> Voltar para o Banco
+    </a>
+  </div>
+
+  <div class="rodape-folga"></div>
+
+  <!-- Barra de lote -->
+  <div class="lote" id="memLote">
+    <span class="n"><span id="memQtd">0</span> selecionada(s)</span>
+    <span class="sep"></span>
+    <button type="button" class="bl" onclick="memLimpar()">Limpar</button>
+    <button type="submit" form="formLote" class="bl bl--fim" onclick="return memConfirma();">
+      <i class="bi bi-trash"></i> Esquecer
+    </button>
+  </div>
+
+  <!-- Filtro em passos -->
+  <div class="escuro" id="mem-escuro" onclick="memFecharFiltro()"></div>
+  <form class="gav" id="mem-gav" method="get"
+        action="{{ url_for('conciliacao_regras.memorias') }}">
+    <div class="gav__pega"></div>
+    <div class="passos">
+      <span class="passo on" id="mem-p1"></span>
+      <span class="passo" id="mem-p2"></span>
+    </div>
+    <div class="pnome">Passo <span id="mem-pn">1</span> de 2 — <b id="mem-pt">Procurar</b></div>
+
+    <input type="hidden" name="tipo" id="mem-tipo" value="{{ filtro_tipo }}">
+    <input type="hidden" name="destino" id="mem-destino" value="{{ filtro_destino }}">
+    <input type="hidden" name="ordem" id="mem-ordem" value="{{ ordem }}">
+
+    <div class="gav__b">
+      <div class="etapa" id="mem-e1">
+        <div class="gr">
+          <div class="gr__t">Procurar</div>
+          <input type="text" class="campo" name="q" id="mem-q" value="{{ filtro_q }}"
+                 autocomplete="off" placeholder="CNPJ, CPF, descrição, fornecedor, forma…">
+          <div class="dica">Procura na chave e também no vínculo — fornecedor,
+            forma, título, categoria e conta de destino.</div>
+        </div>
       </div>
-      <div id="bulk-actions" class="align-items-center gap-2 border-bottom px-3 py-2 bg-light">
-        <span class="small text-muted"><strong id="bulk-count">0</strong> selecionada(s)</span>
-        <form id="form-excluir-lote"
-              method="post"
-              action="{{ url_for('conciliacao_regras.excluir_memorias_lote') }}"
-              onsubmit="return confirmarExclusaoLoteMemorias();">
-          <input type="hidden" name="q" value="{{ filtro_q or '' }}">
-          <button type="submit" class="btn btn-danger btn-sm">
-            <i class="bi bi-trash"></i> Excluir selecionadas
-          </button>
-        </form>
-        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="desmarcarTodasMemorias()">
-          <i class="bi bi-x"></i> Desmarcar
-        </button>
-      </div>
-      <div class="table-responsive">
-        <table class="table table-hover table-sm mb-0" id="tbl-memorias">
-          <thead>
-            <tr>
-              <th class="col-check">
-                <input type="checkbox" id="check-all-memorias" onchange="marcarTodasMemorias(this.checked)">
-              </th>
-              <th>CNPJ/CPF</th>
-              <th>Descrição-chave</th>
-              <th>Vincula a</th>
-              <th class="text-center">Tipo</th>
-              <th class="text-center">Conciliações</th>
-              <th>Última atualização</th>
-              <th class="text-center">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for m in memorias %}
-            <tr>
-              <td class="col-check">
-                <input type="checkbox" class="check-memoria" value="{{ m.id }}" onchange="atualizarSelecaoMemorias()">
-              </td>
-              <td><code>{{ m.cnpj_cpf }}</code></td>
-              <td>
-                {% if m.get('descricao_chave') %}
-                  <small class="text-muted" title="{{ m.descricao_chave }}">{{ m.descricao_chave[:60] }}{% if m.descricao_chave|length > 60 %}…{% endif %}</small>
-                {% else %}
-                  <span class="text-muted small fst-italic">— (legado)</span>
-                {% endif %}
-              </td>
-              <td>
-                {% if m.get('forma_nome') %}
-                  <span class="badge bg-success"><i class="bi bi-wallet2"></i> {{ m.forma_nome }}</span>
-                {% endif %}
-                {% if m.get('fornecedor_nome') %}
-                  <span class="badge bg-primary"><i class="bi bi-building"></i> {{ m.fornecedor_nome }}</span>
-                {% endif %}
-                {% if m.get('titulo_nome') %}
-                  <span class="badge bg-warning text-dark">
-                    <i class="bi bi-receipt"></i> {{ m.titulo_nome }}
-                    {% if m.get('categoria_nome') %} › {{ m.categoria_nome }}{% endif %}
-                  </span>
-                {% endif %}
-                {% if m.get('conta_destino_apelido') %}
-                  <span class="badge bg-info text-dark">
-                    <i class="bi bi-arrow-left-right"></i>
-                    {{ m.conta_destino_banco }} {{ m.conta_destino_apelido }}
-                  </span>
-                {% endif %}
-                {% if not m.get('forma_nome') and not m.get('fornecedor_nome') and not m.get('titulo_nome') and not m.get('conta_destino_apelido') %}
-                  <span class="text-muted">—</span>
-                {% endif %}
-              </td>
-              <td class="text-center">
-                {% if m.tipo_debito == 'transferencia' %}
-                  <span class="badge bg-info text-dark">Transferência</span>
-                {% elif m.tipo_debito == 'despesa' %}
-                  <span class="badge bg-warning text-dark">Despesa</span>
-                {% elif m.get('forma_nome') %}
-                  <span class="badge bg-success">Crédito</span>
-                {% elif m.get('fornecedor_nome') %}
-                  <span class="badge bg-primary">Débito</span>
-                {% else %}
-                  <span class="badge bg-secondary">—</span>
-                {% endif %}
-              </td>
-              <td class="text-center">{{ m.total_conciliacoes }}</td>
-              <td>
-                {% if m.atualizado_em %}
-                  {{ m.atualizado_em.strftime('%d/%m/%Y %H:%M') if m.atualizado_em else '—' }}
-                {% else %}
-                  —
-                {% endif %}
-              </td>
-              <td class="text-center">
-                <form method="post"
-                      action="{{ url_for('conciliacao_regras.excluir_memoria', memoria_id=m.id) }}"
-                      class="d-inline"
-                      onsubmit="return confirm('Excluir esta memorização para {{ m.cnpj_cpf }}?')">
-                  <input type="hidden" name="q" value="{{ filtro_q or '' }}">
-                  <button class="btn btn-outline-danger btn-sm" title="Excluir memorização">
-                    <i class="bi bi-trash"></i>
-                  </button>
-                </form>
-              </td>
-            </tr>
-            {% else %}
-            <tr>
-              <td colspan="{{ memoria_cols }}" class="text-center text-muted py-3">
-                Nenhuma memorização registrada.
-              </td>
-            </tr>
+
+      <div class="etapa" id="mem-e2" hidden>
+        <div class="gr">
+          <div class="gr__t">Como a memorização identifica</div>
+          <div class="seg">
+            <button type="button" data-campo="mem-tipo" data-valor=""
+                    class="{{ 'on' if not filtro_tipo }}">Todas</button>
+            <button type="button" data-campo="mem-tipo" data-valor="cnpj"
+                    class="{{ 'on' if filtro_tipo == 'cnpj' }}">Por CNPJ/CPF</button>
+            <button type="button" data-campo="mem-tipo" data-valor="texto"
+                    class="{{ 'on' if filtro_tipo == 'texto' }}">Por texto</button>
+          </div>
+        </div>
+        <div class="gr">
+          <div class="gr__t">Para onde ela manda</div>
+          <div class="chips">
+            {% for v, rot in [('','Qualquer'), ('forma','Forma de recebimento'),
+                              ('fornecedor','Fornecedor'), ('despesa','Despesa'),
+                              ('transferencia','Transferência'), ('nenhum','Sem destino')] %}
+            <button type="button" class="chip{{ ' on' if filtro_destino == v }}"
+                    data-campo="mem-destino" data-valor="{{ v }}">{{ rot }}</button>
             {% endfor %}
-          </tbody>
-        </table>
+          </div>
+        </div>
+        <div class="gr">
+          <div class="gr__t">Ordem</div>
+          <div class="chips">
+            {% for v, rot in [('uso','Mais usadas'), ('recente','Mais recentes'),
+                              ('parada','As que não pegam nada')] %}
+            <button type="button" class="chip{{ ' on' if ordem == v }}"
+                    data-campo="mem-ordem" data-valor="{{ v }}">{{ rot }}</button>
+            {% endfor %}
+          </div>
+        </div>
       </div>
     </div>
-  </div>
 
-  <div class="mt-3">
-    <a href="{{ url_for('conciliacao_regras.lista') }}" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-arrow-left"></i> Voltar para Regras
-    </a>
-    <a href="{{ url_for('bank_import.conciliar') }}" class="btn btn-outline-secondary btn-sm ms-1">
-      <i class="bi bi-arrow-left-right"></i> Ir para Conciliação
-    </a>
-  </div>
+    <div class="gav__f">
+      <button type="button" class="bt-g bt-g--ca" id="mem-voltar" onclick="memPasso(-1)" hidden>Voltar</button>
+      <button type="button" class="bt-g bt-g--ok" id="mem-seguir" onclick="memPasso(1)">Continuar</button>
+      <button type="submit" class="bt-g bt-g--ok" id="mem-aplicar" hidden>Aplicar filtro</button>
+    </div>
+  </form>
 </div>
+{% endblock %}
+
+{% block scripts %}
 <script>
-function _checksMemorias() {
-  return Array.from(document.querySelectorAll('.check-memoria'));
-}
+/* ── Seleção e barra de lote ──────────────────────────────────────────
+   A seleção vale para a página aberta: são 50 de mais de 17 mil, e um
+   "selecionar tudo" que apagasse o banco inteiro num clique seria armadilha. */
+var memBarra = document.getElementById('memLote');
+var memQtd   = document.getElementById('memQtd');
+var memTudo  = document.getElementById('marcaTudo');
 
-function atualizarSelecaoMemorias() {
-  const checks = _checksMemorias();
-  const checksMarcados = checks.filter(c => c.checked);
-  const bulk = document.getElementById('bulk-actions');
-  const count = document.getElementById('bulk-count');
-  const checkAll = document.getElementById('check-all-memorias');
-
-  if (count) count.textContent = checksMarcados.length;
-  if (bulk) bulk.classList.toggle('visible', checksMarcados.length > 0);
-
-  if (checkAll) {
-    if (checks.length === 0 || checksMarcados.length === 0) {
-      checkAll.checked = false;
-      checkAll.indeterminate = false;
-    } else if (checksMarcados.length === checks.length) {
-      checkAll.checked = true;
-      checkAll.indeterminate = false;
-    } else {
-      checkAll.checked = false;
-      checkAll.indeterminate = true;
-    }
-  }
-}
-
-function marcarTodasMemorias(checked) {
-  _checksMemorias().forEach(c => { c.checked = checked; });
-  atualizarSelecaoMemorias();
-}
-
-function desmarcarTodasMemorias() {
-  marcarTodasMemorias(false);
-}
-
-function confirmarExclusaoLoteMemorias() {
-  const selecionadas = _checksMemorias().filter(c => c.checked);
-  if (selecionadas.length === 0) {
-    alert('Selecione pelo menos uma memorização para excluir.');
-    return false;
-  }
-  if (!confirm('Excluir ' + selecionadas.length + ' memorização(ões) selecionada(s)?')) {
-    return false;
-  }
-
-  const form = document.getElementById('form-excluir-lote');
-  form.querySelectorAll('input[name="memoria_ids[]"]').forEach(el => el.remove());
-  selecionadas.forEach(c => {
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = 'memoria_ids[]';
-    input.value = c.value;
-    form.appendChild(input);
+function memContar() {
+  var todas = document.querySelectorAll('#mem .chk');
+  var n = document.querySelectorAll('#mem .chk:checked').length;
+  memQtd.textContent = n;
+  memBarra.classList.toggle('on', n > 0);
+  if (memTudo) memTudo.checked = n > 0 && n === todas.length;
+  document.querySelectorAll('#mem .lin').forEach(function (l) {
+    var c = l.querySelector('.chk');
+    l.classList.toggle('sel', !!(c && c.checked));
   });
-  return true;
 }
+function memLimpar() {
+  document.querySelectorAll('#mem .chk').forEach(function (c) { c.checked = false; });
+  if (memTudo) memTudo.checked = false;
+  memContar();
+}
+function memConfirma() {
+  var n = document.querySelectorAll('#mem .chk:checked').length;
+  if (!n) { alert('Selecione ao menos uma memorização.'); return false; }
+  return confirm('Esquecer ' + n + ' memorização(ões)? O sistema deixa de repetir '
+                 + 'esse vínculo sozinho, mas os lançamentos já conciliados ficam como estão.');
+}
+if (memTudo) {
+  memTudo.addEventListener('change', function () {
+    document.querySelectorAll('#mem .chk').forEach(function (c) {
+      c.checked = memTudo.checked;
+    });
+    memContar();
+  });
+}
+document.querySelectorAll('#mem .chk').forEach(function (c) {
+  c.addEventListener('change', memContar);
+});
+document.querySelectorAll('#mem .lin').forEach(function (lin) {
+  lin.addEventListener('click', function (ev) {
+    if (ev.target.closest('a, button, input, form')) return;
+    var c = lin.querySelector('.chk');
+    if (!c) return;
+    c.checked = !c.checked;
+    memContar();
+  });
+});
+
+/* A pergunta se monta aqui, e não num onsubmit= no HTML: a descrição-chave tem
+   aspas e acento, e no atributo ela quebrava o parser. */
+document.querySelectorAll('#mem .f-excluir').forEach(function (fm) {
+  fm.addEventListener('submit', function (ev) {
+    if (!confirm('Esquecer a memorização “' + fm.dataset.nome + '”?')) {
+      ev.preventDefault();
+    }
+  });
+});
+
+/* ── Filtro em passos ─────────────────────────────────────────────── */
+var memN = 1;
+var MEM_NOMES = ['Procurar', 'Refinar'];
+
+function memAbrirFiltro() {
+  document.getElementById('mem-gav').classList.add('on');
+  document.getElementById('mem-escuro').classList.add('on');
+  memIr(1);
+}
+function memFecharFiltro() {
+  document.getElementById('mem-gav').classList.remove('on');
+  document.getElementById('mem-escuro').classList.remove('on');
+}
+function memIr(n) {
+  memN = Math.min(2, Math.max(1, n));
+  for (var i = 1; i <= 2; i++) {
+    document.getElementById('mem-e' + i).hidden = (i !== memN);
+    document.getElementById('mem-p' + i).classList.toggle('on', i <= memN);
+  }
+  document.getElementById('mem-pn').textContent = memN;
+  document.getElementById('mem-pt').textContent = MEM_NOMES[memN - 1];
+  document.getElementById('mem-voltar').hidden  = (memN === 1);
+  document.getElementById('mem-seguir').hidden  = (memN === 2);
+  document.getElementById('mem-aplicar').hidden = (memN !== 2);
+}
+function memPasso(d) { memIr(memN + d); }
+
+/* Um tratador só para segmento e pastilha: guardam o valor num campo
+   escondido e acendem o irmão escolhido. */
+document.querySelectorAll('#mem-gav [data-campo]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    document.getElementById(b.dataset.campo).value = b.dataset.valor;
+    b.parentElement.querySelectorAll('[data-campo="' + b.dataset.campo + '"]')
+      .forEach(function (o) { o.classList.remove('on'); });
+    b.classList.add('on');
+  });
+});
+
+memContar();
 </script>
 {% endblock %}
