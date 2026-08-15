@@ -5,6 +5,7 @@ import pytz
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
+from utils.conciliacao import reverter_varias
 from utils.navegacao import destino_pos_acao
 
 _BRASILIA = pytz.timezone('America/Sao_Paulo')
@@ -584,66 +585,156 @@ def memorias():
     )
 
 
-@bp.route('/memorias/<int:memoria_id>/excluir', methods=['POST'])
+# Quais lançamentos uma memorização fechou.
+#
+# O sistema NÃO guarda essa ligação: nenhuma coluna diz "esta conciliação veio
+# daquela memorização". Então o alcance é redescoberto aplicando o MESMO
+# casamento do auto-conciliar (routes/bank_import.py, api_auto_reconcile).
+#
+# Duas restrições que evitam estrago:
+#
+#  - só o que a MÁQUINA fechou (conciliado_por começa com 'auto'). O que uma
+#    pessoa conciliou na mão não foi decisão da memorização, e desfazer isso
+#    seria apagar trabalho humano.
+#  - só CNPJ preenchido, porque é assim que o casamento acontece de verdade.
+#
+# Mesmo assim o alcance pode surpreender: memorização com descrição-chave
+# vazia pega QUALQUER descrição daquele CNPJ. Uma que diz ter feito 46
+# conciliações alcança 447 lançamentos. Por isso a tela mostra o número e o
+# valor ANTES de confirmar — a conta é aproximada, e quem decide é quem lê.
+_SQL_ALCANCE = """
+    FROM bank_transactions bt
+    JOIN bank_supplier_mapping bsm ON bsm.id IN ({ph})
+    WHERE bt.status = 'conciliado'
+      AND bt.conciliado_por LIKE 'auto%%'
+      AND bt.cnpj_cpf IS NOT NULL AND bt.cnpj_cpf <> ''
+      AND bt.cnpj_cpf = bsm.cnpj_cpf
+      AND bsm.descricao_chave IN ('', LEFT(UPPER(TRIM(bt.descricao)), 100))
+"""
+
+
+def _ids_validos(brutos):
+    """Inteiros positivos, sem repetição e na ordem em que vieram."""
+    ids, vistos = [], set()
+    for bruto in brutos:
+        try:
+            n = int(bruto)
+        except (TypeError, ValueError):
+            continue
+        if n > 0 and n not in vistos:
+            ids.append(n)
+            vistos.add(n)
+    return ids
+
+
+def _alcance(cursor, memoria_ids):
+    """(quantidade, valor, [tx_ids]) que a reversão tocaria."""
+    if not memoria_ids:
+        return 0, 0.0, []
+    ph = ','.join(['%s'] * len(memoria_ids))
+    cursor.execute(
+        "SELECT DISTINCT bt.id, bt.valor" + _SQL_ALCANCE.format(ph=ph),
+        memoria_ids,
+    )
+    linhas = cursor.fetchall()
+    total = sum(float(l['valor'] or 0) for l in linhas)
+    return len(linhas), total, [l['id'] for l in linhas]
+
+
+@bp.route('/memorias/alcance')
 @login_required
-def excluir_memoria(memoria_id):
-    """Exclui uma memorização de conciliação."""
-    filtro_q = (request.form.get('q') or '').strip()
+def memorias_alcance():
+    """Quanto a reversão tocaria, para a tela avisar ANTES de executar."""
+    ids = _ids_validos((request.args.get('ids') or '').split(','))
+    if not ids:
+        return jsonify({'quantos': 0, 'valor': 0, 'contador': 0, 'memorias': 0})
+
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("DELETE FROM bank_supplier_mapping WHERE id = %s", (memoria_id,))
-        conn.commit()
-        flash('Memorização excluída com sucesso.', 'success')
-    except Exception as e:
-        conn.rollback()
-        flash(f'Erro ao excluir memorização: {e}', 'danger')
+        quantos, valor, _ = _alcance(cursor, ids)
+        ph = ','.join(['%s'] * len(ids))
+        cursor.execute(
+            "SELECT COALESCE(SUM(total_conciliacoes),0) AS c"
+            " FROM bank_supplier_mapping WHERE id IN (" + ph + ")",
+            ids,
+        )
+        contador = int((cursor.fetchone() or {}).get('c') or 0)
+    except Exception:
+        logger.exception("Erro ao calcular o alcance da reversão")
+        return jsonify({'erro': 'Não deu para calcular o alcance.'}), 500
     finally:
         cursor.close()
         conn.close()
+
+    return jsonify({'quantos': quantos, 'valor': valor,
+                    'contador': contador, 'memorias': len(ids)})
+
+
+def _esquecer(memoria_ids, reverter):
+    """Apaga as memorizações e, se pedido, reabre o que elas fecharam.
+
+    A ordem importa: os lançamentos são descobertos ANTES de apagar, porque o
+    alcance depende da memorização existir.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    tx_ids = []
+    try:
+        if reverter:
+            _, _, tx_ids = _alcance(cursor, memoria_ids)
+        ph = ','.join(['%s'] * len(memoria_ids))
+        cursor.execute("DELETE FROM bank_supplier_mapping WHERE id IN (" + ph + ")",
+                       memoria_ids)
+        apagadas = cursor.rowcount
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        cursor.close()
+        conn.close()
+        flash('Erro ao excluir: %s' % e, 'danger')
+        return
+
+    cursor.close()
+    if not reverter:
+        conn.close()
+        flash('%d memorização(ões) esquecida(s). Os lançamentos já conciliados'
+              ' ficaram como estavam.' % apagadas, 'success')
+        return
+
+    try:
+        revertidos, erros = reverter_varias(conn, tx_ids, logger)
+    except Exception as e:
+        logger.exception("Erro ao reverter conciliações da memorização")
+        flash('Memorizações excluídas, mas a reversão falhou: %s' % e, 'danger')
+        return
+    finally:
+        conn.close()
+
+    flash('%d memorização(ões) esquecida(s) e %d lançamento(s) reaberto(s).'
+          % (apagadas, revertidos), 'success')
+    if erros:
+        flash('Não deu para reabrir %d: %s' % (len(erros), '; '.join(erros[:5])), 'warning')
+
+
+@bp.route('/memorias/<int:memoria_id>/excluir', methods=['POST'])
+@login_required
+def excluir_memoria(memoria_id):
+    """Esquece uma memorização. Com reverter=1, reabre também o que ela fechou."""
+    _esquecer([memoria_id], (request.form.get('reverter') or '') == '1')
     return redirect(destino_pos_acao() or url_for('conciliacao_regras.memorias'))
 
 
 @bp.route('/memorias/excluir-lote', methods=['POST'])
 @login_required
 def excluir_memorias_lote():
-    """Exclui memorizações em lote."""
-    filtro_q = (request.form.get('q') or '').strip()
-    memoria_ids = []
-    seen = set()
-    for raw in request.form.getlist('memoria_ids[]'):
-        try:
-            memoria_id = int(raw)
-            if memoria_id > 0 and memoria_id not in seen:
-                memoria_ids.append(memoria_id)
-                seen.add(memoria_id)
-        except (TypeError, ValueError):
-            continue
-
+    """Esquece várias memorizações. Com reverter=1, reabre também o que fecharam."""
+    memoria_ids = _ids_validos(request.form.getlist('memoria_ids[]'))
     if not memoria_ids:
-        flash('Nenhuma memorização selecionada para exclusão.', 'warning')
-        if filtro_q:
-            return redirect(url_for('conciliacao_regras.memorias', q=filtro_q))
-        return redirect(url_for('conciliacao_regras.memorias'))
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.executemany(
-            "DELETE FROM bank_supplier_mapping WHERE id = %s",
-            [(mid,) for mid in memoria_ids],
-        )
-        conn.commit()
-        flash(f'{cursor.rowcount} memorização(ões) excluída(s) com sucesso.', 'success')
-    except Exception as e:
-        conn.rollback()
-        flash(f'Erro ao excluir em lote: {e}', 'danger')
-    finally:
-        cursor.close()
-        conn.close()
-
+        flash('Nenhuma memorização selecionada.', 'warning')
+        return redirect(destino_pos_acao() or url_for('conciliacao_regras.memorias'))
+    _esquecer(memoria_ids, (request.form.get('reverter') or '') == '1')
     return redirect(destino_pos_acao() or url_for('conciliacao_regras.memorias'))
-
 
 
 @login_required
