@@ -3,15 +3,280 @@
 
 {% block styles %}
 <style>
-  .flt-header { background: #1D63A5; color: #fff; font-size: 0.78rem; font-weight: 600; padding: .45rem .75rem; border-radius: .35rem .35rem 0 0; }
-  .tx-row { cursor: pointer; transition: background .1s; }
-  .tx-row:hover { background: #eef4ff; }
-  .tx-row.table-selected { background: #ddeeff; }
+/* ═══════════════════════════════════════════════════════════════════════
+   Conciliação — fila de aprovação.
+
+   O trabalho aqui não é preencher: as regras e as memorizações já chutaram
+   um destino para a maioria dos lançamentos. O que resta é dizer "sim".
+   Por isso a lista se parte em duas: o que já tem palpite vem primeiro,
+   com um botão verde; o que não tem fica embaixo, para o trabalho manual.
+
+   Nada de tabela: a de antes tinha 9 colunas e rolava de lado no celular —
+   a descrição ficava numa tela e a sugestão na outra.
+   ═════════════════════════════════════════════════════════════════════ */
+body > .container-fluid:has(#cnc){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#cnc){ padding:.7rem 1rem 0; }
+}
+#cnc.container-fluid{ padding-left:0; padding-right:0; }
+
+#cnc{
+  --azul:#1D63A5; --azul-deep:#0C4C86; --azul-claro:#eaf1f9;
+  --verde:#17963C; --verde-deep:#12762F; --roxo:#6D48C8;
+  --ink:#151d27; --ink-2:#3a4655; --muted:#6b7684;
+  --line:#e7ebf1; --line-2:#d9e0e8; --surface:#f7f9fc;
+  --ok:#1c6b34; --ok-bg:#e4f4e8;
+  --pend:#8a5a00; --pend-bg:#fdf0d6;
+  --ign:#4b5563; --ign-bg:#eceef1;
+  --danger:#a32d2d; --danger-bg:#fbe9e9;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  color:var(--ink);
+  overflow-x:hidden;
+}
+
+/* ── Números ──────────────────────────────────────────────────────── */
+#cnc .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:.7rem; }
+@media (min-width:768px){ #cnc .nums{ grid-template-columns:repeat(4,1fr); } }
+#cnc .nums .n{ border-radius:13px; padding:.55rem .75rem; color:#fff;
+  box-shadow:0 2px 8px rgba(20,35,60,.12); }
+#cnc .nums .r{ font-size:.66rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.06em; opacity:.92; }
+#cnc .nums .v{ font-size:1.05rem; font-weight:800; letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums; line-height:1.28; }
+#cnc .n--a{ background:linear-gradient(135deg,#2E6FB0,#1D63A5); }
+#cnc .n--b{ background:linear-gradient(135deg,#22A24B,#17963C); }
+#cnc .n--c{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
+#cnc .n--d{ background:linear-gradient(135deg,#5B6B7F,#465565); }
+
+/* ── Atalhos ──────────────────────────────────────────────────────── */
+#cnc .atalhos{ display:flex; gap:.45rem; flex-wrap:wrap; margin-bottom:.7rem; }
+#cnc .at{ display:inline-flex; align-items:center; gap:.35rem; font-size:.79rem;
+  font-weight:700; color:var(--azul); text-decoration:none; background:#fff;
+  border:1px solid var(--line-2); border-radius:10px; padding:.42rem .7rem;
+  cursor:pointer; font-family:inherit; }
+#cnc .at:hover{ border-color:var(--azul); }
+#cnc .at--magia{ background:linear-gradient(120deg,var(--verde),var(--verde-deep));
+  border-color:transparent; color:#fff; }
+#cnc .at--magia:hover{ filter:brightness(1.07); color:#fff; }
+#cnc .at[disabled]{ opacity:.55; cursor:wait; }
+#cnc .recado{ font-size:.79rem; color:var(--muted); align-self:center; }
+
+/* ── Lista ────────────────────────────────────────────────────────── */
+#cnc .lst{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+  overflow:hidden; }
+#cnc .topo-lst{ display:flex; align-items:center; gap:.55rem; padding:.55rem .7rem;
+  border-bottom:1px solid var(--line); font-size:.79rem; font-weight:700;
+  color:var(--muted); cursor:pointer; user-select:none; margin:0; }
+#cnc .topo-lst .tot{ margin-left:auto; color:var(--azul-deep);
+  font-variant-numeric:tabular-nums; }
+
+/* A faixa das prontas e a estrela da tela: verde, com o botao de aprovar
+   tudo dentro dela. */
+#cnc .banda{ display:flex; align-items:center; gap:.5rem; padding:.5rem .7rem;
+  background:var(--azul-claro); color:var(--azul-deep); font-size:.8rem;
+  font-weight:800; border-bottom:1px solid var(--line-2); position:sticky; top:0;
+  z-index:3; flex-wrap:wrap; }
+#cnc .banda--pronta{ background:linear-gradient(120deg,#e4f4e8,#d6efdd);
+  color:var(--ok); border-color:#bfe3c9; }
+#cnc .banda--manual{ background:var(--pend-bg); color:#6b4600; border-color:#f0dcae; }
+#cnc .banda .q{ margin-left:auto; font-variant-numeric:tabular-nums; opacity:.8;
+  font-weight:700; }
+#cnc .banda .diz{ flex:1 1 100%; font-size:.73rem; font-weight:600; opacity:.85;
+  margin-top:-.15rem; }
+#cnc .bt-tudo{ border:0; border-radius:9px; padding:.34rem .7rem; font-size:.78rem;
+  font-weight:800; cursor:pointer; font-family:inherit; white-space:nowrap;
+  background:var(--verde); color:#fff; display:inline-flex; align-items:center;
+  gap:.3rem; }
+#cnc .bt-tudo:hover{ background:var(--verde-deep); }
+
+#cnc .lin{ display:grid; grid-template-columns:auto minmax(0,1fr); gap:.1rem .55rem;
+  grid-template-areas:"chk desc" "chk meio" "chk baixo";
+  padding:.55rem .6rem; border-bottom:1px solid var(--line); align-items:center;
+  cursor:pointer; position:relative; }
+#cnc .lin:last-child{ border-bottom:0; }
+#cnc .lin.table-selected{ background:var(--azul-claro); }
+/* Fio verde na lateral: da para ver de longe quais ja tem palpite. */
+#cnc .lin--pronta::before{ content:''; position:absolute; left:0; top:0; bottom:0;
+  width:3px; background:var(--verde); }
+#cnc .c-chk{ grid-area:chk; align-self:center; }
+#cnc .c-desc{ grid-area:desc; font-size:.85rem; font-weight:700; letter-spacing:-.01em;
+  min-width:0; line-height:1.28; display:-webkit-box; -webkit-line-clamp:2;
+  -webkit-box-orient:vertical; overflow:hidden; }
+#cnc .c-meio{ grid-area:meio; display:flex; align-items:center; gap:.35rem; min-width:0; }
+#cnc .conta{ font-size:.72rem; color:var(--muted); font-weight:600; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#cnc .c-valor{ margin-left:auto; flex:0 0 auto; font-size:.97rem; font-weight:800;
+  font-variant-numeric:tabular-nums; letter-spacing:-.02em; white-space:nowrap; }
+#cnc .c-valor--e{ color:var(--verde); }
+#cnc .c-valor--s{ color:var(--danger); }
+#cnc .c-baixo{ grid-area:baixo; display:flex; align-items:center; gap:.35rem;
+  min-width:0; margin-top:.28rem; }
+#cnc .palpite{ display:inline-flex; align-items:center; gap:.28rem; min-width:0;
+  font-size:.72rem; font-weight:800; border-radius:6px; padding:.14rem .45rem;
+  background:var(--ok-bg); color:var(--ok); overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap; }
+#cnc .palpite--transf{ background:rgba(109,72,200,.13); color:var(--roxo); }
+#cnc .palpite--desp{ background:var(--pend-bg); color:var(--pend); }
+#cnc .palpite--nada{ background:var(--ign-bg); color:var(--ign); font-weight:700; }
+#cnc .palpite i{ flex:0 0 auto; }
+#cnc .doc{ font-family:var(--mono); font-size:.69rem; color:var(--muted);
+  font-weight:600; white-space:nowrap; }
+
+#cnc .c-acao{ display:flex; gap:.25rem; align-items:center; margin-left:auto;
+  flex:0 0 auto; padding-left:.3rem; }
+#cnc .bt-ok{ border:0; border-radius:9px; padding:.34rem .7rem; font-size:.78rem;
+  font-weight:800; cursor:pointer; font-family:inherit; white-space:nowrap;
+  background:var(--verde); color:#fff; display:inline-flex; align-items:center;
+  gap:.28rem; }
+#cnc .bt-ok:hover{ background:var(--verde-deep); }
+#cnc .bt-ok--transf{ background:var(--roxo); }
+#cnc .bt-ok--transf:hover{ background:#5a3ba8; }
+#cnc .bt-ok--desp{ background:#B8791C; }
+#cnc .bt-ok--desp:hover{ background:#9c6415; }
+#cnc .ic{ width:28px; height:28px; border-radius:7px; border:1px solid var(--line-2);
+  background:#fff; display:grid; place-items:center; font-size:.85rem; cursor:pointer;
+  color:var(--muted); padding:0; font-family:inherit; }
+#cnc .ic:hover{ border-color:var(--azul); color:var(--azul); }
+#cnc .ic--ign:hover{ border-color:#f0c6c6; color:var(--danger); }
+#cnc .marca{ width:19px; height:19px; cursor:pointer; accent-color:var(--azul); margin:0; }
+#cnc .vazio{ text-align:center; color:var(--muted); padding:2.6rem 1rem; font-size:.86rem; }
+#cnc .vazio b{ display:block; color:var(--ink); font-size:1rem; margin-bottom:.3rem; }
+#cnc .vazio .festa{ font-size:2rem; display:block; margin-bottom:.4rem; }
+
+/* ── Páginas ──────────────────────────────────────────────────────── */
+#cnc .paginas{ display:flex; align-items:center; gap:.45rem; padding:.6rem .7rem;
+  border-top:1px solid var(--line); background:var(--surface); }
+#cnc .paginas .qual{ margin:0 auto; font-size:.79rem; font-weight:700;
+  color:var(--muted); font-variant-numeric:tabular-nums; }
+#cnc .pg{ display:inline-flex; align-items:center; gap:.3rem; font-size:.79rem;
+  font-weight:800; color:var(--azul); background:#fff; border:1px solid var(--line-2);
+  border-radius:10px; padding:.35rem .65rem; cursor:pointer; font-family:inherit; }
+#cnc .pg:hover{ border-color:var(--azul); }
+#cnc .pg[disabled]{ color:#b9c1cb; border-color:var(--line); cursor:default; }
+
+/* ── Barra de lote ────────────────────────────────────────────────── */
+#cnc .lote{ position:fixed; left:0; right:0; bottom:0; z-index:1040;
+  background:var(--azul-deep); color:#fff; padding:.6rem .8rem; display:flex;
+  align-items:center; gap:.5rem; flex-wrap:wrap; transform:translateY(110%);
+  transition:transform .18s ease; box-shadow:0 -6px 20px rgba(12,76,134,.25);
+  padding-bottom:calc(.6rem + env(safe-area-inset-bottom)); }
+#cnc .lote.on{ transform:translateY(0); }
+#cnc .lote .n{ font-weight:800; font-variant-numeric:tabular-nums; }
+#cnc .lote .sep{ margin-left:auto; }
+#cnc .bl{ border:0; border-radius:9px; padding:.36rem .7rem; font-size:.79rem;
+  font-weight:800; cursor:pointer; background:rgba(255,255,255,.18); color:#fff;
+  font-family:inherit; display:inline-flex; align-items:center; gap:.3rem; }
+#cnc .bl:hover{ background:rgba(255,255,255,.3); }
+#cnc .bl--pri{ background:#fff; color:var(--azul-deep); }
+#cnc .bl[disabled]{ opacity:.45; cursor:not-allowed; }
+#cnc .rodape-folga{ height:4.6rem; }
+
+/* ── Saída da tela ────────────────────────────────────────────────── */
+#cnc .pe{ display:flex; gap:.45rem; flex-wrap:wrap; margin-top:.8rem; }
+#cnc .pe a{ display:inline-flex; align-items:center; gap:.3rem; font-size:.79rem;
+  font-weight:700; color:var(--azul); text-decoration:none; background:#fff;
+  border:1px solid var(--line-2); border-radius:10px; padding:.4rem .7rem; }
+#cnc .pe a:hover{ border-color:var(--azul); }
+
+/* ── Filtro em passos ─────────────────────────────────────────────── */
+#cnc .escuro{ position:fixed; inset:0; background:rgba(12,25,42,.45); z-index:1050;
+  opacity:0; pointer-events:none; transition:opacity .2s; }
+#cnc .escuro.on{ opacity:1; pointer-events:auto; }
+#cnc .gav{ position:fixed; left:0; right:0; bottom:0; z-index:1051; background:#fff;
+  border-radius:18px 18px 0 0; max-height:88vh; display:flex; flex-direction:column;
+  transform:translateY(101%); transition:transform .24s cubic-bezier(.22,.7,.3,1);
+  box-shadow:0 -10px 30px rgba(12,25,42,.3); }
+#cnc .gav.on{ transform:translateY(0); }
+@media (min-width:992px){
+  #cnc .gav{ left:50%; right:auto; bottom:auto; top:8vh; width:520px; border-radius:16px;
+    transform:translate(-50%,10px); opacity:0; pointer-events:none;
+    transition:opacity .16s ease, transform .16s ease; max-height:84vh; }
+  #cnc .gav.on{ transform:translate(-50%,0); opacity:1; pointer-events:auto; }
+  #cnc .gav__pega{ display:none; }
+}
+#cnc .gav__pega{ width:36px; height:4px; background:var(--line-2); border-radius:9px;
+  margin:.5rem auto .1rem; flex:0 0 auto; }
+#cnc .passos{ display:flex; gap:.3rem; padding:.4rem .9rem .1rem; }
+#cnc .passo{ flex:1; height:3px; border-radius:9px; background:var(--line-2); }
+#cnc .passo.on{ background:var(--azul); }
+#cnc .pnome{ padding:.35rem .9rem .4rem; font-size:.76rem; color:var(--muted);
+  font-weight:700; }
+#cnc .pnome b{ color:var(--ink); font-size:.95rem; }
+#cnc .gav__b{ overflow-y:auto; padding:0 .9rem .7rem; }
+#cnc .gav__f{ border-top:1px solid var(--line); padding:.65rem .9rem; display:flex;
+  gap:.5rem; background:#fff;
+  padding-bottom:calc(.65rem + env(safe-area-inset-bottom)); }
+#cnc .bt-g{ border:0; border-radius:10px; padding:.55rem .8rem; font-size:.87rem;
+  font-weight:800; cursor:pointer; font-family:inherit; }
+#cnc .bt-g--ok{ flex:1; background:var(--azul); color:#fff; }
+#cnc .bt-g--ca{ background:var(--surface); color:var(--muted);
+  border:1px solid var(--line-2); }
+#cnc .etapa[hidden]{ display:none; }
+#cnc .gr{ margin-bottom:.85rem; }
+#cnc .gr__c{ display:flex; align-items:baseline; gap:.4rem; margin-bottom:.3rem; }
+#cnc .gr__t{ font-size:.69rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--muted); }
+#cnc .gr__a{ margin-left:auto; background:none; border:0; padding:0; cursor:pointer;
+  font-size:.74rem; font-weight:800; color:var(--azul); font-family:inherit; }
+#cnc .opcs{ border:1px solid var(--line-2); border-radius:10px; overflow:hidden;
+  max-height:260px; overflow-y:auto; }
+#cnc .opc{ display:flex; align-items:center; gap:.55rem; padding:.5rem .6rem;
+  border-bottom:1px solid var(--line); font-size:.85rem; cursor:pointer; margin:0;
+  min-width:0; }
+#cnc .opc:last-child{ border-bottom:0; }
+#cnc .opc:hover{ background:var(--surface); }
+#cnc .opc input{ width:19px; height:19px; accent-color:var(--azul); flex:0 0 auto; margin:0; }
+#cnc .opc span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+#cnc .opc small{ display:block; font-size:.71rem; color:var(--muted); }
+#cnc .opc:has(input:checked){ background:var(--azul-claro); }
+#cnc .aviso-f{ padding:.85rem .6rem; font-size:.82rem; color:var(--muted);
+  text-align:center; }
+#cnc .seg{ display:flex; gap:2px; background:var(--surface); border:1px solid var(--line-2);
+  border-radius:10px; padding:2px; }
+#cnc .seg button{ flex:1; border:0; background:none; border-radius:8px; padding:.42rem .2rem;
+  font-size:.79rem; font-weight:700; color:var(--muted); cursor:pointer;
+  font-family:inherit; white-space:nowrap; }
+#cnc .seg button.on{ background:#fff; color:var(--azul-deep);
+  box-shadow:0 1px 2px rgba(20,35,60,.1); }
+#cnc .campo{ width:100%; border:1px solid var(--line-2); border-radius:10px;
+  padding:.5rem .65rem; font-size:.85rem; background:#fff; color:var(--ink);
+  font-family:inherit; }
+#cnc .par{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; }
+#cnc .chips{ display:flex; flex-wrap:wrap; gap:.35rem; }
+#cnc .chip{ border:1px solid var(--line-2); background:#fff; color:var(--ink-2);
+  border-radius:99px; padding:.32rem .7rem; font-size:.78rem; font-weight:700;
+  cursor:pointer; font-family:inherit; }
+#cnc .dica{ font-size:.75rem; color:var(--muted); margin-top:.3rem; }
+#cnc :focus-visible{ outline:2px solid var(--azul); outline-offset:2px; }
+@media (prefers-reduced-motion: reduce){ #cnc *{ transition:none !important; } }
+
+/* O modal de conciliar continua o de sempre; só a linha realçada mudou. */
+.tx-row.table-selected{ background:#ddeeff; }
 </style>
 {% with esc = '#cnc' %}{% include 'includes/abas_banco_css.html' %}{% endwith %}
 {% endblock %}
 
 {% block content %}
+{# Quais lancamentos ja vem com palpite das regras/memorizacoes. E a divisao
+   que organiza a tela: aprovar em cima, trabalhar embaixo. #}
+{% set ns = namespace(pronta=[], manual=[], soma=0) %}
+{% for tx in transacoes %}
+  {% set ns.soma = ns.soma + (tx.valor | float) %}
+  {% if tx.sugestao_transferencia_recebida or tx.sugestao_forma_id
+        or tx.sugestao_fornecedor_id or tx.sugestao_titulo_id
+        or (tx.sugestao_tipo_debito == 'transferencia' and tx.sugestao_conta_destino_id) %}
+    {% set ns.pronta = ns.pronta + [tx] %}
+  {% else %}
+    {% set ns.manual = ns.manual + [tx] %}
+  {% endif %}
+{% endfor %}
+{% set n_filtros = (f_clientes | length) + (f_contas | length)
+                   + (1 if f_tipo else 0) + (1 if f_descricao else 0)
+                   + (1 if f_cnpj else 0) + (1 if (f_data_ini or f_data_fim) else 0) %}
+
 <div class="container-fluid" id="cnc">
 
   <!-- Topo padrão do módulo Banco -->
@@ -21,313 +286,341 @@
         <i class="bi bi-chevron-left"></i> Banco
       </a>
       <h3>Conciliação</h3>
+      <button type="button" class="acao" onclick="cncAbrirFiltro()">
+        <i class="bi bi-sliders"></i> Filtro
+        {% if n_filtros %}<span style="background:#fff;color:#0C4C86;border-radius:99px;min-width:17px;height:17px;display:inline-grid;place-items:center;font-size:.66rem;">{{ n_filtros }}</span>{% endif %}
+      </button>
     </div>
     <div class="abas">
       {% with ativa = 'conciliar' %}{% include 'includes/abas_banco.html' %}{% endwith %}
     </div>
   </div>
 
-  <!-- Filtros -->
-  <form method="GET" class="card shadow-sm mb-3 js-sem-trava" id="formFiltros">
-    <div class="flt-header"><i class="bi bi-funnel me-1"></i> Filtros</div>
-    <div class="card-body py-2">
-      <div class="row g-2">
-        <div class="col-md-3">
-          <label class="form-label form-label-sm mb-0">Empresa <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
-          <select name="cliente_id" class="form-select form-select-sm" multiple size="4" id="selEmpresas">
+  <div class="nums">
+    <div class="n n--a">
+      <div class="r">Pendentes</div>
+      <div class="v">{{ '{:,}'.format(total or 0)|replace(',','.') }}</div>
+    </div>
+    <div class="n n--b">
+      <div class="r">Prontas p/ aprovar</div>
+      <div class="v">{{ ns.pronta | length }}</div>
+    </div>
+    <div class="n n--c">
+      <div class="r">Sem palpite</div>
+      <div class="v">{{ ns.manual | length }}</div>
+    </div>
+    <div class="n n--d">
+      <div class="r">Nesta página</div>
+      <div class="v">{{ ns.soma | formatar_moeda }}</div>
+    </div>
+  </div>
+
+  <div class="atalhos">
+    <button type="button" class="at at--magia" onclick="autoConciliarAqui(this)">
+      <i class="bi bi-stars"></i> Buscar novos palpites
+    </button>
+    <a class="at" href="{{ url_for('conciliacao_regras.lista') }}">
+      <i class="bi bi-funnel"></i> Regras
+    </a>
+    <a class="at" href="{{ url_for('bank_import.relatorio', status='ignorado',
+                          empresa_id=(f_clientes[0] if f_clientes|length == 1 else ''),
+                          account_id=(f_contas[0] if f_contas|length == 1 else ''),
+                          tipo=f_tipo) }}">
+      <i class="bi bi-eye-slash"></i> Ignorados
+    </a>
+    <span id="msgAutoConciliar" class="recado"></span>
+  </div>
+
+  {# O formulario do lote fica FORA da lista: form dentro de form e descartado
+     pelo navegador. As caixinhas se ligam a ele pelo atributo form=. #}
+  <form method="POST" class="js-sem-trava" id="formConciliacaoLote"></form>
+
+  <div class="lst">
+    <label class="topo-lst">
+      <input type="checkbox" class="marca" id="checkAll">
+      Selecionar as desta página
+      <span class="tot">{{ '{:,}'.format(total or 0)|replace(',','.') }} pendente(s)</span>
+    </label>
+
+    {% if not transacoes %}
+      <div class="vazio">
+        <span class="festa">🎉</span>
+        <b>Nada pendente por aqui.</b>
+        {% if n_filtros %}Nenhum lançamento bate com o filtro.
+          <a href="{{ url_for('bank_import.conciliar') }}">Limpar</a>.
+        {% else %}Tudo o que entrou já foi conciliado.{% endif %}
+      </div>
+    {% endif %}
+
+    {% if ns.pronta %}
+    <div class="banda banda--pronta">
+      <i class="bi bi-stars"></i> Prontas para aprovar
+      <span class="q">{{ ns.pronta | length }}</span>
+      <button type="button" class="bt-tudo" id="btnAprovarSugestoes"
+              onclick="aprovarSugestoesPagina()">
+        <i class="bi bi-check2-all"></i> Aprovar as
+        <span id="contadorSugestoes">{{ ns.pronta | length }}</span>
+      </button>
+      <span class="diz">As regras e as memorizações já sabem o destino destas.
+        Confira e diga sim.</span>
+    </div>
+    {% endif %}
+
+    {% for tx in ns.pronta + ns.manual %}
+    {% set pronta = tx in ns.pronta %}
+    {% if not pronta and loop.first or (not pronta and ns.pronta and loop.index0 == ns.pronta | length) %}
+    <div class="banda banda--manual">
+      <i class="bi bi-pencil"></i> Sem palpite
+      <span class="q">{{ ns.manual | length }}</span>
+      <span class="diz">Nenhuma regra ou memorização reconheceu estas. Precisam
+        de você — e o que você escolher aqui vira memorização.</span>
+    </div>
+    {% endif %}
+
+    <div class="lin tx-row{{ ' lin--pronta' if pronta }}" data-tipo="{{ tx.tipo }}">
+      <span class="c-chk">
+        <input type="checkbox" form="formConciliacaoLote" name="transaction_id"
+               value="{{ tx.id }}" class="marca tx-check"
+               data-tipo="{{ tx.tipo }}"
+               data-sugestao-forma="{{ tx.sugestao_forma_id or '' }}"
+               data-sugestao-fornecedor="{{ tx.sugestao_fornecedor_id or '' }}"
+               aria-label="Selecionar o lançamento {{ tx.id }}">
+      </span>
+
+      <div class="c-desc">{{ tx.descricao or '—' }}</div>
+
+      <div class="c-meio">
+        <span class="conta">{{ tx.conta_apelido or tx.banco_nome }} ·
+          {{ tx.data_transacao.strftime('%d/%m/%Y') if tx.data_transacao else 'sem data' }}</span>
+        <span class="c-valor c-valor--{{ 's' if tx.tipo == 'DEBIT' else 'e' }}">
+          {{ '−' if tx.tipo == 'DEBIT' else '+' }} {{ tx.valor | formatar_moeda }}
+        </span>
+      </div>
+
+      <div class="c-baixo">
+        {% if tx.tipo == 'CREDIT' and tx.sugestao_transferencia_recebida %}
+          <span class="palpite palpite--transf"><i class="bi bi-arrow-left-right"></i>
+            Transferência recebida</span>
+        {% elif tx.tipo == 'CREDIT' and tx.sugestao_forma_id %}
+          <span class="palpite"><i class="bi bi-{{ 'funnel-fill' if tx.sugestao_regra else 'stars' }}"></i>
+            {{ tx.sugestao_forma_nome }}</span>
+        {% elif tx.tipo == 'DEBIT' and tx.sugestao_tipo_debito == 'transferencia' and tx.sugestao_conta_destino_id %}
+          <span class="palpite palpite--transf"><i class="bi bi-arrow-left-right"></i>
+            → {{ todas_contas_map.get(tx.sugestao_conta_destino_id, 'Conta #' ~ tx.sugestao_conta_destino_id) }}</span>
+        {% elif tx.tipo == 'DEBIT' and tx.sugestao_fornecedor_id %}
+          <span class="palpite"><i class="bi bi-{{ 'funnel-fill' if tx.sugestao_regra else 'stars' }}"></i>
+            {{ tx.sugestao_fornecedor_nome }}</span>
+        {% elif tx.tipo == 'DEBIT' and tx.sugestao_titulo_id %}
+          <span class="palpite palpite--desp"><i class="bi bi-receipt"></i>
+            {{ tx.sugestao_despesa_label or (tx.sugestao_titulo_nome ~ ' › ' ~ (tx.sugestao_categoria_nome or '')) }}</span>
+        {% else %}
+          <span class="palpite palpite--nada">sem palpite</span>
+        {% endif %}
+        {% if tx.cnpj_cpf %}<span class="doc">{{ tx.cnpj_cpf }}</span>{% endif %}
+
+        <span class="c-acao">
+          {% if tx.tipo == 'CREDIT' and tx.sugestao_transferencia_recebida %}
+          <button type="button" class="bt-ok bt-ok--transf btn-aprovar-transf-recebida"
+                  data-tx-id="{{ tx.id }}" title="Aprovar a transferência recebida">
+            <i class="bi bi-check-lg"></i> Aprovar
+          </button>
+          {% elif tx.tipo == 'DEBIT' and tx.sugestao_tipo_debito == 'transferencia' and tx.sugestao_conta_destino_id %}
+          <button type="button" class="bt-ok bt-ok--transf btn-aprovar-transf"
+                  data-tx-id="{{ tx.id }}"
+                  data-conta-destino="{{ tx.sugestao_conta_destino_id }}"
+                  title="Aprovar a transferência">
+            <i class="bi bi-check-lg"></i> Aprovar
+          </button>
+          {% elif (tx.tipo == 'CREDIT' and tx.sugestao_forma_id) or (tx.tipo == 'DEBIT' and tx.sugestao_fornecedor_id) %}
+          <button type="button" class="bt-ok btn-aprovar"
+                  data-tx-id="{{ tx.id }}" data-tx-tipo="{{ tx.tipo }}"
+                  data-sugestao-forma="{{ tx.sugestao_forma_id or '' }}"
+                  data-sugestao-fornecedor="{{ tx.sugestao_fornecedor_id or '' }}"
+                  title="Aprovar o palpite">
+            <i class="bi bi-check-lg"></i> Aprovar
+          </button>
+          {% elif tx.tipo == 'DEBIT' and tx.sugestao_titulo_id %}
+          <button type="button" class="bt-ok bt-ok--desp btn-aprovar-despesa"
+                  data-tx-id="{{ tx.id }}" data-tx-valor="{{ tx.valor }}"
+                  data-sugestao-titulo="{{ tx.sugestao_titulo_id }}"
+                  data-sugestao-categoria="{{ tx.sugestao_categoria_id or '' }}"
+                  data-sugestao-subcategoria="{{ tx.sugestao_subcategoria_id or '' }}"
+                  title="Aprovar a despesa sugerida">
+            <i class="bi bi-check-lg"></i> Aprovar
+          </button>
+          {% endif %}
+
+          <button type="button" class="ic btn-conciliar"
+                  data-tx-id="{{ tx.id }}"
+                  data-tx-desc="{{ tx.descricao or '' }}"
+                  data-tx-valor="{{ tx.valor }}"
+                  data-tx-cnpj="{{ tx.cnpj_cpf or '' }}"
+                  data-tx-tipo="{{ tx.tipo }}"
+                  data-sugestao-forma="{{ tx.sugestao_forma_id or '' }}"
+                  data-sugestao-fornecedor="{{ tx.sugestao_fornecedor_id or '' }}"
+                  data-sugestao-titulo="{{ tx.sugestao_titulo_id or '' }}"
+                  data-sugestao-categoria="{{ tx.sugestao_categoria_id or '' }}"
+                  data-sugestao-subcategoria="{{ tx.sugestao_subcategoria_id or '' }}"
+                  data-sugestao-tipo-debito="{{ tx.sugestao_tipo_debito or '' }}"
+                  data-sugestao-conta-destino="{{ tx.sugestao_conta_destino_id or '' }}"
+                  data-sugestao-transf-recebida="{{ '1' if tx.sugestao_transferencia_recebida else '' }}"
+                  title="{{ 'Trocar o destino' if pronta else 'Escolher o destino' }}">
+            <i class="bi bi-{{ 'pencil' if pronta else 'link-45deg' }}"></i>
+          </button>
+          <button type="button" class="ic ic--ign btn-ignorar" data-tx-id="{{ tx.id }}"
+                  title="Ignorar este lançamento">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </span>
+      </div>
+    </div>
+    {% endfor %}
+
+    {% if total_pages > 1 %}
+    <div class="paginas">
+      <button type="button" class="pg" onclick="irParaPagina({{ page-1 }})"
+              {{ 'disabled' if page <= 1 }}>
+        <i class="bi bi-chevron-left"></i> Anterior
+      </button>
+      <span class="qual">{{ page }} de {{ '{:,}'.format(total_pages)|replace(',','.') }}</span>
+      <button type="button" class="pg" onclick="irParaPagina({{ page+1 }})"
+              {{ 'disabled' if page >= total_pages }}>
+        Próxima <i class="bi bi-chevron-right"></i>
+      </button>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="pe">
+    <a href="{{ url_for('bank_import.relatorio') }}">
+      <i class="bi bi-bar-chart-line"></i> Relatório do banco
+    </a>
+    <a href="{{ url_for('conciliacao_regras.memorias') }}">
+      <i class="bi bi-bookmark-star"></i> Memorizações
+    </a>
+    <a href="{{ url_for('bank_import.index') }}">
+      <i class="bi bi-arrow-left"></i> Voltar para o Banco
+    </a>
+  </div>
+
+  <div class="rodape-folga"></div>
+
+  <!-- Barra de lote -->
+  <div class="lote" id="cncLote">
+    <span class="n"><span id="contadorSelecionados">0</span> selecionada(s)</span>
+    <span class="sep"></span>
+    <button type="button" class="bl" id="btnSelecionarTodos">Todas</button>
+    <button type="button" class="bl" id="btnIgnorarSelecionados" disabled
+            onclick="ignorarSelecionados()">Ignorar</button>
+    <button type="button" class="bl" id="btnLancamentoUnico" disabled
+            onclick="abrirLancamentoUnico()">Lançamento único</button>
+    {% if total > 0 and f_clientes %}
+    <button type="button" class="bl" id="btnLancamentoFiltros"
+            onclick="abrirLancamentoFiltros()">Todos os {{ total }}</button>
+    {% endif %}
+    <button type="button" class="bl bl--pri" id="btnConciliarSelecionados" disabled
+            onclick="abrirModalLote()"><i class="bi bi-link-45deg"></i> Conciliar</button>
+  </div>
+
+  <!-- Filtro em passos -->
+  <div class="escuro" id="cnc-escuro" onclick="cncFecharFiltro()"></div>
+  <form class="gav js-sem-trava" id="formFiltros" method="GET"
+        action="{{ url_for('bank_import.conciliar') }}">
+    <div class="gav__pega"></div>
+    <div class="passos">
+      <span class="passo on" id="cnc-p1"></span>
+      <span class="passo" id="cnc-p2"></span>
+      <span class="passo" id="cnc-p3"></span>
+    </div>
+    <div class="pnome">Passo <span id="cnc-pn">1</span> de 3 — <b id="cnc-pt">Empresa</b></div>
+
+    <input type="hidden" name="tipo" id="cnc-tipo" value="{{ f_tipo or '' }}">
+
+    <div class="gav__b">
+      <div class="etapa" id="cnc-e1">
+        <div class="gr">
+          <div class="gr__c">
+            <span class="gr__t">Empresa</span>
+            <button type="button" class="gr__a" onclick="cncMarcarTodas('cnc-empresas')">marcar todas</button>
+          </div>
+          <div class="opcs" id="cnc-empresas">
             {% for c in clientes %}
-            <option value="{{ c.id }}" {% if c.id in f_clientes %}selected{% endif %}>
-              {{ c.nome_fantasia or c.razao_social }}
-            </option>
+            <label class="opc">
+              <input type="checkbox" name="cliente_id" value="{{ c.id }}"
+                     {% if c.id in f_clientes %}checked{% endif %}
+                     onchange="cncPintaContas()">
+              <span>{{ c.nome_fantasia or c.razao_social }}</span>
+            </label>
             {% endfor %}
-          </select>
+          </div>
+          <div class="dica">Pode marcar mais de uma. Sem marcar nenhuma, vêm todas.</div>
         </div>
-        <div class="col-md-3" id="divContaBancaria">
-          <label class="form-label form-label-sm mb-0">Conta Bancária <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
-          <select name="account_id" class="form-select form-select-sm" multiple size="4" id="selContas">
-            <option value="" disabled id="optContaPlaceholder">— Selecione uma empresa primeiro —</option>
-          </select>
-        </div>
-        <div class="col-md-6">
-          <div class="row g-2">
-            <div class="col-md-6">
-              <label class="form-label form-label-sm mb-0">Tipo</label>
-              <select name="tipo" class="form-select form-select-sm">
-                <option value="">Crédito + Débito</option>
-                <option value="CREDIT" {% if f_tipo == 'CREDIT' %}selected{% endif %}>Crédito</option>
-                <option value="DEBIT"  {% if f_tipo == 'DEBIT'  %}selected{% endif %}>Débito</option>
-              </select>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label form-label-sm mb-0">Descrição</label>
-              <input type="text" name="descricao" class="form-control form-control-sm"
-                     placeholder="parte da descrição" value="{{ f_descricao }}">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label form-label-sm mb-0">Data início</label>
-              <input type="date" name="data_ini" class="form-control form-control-sm" value="{{ f_data_ini }}">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label form-label-sm mb-0">Data fim</label>
-              <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ f_data_fim }}">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label form-label-sm mb-0">CNPJ/CPF</label>
-              <input type="text" name="cnpj_cpf" class="form-control form-control-sm"
-                     placeholder="parte do CNPJ" value="{{ f_cnpj }}">
-            </div>
-            <div class="col-md-6 d-flex align-items-end gap-1">
-              <button type="submit" class="btn btn-primary btn-sm flex-fill" id="btnFiltrar">
-                <i class="bi bi-search"></i> Filtrar
-              </button>
-              <a href="{{ url_for('bank_import.conciliar') }}" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-x"></i>
-              </a>
-            </div>
+      </div>
+
+      <div class="etapa" id="cnc-e2" hidden>
+        <div class="gr">
+          <div class="gr__c">
+            <span class="gr__t">Conta bancária</span>
+            <button type="button" class="gr__a" onclick="cncMarcarTodas('cnc-contas')">marcar todas</button>
+          </div>
+          <div class="opcs" id="cnc-contas">
+            {% for conta in todas_contas %}
+            <label class="opc" data-cliente="{{ conta.cliente_id or '' }}">
+              <input type="checkbox" name="account_id" value="{{ conta.id }}"
+                     {% if conta.id in f_contas %}checked{% endif %}>
+              <span>{{ conta.apelido or conta.banco_nome }}
+                <small>{{ conta.banco_nome }}{% if conta.agencia %} · Ag {{ conta.agencia }}{% endif %}</small>
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+          <div class="aviso-f" id="cnc-sem-conta" hidden>
+            Escolha uma empresa no passo anterior para ver as contas dela.
           </div>
         </div>
       </div>
+
+      <div class="etapa" id="cnc-e3" hidden>
+        <div class="gr">
+          <div class="gr__t">Entrada ou saída</div>
+          <div class="seg">
+            <button type="button" data-campo="cnc-tipo" data-valor=""
+                    class="{{ 'on' if not f_tipo }}">Tudo</button>
+            <button type="button" data-campo="cnc-tipo" data-valor="CREDIT"
+                    class="{{ 'on' if f_tipo == 'CREDIT' }}">Entrada</button>
+            <button type="button" data-campo="cnc-tipo" data-valor="DEBIT"
+                    class="{{ 'on' if f_tipo == 'DEBIT' }}">Saída</button>
+          </div>
+        </div>
+        <div class="gr">
+          <div class="gr__t">Período</div>
+          <div class="par">
+            <input type="date" class="campo" name="data_ini" id="cnc-ini" value="{{ f_data_ini or '' }}">
+            <input type="date" class="campo" name="data_fim" id="cnc-fim" value="{{ f_data_fim or '' }}">
+          </div>
+          <div class="chips" style="margin-top:.5rem;">
+            <button type="button" class="chip" onclick="cncPeriodo('mes')">Este mês</button>
+            <button type="button" class="chip" onclick="cncPeriodo('anterior')">Mês passado</button>
+            <button type="button" class="chip" onclick="cncPeriodo('90')">90 dias</button>
+            <button type="button" class="chip" onclick="cncPeriodo('limpa')">Sem período</button>
+          </div>
+        </div>
+        <div class="gr">
+          <div class="gr__t">Procurar</div>
+          <input type="text" class="campo" name="descricao" value="{{ f_descricao or '' }}"
+                 placeholder="Parte da descrição" autocomplete="off">
+          <input type="text" class="campo" name="cnpj" value="{{ f_cnpj or '' }}"
+                 placeholder="Parte do CNPJ/CPF" autocomplete="off" style="margin-top:.5rem;">
+        </div>
+      </div>
+    </div>
+
+    <div class="gav__f">
+      <button type="button" class="bt-g bt-g--ca" id="cnc-voltar" onclick="cncPasso(-1)" hidden>Voltar</button>
+      <button type="button" class="bt-g bt-g--ok" id="cnc-seguir" onclick="cncPasso(1)">Continuar</button>
+      <button type="submit" class="bt-g bt-g--ok" id="btnFiltrar" hidden>Aplicar filtro</button>
     </div>
   </form>
-
-  <!-- Botão Auto-Conciliar -->
-  <div class="d-flex gap-2 mb-2 align-items-center flex-wrap">
-    <button type="button" class="btn btn-success btn-sm" onclick="autoConciliarAqui(this)">
-      <i class="bi bi-magic"></i> Executar Auto-Conciliação
-    </button>
-    <a href="{{ url_for('conciliacao_regras.lista') }}" class="btn btn-outline-primary btn-sm">
-      <i class="bi bi-funnel-fill"></i> Gerenciar Regras
-    </a>
-    <a href="{{ url_for('bank_import.relatorio', status='ignorado',
-                        empresa_id=(f_clientes[0] if f_clientes|length == 1 else ''),
-                        account_id=(f_contas[0] if f_contas|length == 1 else ''),
-                        tipo=f_tipo) }}"
-       class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-eye-slash me-1"></i> Ver Ignorados
-    </a>
-    <span id="msgAutoConciliar" class="small text-muted"></span>
-  </div>
-
-  <!-- Tabela principal -->
-  <div class="card shadow-sm">
-    <div class="card-header d-flex justify-content-between align-items-center py-2"
-         style="background:#1D63A5;color:white;">
-      <h6 class="mb-0"><i class="bi bi-arrow-left-right"></i> Transações Pendentes</h6>
-      <span class="badge bg-warning text-dark">{{ total }} pendente(s)</span>
-    </div>
-    <div class="card-body p-0">
-      {% if transacoes %}
-      <form method="POST" class="js-sem-trava" id="formConciliacaoLote">
-        <div class="d-flex gap-2 p-2 bg-light border-bottom" style="font-size:0.85rem;">
-          <button type="button" class="btn btn-outline-primary btn-sm" id="btnSelecionarTodos">
-            <i class="bi bi-check-all"></i> Selecionar Todos
-          </button>
-          <button type="button" class="btn btn-success btn-sm" id="btnConciliarSelecionados"
-                  disabled onclick="abrirModalLote()">
-            <i class="bi bi-link-45deg"></i> Conciliar Selecionados
-            (<span id="contadorSelecionados">0</span>)
-          </button>
-          <button type="button" class="btn btn-outline-secondary btn-sm" id="btnIgnorarSelecionados"
-                  disabled onclick="ignorarSelecionados()">
-            <i class="bi bi-x-circle"></i> Ignorar Selecionados
-          </button>
-          <button type="button" class="btn btn-outline-warning btn-sm" id="btnLancamentoUnico"
-                  disabled onclick="abrirLancamentoUnico()">
-            <i class="bi bi-1-circle"></i> Lançamento Único
-          </button>
-          {% if total > 0 and f_clientes %}
-          <button type="button" class="btn btn-outline-info btn-sm" id="btnLancamentoFiltros"
-                  onclick="abrirLancamentoFiltros()">
-            <i class="bi bi-funnel-fill"></i> Lançamento a Todos ({{ total }})
-          </button>
-          {% endif %}
-          <button type="button" class="btn btn-success btn-sm" id="btnAprovarSugestoes"
-                  onclick="aprovarSugestoesPagina()">
-            <i class="bi bi-check2-all"></i> Aprovar Sugestões da Página
-            (<span id="contadorSugestoes">0</span>)
-          </button>
-        </div>
-
-        <div class="table-responsive">
-          <table class="table table-hover table-sm mb-0" style="font-size:0.83rem;">
-            <thead class="table-light">
-              <tr>
-                <th style="width:32px;"><input type="checkbox" id="checkAll" title="Selecionar todos"></th>
-                <th>Data</th>
-                <th>Tipo</th>
-                <th>Valor</th>
-                <th>Descrição</th>
-                <th>CNPJ/CPF</th>
-                <th>Conta</th>
-                <th>Sugestão</th>
-                <th class="text-center">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for tx in transacoes %}
-              <tr class="tx-row" data-tipo="{{ tx.tipo }}">
-                <td>
-                  <input type="checkbox" name="transaction_id" value="{{ tx.id }}"
-                         class="tx-check"
-                         data-tipo="{{ tx.tipo }}"
-                         data-sugestao-forma="{{ tx.sugestao_forma_id or '' }}"
-                         data-sugestao-fornecedor="{{ tx.sugestao_fornecedor_id or '' }}">
-                </td>
-                <td>{{ tx.data_transacao.strftime('%d/%m/%Y') if tx.data_transacao else '-' }}</td>
-                <td>
-                  {% if tx.tipo == 'DEBIT' %}
-                  <span class="badge bg-danger">Débito</span>
-                  {% else %}
-                  <span class="badge bg-success">Crédito</span>
-                  {% endif %}
-                </td>
-                <td class="fw-semibold">{{ tx.valor | formatar_moeda }}</td>
-                <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                    title="{{ tx.descricao or '' }}">
-                  {{ tx.descricao or '—' }}
-                </td>
-                <td>
-                  {% if tx.cnpj_cpf %}<code style="font-size:0.78rem;">{{ tx.cnpj_cpf }}</code>
-                  {% else %}<span class="text-muted">—</span>{% endif %}
-                </td>
-                <td>{{ tx.conta_apelido or tx.banco_nome }}</td>
-                <td style="max-width:140px;">
-                  {% if tx.tipo == 'CREDIT' and tx.sugestao_transferencia_recebida %}
-                    <span class="badge text-white" style="background:#6f42c1;font-size:0.72rem;"
-                          title="Transferência bancária recebida">
-                      🔄 Transf. Recebida
-                    </span>
-                  {% elif tx.tipo == 'CREDIT' and tx.sugestao_forma_id %}
-                    <span class="badge bg-info text-dark" style="font-size:0.72rem;"
-                          title="{% if tx.sugestao_regra %}Sugestão por regra de descrição{% else %}Sugestão com base no CNPJ anterior{% endif %}">
-                      {% if tx.sugestao_regra %}📋{% else %}✨{% endif %} {{ tx.sugestao_forma_nome }}
-                    </span>
-                  {% elif tx.tipo == 'DEBIT' and tx.sugestao_tipo_debito == 'transferencia' and tx.sugestao_conta_destino_id %}
-                    <span class="badge bg-purple text-white" style="font-size:0.72rem;background:#6f42c1;"
-                          title="Transferência aprendida do CNPJ anterior">
-                      🔄 → {{ todas_contas_map.get(tx.sugestao_conta_destino_id, 'Conta #' ~ tx.sugestao_conta_destino_id) }}
-                    </span>
-                  {% elif tx.tipo == 'DEBIT' and tx.sugestao_fornecedor_id %}
-                    <span class="badge bg-secondary" style="font-size:0.72rem;"
-                          title="{% if tx.sugestao_regra %}Sugestão por regra de descrição{% else %}Sugestão com base no CNPJ anterior{% endif %}">
-                      {% if tx.sugestao_regra %}📋{% else %}✨{% endif %} {{ tx.sugestao_fornecedor_nome }}
-                    </span>
-                  {% elif tx.tipo == 'DEBIT' and tx.sugestao_titulo_id %}
-                    <span class="badge bg-warning text-dark" style="font-size:0.72rem;"
-                          title="Sugestão de despesa com base no CNPJ anterior">
-                      🧾 {{ tx.sugestao_despesa_label or (tx.sugestao_titulo_nome ~ ' › ' ~ tx.sugestao_categoria_nome) }}
-                    </span>
-                  {% else %}
-                    <span class="text-muted">—</span>
-                  {% endif %}
-                </td>
-                <td class="text-center text-nowrap">
-                  {% if tx.tipo == 'CREDIT' and tx.sugestao_transferencia_recebida %}
-                  <button type="button" class="btn btn-sm btn-aprovar-transf-recebida"
-                          style="background:#6f42c1;color:#fff;"
-                          data-tx-id="{{ tx.id }}"
-                          title="Aprovar transferência recebida com 1 clique">
-                    🔄 Aprovar Receb.
-                  </button>
-                  {% elif tx.tipo == 'DEBIT' and tx.sugestao_tipo_debito == 'transferencia' and tx.sugestao_conta_destino_id %}
-                  <button type="button" class="btn btn-sm btn-aprovar-transf"
-                          style="background:#6f42c1;color:#fff;"
-                          data-tx-id="{{ tx.id }}"
-                          data-conta-destino="{{ tx.sugestao_conta_destino_id }}"
-                          title="Aprovar transferência com 1 clique">
-                    🔄 Aprovar Transf.
-                  </button>
-                  {% elif (tx.tipo == 'CREDIT' and tx.sugestao_forma_id) or (tx.tipo == 'DEBIT' and tx.sugestao_fornecedor_id) %}
-                  <button type="button" class="btn btn-sm btn-success btn-aprovar"
-                          data-tx-id="{{ tx.id }}"
-                          data-tx-tipo="{{ tx.tipo }}"
-                          data-sugestao-forma="{{ tx.sugestao_forma_id or '' }}"
-                          data-sugestao-fornecedor="{{ tx.sugestao_fornecedor_id or '' }}"
-                          title="Aprovar sugestão com 1 clique">
-                    ✅ Aprovar
-                  </button>
-                  {% elif tx.tipo == 'DEBIT' and tx.sugestao_titulo_id %}
-                  <button type="button" class="btn btn-sm btn-warning btn-aprovar-despesa"
-                          data-tx-id="{{ tx.id }}"
-                          data-tx-valor="{{ tx.valor }}"
-                          data-sugestao-titulo="{{ tx.sugestao_titulo_id }}"
-                          data-sugestao-categoria="{{ tx.sugestao_categoria_id or '' }}"
-                          data-sugestao-subcategoria="{{ tx.sugestao_subcategoria_id or '' }}"
-                          title="Aprovar despesa sugerida com 1 clique">
-                    🧾 Aprovar Despesa
-                  </button>
-                  {% endif %}
-                  <button type="button" class="btn btn-sm btn-outline-primary btn-conciliar"
-                          data-tx-id="{{ tx.id }}"
-                          data-tx-desc="{{ tx.descricao | e }}"
-                          data-tx-valor="{{ tx.valor }}"
-                          data-tx-cnpj="{{ tx.cnpj_cpf or '' }}"
-                          data-tx-tipo="{{ tx.tipo }}"
-                          data-sugestao-forma="{{ tx.sugestao_forma_id or '' }}"
-                          data-sugestao-fornecedor="{{ tx.sugestao_fornecedor_id or '' }}"
-                          data-sugestao-titulo="{{ tx.sugestao_titulo_id or '' }}"
-                          data-sugestao-categoria="{{ tx.sugestao_categoria_id or '' }}"
-                          data-sugestao-subcategoria="{{ tx.sugestao_subcategoria_id or '' }}"
-                          data-sugestao-tipo-debito="{{ tx.sugestao_tipo_debito or '' }}"
-                          data-sugestao-conta-destino="{{ tx.sugestao_conta_destino_id or '' }}"
-                          data-sugestao-transf-recebida="{{ '1' if tx.sugestao_transferencia_recebida else '' }}">
-                    <i class="bi bi-link-45deg"></i> {% if tx.sugestao_transferencia_recebida or (tx.tipo == 'CREDIT' and tx.sugestao_forma_id) or (tx.tipo == 'DEBIT' and (tx.sugestao_fornecedor_id or tx.sugestao_titulo_id or tx.sugestao_tipo_debito == 'transferencia')) %}Alterar{% else %}Conciliar{% endif %}
-                  </button>
-                  <button type="button" class="btn btn-sm btn-outline-secondary btn-ignorar"
-                          data-tx-id="{{ tx.id }}" title="Ignorar">
-                    <i class="bi bi-x-circle"></i>
-                  </button>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </form>
-
-      {% if total_pages > 1 %}
-      <div class="d-flex justify-content-center py-3">
-        <nav>
-          <ul class="pagination pagination-sm mb-0">
-            {% if page > 1 %}
-            <li class="page-item">
-              <a class="page-link" href="javascript:void(0)" onclick="irParaPagina({{ page-1 }})">&#8249;</a>
-            </li>
-            {% endif %}
-            {% for p in range(1, total_pages+1) %}
-            <li class="page-item {% if p == page %}active{% endif %}">
-              <a class="page-link" href="javascript:void(0)" onclick="irParaPagina({{ p }})">{{ p }}</a>
-            </li>
-            {% endfor %}
-            {% if page < total_pages %}
-            <li class="page-item">
-              <a class="page-link" href="javascript:void(0)" onclick="irParaPagina({{ page+1 }})">&#8250;</a>
-            </li>
-            {% endif %}
-          </ul>
-        </nav>
-      </div>
-      {% endif %}
-
-      {% else %}
-      {% if not f_clientes %}
-      <div class="p-4 text-center text-muted">
-        <i class="bi bi-building fs-1 text-primary"></i>
-        <p class="mt-2 mb-0 fw-semibold">Selecione uma ou mais empresas no filtro acima para visualizar as transações pendentes.</p>
-      </div>
-      {% else %}
-      <div class="p-4 text-center text-muted">
-        <i class="bi bi-check2-all fs-1 text-success"></i>
-        <p class="mt-2 mb-0">Nenhuma transação pendente.</p>
-      </div>
-      {% endif %}
-      {% endif %}
-    </div>
-  </div>
-
-  <a href="{{ url_for('bank_import.index') }}" class="btn btn-secondary mt-3">
-    <i class="bi bi-arrow-left"></i> Voltar
-  </a>
 </div>
 
 <!-- Modal: Conciliar individual -->
@@ -755,51 +1048,6 @@ function mostrarCarregando(btn) {
   setTimeout(function() { btn.disabled = false; btn.innerHTML = orig; }, LOADING_TIMEOUT_MS);
 }
 
-// ---- Filtro dinâmico de Conta Bancária por Empresa ----
-function atualizarContasBancarias() {
-  const selEmp = document.getElementById('selEmpresas');
-  const selCon = document.getElementById('selContas');
-  if (!selEmp || !selCon) return;
-
-  const empsSelecionadas = Array.from(selEmp.selectedOptions).map(o => parseInt(o.value));
-
-  // Limpa e reconstrói a lista de contas
-  selCon.innerHTML = '';
-
-  if (empsSelecionadas.length === 0) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.disabled = true;
-    opt.textContent = '— Selecione uma empresa primeiro —';
-    selCon.appendChild(opt);
-    return;
-  }
-
-  const contasFiltradas = _todasContas.filter(c => {
-    // cliente_id é incluído na query das todas_contas
-    const cid = c.cliente_id !== undefined ? parseInt(c.cliente_id) : null;
-    return cid !== null && empsSelecionadas.includes(cid);
-  });
-
-  if (contasFiltradas.length === 0) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.disabled = true;
-    opt.textContent = '— Nenhuma conta para a empresa selecionada —';
-    selCon.appendChild(opt);
-    return;
-  }
-
-  contasFiltradas.forEach(function(c) {
-    const opt = document.createElement('option');
-    opt.value = c.id;
-    opt.textContent = c.apelido ? (c.banco_nome ? c.apelido + ' — ' + c.banco_nome : c.apelido) : (c.banco_nome || '');
-    if (_contasSelecionadas.includes(String(c.id)) || _contasSelecionadas.includes(c.id)) {
-      opt.selected = true;
-    }
-    selCon.appendChild(opt);
-  });
-}
 
 // ---- Navegação de paginação preservando multi-selects ----
 function irParaPagina(page) {
@@ -809,13 +1057,102 @@ function irParaPagina(page) {
   window.location.href = '?' + params.toString();
 }
 
+/* ── Filtro em passos ─────────────────────────────────────────────────
+   O funil fica no topo, como nas outras telas: escolhe empresa, depois SO as
+   contas dela, depois o resto. */
+var cncN = 1;
+var CNC_NOMES = ['Empresa', 'Conta', 'Refinar'];
+
+function cncAbrirFiltro() {
+  document.getElementById('formFiltros').classList.add('on');
+  document.getElementById('cnc-escuro').classList.add('on');
+  cncIr(1);
+}
+function cncFecharFiltro() {
+  document.getElementById('formFiltros').classList.remove('on');
+  document.getElementById('cnc-escuro').classList.remove('on');
+}
+function cncIr(n) {
+  cncN = Math.min(3, Math.max(1, n));
+  for (var i = 1; i <= 3; i++) {
+    document.getElementById('cnc-e' + i).hidden = (i !== cncN);
+    document.getElementById('cnc-p' + i).classList.toggle('on', i <= cncN);
+  }
+  document.getElementById('cnc-pn').textContent = cncN;
+  document.getElementById('cnc-pt').textContent = CNC_NOMES[cncN - 1];
+  document.getElementById('cnc-voltar').hidden = (cncN === 1);
+  document.getElementById('cnc-seguir').hidden = (cncN === 3);
+  document.getElementById('btnFiltrar').hidden = (cncN !== 3);
+  if (cncN === 2) cncPintaContas();
+}
+function cncPasso(d) { cncIr(cncN + d); }
+
+function cncMarcarTodas(id) {
+  var cx = document.getElementById(id);
+  var visiveis = [].slice.call(cx.querySelectorAll('.opc'))
+                   .filter(function (o) { return !o.hidden; });
+  var faltaAlguma = visiveis.some(function (o) {
+    return !o.querySelector('input').checked;
+  });
+  visiveis.forEach(function (o) { o.querySelector('input').checked = faltaAlguma; });
+  if (id === 'cnc-empresas') cncPintaContas();
+}
+
+/* So as contas das empresas marcadas. E conta de empresa que saiu do filtro
+   nao pode continuar marcada em silencio: o resultado viria vazio sem
+   explicacao. */
+function cncPintaContas() {
+  var marcadas = [].slice.call(
+    document.querySelectorAll('#cnc-empresas input:checked')
+  ).map(function (i) { return i.value; });
+  var algumaVisivel = false;
+  document.querySelectorAll('#cnc-contas .opc').forEach(function (o) {
+    var mostra = !marcadas.length ||
+                 marcadas.indexOf(o.dataset.cliente) >= 0;
+    o.hidden = !mostra;
+    if (mostra) algumaVisivel = true;
+    else o.querySelector('input').checked = false;
+  });
+  var aviso = document.getElementById('cnc-sem-conta');
+  if (aviso) aviso.hidden = algumaVisivel;
+}
+
+function cncPeriodo(qual) {
+  var ini = document.getElementById('cnc-ini');
+  var fim = document.getElementById('cnc-fim');
+  if (qual === 'limpa') { ini.value = ''; fim.value = ''; return; }
+  var hoje = new Date(), a, b;
+  if (qual === 'mes') {
+    a = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    b = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+  } else if (qual === 'anterior') {
+    a = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    b = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+  } else {
+    b = hoje;
+    a = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 89);
+  }
+  var iso = function (d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+           '-' + String(d.getDate()).padStart(2, '0');
+  };
+  ini.value = iso(a);
+  fim.value = iso(b);
+}
+
+document.querySelectorAll('#formFiltros [data-campo]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    document.getElementById(b.dataset.campo).value = b.dataset.valor;
+    b.parentElement.querySelectorAll('[data-campo]').forEach(function (o) {
+      o.classList.remove('on');
+    });
+    b.classList.add('on');
+  });
+});
+
 // Inicializa ao carregar
 document.addEventListener('DOMContentLoaded', function() {
-  const selEmp = document.getElementById('selEmpresas');
-  if (selEmp) {
-    selEmp.addEventListener('change', atualizarContasBancarias);
-    atualizarContasBancarias();
-  }
+  cncPintaContas();
 
   // Mostra spinner no botão Filtrar ao submeter, SEM desabilitar o botão
   // (desabilitar antes da submissão pode bloquear o envio do formulário em alguns navegadores)
@@ -837,11 +1174,19 @@ const btnLancUnico    = document.getElementById('btnLancamentoUnico');
 const contador        = document.getElementById('contadorSelecionados');
 
 function atualizarBotoes() {
+  const todas = document.querySelectorAll('.tx-check');
   const n = document.querySelectorAll('.tx-check:checked').length;
   if (contador) contador.textContent = n;
   if (btnConciliarSel) btnConciliarSel.disabled = n === 0;
   if (btnIgnorarSel)   btnIgnorarSel.disabled   = n === 0;
   if (btnLancUnico)    btnLancUnico.disabled     = n === 0;
+  const barra = document.getElementById('cncLote');
+  if (barra) barra.classList.toggle('on', n > 0);
+  if (checkAll) checkAll.checked = n > 0 && n === todas.length;
+  document.querySelectorAll('#cnc .lin').forEach(function (l) {
+    const c = l.querySelector('.tx-check');
+    l.classList.toggle('table-selected', !!(c && c.checked));
+  });
 }
 
 if (checkAll) {
@@ -853,7 +1198,7 @@ if (checkAll) {
 document.querySelectorAll('.tx-check').forEach(c => c.addEventListener('change', atualizarBotoes));
 
 // Clique na linha seleciona o checkbox (single-click)
-document.querySelectorAll('tr.tx-row').forEach(function(row) {
+document.querySelectorAll('#cnc .tx-row').forEach(function(row) {
   row.addEventListener('click', function(e) {
     if (e.target.closest('button, a, input, select, textarea, label')) return;
     var chk = row.querySelector('.tx-check');
@@ -867,9 +1212,9 @@ document.getElementById('btnSelecionarTodos')?.addEventListener('click', functio
   const all = document.querySelectorAll('.tx-check');
   const algumDesmarcado = [...all].some(c => !c.checked);
   all.forEach(c => c.checked = algumDesmarcado);
-  if (checkAll) checkAll.checked = algumDesmarcado;
   atualizarBotoes();
 });
+atualizarBotoes();
 
 function ignorarSelecionados() {
   const ids = [...document.querySelectorAll('.tx-check:checked')].map(c => c.value);
@@ -891,8 +1236,8 @@ function abrirLancamentoUnico() {
   if (checked.length === 0) return;
   _lancUnicoIds = checked.map(c => c.value);
   // Usa o primeiro selecionado para popular o modal
-  const tr = checked[0].closest('tr');
-  const btn = tr ? tr.querySelector('.btn-conciliar') : null;
+  const lin = checked[0].closest('.lin');
+  const btn = lin ? lin.querySelector('.btn-conciliar') : null;
   if (!btn) return;
   // Simula clique no btn-conciliar para preencher o modal
   btn.click();
