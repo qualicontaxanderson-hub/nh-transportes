@@ -288,6 +288,45 @@ body > .container-fluid:has(#cnc){
   display:inline-flex; align-items:center; gap:.25rem; margin-bottom:.55rem; }
 .mp-etapa[hidden]{ display:none; }
 
+/* Lista no lugar do <select>. O <select size="6"> nao vira lista no iPhone:
+   aparece como um retangulo branco vazio, que foi o que voce viu. */
+.lsel{ border:1px solid #d9e0e8; border-radius:11px; overflow:hidden; background:#fff; }
+.lsel__busca{ position:relative; padding:.45rem; border-bottom:1px solid #e7ebf1;
+  background:#f7f9fc; }
+.lsel__busca[hidden]{ display:none; }
+.lsel__busca i{ position:absolute; left:1rem; top:50%; transform:translateY(-50%);
+  color:#6b7684; font-size:.82rem; }
+.lsel__busca input{ width:100%; border:1px solid #d9e0e8; border-radius:8px;
+  padding:.42rem .6rem .42rem 1.85rem; font-size:.85rem; font-family:inherit; }
+.lsel__lista{ max-height:14rem; overflow-y:auto; }
+.lsel__i{ display:flex; align-items:center; gap:.5rem; width:100%; padding:.55rem .65rem;
+  border:0; border-bottom:1px solid #e7ebf1; background:#fff; font-family:inherit;
+  font-size:.85rem; text-align:left; color:#151d27; cursor:pointer; }
+.lsel__i:last-child{ border-bottom:0; }
+.lsel__i:hover{ background:#f7f9fc; }
+.lsel__i.on{ background:#eaf1f9; color:#0C4C86; font-weight:800; }
+.lsel__i span{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lsel__i .tique{ margin-left:auto; color:#1D63A5; flex:0 0 auto; }
+.lsel__vazio{ padding:.75rem .65rem; font-size:.82rem; color:#8b95a3; text-align:center; }
+
+/* Formato fechado, para quando ha varios campos no mesmo passo. */
+.lsel--fechada > .lsel__abre{ width:100%; display:flex; align-items:center; gap:.5rem;
+  border:1px solid #d9e0e8; border-radius:10px; background:#fff; color:#151d27;
+  padding:.5rem .65rem; font-size:.86rem; font-weight:600; cursor:pointer;
+  font-family:inherit; text-align:left; }
+.lsel--fechada > .lsel__abre:hover{ border-color:#1D63A5; }
+.lsel--fechada > .lsel__abre span{ min-width:0; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; }
+.lsel--fechada > .lsel__abre .seta{ margin-left:auto; color:#6b7684; font-size:.78rem;
+  flex:0 0 auto; transition:transform .16s; }
+.lsel--fechada.aberta > .lsel__abre{ border-color:#1D63A5; border-radius:10px 10px 0 0; }
+.lsel--fechada.aberta > .lsel__abre .seta{ transform:rotate(180deg); color:#1D63A5; }
+.lsel--fechada{ border:0; border-radius:0; overflow:visible; background:none; }
+.lsel--fechada > .lsel__corpo{ border:1px solid #1D63A5; border-top:0;
+  border-radius:0 0 10px 10px; overflow:hidden; background:#fff; }
+.lsel--fechada > .lsel__corpo[hidden]{ display:none; }
+.lsel--fechada > .lsel__abre.vazio span{ color:#8b95a3; font-weight:500; }
+
 /* O modal de conciliar continua o de sempre; só a linha realçada mudou. */
 .tx-row.table-selected{ background:#ddeeff; }
 </style>
@@ -1425,6 +1464,8 @@ function abrirLancamentoFiltros() {
   if (credBtn) bootstrap.Tab.getOrCreateInstance(credBtn).show();
   {% endif %}
   alternarAbaDebitoLote('');
+  lselMontarTudo();
+  lselSincronizar();
   bootstrap.Modal.getOrCreateInstance(document.getElementById('modalLote')).show();
 }
 
@@ -1556,6 +1597,8 @@ document.querySelectorAll('.btn-conciliar').forEach(btn => {
         alternarAbaDebito('');
       }
     }
+    lselMontarTudo();
+    setTimeout(lselSincronizar, 30);   // o codigo antigo preenche com setTimeout
     bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConciliar')).show();
   });
 });
@@ -1640,6 +1683,145 @@ function valorMascaraParaFloat(str) {
 }
 
 // ---- Abas Débito (Fornecedor / Despesa) ----
+/* ── Lista no lugar do <select> ───────────────────────────────────────
+   O <select> fica escondido e continua sendo a fonte da verdade: quem envia
+   o formulario e ele, e o codigo antigo continua fazendo `sel.value = x`.
+   A lista so espelha. Um MutationObserver cuida das <option> que o proprio
+   sistema troca (a categoria muda conforme o titulo).                        */
+var LSEL_LIMIAR_BUSCA = 8;
+
+function lselMonta(sel, aberta) {
+  if (sel.dataset.lsel) return;
+  sel.dataset.lsel = '1';
+  sel.style.display = 'none';
+  sel.removeAttribute('size');
+
+  var cx = document.createElement('div');
+  cx.className = 'lsel' + (aberta ? '' : ' lsel--fechada');
+
+  var abre = null;
+  if (!aberta) {
+    abre = document.createElement('button');
+    abre.type = 'button';
+    abre.className = 'lsel__abre';
+    abre.innerHTML = '<span></span><i class="bi bi-chevron-down seta"></i>';
+    abre.addEventListener('click', function () {
+      var corpo = cx.querySelector('.lsel__corpo');
+      var abrir = corpo.hidden;
+      document.querySelectorAll('.lsel--fechada.aberta').forEach(function (o) {
+        o.classList.remove('aberta');
+        o.querySelector('.lsel__corpo').hidden = true;
+      });
+      corpo.hidden = !abrir;
+      cx.classList.toggle('aberta', abrir);
+      if (abrir) {
+        var b = corpo.querySelector('.lsel__busca:not([hidden]) input');
+        if (b) b.focus();
+      }
+    });
+    cx.appendChild(abre);
+  }
+
+  var corpo = document.createElement('div');
+  corpo.className = 'lsel__corpo';
+  if (!aberta) corpo.hidden = true;
+
+  var busca = document.createElement('div');
+  busca.className = 'lsel__busca';
+  busca.innerHTML = '<i class="bi bi-search"></i><input type="text" placeholder="Procurar" autocomplete="off">';
+  var lista = document.createElement('div');
+  lista.className = 'lsel__lista';
+  corpo.appendChild(busca);
+  corpo.appendChild(lista);
+  cx.appendChild(corpo);
+  sel.parentNode.insertBefore(cx, sel.nextSibling);
+
+  busca.querySelector('input').addEventListener('input', function () {
+    lselPinta(sel, this.value);
+  });
+  sel.addEventListener('change', function () { lselPinta(sel, ''); });
+
+  /* O sistema troca as <option> da categoria quando o titulo muda. */
+  try {
+    new MutationObserver(function () { lselPinta(sel, ''); })
+      .observe(sel, { childList: true });
+  } catch (e) {}
+
+  lselPinta(sel, '');
+}
+
+function lselPinta(sel, termo) {
+  var cx = sel.nextElementSibling;
+  if (!cx || !cx.classList.contains('lsel')) return;
+  var lista = cx.querySelector('.lsel__lista');
+  var q = (termo || '').trim().toLowerCase();
+  var opts = [].slice.call(sel.options);
+
+  cx.querySelector('.lsel__busca').hidden = opts.length <= LSEL_LIMIAR_BUSCA;
+
+  var visiveis = opts.filter(function (o) {
+    if (o.hidden || o.style.display === 'none') return false;
+    return !q || o.textContent.toLowerCase().indexOf(q) >= 0;
+  });
+
+  lista.innerHTML = '';
+  if (!visiveis.length) {
+    lista.innerHTML = '<div class="lsel__vazio">Nada com esse nome</div>';
+  }
+  visiveis.forEach(function (o) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'lsel__i' + (o.value === sel.value ? ' on' : '');
+    if (o.disabled) b.disabled = true;
+    var t = document.createElement('span');
+    t.textContent = o.textContent.trim();
+    b.appendChild(t);
+    if (o.value === sel.value) {
+      var i = document.createElement('i');
+      i.className = 'bi bi-check-lg tique';
+      b.appendChild(i);
+    }
+    b.addEventListener('click', function () {
+      sel.value = o.value;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      var fechada = cx.classList.contains('lsel--fechada');
+      if (fechada) {
+        cx.classList.remove('aberta');
+        cx.querySelector('.lsel__corpo').hidden = true;
+      }
+      var bu = cx.querySelector('.lsel__busca input');
+      if (bu) bu.value = '';
+      lselPinta(sel, '');
+    });
+    lista.appendChild(b);
+  });
+
+  var atual = opts.filter(function (o) { return o.value === sel.value; })[0];
+  var abre = cx.querySelector('.lsel__abre');
+  if (abre) {
+    var txt = atual ? atual.textContent.trim() : '';
+    abre.querySelector('span').textContent = txt || 'Escolher';
+    abre.classList.toggle('vazio', !sel.value);
+  }
+}
+
+/* Aberta quando o select e a unica escolha do passo; fechada quando divide o
+   passo com outros campos. */
+var LSEL_ABERTAS = ['selectForma', 'selectFornecedor', 'selectContaDestino',
+                    'selectContaOrigem', 'selectFormaLote', 'selectFornLote',
+                    'lote_conta_destino_id'];
+
+function lselMontarTudo() {
+  document.querySelectorAll('#modalConciliar select, #modalLote select')
+    .forEach(function (sel) {
+      lselMonta(sel, LSEL_ABERTAS.indexOf(sel.id) >= 0);
+    });
+}
+function lselSincronizar() {
+  document.querySelectorAll('#modalConciliar select, #modalLote select')
+    .forEach(function (sel) { if (sel.dataset.lsel) lselPinta(sel, ''); });
+}
+
 /* Escolher o destino leva ao passo 2; `mpdVoltar` traz de volta. */
 function mpdIr(n) {
   document.getElementById('mpd-e1').hidden = (n !== 1);
@@ -1732,6 +1914,7 @@ function carregarCategorias(selectTitulo, nomeCampoCategoria) {
   // Limpa subcategoria ao trocar categoria
   const selSub = linha ? linha.querySelector('.sel-subcategoria') : null;
   if (selSub) selSub.innerHTML = '<option value="">— Nenhuma —</option>';
+  if (window.lselSincronizar) lselSincronizar();   // as listas acompanham
 }
 
 function carregarSubcategorias(selCategoria) {
@@ -1750,6 +1933,7 @@ function carregarSubcategorias(selCategoria) {
   });
   // Também carrega fornecedores desta categoria
   carregarFornecedoresDespesa(selCategoria);
+  if (window.lselSincronizar) lselSincronizar();   // as listas acompanham
 }
 
 function carregarFornecedoresDespesa(selCategoria) {
@@ -1897,6 +2081,7 @@ function adicionarLinhaDespesa() {
   }
   atualizarSoma();
   if (_linhaDespIdx >= 3) document.getElementById('btnAdicionarDesp').style.display = 'none';
+  lselMontarTudo();   // a linha nova tambem vira lista
 }
 
 function atualizarSoma() {
@@ -1990,6 +2175,7 @@ function carregarCatLote() {
     o.dataset.subcategorias = JSON.stringify(c.subcategorias || []);
     selCat.appendChild(o);
   });
+  if (window.lselSincronizar) lselSincronizar();   // as listas acompanham
 }
 
 function carregarSubCatLote() {
@@ -2026,6 +2212,8 @@ function abrirModalLote() {
   if (alvo) bootstrap.Tab.getOrCreateInstance(alvo).show();
   /* Volta ao passo 1: escolher o destino e uma decisao, nao um padrao. */
   alternarAbaDebitoLote('');
+  lselMontarTudo();
+  lselSincronizar();
   bootstrap.Modal.getOrCreateInstance(document.getElementById('modalLote')).show();
 }
 
