@@ -688,21 +688,37 @@ body > .container-fluid:has(#cnc){
           <input type="hidden" name="tipo_tx" id="modal_tipo_tx">
           <div class="alert alert-light border py-2 mb-3" id="modal_tx_info" style="font-size:0.88rem;"></div>
           <div id="secao_credito" style="display:none;">
-            <!-- Abas Crédito: Forma de Recebimento | Transferência Recebida -->
-            <ul class="nav nav-tabs mb-2" id="creditoTabs">
-              <li class="nav-item">
-                <button type="button" class="nav-link active" id="tab_cr_forma_btn"
+            <div class="mp"><span class="on" id="mpc1"></span><span id="mpc2"></span></div>
+            <div class="mp-nome">Passo <span id="mpcn">1</span> de 2 —
+              <b id="mpct">De onde veio esta entrada?</b></div>
+
+            <div class="mp-etapa" id="mpc-e1">
+              <div class="destinos" id="creditoTabs">
+                <button type="button" class="destino" id="tab_cr_forma_btn"
                         onclick="alternarAbaCredito('forma')">
-                  <i class="bi bi-wallet-fill text-success"></i> Forma de Recebimento
+                  <span class="destino__i"><i class="bi bi-wallet-fill"></i></span>
+                  <span class="destino__t">
+                    <span class="destino__n">Forma de recebimento</span>
+                    <span class="destino__d">Venda paga em PIX, cartão, dinheiro,
+                      boleto — o dinheiro entrou de fora.</span>
+                  </span>
                 </button>
-              </li>
-              <li class="nav-item">
-                <button type="button" class="nav-link" id="tab_cr_transf_btn"
+                <button type="button" class="destino" id="tab_cr_transf_btn"
                         onclick="alternarAbaCredito('transferencia')">
-                  <i class="bi bi-arrow-left-right"></i> Transferência Recebida
+                  <span class="destino__i"><i class="bi bi-arrow-left-right"></i></span>
+                  <span class="destino__t">
+                    <span class="destino__n">Transferência recebida</span>
+                    <span class="destino__d">Veio de outra conta do grupo — não é
+                      receita nova, só mudou de lugar.</span>
+                  </span>
                 </button>
-              </li>
-            </ul>
+              </div>
+            </div>
+
+            <div class="mp-etapa" id="mpc-e2" hidden>
+              <button type="button" class="mp-voltar" onclick="mpcIr(1)">
+                <i class="bi bi-chevron-left"></i> trocar a origem
+              </button>
             <!-- Aba Forma de Recebimento -->
             <div id="aba_cr_forma">
               <label class="form-label fw-semibold">
@@ -743,6 +759,7 @@ body > .container-fluid:has(#cnc){
                 <div class="form-text">Selecione a conta que enviou o valor para registrar a ligação entre as pontas da transferência.</div>
               </div>
             </div>
+            </div><!-- /mpc-e2: a escolha da origem -->
           </div>
           <div id="secao_debito" style="display:none;">
             <input type="hidden" name="tipo_debito" id="modal_tipo_debito" value="fornecedor">
@@ -1002,22 +1019,47 @@ body > .container-fluid:has(#cnc){
             </button>
           </div>
           <div class="tab-pane fade" id="tabLoteDebito">
-            <!-- Seletor de tipo (btn-group, sem data-bs-toggle para não conflitar com tabs externos) -->
-            <div class="d-flex gap-1 mb-2">
-              <button type="button" class="btn btn-sm btn-outline-secondary active" id="lote_btn_forn"
-                      onclick="alternarAbaDebitoLote('fornecedor')">
-                <i class="bi bi-building"></i> Fornecedor
-              </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary" id="lote_btn_desp"
-                      onclick="alternarAbaDebitoLote('despesa')">
-                <i class="bi bi-receipt"></i> Despesa
-              </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary" id="lote_btn_transf"
-                      onclick="alternarAbaDebitoLote('transferencia')">
-                <i class="bi bi-arrow-left-right"></i> Transferência
-              </button>
+            <div class="mp"><span class="on" id="mpl1"></span><span id="mpl2"></span></div>
+            <div class="mp-nome">Passo <span id="mpln">1</span> de 2 —
+              <b id="mplt">Para onde vão estas saídas?</b></div>
+            <input type="hidden" id="lote_tipo_debito" value="">
+
+            <div class="mp-etapa" id="mpl-e1">
+              <div class="destinos">
+                <button type="button" class="destino" id="lote_btn_forn"
+                        onclick="alternarAbaDebitoLote('fornecedor')">
+                  <span class="destino__i"><i class="bi bi-building"></i></span>
+                  <span class="destino__t">
+                    <span class="destino__n">Fornecedor</span>
+                    <span class="destino__d">O mesmo fornecedor para todas as
+                      selecionadas.</span>
+                  </span>
+                </button>
+                <button type="button" class="destino" id="lote_btn_desp"
+                        onclick="alternarAbaDebitoLote('despesa')">
+                  <span class="destino__i"><i class="bi bi-receipt"></i></span>
+                  <span class="destino__t">
+                    <span class="destino__n">Despesa</span>
+                    <span class="destino__d">Mesmo título e categoria para todas; o
+                      valor de cada uma é usado automaticamente.</span>
+                  </span>
+                </button>
+                <button type="button" class="destino" id="lote_btn_transf"
+                        onclick="alternarAbaDebitoLote('transferencia')">
+                  <span class="destino__i"><i class="bi bi-arrow-left-right"></i></span>
+                  <span class="destino__t">
+                    <span class="destino__n">Transferência</span>
+                    <span class="destino__d">Todas saíram para a mesma conta do
+                      grupo — não são despesa.</span>
+                  </span>
+                </button>
+              </div>
             </div>
-            <input type="hidden" id="lote_tipo_debito" value="fornecedor">
+
+            <div class="mp-etapa" id="mpl-e2" hidden>
+              <button type="button" class="mp-voltar" onclick="mplIr(1)">
+                <i class="bi bi-chevron-left"></i> trocar o destino
+              </button>
 
             <!-- Painel Fornecedor -->
             <div id="lote_aba_fornecedor">
@@ -1092,6 +1134,7 @@ body > .container-fluid:has(#cnc){
             <button type="button" class="btn btn-danger btn-sm mt-2" onclick="submeterLote('DEBIT')">
               <i class="bi bi-check-lg"></i> Conciliar Débitos
             </button>
+            </div><!-- /mpl-e2: a escolha do destino -->
           </div>
         </div>
       </div>
@@ -1381,7 +1424,7 @@ function abrirLancamentoFiltros() {
   const credBtn = document.querySelector('[data-bs-target="#tabLoteCredito"]');
   if (credBtn) bootstrap.Tab.getOrCreateInstance(credBtn).show();
   {% endif %}
-  alternarAbaDebitoLote('fornecedor');
+  alternarAbaDebitoLote('');
   bootstrap.Modal.getOrCreateInstance(document.getElementById('modalLote')).show();
 }
 
@@ -1435,11 +1478,12 @@ document.querySelectorAll('.btn-conciliar').forEach(btn => {
     if (tipo === 'CREDIT') {
       if (this.dataset.sugestaoTransfRecebida === '1') {
         alternarAbaCredito('transferencia');
-      } else {
+      } else if (this.dataset.sugestaoForma) {
         alternarAbaCredito('forma');
-        if (this.dataset.sugestaoForma) {
-          document.getElementById('selectForma').value = this.dataset.sugestaoForma;
-        }
+        document.getElementById('selectForma').value = this.dataset.sugestaoForma;
+      } else {
+        /* Sem palpite: fica no passo 1 para a pessoa dizer de onde veio. */
+        alternarAbaCredito('');
       }
     }
     if (tipo === 'DEBIT') {
@@ -1504,12 +1548,12 @@ document.querySelectorAll('.btn-conciliar').forEach(btn => {
         alternarAbaDebito('transferencia');
         const selDest = document.getElementById('selectContaDestino');
         if (selDest) selDest.value = this.dataset.sugestaoContaDestino;
-      } else {
-        // Reinicia aba para Fornecedor ao abrir
+      } else if (this.dataset.sugestaoFornecedor) {
         alternarAbaDebito('fornecedor');
-        if (this.dataset.sugestaoFornecedor) {
-          document.getElementById('selectFornecedor').value = this.dataset.sugestaoFornecedor;
-        }
+        document.getElementById('selectFornecedor').value = this.dataset.sugestaoFornecedor;
+      } else {
+        /* Sem palpite: fica no passo 1 para a pessoa dizer para onde vai. */
+        alternarAbaDebito('');
       }
     }
     bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConciliar')).show();
@@ -1632,18 +1676,41 @@ function alternarAbaDebito(aba) {
       b.appendChild(i);
     }
   });
-  mpdIr(2);
+  mpdIr(aba ? 2 : 1);
   // Ao abrir a aba Troco PIX, filtra automaticamente pelo valor da transação
   if (aba === 'troco_pix') filtrarTrocoPixPorValor();
 }
 
 // ---- Abas Crédito (Forma de Recebimento / Transferência Recebida) ----
+function mpcIr(n) {
+  document.getElementById('mpc-e1').hidden = (n !== 1);
+  document.getElementById('mpc-e2').hidden = (n !== 2);
+  document.getElementById('mpc2').classList.toggle('on', n === 2);
+  document.getElementById('mpcn').textContent = n;
+  document.getElementById('mpct').textContent = n === 1
+    ? 'De onde veio esta entrada?'
+    : (document.getElementById('tab_cr_transf_btn').classList.contains('active')
+       ? 'De qual conta?' : 'Qual forma de recebimento?');
+}
+
 function alternarAbaCredito(aba) {
   document.getElementById('modal_tipo_debito').value = aba === 'transferencia' ? 'transferencia' : '';
   document.getElementById('aba_cr_forma').style.display        = aba === 'forma'        ? '' : 'none';
   document.getElementById('aba_cr_transferencia').style.display = aba === 'transferencia' ? '' : 'none';
-  document.getElementById('tab_cr_forma_btn').classList.toggle('active', aba === 'forma');
-  document.getElementById('tab_cr_transf_btn').classList.toggle('active', aba === 'transferencia');
+  [['tab_cr_forma_btn', 'forma'], ['tab_cr_transf_btn', 'transferencia']].forEach(function (par) {
+    var b = document.getElementById(par[0]);
+    var eu = (par[1] === aba);
+    b.classList.toggle('active', eu);
+    b.classList.toggle('on', eu);
+    var t = b.querySelector('.tique');
+    if (t) t.remove();
+    if (eu) {
+      var i = document.createElement('i');
+      i.className = 'bi bi-check-lg tique';
+      b.appendChild(i);
+    }
+  });
+  mpcIr(aba ? 2 : 1);
 }
 
 function carregarCategorias(selectTitulo, nomeCampoCategoria) {
@@ -1870,14 +1937,40 @@ function filtrarFornLote() {
   });
 }
 
+/* Mesmo passo a passo do modal individual: os dois fazem a MESMA coisa, a
+   unica diferenca e o lote valer para varias de uma vez. */
+function mplIr(n) {
+  document.getElementById('mpl-e1').hidden = (n !== 1);
+  document.getElementById('mpl-e2').hidden = (n !== 2);
+  document.getElementById('mpl2').classList.toggle('on', n === 2);
+  document.getElementById('mpln').textContent = n;
+  var nomes = { fornecedor: 'Qual fornecedor?', despesa: 'Qual despesa?',
+                transferencia: 'Para qual conta?' };
+  document.getElementById('mplt').textContent = n === 1
+    ? 'Para onde vão estas saídas?'
+    : (nomes[document.getElementById('lote_tipo_debito').value] || 'Escolha');
+}
+
 function alternarAbaDebitoLote(aba) {
   document.getElementById('lote_aba_fornecedor').style.display = aba === 'fornecedor' ? '' : 'none';
   document.getElementById('lote_aba_despesa').style.display = aba === 'despesa' ? '' : 'none';
   document.getElementById('lote_aba_transferencia').style.display = aba === 'transferencia' ? '' : 'none';
   document.getElementById('lote_tipo_debito').value = aba;
-  document.getElementById('lote_btn_forn').classList.toggle('active', aba === 'fornecedor');
-  document.getElementById('lote_btn_desp').classList.toggle('active', aba === 'despesa');
-  document.getElementById('lote_btn_transf').classList.toggle('active', aba === 'transferencia');
+  [['lote_btn_forn', 'fornecedor'], ['lote_btn_desp', 'despesa'],
+   ['lote_btn_transf', 'transferencia']].forEach(function (par) {
+    var b = document.getElementById(par[0]);
+    var eu = (par[1] === aba);
+    b.classList.toggle('active', eu);
+    b.classList.toggle('on', eu);
+    var t = b.querySelector('.tique');
+    if (t) t.remove();
+    if (eu) {
+      var i = document.createElement('i');
+      i.className = 'bi bi-check-lg tique';
+      b.appendChild(i);
+    }
+  });
+  mplIr(aba ? 2 : 1);
 }
 
 function carregarCatLote() {
@@ -1931,8 +2024,8 @@ function abrirModalLote() {
   if (debBtn)  debBtn.closest('li').hidden  = (debitos === 0);
   const alvo = creditos > 0 ? credBtn : debBtn;
   if (alvo) bootstrap.Tab.getOrCreateInstance(alvo).show();
-  // Resetar painel interno de Débitos para Fornecedor
-  alternarAbaDebitoLote('fornecedor');
+  /* Volta ao passo 1: escolher o destino e uma decisao, nao um padrao. */
+  alternarAbaDebitoLote('');
   bootstrap.Modal.getOrCreateInstance(document.getElementById('modalLote')).show();
 }
 
