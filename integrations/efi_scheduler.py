@@ -24,7 +24,8 @@ Liga/desliga por env (configurar no Railway):
     EFI_SCHED_ENABLED = '1' (default) | '0' para desligar
     EFI_SCHED_MINUTE  = minuto cron (default '7,37' = duas vezes por hora)
     EFI_SCHED_HOURS   = horas cron (default '6-22' = ao longo do dia)
-    EFI_SCHED_DIAS    = quantos dias para trás consultar (default 45)
+    EFI_SCHED_DIAS    = janela MINIMA em dias (default 45). A janela se estica
+                        sozinha para alcançar o boleto em aberto mais antigo.
 
 Chamar iniciar_scheduler(app) dentro de create_app(), como já é feito com o
 dfe_scheduler e o els_scheduler.
@@ -42,7 +43,8 @@ _started_lock = threading.Lock()
 
 
 def _job(app):
-    from integrations.efi_reconcilia import ErroEfi, reconciliar
+    from integrations.efi_reconcilia import (ErroEfi, inicio_que_cobre_abertos,
+                                             reconciliar)
 
     logger = app.logger
     conn = cur = None
@@ -64,7 +66,7 @@ def _job(app):
 
         with app.app_context():
             resumo = reconciliar(
-                begin_date=(date.today() - timedelta(days=dias)).isoformat(),
+                begin_date=inicio_que_cobre_abertos(dias_min=dias),
                 end_date=date.today().isoformat(),
                 config=app.config,
                 logger=logger,

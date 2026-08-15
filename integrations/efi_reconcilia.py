@@ -142,6 +142,44 @@ def _data_pagamento_completa(charge, charge_id, cred, logger):
     return None
 
 
+def inicio_que_cobre_abertos(dias_min=45, dias_max=365):
+    """Desde quando perguntar à EFI, para não deixar boleto aberto fora do olhar.
+
+    Uma janela fixa de N dias parece razoável até um boleto passar do prazo: a
+    partir daí ele fica para trás da janela e o agendador nunca mais pergunta
+    por ele. Foi o que aconteceu com três boletos de maio e junho.
+
+    Então a janela se estica sozinha até alcançar a cobrança em aberto mais
+    antiga, com teto para a consulta não crescer sem fim. Quando tudo está em
+    dia, ela encolhe de volta para o mínimo.
+    """
+    piso = date.today() - timedelta(days=dias_min)
+    teto = date.today() - timedelta(days=dias_max)
+    conn = cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT MIN(data_emissao) FROM cobrancas"
+            " WHERE status NOT IN ('pago','cancelado') AND charge_id IS NOT NULL"
+        )
+        row = cur.fetchone()
+        mais_antiga = row[0] if row else None
+    except Exception:
+        mais_antiga = None
+    finally:
+        for c in (cur, conn):
+            try:
+                if c is not None:
+                    c.close()
+            except Exception:
+                pass
+
+    if not mais_antiga:
+        return piso.isoformat()
+    return max(min(mais_antiga, piso), teto).isoformat()
+
+
 def _buscar(base, headers, situacao, begin_date, end_date, logger):
     """Todas as páginas de cobranças da EFI para uma situação."""
     achados = []
