@@ -145,6 +145,12 @@ body > .container-fluid:has(#cnc){
 #cnc .vazio{ text-align:center; color:var(--muted); padding:2.6rem 1rem; font-size:.86rem; }
 #cnc .vazio b{ display:block; color:var(--ink); font-size:1rem; margin-bottom:.3rem; }
 #cnc .vazio .festa{ font-size:2rem; display:block; margin-bottom:.4rem; }
+#cnc .bt-comecar{ display:inline-flex; align-items:center; gap:.4rem; margin-top:1rem;
+  border:0; border-radius:11px; padding:.6rem 1.1rem; font-size:.9rem; font-weight:800;
+  cursor:pointer; font-family:inherit; color:#fff;
+  background:linear-gradient(120deg,var(--azul-deep),var(--azul));
+  box-shadow:0 3px 12px rgba(29,99,165,.3); }
+#cnc .bt-comecar:hover{ filter:brightness(1.08); }
 
 /* ── Páginas ──────────────────────────────────────────────────────── */
 #cnc .paginas{ display:flex; align-items:center; gap:.45rem; padding:.6rem .7rem;
@@ -317,7 +323,7 @@ body > .container-fluid:has(#cnc){
 
   <div class="atalhos">
     <button type="button" class="at at--magia" onclick="autoConciliarAqui(this)">
-      <i class="bi bi-stars"></i> Buscar novos palpites
+      <i class="bi bi-magic"></i> Executar Auto-Conciliação
     </button>
     <a class="at" href="{{ url_for('conciliacao_regras.lista') }}">
       <i class="bi bi-funnel"></i> Regras
@@ -336,19 +342,34 @@ body > .container-fluid:has(#cnc){
   <form method="POST" class="js-sem-trava" id="formConciliacaoLote"></form>
 
   <div class="lst">
+    {% if transacoes %}
     <label class="topo-lst">
       <input type="checkbox" class="marca" id="checkAll">
       Selecionar as desta página
       <span class="tot">{{ '{:,}'.format(total or 0)|replace(',','.') }} pendente(s)</span>
     </label>
+    {% endif %}
 
-    {% if not transacoes %}
+    {# Sem empresa escolhida a rota nem consulta o banco — dizer "tudo
+       conciliado" aqui seria mentira. São dois estados diferentes. #}
+    {% if not f_clientes %}
+      <div class="vazio">
+        <span class="festa">🏢</span>
+        <b>Escolha a empresa para começar.</b>
+        A conciliação é feita uma empresa por vez — é assim que o extrato
+        bate com a conta certa.
+        <button type="button" class="bt-comecar" onclick="cncAbrirFiltro()">
+          <i class="bi bi-sliders"></i> Escolher a empresa
+        </button>
+      </div>
+    {% elif not transacoes %}
       <div class="vazio">
         <span class="festa">🎉</span>
         <b>Nada pendente por aqui.</b>
-        {% if n_filtros %}Nenhum lançamento bate com o filtro.
-          <a href="{{ url_for('bank_import.conciliar') }}">Limpar</a>.
-        {% else %}Tudo o que entrou já foi conciliado.{% endif %}
+        {% if n_filtros > (f_clientes | length) %}Nenhum lançamento bate com o
+          resto do filtro.
+          <a href="{{ url_for('bank_import.conciliar', cliente_id=f_clientes) }}">Tirar o resto do filtro</a>.
+        {% else %}Tudo o que entrou nesta empresa já foi conciliado.{% endif %}
       </div>
     {% endif %}
 
@@ -609,7 +630,7 @@ body > .container-fluid:has(#cnc){
           <div class="gr__t">Procurar</div>
           <input type="text" class="campo" name="descricao" value="{{ f_descricao or '' }}"
                  placeholder="Parte da descrição" autocomplete="off">
-          <input type="text" class="campo" name="cnpj" value="{{ f_cnpj or '' }}"
+          <input type="text" class="campo" name="cnpj_cpf" value="{{ f_cnpj or '' }}"
                  placeholder="Parte do CNPJ/CPF" autocomplete="off" style="margin-top:.5rem;">
         </div>
       </div>
