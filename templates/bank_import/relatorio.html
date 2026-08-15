@@ -103,15 +103,25 @@ body > .container-fluid:has(#rel){
 #rel .c-desc{ grid-area:desc; font-size:.85rem; font-weight:700; letter-spacing:-.01em;
   min-width:0; line-height:1.28; display:-webkit-box; -webkit-line-clamp:2;
   -webkit-box-orient:vertical; overflow:hidden; }
-#rel .c-meio{ grid-area:meio; display:flex; align-items:center; gap:.35rem; min-width:0; }
-#rel .conta{ font-size:.72rem; color:var(--muted); font-weight:600; min-width:0;
+/* A linha do meio e SO da conta e da empresa. O que separa "POSTO NOVO
+   HORIZONTE GOIATUBA" de "POSTO NOVO HORIZONTE BR 153" esta no FIM do nome —
+   e era exatamente o que a reticencia comia quando o valor dividia a linha. */
+#rel .c-meio{ grid-area:meio; display:flex; align-items:baseline; gap:.3rem;
+  min-width:0; overflow:hidden; }
+#rel .conta{ font-size:.72rem; color:var(--muted); font-weight:600;
+  white-space:nowrap; flex:0 0 auto; }
+#rel .empresa{ font-size:.74rem; color:var(--ink-2); font-weight:700; min-width:0;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#rel .c-valor{ margin-left:auto; flex:0 0 auto; font-size:.95rem; font-weight:800;
+#rel .c-valor{ flex:0 0 auto; font-size:.95rem; font-weight:800;
   font-variant-numeric:tabular-nums; letter-spacing:-.02em; white-space:nowrap; }
 #rel .c-valor--e{ color:var(--verde); }
 #rel .c-valor--s{ color:var(--danger); }
-#rel .c-baixo{ grid-area:baixo; display:flex; align-items:center; gap:.3rem;
-  min-width:0; margin-top:.14rem; flex-wrap:wrap; }
+/* Os selos podem quebrar em varias linhas; o valor fica ancorado a direita e
+   nunca encolhe. */
+#rel .c-baixo{ grid-area:baixo; display:flex; align-items:center; gap:.4rem;
+  min-width:0; margin-top:.2rem; }
+#rel .selos{ display:flex; flex-wrap:wrap; align-items:center; gap:.3rem;
+  min-width:0; flex:1 1 auto; }
 #rel .doc{ font-family:var(--mono); font-size:.7rem; color:var(--muted);
   font-weight:600; white-space:nowrap; }
 #rel .c-acao{ margin-left:auto; flex:0 0 auto; }
@@ -329,13 +339,14 @@ body > .container-fluid:has(#rel){
         <div class="c-desc">{{ tx.descricao or '—' }}</div>
 
         <div class="c-meio">
-          <span class="conta">{{ tx.conta_apelido or tx.banco_nome }}{% if tx.empresa_nome %} · {{ tx.empresa_nome }}{% endif %}</span>
-          <span class="c-valor c-valor--{{ 's' if tx.tipo == 'DEBIT' else 'e' }}">
-            {{ '−' if tx.tipo == 'DEBIT' else '+' }} {{ tx.valor | formatar_moeda }}
-          </span>
+          <span class="conta">{{ tx.conta_apelido or tx.banco_nome }}</span>
+          {% if tx.empresa_nome %}
+            <span class="empresa">· {{ tx.empresa_nome }}</span>
+          {% endif %}
         </div>
 
         <div class="c-baixo">
+          <span class="selos">
           {% if tx.status == 'conciliado' %}
             <span class="selo selo--ok">Conciliado</span>
           {% elif tx.status == 'ignorado' %}
@@ -356,14 +367,17 @@ body > .container-fluid:has(#rel){
             <span class="selo selo--como">{{ tx.tipo_conciliacao }}</span>
           {% endif %}
           {% if tx.cnpj_cpf %}<span class="doc">{{ tx.cnpj_cpf }}</span>{% endif %}
+          </span>
+
+          <span class="c-valor c-valor--{{ 's' if tx.tipo == 'DEBIT' else 'e' }}">
+            {{ '−' if tx.tipo == 'DEBIT' else '+' }} {{ tx.valor | formatar_moeda }}
+          </span>
 
           {% if so_ignorados %}
-          <span class="c-acao">
-            <button type="button" class="ic btn-reverter-unico" data-tx-id="{{ tx.id }}"
-                    title="Voltar para pendente">
-              <i class="bi bi-arrow-counterclockwise"></i>
-            </button>
-          </span>
+          <button type="button" class="ic btn-reverter-unico" data-tx-id="{{ tx.id }}"
+                  title="Voltar para pendente">
+            <i class="bi bi-arrow-counterclockwise"></i>
+          </button>
           {% endif %}
         </div>
       </div>
