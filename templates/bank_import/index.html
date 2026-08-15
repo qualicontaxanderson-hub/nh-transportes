@@ -14,6 +14,10 @@ body > .container-fluid:has(#bnc){
 @media (min-width:992px){
   body > .container-fluid:has(#bnc){ padding:.7rem 1rem 0; }
 }
+/* O proprio #bnc e um container-fluid e traz mais .75rem de cada lado —
+   somados aos de fora, sobrava faixa vazia dos dois lados. */
+#bnc.container-fluid{ padding-left:0; padding-right:0; }
+
 #bnc{ --azul:#1D63A5; --azul-deep:#0C4C86; --line-2:#d9e0e8; }
 
 #bnc .topo{ background:linear-gradient(120deg,var(--azul-deep),var(--azul)); color:#fff;

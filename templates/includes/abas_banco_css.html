@@ -18,6 +18,10 @@ body > .container-fluid:has({{ esc }}-topo){
 @media (min-width:992px){
   body > .container-fluid:has({{ esc }}-topo){ padding:.7rem 1rem 0; }
 }
+/* O container-fluid de dentro traz mais .75rem de cada lado, do proprio
+   Bootstrap. Somado ao de fora, sobra faixa vazia nas laterais. */
+{{ esc }}.container-fluid{ padding-left:0; padding-right:0; }
+
 {{ esc }}-topo{ background:linear-gradient(120deg,#0C4C86,#1D63A5); color:#fff;
   border-radius:14px; padding:.6rem .8rem .15rem; margin-bottom:.7rem; }
 {{ esc }}-topo .topo__l1{ display:flex; align-items:center; gap:.5rem; }
