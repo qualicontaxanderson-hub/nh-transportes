@@ -259,6 +259,35 @@ body > .container-fluid:has(#cnc){
 #cnc :focus-visible{ outline:2px solid var(--azul); outline-offset:2px; }
 @media (prefers-reduced-motion: reduce){ #cnc *{ transition:none !important; } }
 
+/* ── Passo a passo dentro dos modais ──────────────────────────────────
+   Quatro abas lado a lado nao cabem no celular: quebravam em duas linhas e
+   ainda assim so diziam uma palavra cada. Viram lista, com a frase que
+   explica o que cada caminho faz. */
+.mp{ display:flex; gap:.3rem; margin-bottom:.5rem; }
+.mp span{ flex:1; height:3px; border-radius:9px; background:#d9e0e8; }
+.mp span.on{ background:#1D63A5; }
+.mp-nome{ font-size:.74rem; color:#6b7684; font-weight:700; margin-bottom:.5rem; }
+.mp-nome b{ color:#151d27; font-size:.92rem; }
+.destinos{ border:1px solid #d9e0e8; border-radius:11px; overflow:hidden; }
+.destino{ display:flex; align-items:flex-start; gap:.6rem; width:100%;
+  padding:.62rem .7rem; border:0; border-bottom:1px solid #e7ebf1; background:#fff;
+  font-family:inherit; text-align:left; color:#151d27; cursor:pointer; }
+.destino:last-child{ border-bottom:0; }
+.destino:hover{ background:#f7f9fc; }
+.destino.on{ background:#eaf1f9; }
+.destino__i{ width:30px; height:30px; border-radius:8px; display:grid;
+  place-items:center; flex:0 0 auto; font-size:.95rem; background:#eef2f7;
+  color:#1D63A5; }
+.destino.on .destino__i{ background:#1D63A5; color:#fff; }
+.destino__t{ min-width:0; }
+.destino__n{ font-size:.88rem; font-weight:800; letter-spacing:-.01em; }
+.destino__d{ font-size:.75rem; color:#6b7684; line-height:1.35; }
+.destino .tique{ margin-left:auto; color:#1D63A5; align-self:center; flex:0 0 auto; }
+.mp-voltar{ background:none; border:0; color:#1D63A5; font-weight:800;
+  font-size:.8rem; font-family:inherit; cursor:pointer; padding:0;
+  display:inline-flex; align-items:center; gap:.25rem; margin-bottom:.55rem; }
+.mp-etapa[hidden]{ display:none; }
+
 /* O modal de conciliar continua o de sempre; só a linha realçada mudou. */
 .tx-row.table-selected{ background:#ddeeff; }
 </style>
@@ -717,33 +746,53 @@ body > .container-fluid:has(#cnc){
           </div>
           <div id="secao_debito" style="display:none;">
             <input type="hidden" name="tipo_debito" id="modal_tipo_debito" value="fornecedor">
-            <!-- Abas Fornecedor / Despesa / Transferência -->
-            <ul class="nav nav-tabs mb-2" id="debitoTabs">
-              <li class="nav-item">
-                <button type="button" class="nav-link active" id="tab_forn_btn"
+            <div class="mp"><span class="on" id="mpd1"></span><span id="mpd2"></span></div>
+            <div class="mp-nome">Passo <span id="mpdn">1</span> de 2 —
+              <b id="mpdt">Para onde vai esta saída?</b></div>
+
+            <div class="mp-etapa" id="mpd-e1">
+              <div class="destinos" id="debitoTabs">
+                <button type="button" class="destino on" id="tab_forn_btn"
                         onclick="alternarAbaDebito('fornecedor')">
-                  <i class="bi bi-building"></i> Fornecedor
+                  <span class="destino__i"><i class="bi bi-building"></i></span>
+                  <span class="destino__t">
+                    <span class="destino__n">Fornecedor</span>
+                    <span class="destino__d">Pagamento a quem já está cadastrado.</span>
+                  </span>
                 </button>
-              </li>
-              <li class="nav-item">
-                <button type="button" class="nav-link" id="tab_desp_btn"
+                <button type="button" class="destino" id="tab_desp_btn"
                         onclick="alternarAbaDebito('despesa')">
-                  <i class="bi bi-receipt"></i> Despesa
+                  <span class="destino__i"><i class="bi bi-receipt"></i></span>
+                  <span class="destino__t">
+                    <span class="destino__n">Despesa</span>
+                    <span class="destino__d">Vira lançamento de despesa, com título e
+                      categoria. Dá para dividir em mais de uma.</span>
+                  </span>
                 </button>
-              </li>
-              <li class="nav-item">
-                <button type="button" class="nav-link" id="tab_transf_btn"
+                <button type="button" class="destino" id="tab_transf_btn"
                         onclick="alternarAbaDebito('transferencia')">
-                  <i class="bi bi-arrow-left-right"></i> Transferência
+                  <span class="destino__i"><i class="bi bi-arrow-left-right"></i></span>
+                  <span class="destino__t">
+                    <span class="destino__n">Transferência</span>
+                    <span class="destino__d">Dinheiro que saiu para outra conta do
+                      grupo — não é despesa.</span>
+                  </span>
                 </button>
-              </li>
-              <li class="nav-item">
-                <button type="button" class="nav-link" id="tab_troco_pix_btn"
+                <button type="button" class="destino" id="tab_troco_pix_btn"
                         onclick="alternarAbaDebito('troco_pix')">
-                  <i class="bi bi-cash-coin"></i> Troco PIX
+                  <span class="destino__i"><i class="bi bi-cash-coin"></i></span>
+                  <span class="destino__t">
+                    <span class="destino__n">Troco PIX</span>
+                    <span class="destino__d">Amarra a um troco já registrado no caixa.</span>
+                  </span>
                 </button>
-              </li>
-            </ul>
+              </div>
+            </div>
+
+            <div class="mp-etapa" id="mpd-e2" hidden>
+              <button type="button" class="mp-voltar" onclick="mpdVoltar()">
+                <i class="bi bi-chevron-left"></i> trocar o destino
+              </button>
 
             <!-- Aba Fornecedor -->
             <div id="aba_fornecedor">
@@ -902,6 +951,7 @@ body > .container-fluid:has(#cnc){
                 <strong>Selecionado:</strong> <span id="trocoPixSelecionadoLabel"></span>
               </div>
             </div>
+            </div><!-- /mpd-e2: a escolha do destino -->
           </div>
         </div>
         <div class="modal-footer">
@@ -1546,6 +1596,21 @@ function valorMascaraParaFloat(str) {
 }
 
 // ---- Abas Débito (Fornecedor / Despesa) ----
+/* Escolher o destino leva ao passo 2; `mpdVoltar` traz de volta. */
+function mpdIr(n) {
+  document.getElementById('mpd-e1').hidden = (n !== 1);
+  document.getElementById('mpd-e2').hidden = (n !== 2);
+  document.getElementById('mpd1').classList.toggle('on', true);
+  document.getElementById('mpd2').classList.toggle('on', n === 2);
+  document.getElementById('mpdn').textContent = n;
+  var nomes = { fornecedor: 'Qual fornecedor?', despesa: 'Qual despesa?',
+                transferencia: 'Para qual conta?', troco_pix: 'Qual troco?' };
+  document.getElementById('mpdt').textContent = n === 1
+    ? 'Para onde vai esta saída?'
+    : (nomes[document.getElementById('modal_tipo_debito').value] || 'Escolha');
+}
+function mpdVoltar() { mpdIr(1); }
+
 function alternarAbaDebito(aba) {
   document.getElementById('modal_tipo_debito').value = aba;
   document.getElementById('aba_fornecedor').style.display    = aba === 'fornecedor'    ? '' : 'none';
@@ -1556,6 +1621,18 @@ function alternarAbaDebito(aba) {
   document.getElementById('tab_desp_btn').classList.toggle('active', aba === 'despesa');
   document.getElementById('tab_transf_btn').classList.toggle('active', aba === 'transferencia');
   document.getElementById('tab_troco_pix_btn').classList.toggle('active', aba === 'troco_pix');
+  ['tab_forn_btn', 'tab_desp_btn', 'tab_transf_btn', 'tab_troco_pix_btn'].forEach(function (id) {
+    var b = document.getElementById(id);
+    b.classList.toggle('on', b.classList.contains('active'));
+    var t = b.querySelector('.tique');
+    if (t) t.remove();
+    if (b.classList.contains('active')) {
+      var i = document.createElement('i');
+      i.className = 'bi bi-check-lg tique';
+      b.appendChild(i);
+    }
+  });
+  mpdIr(2);
   // Ao abrir a aba Troco PIX, filtra automaticamente pelo valor da transação
   if (aba === 'troco_pix') filtrarTrocoPixPorValor();
 }
@@ -1844,9 +1921,16 @@ function abrirModalLote() {
   const debitos  = checks.filter(c => c.dataset.tipo === 'DEBIT').length;
   const li = document.getElementById('lote_info');
   if (li) li.textContent = checks.length + ' transação(ões) selecionada(s): ' + creditos + ' crédito(s), ' + debitos + ' débito(s).';
-  // Resetar estado dos painéis externos (Bootstrap tab pode ter mantido Débitos ativo)
+
+  /* Abre na aba que tem transacao, e esconde a que esta vazia. Antes abria
+     sempre em Creditos: com 0 creditos selecionados, o formulario aparecia
+     pedindo a forma de recebimento de coisa nenhuma. */
   const credBtn = document.querySelector('[data-bs-target="#tabLoteCredito"]');
-  if (credBtn) bootstrap.Tab.getOrCreateInstance(credBtn).show();
+  const debBtn  = document.querySelector('[data-bs-target="#tabLoteDebito"]');
+  if (credBtn) credBtn.closest('li').hidden = (creditos === 0);
+  if (debBtn)  debBtn.closest('li').hidden  = (debitos === 0);
+  const alvo = creditos > 0 ? credBtn : debBtn;
+  if (alvo) bootstrap.Tab.getOrCreateInstance(alvo).show();
   // Resetar painel interno de Débitos para Fornecedor
   alternarAbaDebitoLote('fornecedor');
   bootstrap.Modal.getOrCreateInstance(document.getElementById('modalLote')).show();
