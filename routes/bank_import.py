@@ -2529,7 +2529,11 @@ def conciliar():
         # Todas as contas de todas as empresas (para transferência entre contas e filtro JS)
         cursor.execute(
             """SELECT ba.id, ba.apelido, ba.banco_nome, ba.cliente_id,
-                      c.nome_fantasia AS empresa_nome
+                      -- Metade das empresas nao tem nome_fantasia (GOIATUBA e
+                      -- QUALICONTAX, hoje), e elas caiam todas num balaio
+                      -- "Sem empresa" na hora de escolher a conta destino.
+                      COALESCE(NULLIF(c.nome_fantasia, ''), c.razao_social)
+                        AS empresa_nome
                FROM bank_accounts ba
                LEFT JOIN clientes c ON c.id = ba.cliente_id
                WHERE ba.ativo = 1
