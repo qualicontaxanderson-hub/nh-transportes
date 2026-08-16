@@ -1270,6 +1270,29 @@ document.addEventListener('DOMContentLoaded', function() {
   // Após LOADING_TIMEOUT_MS restaura o texto original caso o servidor não responda.
   const formFiltros = document.getElementById('formFiltros');
   const btnFiltrar  = document.getElementById('btnFiltrar');
+
+  /* Campo em branco nao vai pra URL.
+     O GET manda todo campo que tem name, mesmo vazio, e a barra de endereco
+     virava  ...&data_ini=&data_fim=&descricao=&cnpj_cpf=  — quatro filtros
+     que ninguem pediu, ocupando a URL que o usuario copia e manda pro outro.
+     Campo desabilitado o navegador nao envia; e ele volta logo em seguida,
+     caso a pagina fique (voltar do historico, envio cancelado). */
+  if (formFiltros) {
+    formFiltros.addEventListener('submit', function () {
+      const apagados = [];
+      formFiltros.querySelectorAll('input[name], select[name], textarea[name]')
+        .forEach(function (campo) {
+          if (campo.type === 'checkbox' || campo.type === 'radio') return;
+          if (campo.disabled || campo.value !== '') return;
+          campo.disabled = true;
+          apagados.push(campo);
+        });
+      setTimeout(function () {
+        apagados.forEach(function (campo) { campo.disabled = false; });
+      }, 0);
+    });
+  }
+
   if (formFiltros && btnFiltrar) {
     formFiltros.addEventListener('submit', function() {
       const origHTML = btnFiltrar.innerHTML;
