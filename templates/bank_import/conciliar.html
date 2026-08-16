@@ -354,6 +354,22 @@ body > .container-fluid:has(#cnc){
   margin-bottom:.6rem; }
 #btnAdicionarDesp[hidden]{ display:none !important; }
 
+/* Despesa ja montada vira uma linha de resumo: fica a vista pra conferir,
+   sem ocupar a tela do degrau que esta sendo preenchido agora. */
+.dresumo{ display:flex; align-items:center; gap:.6rem; width:100%; border:0;
+  background:none; font-family:inherit; text-align:left; padding:0;
+  cursor:pointer; color:#151d27; }
+.dresumo__t{ min-width:0; flex:1; }
+.dresumo__n{ display:block; font-size:.86rem; font-weight:800;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dresumo__d{ display:block; font-size:.74rem; color:#6b7684;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dresumo__v{ font-size:.86rem; font-weight:800; font-variant-numeric:tabular-nums;
+  flex:0 0 auto; }
+.dresumo__e{ flex:0 0 auto; color:#1D63A5; font-size:.74rem; font-weight:800; }
+.linha-desp--resumo{ background:#f7f9fc; }
+.linha-desp--resumo .dcabeca{ margin-bottom:.4rem; }
+
 /* ── Transferencia: empresa, depois a conta ───────────────────────────
    Uma lista unica com todas as contas de todas as empresas nao diz de quem
    e cada conta — e "SICREDI - NH GTBA" ao lado de "SICREDI - QUALICONTAX"
@@ -964,7 +980,7 @@ body > .container-fluid:has(#cnc){
               <div id="linhas_despesa">
                 <!-- Linha 1 -->
                 <div class="border rounded p-2 mb-2 linha-desp" data-idx="1">
-                  <div class="d-flex justify-content-between mb-1">
+                  <div class="d-flex justify-content-between mb-1 dcabeca">
                     <small class="fw-semibold text-danger">Despesa 1</small>
                     <button type="button" class="btn btn-outline-danger btn-xs py-0 px-1 btn-remover-desp"
                             style="display:none;font-size:0.75rem;" onclick="removerLinha(this)">✕</button>
@@ -1268,7 +1284,7 @@ body > .container-fluid:has(#cnc){
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-secondary bt-volta"
-                id="btnVoltarLote" onclick="mplIr(1)" hidden>
+                id="btnVoltarLote" onclick="mplVoltar()" hidden>
           <i class="bi bi-chevron-left"></i> Voltar
         </button>
         <!-- Mesmo rodape do individual: os dois fazem a mesma coisa, a unica
@@ -1524,6 +1540,9 @@ function abrirLancamentoUnico() {
   // Atualiza o título do modal para indicar modo Lançamento Único
   const titulo = document.querySelector('#modalConciliar .modal-title');
   if (titulo) titulo.innerHTML = '<i class="bi bi-1-circle"></i> Lançamento Único (sem memorizar)';
+  /* A acao mudou depois que o modal foi montado: o Lancamento Unico vai um
+     degrau alem (valor) e ganha o "dividir". */
+  dpRevelarTudo();
   // Para múltiplas seleções: mostra badge de quantidade e limpa valor da despesa
   // (cada transação usará o seu próprio valor no backend)
   if (_lancUnicoIds.length > 1) {
@@ -2035,16 +2054,18 @@ function mpdPintar() {
   if (!e1) return;
   var noDestino = !e1.hidden;
   var destino = document.getElementById('modal_tipo_debito').value;
-  var despesa = (destino === 'despesa' && !noDestino && !dpDividido());
+  var despesa = (destino === 'despesa' && !noDestino);
   var linha = dpLinha();
   var interno = (despesa && linha) ? Number(linha.dataset.passo || 1) : 1;
 
-  var total = despesa ? 1 + DP_ULTIMO : 2;
+  var total = despesa ? 1 + dpUltimo() : 2;
   var atual = noDestino ? 1 : (despesa ? 1 + interno : 2);
   var nomes = { fornecedor: 'Qual fornecedor?', despesa: 'Qual despesa?',
                 transferencia: 'Para qual conta?' };
+  var qual = (despesa && dpLinhas().length > 1 && linha)
+    ? 'Despesa ' + linha.dataset.idx + ' — ' : '';
   var pergunta = noDestino ? 'Para onde vai esta saída?'
-    : (despesa ? (DP_PERGUNTA[interno - 1] || 'Qual despesa?')
+    : (despesa ? qual + (DP_PERGUNTA[interno - 1] || 'Qual despesa?')
                : (nomes[destino] || 'Escolha'));
 
   document.getElementById('mpdn').textContent = atual;
@@ -2066,7 +2087,7 @@ function mpdPintar() {
 /* Voltar anda para tras dentro da despesa antes de sair para o destino. */
 function mpdVoltar() {
   var destino = document.getElementById('modal_tipo_debito').value;
-  if (destino === 'despesa' && !dpDividido() && dpVoltar()) return;
+  if (destino === 'despesa' && dpVoltar()) return;
   mpdIr(1);
 }
 
@@ -2080,7 +2101,7 @@ function mpRodape(n, despesa, interno) {
   if (voltar) voltar.hidden = (n !== 2);
   /* Na despesa, confirmar so no ultimo degrau: no meio do caminho ainda
      falta campo, e um Confirmar aceso ali so convida ao erro. */
-  if (ok) ok.hidden = (n !== 2) || (despesa && interno < DP_ULTIMO);
+  if (ok) ok.hidden = (n !== 2) || (despesa && interno < dpUltimo());
   if (pular) pular.hidden = !(n === 2 && despesa &&
                               DP_OPCIONAL.indexOf(interno) >= 0);
 }
@@ -2154,21 +2175,40 @@ function alternarAbaCredito(aba) {
    Sao cinco: titulo, categoria, subcategoria, fornecedor e valor. Cada um
    e uma tela; escolher avanca sozinho, e os dois opcionais tem "Pular".
    O degrau atual mora no proprio elemento da linha, entao a sugestao que
-   ja chega preenchida abre onde parou em vez de voltar ao comeco.       */
+   ja chega preenchida abre onde parou em vez de voltar ao comeco.
+
+   Ao dividir, a despesa pronta vira uma linha de resumo e a nova comeca do
+   titulo — do mesmo jeito que a primeira comecou.                       */
 var DP_PERGUNTA = ['Qual título?', 'Qual categoria?', 'Qual subcategoria?',
                    'Qual fornecedor?', 'Quanto e de quê?'];
-var DP_ULTIMO   = 5;
 var DP_OPCIONAL = [3, 4];   // subcategoria e fornecedor
 
-/* Enquanto ha uma despesa so, ela vai em degraus. A partir do momento em
-   que o usuario divide, o painel abre inteiro: dividir e justamente comparar
-   valores, e isso nao da pra fazer olhando um campo por vez. */
-function dpDividido() {
-  return document.querySelectorAll('#linhas_despesa .linha-desp').length > 1;
+/* O Conciliar memoriza a regra, e regra nao tem valor — cada extrato traz o
+   seu — nem divisao. Por isso ele para no fornecedor. Quem vai ate o valor
+   e o Lancamento Unico, que e justamente o caso que muda todo mes. */
+function dpMemoriza() {
+  var a = document.querySelector('#formConciliar input[name="acao"]');
+  return !a || a.value !== 'lancamento_unico';
+}
+function dpUltimo() { return dpMemoriza() ? 4 : 5; }
+
+function dpLinhas() {
+  return [].slice.call(document.querySelectorAll('#linhas_despesa .linha-desp'));
 }
 
+/* Qual despesa esta sendo preenchida agora. */
 function dpLinha() {
-  return document.querySelector('#linhas_despesa .linha-desp[data-idx="1"]');
+  var todas = dpLinhas();
+  if (!todas.length) return null;
+  var foco = todas.filter(function (l) { return l.dataset.foco === '1'; })[0];
+  if (foco) return foco;
+  todas[todas.length - 1].dataset.foco = '1';
+  return todas[todas.length - 1];
+}
+
+function dpFocar(linha) {
+  dpLinhas().forEach(function (l) { l.dataset.foco = (l === linha) ? '1' : ''; });
+  dpRevelarTudo();
 }
 
 /* Ate onde os campos ja foram preenchidos — usado quando o modal abre com
@@ -2181,18 +2221,19 @@ function dpPreenchidoAte(linha) {
     var c = linha.querySelector(p[0]);
     if (c && c.value) ate = p[1];
   });
-  return ate;
+  return Math.min(ate, dpUltimo());
 }
 
 function dpIr(linha, n) {
   if (!linha) return;
-  linha.dataset.passo = Math.max(1, Math.min(DP_ULTIMO, n));
+  linha.dataset.passo = Math.max(1, Math.min(dpUltimo(), n));
   dpRevelarTudo();
 }
 
 /* Escolher um campo leva ao proximo — mesmo gesto do passo do destino. */
 function dpAvancar(linha, deDegrau) {
-  if (!linha || dpDividido()) { dpRevelarTudo(); return; }
+  if (!linha) { dpRevelarTudo(); return; }
+  if (linha.dataset.foco !== '1') { dpRevelarTudo(); return; }
   var atual = Number(linha.dataset.passo || 1);
   if (atual !== deDegrau) { dpRevelarTudo(); return; }   // nao pula degrau
   dpIr(linha, deDegrau + 1);
@@ -2208,42 +2249,109 @@ function dpVoltar() {
   var linha = dpLinha();
   if (!linha) return false;
   var atual = Number(linha.dataset.passo || 1);
-  if (atual <= 1) return false;         // quem volta daqui e o destino
-  dpIr(linha, atual - 1);
-  return true;
+  if (atual > 1) { dpIr(linha, atual - 1); return true; }
+  /* No primeiro degrau da despesa 2 em diante, voltar e desistir dela e
+     retomar a anterior de onde parou. */
+  var todas = dpLinhas();
+  var pos = todas.indexOf(linha);
+  if (pos > 0) {
+    linha.remove();
+    _linhaDespIdx = Math.max(1, _linhaDespIdx - 1);
+    dpFocar(todas[pos - 1]);
+    atualizarSoma();
+    return true;
+  }
+  return false;                          // quem volta daqui e o destino
+}
+
+/* Uma frase que diz o que ja foi escolhido, pra conferir sem reabrir. */
+function dpResumoTexto(linha) {
+  function texto(sel) {
+    var c = linha.querySelector(sel);
+    if (!c || !c.value) return '';
+    var o = c.options ? c.options[c.selectedIndex] : null;
+    return o ? o.textContent.trim() : c.value;
+  }
+  var partes = [texto('.js-dp-cat'), texto('.js-dp-sub'), texto('.js-dp-forn')]
+    .filter(function (t) { return t && t.indexOf('—') !== 0; });
+  return { titulo: texto('.js-dp-tit') || '(sem título)',
+           detalhe: partes.join(' · '),
+           valor: (linha.querySelector('.inp-valor') || {}).value || '' };
+}
+
+function dpPintarResumo(linha) {
+  var cab = linha.querySelector('.dcabeca');
+  if (!cab) return;
+  var velho = cab.querySelector('.dresumo');
+  if (velho) velho.remove();
+  var r = dpResumoTexto(linha);
+  var b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'dresumo';
+  var t = document.createElement('span');
+  t.className = 'dresumo__t';
+  var n = document.createElement('span');
+  n.className = 'dresumo__n';
+  n.textContent = r.titulo;
+  var d = document.createElement('span');
+  d.className = 'dresumo__d';
+  d.textContent = r.detalhe;
+  t.appendChild(n); t.appendChild(d);
+  b.appendChild(t);
+  if (r.valor) {
+    var v = document.createElement('span');
+    v.className = 'dresumo__v';
+    v.textContent = 'R$ ' + r.valor;
+    b.appendChild(v);
+  }
+  var e = document.createElement('span');
+  e.className = 'dresumo__e';
+  e.textContent = 'editar';
+  b.appendChild(e);
+  b.addEventListener('click', function () { dpFocar(linha); });
+  cab.appendChild(b);
 }
 
 function dpRevelar(escopo, passo) {
   if (!escopo) return;
   escopo.querySelectorAll('.dcampo[data-dp]').forEach(function (c) {
-    c.hidden = passo !== null && Number(c.dataset.dp) !== passo;
+    c.hidden = (passo === null) || Number(c.dataset.dp) !== passo;
   });
 }
 
 function dpRevelarTudo() {
-  var dividido = dpDividido();
-  document.querySelectorAll('#linhas_despesa .linha-desp').forEach(function (l) {
-    dpRevelar(l, dividido ? null : Number(l.dataset.passo || 1));
+  var emFoco = dpLinha();
+  dpLinhas().forEach(function (l) {
+    var eu = (l === emFoco);
+    l.classList.toggle('linha-desp--resumo', !eu);
+    if (eu) {
+      var r = l.querySelector('.dresumo');
+      if (r) r.remove();
+      dpRevelar(l, Number(l.dataset.passo || 1));
+    } else {
+      dpRevelar(l, null);
+      dpPintarResumo(l);
+    }
   });
   /* O lote nao tem valor nem fornecedor: para nos tres primeiros degraus. */
   var lote = document.getElementById('lote_desp_campos');
   if (lote) dpRevelar(lote, Number(lote.dataset.passo || 1));
 
-  /* "Dividir em mais uma" so no ultimo degrau, quando a despesa ja existe
-     inteira — antes disso nao ha o que dividir. */
+  /* "Dividir" so no ultimo degrau, e so no Lancamento Unico: a regra que o
+     Conciliar memoriza nao tem como se dividir em dois caminhoes. */
   var b = document.getElementById('btnAdicionarDesp');
   if (b) {
-    var linha = dpLinha();
-    b.hidden = _linhaDespIdx >= 3 || (!dividido &&
-      (!linha || Number(linha.dataset.passo || 1) < DP_ULTIMO));
+    b.hidden = dpMemoriza() || _linhaDespIdx >= 3 ||
+      !emFoco || Number(emFoco.dataset.passo || 1) < dpUltimo();
   }
   mpdPintar();
 }
 
 /* Comeca onde a sugestao parou; sem sugestao, no primeiro degrau. */
 function dpComecar() {
-  document.querySelectorAll('#linhas_despesa .linha-desp').forEach(function (l) {
+  dpLinhas().forEach(function (l, k) {
     l.dataset.passo = dpPreenchidoAte(l);
+    l.dataset.foco = (k === 0) ? '1' : '';
   });
   var lote = document.getElementById('lote_desp_campos');
   if (lote) lote.dataset.passo = Math.min(3, dpPreenchidoAte(lote));
@@ -2388,7 +2496,7 @@ function adicionarLinhaDespesa() {
   div.className = 'border rounded p-2 mb-2 linha-desp';
   div.dataset.idx = i;
   div.innerHTML = `
-    <div class="d-flex justify-content-between mb-1">
+    <div class="d-flex justify-content-between mb-1 dcabeca">
       <small class="fw-semibold text-danger">Despesa ${i}</small>
       <button type="button" class="btn btn-outline-danger btn-xs py-0 px-1 btn-remover-desp"
               style="font-size:0.75rem;" onclick="removerLinha(this)">✕</button>
@@ -2441,8 +2549,10 @@ function adicionarLinhaDespesa() {
   }
   atualizarSoma();
   lselMontarTudo();   // a linha nova tambem vira lista
+  /* A nova despesa comeca do titulo, como a primeira comecou — e a anterior
+     recolhe pro resumo. Era isso que faltava: eu abria as duas inteiras. */
   div.dataset.passo = 1;
-  dpRevelarTudo();
+  dpFocar(div);
 }
 
 function atualizarSoma() {
@@ -2498,6 +2608,18 @@ function mplIr(n) {
   var voltar = document.getElementById('btnVoltarLote');
   if (voltar) voltar.hidden = (n !== 2);
   loteRodape();
+}
+
+/* Mesmo defeito que o individual tinha: ia direto pro inicio em vez de
+   andar um degrau. No lote a despesa tem tres. */
+function mplVoltar() {
+  var lote = document.getElementById('lote_desp_campos');
+  var ehDespesa = document.getElementById('lote_tipo_debito').value === 'despesa';
+  if (ehDespesa && lote) {
+    var atual = Number(lote.dataset.passo || 1);
+    if (atual > 1) { lote.dataset.passo = atual - 1; dpRevelarTudo(); return; }
+  }
+  mplIr(1);
 }
 
 /* O botao de enviar vivia dentro do painel, com nome e cor diferentes em
