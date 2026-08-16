@@ -2088,7 +2088,10 @@ function mpRodape(n, despesa, interno) {
 /* O Voltar do rodape serve os dois lados do modal: saida e entrada. */
 function mpVoltarModal() {
   var e2d = document.getElementById('mpd-e2');
-  if (e2d && !e2d.hidden) { mpdIr(1); return; }
+  /* mpdVoltar, nao mpdIr(1): dentro da despesa ele anda um degrau de cada
+     vez e so sai pro destino quando chega no primeiro. Chamar mpdIr(1) aqui
+     jogava a pessoa la pro comeco de qualquer degrau em que estivesse. */
+  if (e2d && !e2d.hidden) { mpdVoltar(); return; }
   mpcIr(1);
 }
 
