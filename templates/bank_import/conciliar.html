@@ -381,6 +381,15 @@ body > .container-fluid:has(#cnc){
 .linha-desp--resumo{ background:#f7f9fc; padding:.6rem .7rem; }
 .linha-desp--resumo .dcabeca{ display:none; }
 
+/* Mesmo desenho do funil do recebimento: caixa branca, linhas separadas,
+   alvo grande o bastante pro dedo. */
+.tsf__cap{ font-size:.69rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.05em; color:#6b7684; margin:.1rem 0 .3rem; }
+.tsf__box{ border:1px solid #d9e0e8; border-radius:10px; overflow:hidden;
+  max-height:17rem; overflow-y:auto; background:#fff; }
+.tsf__box .lsel__i{ padding:.62rem .65rem; font-size:.88rem; }
+.tsf__dica{ font-size:.75rem; color:#6b7684; margin-top:.35rem; }
+
 /* ── Transferencia: empresa, depois a conta ───────────────────────────
    Uma lista unica com todas as contas de todas as empresas nao diz de quem
    e cada conta — e "SICREDI - NH GTBA" ao lado de "SICREDI - QUALICONTAX"
@@ -678,6 +687,7 @@ body > .container-fluid:has(#cnc){
                   data-tx-valor="{{ tx.valor }}"
                   data-tx-cnpj="{{ tx.cnpj_cpf or '' }}"
                   data-tx-tipo="{{ tx.tipo }}"
+                  data-tx-conta="{{ tx.account_id or '' }}"
                   data-sugestao-forma="{{ tx.sugestao_forma_id or '' }}"
                   data-sugestao-fornecedor="{{ tx.sugestao_fornecedor_id or '' }}"
                   data-sugestao-titulo="{{ tx.sugestao_titulo_id or '' }}"
@@ -1064,32 +1074,19 @@ body > .container-fluid:has(#cnc){
 
             <!-- Aba Transferência -->
             <div id="aba_transferencia" style="display:none;">
-              <div class="alert alert-info py-2 px-3 small mb-2">
-                <i class="bi bi-arrow-left-right"></i>
-                <strong>Transferência entre contas</strong> — o valor sairá desta conta e entrará como
-                crédito na conta selecionada abaixo.
-              </div>
-                            <div class="alert alert-info py-2 px-3 small mb-2">
-                <i class="bi bi-arrow-left-right"></i>
-                <strong>Transferência entre contas</strong> — o valor sairá desta conta e entrará como
-                crédito na conta escolhida abaixo.
-              </div>
               <div class="tsf" data-alvo="selectContaDestino">
                 <div class="tsf__e1">
-                  <div class="mp-nome">Passo 1 de 2 — <b>De qual empresa é a conta?</b></div>
-                  <div class="lsel"><div class="lsel__corpo">
-                    <div class="lsel__lista tsf__emp"></div>
-                  </div></div>
+                  <div class="tsf__cap">Empresa</div>
+                  <div class="tsf__box"><div class="tsf__emp"></div></div>
+                  <div class="tsf__dica">A conta de onde o dinheiro saiu não
+                    aparece: não dá para transferir para ela mesma.</div>
                 </div>
                 <div class="tsf__e2" hidden>
                   <button type="button" class="mp-voltar tsf__volta">
                     <i class="bi bi-chevron-left"></i> trocar a empresa
                   </button>
-                  <div class="mp-nome">Passo 2 de 2 — <b>Qual conta d<span
-                    >a </span><span class="tsf__nome"></span>?</b></div>
-                  <div class="lsel"><div class="lsel__corpo">
-                    <div class="lsel__lista tsf__ct"></div>
-                  </div></div>
+                  <div class="tsf__cap"><span class="tsf__nome"></span></div>
+                  <div class="tsf__box"><div class="tsf__ct"></div></div>
                 </div>
               </div>
               <select name="conta_destino_id" id="selectContaDestino" hidden>
@@ -1258,27 +1255,19 @@ body > .container-fluid:has(#cnc){
 
             <!-- Painel Transferência -->
             <div id="lote_aba_transferencia" style="display:none;">
-                            <div class="alert alert-info py-2 px-3 small mb-2">
-                <i class="bi bi-arrow-left-right"></i>
-                <strong>Transferência entre contas</strong> — o valor sairá de cada conta selecionada
-                e entrará como crédito na conta escolhida abaixo.
-              </div>
-              <div class="tsf" data-alvo="lote_conta_destino_id">
+                            <div class="tsf" data-alvo="lote_conta_destino_id">
                 <div class="tsf__e1">
-                  <div class="mp-nome">Passo 1 de 2 — <b>De qual empresa é a conta?</b></div>
-                  <div class="lsel"><div class="lsel__corpo">
-                    <div class="lsel__lista tsf__emp"></div>
-                  </div></div>
+                  <div class="tsf__cap">Empresa</div>
+                  <div class="tsf__box"><div class="tsf__emp"></div></div>
+                  <div class="tsf__dica">A conta de onde o dinheiro saiu não
+                    aparece: não dá para transferir para ela mesma.</div>
                 </div>
                 <div class="tsf__e2" hidden>
                   <button type="button" class="mp-voltar tsf__volta">
                     <i class="bi bi-chevron-left"></i> trocar a empresa
                   </button>
-                  <div class="mp-nome">Passo 2 de 2 — <b>Qual conta d<span
-                    >a </span><span class="tsf__nome"></span>?</b></div>
-                  <div class="lsel"><div class="lsel__corpo">
-                    <div class="lsel__lista tsf__ct"></div>
-                  </div></div>
+                  <div class="tsf__cap"><span class="tsf__nome"></span></div>
+                  <div class="tsf__box"><div class="tsf__ct"></div></div>
                 </div>
               </div>
               <select id="lote_conta_destino_id" hidden>
@@ -1670,7 +1659,11 @@ document.querySelectorAll('.btn-conciliar').forEach(btn => {
     if (buscaForn) { buscaForn.value = ''; filtrarFornecedores(); }
     // Guarda valor bruto no modal para cálculo de soma
     const modalEl = document.getElementById('modalConciliar');
-    if (modalEl) modalEl.dataset.txValorRaw = this.dataset.txValor || '0';
+    if (modalEl) {
+      modalEl.dataset.txValorRaw = this.dataset.txValor || '0';
+      /* De onde o dinheiro saiu — pra nao oferecer como destino. */
+      modalEl.dataset.txConta = this.dataset.txConta || '';
+    }
     if (tipo === 'CREDIT') {
       if (this.dataset.sugestaoTransfRecebida === '1') {
         alternarAbaCredito('transferencia');
@@ -1941,19 +1934,35 @@ document.addEventListener('change', function (ev) {
 function tsfContas() { return (typeof _todasContas !== 'undefined' && _todasContas) || []; }
 function tsfEmpresaDe(c) { return c.empresa_nome || 'Sem empresa'; }
 
+/* As contas de onde o dinheiro esta saindo. Uma transferencia da conta pra
+   ela mesma nao existe, entao elas nao entram na lista de destino. */
+function tsfOrigens(cx) {
+  var modal = cx.closest('.modal');
+  var bruto = (modal && modal.dataset.txConta) || '';
+  return bruto.split(',').filter(Boolean);
+}
+
+function tsfDisponiveis(cx) {
+  var fora = tsfOrigens(cx);
+  return tsfContas().filter(function (c) {
+    return fora.indexOf(String(c.id)) < 0;
+  });
+}
+
 function tsfMontar(cx) {
-  if (cx.dataset.pronto) return;
   var sel = document.getElementById(cx.dataset.alvo);
   if (!sel) return;
   cx.dataset.pronto = '1';
 
+  var contas = tsfDisponiveis(cx);
   var vistas = [], lista = cx.querySelector('.tsf__emp');
-  tsfContas().forEach(function (c) {
+  lista.innerHTML = '';
+  contas.forEach(function (c) {
     var nome = tsfEmpresaDe(c);
     if (vistas.indexOf(nome) < 0) vistas.push(nome);
   });
   vistas.forEach(function (nome) {
-    var qtd = tsfContas().filter(function (c) {
+    var qtd = contas.filter(function (c) {
       return tsfEmpresaDe(c) === nome; }).length;
     var b = document.createElement('button');
     b.type = 'button';
@@ -1968,12 +1977,14 @@ function tsfMontar(cx) {
     lista.appendChild(b);
   });
   if (!vistas.length) {
-    lista.innerHTML = '<div class="lsel__vazio">Nenhuma conta cadastrada</div>';
+    lista.innerHTML = '<div class="lsel__vazio">Nenhuma outra conta cadastrada</div>';
   }
 
-  cx.querySelector('.tsf__volta').addEventListener('click', function () {
-    tsfPasso(cx, 1);
-  });
+  var volta = cx.querySelector('.tsf__volta');
+  if (!volta.dataset.ligado) {
+    volta.dataset.ligado = '1';
+    volta.addEventListener('click', function () { tsfPasso(cx, 1); });
+  }
   tsfSincronizar(cx);
 }
 
@@ -1983,7 +1994,7 @@ function tsfEmpresa(cx, nome) {
   cx.dataset.empresa = nome;
   cx.querySelector('.tsf__nome').textContent = nome;
   lista.innerHTML = '';
-  tsfContas().filter(function (c) { return tsfEmpresaDe(c) === nome; })
+  tsfDisponiveis(cx).filter(function (c) { return tsfEmpresaDe(c) === nome; })
     .forEach(function (c) {
       var eu = String(c.id) === String(sel.value);
       var b = document.createElement('button');
@@ -2016,8 +2027,10 @@ function tsfPasso(cx, n) {
 function tsfSincronizar(cx) {
   var sel = document.getElementById(cx.dataset.alvo);
   if (!sel) return;
+  /* Se a sugestao aponta pra propria conta de origem, ela nao vale. */
+  if (sel.value && tsfOrigens(cx).indexOf(String(sel.value)) >= 0) sel.value = '';
   if (!sel.value) { tsfPasso(cx, 1); return; }
-  var achou = tsfContas().filter(function (c) {
+  var achou = tsfDisponiveis(cx).filter(function (c) {
     return String(c.id) === String(sel.value); })[0];
   if (achou) tsfEmpresa(cx, tsfEmpresaDe(achou));
   else tsfPasso(cx, 1);
@@ -2042,6 +2055,8 @@ function lselMontarTudo() {
       if (LSEL_FORA.indexOf(sel.id) >= 0) return;
       lselMonta(sel, LSEL_ABERTAS.indexOf(sel.id) >= 0);
     });
+  /* Remonta a cada abertura: a conta de origem muda de transacao pra
+     transacao, e ela e quem sai da lista. */
   document.querySelectorAll('.tsf').forEach(tsfMontar);
 }
 function lselSincronizar() {
@@ -2767,6 +2782,15 @@ function abrirModalLote() {
   const debitos  = checks.filter(c => c.dataset.tipo === 'DEBIT').length;
   const li = document.getElementById('lote_info');
   if (li) li.textContent = checks.length + ' transação(ões) selecionada(s): ' + creditos + ' crédito(s), ' + debitos + ' débito(s).';
+
+  /* Todas as contas de onde sai dinheiro nesta leva: nenhuma delas pode ser
+     o destino da transferencia. */
+  const origens = checks.map(c => {
+    const lin = c.closest('.lin');
+    const b = lin ? lin.querySelector('.btn-conciliar') : null;
+    return b ? (b.dataset.txConta || '') : '';
+  }).filter(Boolean);
+  document.getElementById('modalLote').dataset.txConta = origens.join(',');
 
   /* Abre na aba que tem transacao, e esconde a que esta vazia. Antes abria
      sempre em Creditos: com 0 creditos selecionados, o formulario aparecia
