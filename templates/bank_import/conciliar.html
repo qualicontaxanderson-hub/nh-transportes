@@ -307,7 +307,8 @@ body > .container-fluid:has(#cnc){
 #modalConciliar .modal-title, #modalLote .modal-title{
   font-size:1rem; font-weight:800; letter-spacing:-.01em; }
 #modalConciliar .modal-body, #modalLote .modal-body{
-  overflow-y:auto; -webkit-overflow-scrolling:touch; padding:.8rem .9rem; }
+  overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch;
+  padding:.8rem .9rem; }
 
 /* Sobe de baixo, em vez de cair de cima. */
 #modalConciliar.fade .modal-dialog, #modalLote.fade .modal-dialog{
@@ -354,21 +355,31 @@ body > .container-fluid:has(#cnc){
   margin-bottom:.6rem; }
 #btnAdicionarDesp[hidden]{ display:none !important; }
 
-/* Despesa ja montada vira uma linha de resumo: fica a vista pra conferir,
-   sem ocupar a tela do degrau que esta sendo preenchido agora. */
-.dresumo{ display:flex; align-items:center; gap:.6rem; width:100%; border:0;
-  background:none; font-family:inherit; text-align:left; padding:0;
-  cursor:pointer; color:#151d27; }
-.dresumo__t{ min-width:0; flex:1; }
-.dresumo__n{ display:block; font-size:.86rem; font-weight:800;
+/* Despesa ja montada vira um resumo empilhado: fica a vista pra conferir,
+   sem ocupar a tela do degrau que esta sendo preenchido agora.
+   Empilhado, e nao em linha, porque em linha nao cabe — foi o que estourou
+   a largura do modal e empurrou tudo pra esquerda. */
+.dresumo{ display:flex; flex-direction:column; gap:.25rem; min-width:0; }
+.dresumo__topo{ display:flex; align-items:center; gap:.5rem; }
+.dresumo__cab{ font-size:.7rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.05em; color:#a52a2a; }
+.dresumo__x{ margin-left:auto; border:1px solid #f3c9c9; background:#fff;
+  color:#a52a2a; border-radius:8px; font-size:.72rem; font-weight:800;
+  padding:.12rem .4rem; cursor:pointer; font-family:inherit; flex:0 0 auto; }
+.dresumo__ab{ display:flex; flex-direction:column; gap:.1rem; width:100%;
+  min-width:0; border:0; background:none; padding:0; margin:0; cursor:pointer;
+  font-family:inherit; text-align:left; color:#151d27; }
+.dresumo__l1{ display:flex; align-items:baseline; gap:.6rem; min-width:0; }
+.dresumo__n{ flex:1; min-width:0; font-size:.88rem; font-weight:800;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.dresumo__d{ display:block; font-size:.74rem; color:#6b7684;
+.dresumo__v{ flex:0 0 auto; font-size:.88rem; font-weight:800;
+  font-variant-numeric:tabular-nums; }
+.dresumo__d{ font-size:.75rem; color:#6b7684; min-width:0;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.dresumo__v{ font-size:.86rem; font-weight:800; font-variant-numeric:tabular-nums;
-  flex:0 0 auto; }
-.dresumo__e{ flex:0 0 auto; color:#1D63A5; font-size:.74rem; font-weight:800; }
-.linha-desp--resumo{ background:#f7f9fc; }
-.linha-desp--resumo .dcabeca{ margin-bottom:.4rem; }
+.dresumo__e{ font-size:.72rem; font-weight:800; color:#1D63A5; }
+.linha-desp{ min-width:0; }
+.linha-desp--resumo{ background:#f7f9fc; padding:.6rem .7rem; }
+.linha-desp--resumo .dcabeca{ display:none; }
 
 /* ── Transferencia: empresa, depois a conta ───────────────────────────
    Uma lista unica com todas as contas de todas as empresas nao diz de quem
@@ -2280,36 +2291,67 @@ function dpResumoTexto(linha) {
 }
 
 function dpPintarResumo(linha) {
-  var cab = linha.querySelector('.dcabeca');
-  if (!cab) return;
-  var velho = cab.querySelector('.dresumo');
+  var velho = linha.querySelector('.dresumo');
   if (velho) velho.remove();
   var r = dpResumoTexto(linha);
-  var b = document.createElement('button');
-  b.type = 'button';
-  b.className = 'dresumo';
-  var t = document.createElement('span');
-  t.className = 'dresumo__t';
+
+  var cx = document.createElement('div');
+  cx.className = 'dresumo';
+
+  var topo = document.createElement('div');
+  topo.className = 'dresumo__topo';
+  var cab = document.createElement('span');
+  cab.className = 'dresumo__cab';
+  var rotulo = linha.querySelector('.dcabeca small');
+  cab.textContent = rotulo ? rotulo.textContent.trim() : 'Despesa';
+  topo.appendChild(cab);
+  /* So aparece o X onde ele ja existia: a despesa 1 e a base, nao se remove. */
+  var xVelho = linha.querySelector('.btn-remover-desp');
+  if (xVelho && xVelho.style.display !== 'none') {
+    var x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'dresumo__x';
+    x.textContent = 'remover';
+    x.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      removerLinha(x);
+    });
+    topo.appendChild(x);
+  }
+  cx.appendChild(topo);
+
+  var ab = document.createElement('button');
+  ab.type = 'button';
+  ab.className = 'dresumo__ab';
+  var l1 = document.createElement('span');
+  l1.className = 'dresumo__l1';
   var n = document.createElement('span');
   n.className = 'dresumo__n';
   n.textContent = r.titulo;
-  var d = document.createElement('span');
-  d.className = 'dresumo__d';
-  d.textContent = r.detalhe;
-  t.appendChild(n); t.appendChild(d);
-  b.appendChild(t);
+  l1.appendChild(n);
   if (r.valor) {
     var v = document.createElement('span');
     v.className = 'dresumo__v';
     v.textContent = 'R$ ' + r.valor;
-    b.appendChild(v);
+    l1.appendChild(v);
+  }
+  ab.appendChild(l1);
+  if (r.detalhe) {
+    var d = document.createElement('span');
+    d.className = 'dresumo__d';
+    d.textContent = r.detalhe;
+    ab.appendChild(d);
   }
   var e = document.createElement('span');
   e.className = 'dresumo__e';
-  e.textContent = 'editar';
-  b.appendChild(e);
-  b.addEventListener('click', function () { dpFocar(linha); });
-  cab.appendChild(b);
+  e.textContent = 'tocar para editar';
+  ab.appendChild(e);
+  ab.addEventListener('click', function () { dpFocar(linha); });
+  cx.appendChild(ab);
+
+  /* Bloco proprio, primeiro filho da linha — nao dentro do cabecalho, que
+     e um flex e nao tinha largura pra ele. */
+  linha.insertBefore(cx, linha.firstChild);
 }
 
 function dpRevelar(escopo, passo) {
@@ -2572,13 +2614,18 @@ function atualizarSoma() {
 
 function removerLinha(btn) {
   const linha = btn.closest('.linha-desp');
-  if (linha) { linha.remove(); _linhaDespIdx--; }
+  if (linha) { linha.remove(); _linhaDespIdx = Math.max(1, _linhaDespIdx - 1); }
   document.getElementById('btnAdicionarDesp').style.display = '';
-  // Renumera as pequenas labels
-  document.querySelectorAll('.linha-desp').forEach((l, idx) => {
-    const lbl = l.querySelector('small');
+  /* So as despesas do modal individual: #lote_desp_campos tambem tem a
+     classe .linha-desp e nao entra nessa contagem. */
+  dpLinhas().forEach((l, idx) => {
+    const lbl = l.querySelector('.dcabeca small');
     if (lbl) lbl.textContent = 'Despesa ' + (idx + 1);
   });
+  /* Sem foco em lugar nenhum a tela ficava sem degrau aberto. */
+  const resta = dpLinhas();
+  if (resta.length) dpFocar(resta[resta.length - 1]);
+  atualizarSoma();
 }
 function filtrarFormasLote() {
   const t = document.getElementById('buscaFormaLote').value.toLowerCase();
