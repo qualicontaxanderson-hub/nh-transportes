@@ -908,8 +908,9 @@ body > .container-fluid:has(#cnc){
           </div>
           <div id="secao_debito" style="display:none;">
             <input type="hidden" name="tipo_debito" id="modal_tipo_debito" value="fornecedor">
-            <div class="mp"><span class="on" id="mpd1"></span><span id="mpd2"></span></div>
-            <div class="mp-nome">Passo <span id="mpdn">1</span> de 2 —
+            <div class="mp" id="mpd-barra"></div>
+            <div class="mp-nome">Passo <span id="mpdn">1</span> de
+              <span id="mpdtot">2</span> —
               <b id="mpdt">Para onde vai esta saída?</b></div>
 
             <div class="mp-etapa" id="mpd-e1">
@@ -992,23 +993,24 @@ body > .container-fluid:has(#cnc){
                   </div>
                   <div class="dcampo" data-dp="3">
                     <label class="dlbl">Subcategoria <span class="dopc">opcional</span></label>
-                    <select name="desp_1_subcategoria_id" class="form-select form-select-sm sel-subcategoria">
+                    <select name="desp_1_subcategoria_id" class="form-select form-select-sm sel-subcategoria js-dp-sub">
                       <option value="">— Nenhuma —</option>
                     </select>
                   </div>
-                  <div class="dcampo" data-dp="3">
+                  <!-- O botao de novo fornecedor saiu do input-group: a lista
+                       nascia dentro dele e dividia a linha com o botao, ficando
+                       na metade da largura. -->
+                  <div class="dcampo" data-dp="4">
                     <label class="dlbl">Fornecedor <span class="dopc">opcional</span></label>
-                    <div class="input-group input-group-sm">
-                      <select name="desp_1_fornecedor" class="form-select form-select-sm sel-fornecedor" disabled>
-                        <option value="">— Selecione a categoria primeiro —</option>
-                      </select>
-                      <button type="button" class="btn btn-outline-primary btn-sm btn-novo-forn" disabled
-                              onclick="criarFornecedorRapido(this)" title="Novo fornecedor">
-                        <i class="bi bi-plus-circle"></i>
-                      </button>
-                    </div>
+                    <select name="desp_1_fornecedor" class="form-select form-select-sm sel-fornecedor js-dp-forn" disabled>
+                      <option value="">— Selecione a categoria primeiro —</option>
+                    </select>
+                    <button type="button" class="btn btn-outline-primary btn-sm btn-novo-forn mt-2" disabled
+                            onclick="criarFornecedorRapido(this)">
+                      <i class="bi bi-plus-circle"></i> Cadastrar um novo
+                    </button>
                   </div>
-                  <div class="dcampo" data-dp="3">
+                  <div class="dcampo" data-dp="5">
                     <label class="dlbl">Valor R$
                       <span id="labelValorTotal" class="dtot"></span>
                     </label>
@@ -1017,7 +1019,7 @@ body > .container-fluid:has(#cnc){
                            placeholder="0,00" inputmode="numeric" readonly
                            style="background:#f8f9fa;">
                   </div>
-                  <div class="dcampo" data-dp="3">
+                  <div class="dcampo" data-dp="5">
                     <label class="dlbl">Observação <span class="dopc">opcional</span></label>
                     <input type="text" name="desp_1_observacao" class="form-control form-control-sm"
                            placeholder="Observação adicional...">
@@ -1092,6 +1094,10 @@ body > .container-fluid:has(#cnc){
             <i class="bi bi-chevron-left"></i> Voltar
           </button>
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <!-- Subcategoria e fornecedor sao opcionais: quem nao vai usar
+               precisa de um jeito de passar reto sem escolher nada. -->
+          <button type="button" class="btn btn-outline-secondary" id="btnPularModal"
+                  onclick="dpPular()" hidden>Pular</button>
           <button type="submit" class="btn btn-primary" id="btnConfirmarModal">
             <i class="bi bi-check-lg"></i> Confirmar
           </button>
@@ -1717,7 +1723,8 @@ document.querySelectorAll('.btn-conciliar').forEach(btn => {
       }
     }
     lselMontarTudo();
-    setTimeout(lselSincronizar, 30);   // o codigo antigo preenche com setTimeout
+    dpComecar();
+    setTimeout(function () { lselSincronizar(); dpComecar(); }, 30);
     bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConciliar')).show();
   });
 });
@@ -1888,6 +1895,16 @@ function lselPinta(sel, termo) {
   }
 }
 
+/* Subcategoria e fornecedor nao tem carregador proprio: escutam direto. */
+document.addEventListener('change', function (ev) {
+  var alvo = ev.target;
+  if (!alvo || !alvo.classList) return;
+  var linha = alvo.closest ? alvo.closest('.linha-desp') : null;
+  if (!linha || linha.id === 'lote_desp_campos') return;
+  if (alvo.classList.contains('js-dp-sub') && alvo.value) dpAvancar(linha, 3);
+  if (alvo.classList.contains('js-dp-forn') && alvo.value) dpAvancar(linha, 4);
+});
+
 /* ── Transferencia: empresa, depois a conta dela ──────────────────────
    O <select> continua sendo quem envia — some da tela, mas guarda o valor.
    Estas duas listas so escrevem nele.                                   */
@@ -2008,26 +2025,64 @@ function lselSincronizar() {
 function mpdIr(n) {
   document.getElementById('mpd-e1').hidden = (n !== 1);
   document.getElementById('mpd-e2').hidden = (n !== 2);
-  document.getElementById('mpd1').classList.toggle('on', true);
-  document.getElementById('mpd2').classList.toggle('on', n === 2);
-  document.getElementById('mpdn').textContent = n;
+  mpdPintar();
+}
+
+/* O contador dizia "2 de 2" tanto pra escolher um fornecedor (uma decisao)
+   quanto pra montar uma despesa (cinco). Agora conta os degraus de verdade. */
+function mpdPintar() {
+  var e1 = document.getElementById('mpd-e1');
+  if (!e1) return;
+  var noDestino = !e1.hidden;
+  var destino = document.getElementById('modal_tipo_debito').value;
+  var despesa = (destino === 'despesa' && !noDestino && !dpDividido());
+  var linha = dpLinha();
+  var interno = (despesa && linha) ? Number(linha.dataset.passo || 1) : 1;
+
+  var total = despesa ? 1 + DP_ULTIMO : 2;
+  var atual = noDestino ? 1 : (despesa ? 1 + interno : 2);
   var nomes = { fornecedor: 'Qual fornecedor?', despesa: 'Qual despesa?',
                 transferencia: 'Para qual conta?' };
-  document.getElementById('mpdt').textContent = n === 1
-    ? 'Para onde vai esta saída?'
-    : (nomes[document.getElementById('modal_tipo_debito').value] || 'Escolha');
-  mpRodape(n);
+  var pergunta = noDestino ? 'Para onde vai esta saída?'
+    : (despesa ? (DP_PERGUNTA[interno - 1] || 'Qual despesa?')
+               : (nomes[destino] || 'Escolha'));
+
+  document.getElementById('mpdn').textContent = atual;
+  document.getElementById('mpdtot').textContent = total;
+  document.getElementById('mpdt').textContent = pergunta;
+
+  var barra = document.getElementById('mpd-barra');
+  if (barra) {
+    barra.innerHTML = '';
+    for (var k = 1; k <= total; k++) {
+      var seg = document.createElement('span');
+      if (k <= atual) seg.className = 'on';
+      barra.appendChild(seg);
+    }
+  }
+  mpRodape(noDestino ? 1 : 2, despesa, interno);
 }
-function mpdVoltar() { mpdIr(1); }
+
+/* Voltar anda para tras dentro da despesa antes de sair para o destino. */
+function mpdVoltar() {
+  var destino = document.getElementById('modal_tipo_debito').value;
+  if (destino === 'despesa' && !dpDividido() && dpVoltar()) return;
+  mpdIr(1);
+}
 
 /* Rodape do modal individual. No passo 1 nao ha o que confirmar — so se
    escolheu o caminho — entao aparece Cancelar sozinho; no passo 2 entram
    Voltar e Confirmar. */
-function mpRodape(n) {
+function mpRodape(n, despesa, interno) {
   var voltar = document.getElementById('btnVoltarModal');
   var ok     = document.getElementById('btnConfirmarModal');
+  var pular  = document.getElementById('btnPularModal');
   if (voltar) voltar.hidden = (n !== 2);
-  if (ok)     ok.hidden     = (n !== 2);
+  /* Na despesa, confirmar so no ultimo degrau: no meio do caminho ainda
+     falta campo, e um Confirmar aceso ali so convida ao erro. */
+  if (ok) ok.hidden = (n !== 2) || (despesa && interno < DP_ULTIMO);
+  if (pular) pular.hidden = !(n === 2 && despesa &&
+                              DP_OPCIONAL.indexOf(interno) >= 0);
 }
 
 /* O Voltar do rodape serve os dois lados do modal: saida e entrada. */
@@ -2092,36 +2147,104 @@ function alternarAbaCredito(aba) {
   mpcIr(aba ? 2 : 1);
 }
 
-/* ── Despesa: revela na ordem da decisao ─────────────────────────────
-   1 titulo (obrigatorio) · 2 categoria (obrigatoria) · 3 o resto.
-   Quem manda e o valor dos selects, nao um contador a parte: assim a
-   sugestao que ja chega preenchida abre o bloco todo sozinha.          */
-function dpRevelar(escopo) {
-  if (!escopo) return;
-  var tit = escopo.querySelector('.js-dp-tit');
-  var cat = escopo.querySelector('.js-dp-cat');
+/* ── Despesa: um campo por degrau ─────────────────────────────────────
+   Sao cinco: titulo, categoria, subcategoria, fornecedor e valor. Cada um
+   e uma tela; escolher avanca sozinho, e os dois opcionais tem "Pular".
+   O degrau atual mora no proprio elemento da linha, entao a sugestao que
+   ja chega preenchida abre onde parou em vez de voltar ao comeco.       */
+var DP_PERGUNTA = ['Qual título?', 'Qual categoria?', 'Qual subcategoria?',
+                   'Qual fornecedor?', 'Quanto e de quê?'];
+var DP_ULTIMO   = 5;
+var DP_OPCIONAL = [3, 4];   // subcategoria e fornecedor
+
+/* Enquanto ha uma despesa so, ela vai em degraus. A partir do momento em
+   que o usuario divide, o painel abre inteiro: dividir e justamente comparar
+   valores, e isso nao da pra fazer olhando um campo por vez. */
+function dpDividido() {
+  return document.querySelectorAll('#linhas_despesa .linha-desp').length > 1;
+}
+
+function dpLinha() {
+  return document.querySelector('#linhas_despesa .linha-desp[data-idx="1"]');
+}
+
+/* Ate onde os campos ja foram preenchidos — usado quando o modal abre com
+   uma sugestao pronta. */
+function dpPreenchidoAte(linha) {
+  var pares = [['.js-dp-tit', 2], ['.js-dp-cat', 3],
+               ['.js-dp-sub', 4], ['.js-dp-forn', 5]];
   var ate = 1;
-  if (tit && tit.value) ate = 2;
-  if (cat && cat.value) ate = 3;
+  pares.forEach(function (p) {
+    var c = linha.querySelector(p[0]);
+    if (c && c.value) ate = p[1];
+  });
+  return ate;
+}
+
+function dpIr(linha, n) {
+  if (!linha) return;
+  linha.dataset.passo = Math.max(1, Math.min(DP_ULTIMO, n));
+  dpRevelarTudo();
+}
+
+/* Escolher um campo leva ao proximo — mesmo gesto do passo do destino. */
+function dpAvancar(linha, deDegrau) {
+  if (!linha || dpDividido()) { dpRevelarTudo(); return; }
+  var atual = Number(linha.dataset.passo || 1);
+  if (atual !== deDegrau) { dpRevelarTudo(); return; }   // nao pula degrau
+  dpIr(linha, deDegrau + 1);
+}
+
+function dpPular() {
+  var linha = dpLinha();
+  if (!linha) return;
+  dpIr(linha, Number(linha.dataset.passo || 1) + 1);
+}
+
+function dpVoltar() {
+  var linha = dpLinha();
+  if (!linha) return false;
+  var atual = Number(linha.dataset.passo || 1);
+  if (atual <= 1) return false;         // quem volta daqui e o destino
+  dpIr(linha, atual - 1);
+  return true;
+}
+
+function dpRevelar(escopo, passo) {
+  if (!escopo) return;
   escopo.querySelectorAll('.dcampo[data-dp]').forEach(function (c) {
-    c.hidden = Number(c.dataset.dp) > ate;
+    c.hidden = passo !== null && Number(c.dataset.dp) !== passo;
   });
 }
 
 function dpRevelarTudo() {
-  document.querySelectorAll('#linhas_despesa .linha-desp, #lote_desp_campos')
-    .forEach(dpRevelar);
-  /* "Dividir em mais uma" so faz sentido depois que a primeira despesa
-     existe de verdade — antes disso nao ha o que dividir. */
-  var b = document.getElementById('btnAdicionarDesp');
-  if (!b) return;
-  var linhas = [].slice.call(
-    document.querySelectorAll('#linhas_despesa .linha-desp'));
-  var prontas = linhas.length > 0 && linhas.every(function (l) {
-    var c = l.querySelector('.js-dp-cat');
-    return c && c.value;
+  var dividido = dpDividido();
+  document.querySelectorAll('#linhas_despesa .linha-desp').forEach(function (l) {
+    dpRevelar(l, dividido ? null : Number(l.dataset.passo || 1));
   });
-  b.hidden = !prontas || _linhaDespIdx >= 3;
+  /* O lote nao tem valor nem fornecedor: para nos tres primeiros degraus. */
+  var lote = document.getElementById('lote_desp_campos');
+  if (lote) dpRevelar(lote, Number(lote.dataset.passo || 1));
+
+  /* "Dividir em mais uma" so no ultimo degrau, quando a despesa ja existe
+     inteira — antes disso nao ha o que dividir. */
+  var b = document.getElementById('btnAdicionarDesp');
+  if (b) {
+    var linha = dpLinha();
+    b.hidden = _linhaDespIdx >= 3 || (!dividido &&
+      (!linha || Number(linha.dataset.passo || 1) < DP_ULTIMO));
+  }
+  mpdPintar();
+}
+
+/* Comeca onde a sugestao parou; sem sugestao, no primeiro degrau. */
+function dpComecar() {
+  document.querySelectorAll('#linhas_despesa .linha-desp').forEach(function (l) {
+    l.dataset.passo = dpPreenchidoAte(l);
+  });
+  var lote = document.getElementById('lote_desp_campos');
+  if (lote) lote.dataset.passo = Math.min(3, dpPreenchidoAte(lote));
+  dpRevelarTudo();
 }
 
 function carregarCategorias(selectTitulo, nomeCampoCategoria) {
@@ -2130,9 +2253,13 @@ function carregarCategorias(selectTitulo, nomeCampoCategoria) {
   const selCat = linha ? linha.querySelector('.sel-categoria') : document.querySelector(`[name="${nomeCampoCategoria}"]`);
   if (!selCat) return;
   selCat.innerHTML = '<option value="">— Selecione —</option>';
-  /* Antes do return: limpar o titulo tem que recolher o que ja apareceu. */
-  dpRevelarTudo();
-  if (!opt || !opt.value) return;
+  const _linha = selectTitulo.closest('.linha-desp');
+  if (!opt || !opt.value) {
+    /* Limpou o titulo: volta ao primeiro degrau. */
+    if (_linha) dpIr(_linha, 1); else dpRevelarTudo();
+    return;
+  }
+  dpAvancar(_linha, 1);
   let cats = [];
   try { cats = JSON.parse(opt.dataset.categorias || '[]'); } catch(e) {}
   cats.forEach(c => {
@@ -2163,11 +2290,11 @@ function carregarSubcategorias(selCategoria) {
     o.value = s.id; o.textContent = s.nome;
     selSub.appendChild(o);
   });
-  /* Revela ANTES de ir na rede: carregarFornecedoresDespesa faz fetch, e se
-     ele falhar a funcao morre aqui — o usuario ficaria com a categoria
-     escolhida e o resto do formulario sem aparecer, sem entender por que. */
+  /* Avanca ANTES de ir na rede: carregarFornecedoresDespesa faz fetch, e se
+     ele falhar a funcao morre aqui — o usuario ficaria preso no degrau da
+     categoria sem entender por que. */
   if (window.lselSincronizar) lselSincronizar();   // as listas acompanham
-  dpRevelarTudo();
+  if (opt && opt.value) dpAvancar(linha, 2); else dpRevelarTudo();
   // Também carrega fornecedores desta categoria
   carregarFornecedoresDespesa(selCategoria);
 }
@@ -2277,27 +2404,25 @@ function adicionarLinhaDespesa() {
     </div>
     <div class="dcampo" data-dp="3">
       <label class="dlbl">Subcategoria <span class="dopc">opcional</span></label>
-      <select name="desp_${i}_subcategoria_id" class="form-select form-select-sm sel-subcategoria">
+      <select name="desp_${i}_subcategoria_id" class="form-select form-select-sm sel-subcategoria js-dp-sub">
         <option value="">— Nenhuma —</option>
       </select>
     </div>
-    <div class="dcampo" data-dp="3">
+    <div class="dcampo" data-dp="4">
       <label class="dlbl">Fornecedor <span class="dopc">opcional</span></label>
-      <div class="input-group input-group-sm">
-        <select name="desp_${i}_fornecedor" class="form-select form-select-sm sel-fornecedor" disabled>
-          <option value="">— Selecione a categoria primeiro —</option>
-        </select>
-        <button type="button" class="btn btn-outline-primary btn-sm btn-novo-forn" disabled
-                onclick="criarFornecedorRapido(this)" title="Novo fornecedor">
-          <i class="bi bi-plus-circle"></i>
-        </button>
-      </div>
+      <select name="desp_${i}_fornecedor" class="form-select form-select-sm sel-fornecedor js-dp-forn" disabled>
+        <option value="">— Selecione a categoria primeiro —</option>
+      </select>
+      <button type="button" class="btn btn-outline-primary btn-sm btn-novo-forn mt-2" disabled
+              onclick="criarFornecedorRapido(this)">
+        <i class="bi bi-plus-circle"></i> Cadastrar um novo
+      </button>
     </div>
-    <div class="dcampo" data-dp="3">
+    <div class="dcampo" data-dp="5">
       <label class="dlbl">Valor R$</label>
       <input type="text" name="desp_${i}_valor" class="form-control form-control-sm inp-valor" placeholder="0,00" inputmode="numeric">
     </div>
-    <div class="dcampo" data-dp="3">
+    <div class="dcampo" data-dp="5">
       <label class="dlbl">Observação <span class="dopc">opcional</span></label>
       <input type="text" name="desp_${i}_observacao" class="form-control form-control-sm" placeholder="Observação adicional...">
     </div>`;
@@ -2313,6 +2438,7 @@ function adicionarLinhaDespesa() {
   }
   atualizarSoma();
   lselMontarTudo();   // a linha nova tambem vira lista
+  div.dataset.passo = 1;
   dpRevelarTudo();
 }
 
@@ -2426,9 +2552,10 @@ function carregarCatLote() {
   if (!selCat) return;
   selCat.innerHTML = '<option value="">— Selecione —</option>';
   if (selSub) selSub.innerHTML = '<option value="">— Nenhuma —</option>';
-  /* Antes do return: limpar o titulo tem que recolher o que ja apareceu. */
+  const _lt = document.getElementById('lote_desp_campos');
+  if (!opt || !opt.value) { if (_lt) _lt.dataset.passo = 1; dpRevelarTudo(); return; }
+  if (_lt && Number(_lt.dataset.passo || 1) === 1) _lt.dataset.passo = 2;
   dpRevelarTudo();
-  if (!opt || !opt.value) return;
   let cats = [];
   try { cats = JSON.parse(opt.dataset.categorias || '[]'); } catch(e) {}
   cats.forEach(c => {
@@ -2447,9 +2574,11 @@ function carregarSubCatLote() {
   selSub.innerHTML = '<option value="">— Nenhuma —</option>';
   /* A versao individual avisava ao terminar; esta nao avisava ninguem, entao
      a subcategoria do lote nunca chegava a aparecer. */
-  dpRevelarTudo();
   const opt = selCat ? selCat.options[selCat.selectedIndex] : null;
-  if (!opt || !opt.value) return;
+  const _lt = document.getElementById('lote_desp_campos');
+  if (!opt || !opt.value) { dpRevelarTudo(); return; }
+  if (_lt && Number(_lt.dataset.passo || 1) === 2) _lt.dataset.passo = 3;
+  dpRevelarTudo();
   let subs = [];
   try { subs = JSON.parse(opt.dataset.subcategorias || '[]'); } catch(e) {}
   subs.forEach(s => {
