@@ -338,6 +338,33 @@ body > .container-fluid:has(#cnc){
     transform:translateY(14px); }
 }
 
+/* ── Despesa: um campo de cada vez ────────────────────────────────────
+   Vinham os seis juntos, o obrigatorio do lado do opcional, sem diferenca.
+   Agora a categoria so nasce depois do titulo, e o resto depois dela. */
+.dcampo{ margin-bottom:.7rem; }
+.dcampo[hidden]{ display:none; }
+.dlbl{ display:flex; align-items:center; gap:.4rem; font-size:.8rem;
+  font-weight:800; color:#151d27; margin-bottom:.25rem; }
+.dobr, .dopc{ font-size:.64rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.05em; border-radius:99px; padding:.1rem .42rem; }
+.dobr{ background:#fdecec; color:#a52a2a; }
+.dopc{ background:#eef1f5; color:#6b7684; }
+.dtot{ margin-left:auto; font-size:.72rem; font-weight:700; color:#6b7684; }
+.linha-desp{ border:1px solid #d9e0e8; border-radius:11px; padding:.7rem;
+  margin-bottom:.6rem; }
+#btnAdicionarDesp[hidden]{ display:none !important; }
+
+/* ── Transferencia: empresa, depois a conta ───────────────────────────
+   Uma lista unica com todas as contas de todas as empresas nao diz de quem
+   e cada conta — e "SICREDI - NH GTBA" ao lado de "SICREDI - QUALICONTAX"
+   e um erro esperando acontecer. */
+.tsf__e1[hidden], .tsf__e2[hidden]{ display:none; }
+.tsf .lsel__lista{ max-height:15rem; }
+.tsf__q{ margin-left:auto; font-size:.72rem; color:#6b7684; font-weight:700;
+  flex:0 0 auto; }
+.tsf__nome{ text-transform:none; }
+.tsf .mp-nome{ padding:0; margin:.1rem 0 .45rem; }
+
 /* ── Passo a passo dentro dos modais ──────────────────────────────────
    Quatro abas lado a lado nao cabem no celular: quebravam em duas linhas e
    ainda assim so diziam uma palavra cada. Viram lista, com a frase que
@@ -941,60 +968,59 @@ body > .container-fluid:has(#cnc){
                     <button type="button" class="btn btn-outline-danger btn-xs py-0 px-1 btn-remover-desp"
                             style="display:none;font-size:0.75rem;" onclick="removerLinha(this)">✕</button>
                   </div>
-                  <div class="row g-1">
-                    <div class="col-md-4">
-                      <label class="form-label form-label-sm mb-0">Título</label>
-                      <select name="desp_1_titulo_id" class="form-select form-select-sm sel-titulo"
-                              onchange="carregarCategorias(this, 'desp_1_categoria_id')">
-                        <option value="">— Selecione —</option>
-                        {% for t in titulos_despesas %}
-                        <option value="{{ t.id }}" data-categorias='{{ t.categorias | tojson }}'>
-                          {{ t.nome }}
-                        </option>
-                        {% endfor %}
+                  <!-- Um campo de cada vez, na ordem em que a decisao acontece.
+                       Antes vinham os seis de uma vez e o obrigatorio ficava
+                       do lado do opcional, sem diferenca nenhuma. -->
+                  <div class="dcampo" data-dp="1">
+                    <label class="dlbl">Título <span class="dobr">obrigatório</span></label>
+                    <select name="desp_1_titulo_id" class="form-select form-select-sm sel-titulo js-dp-tit"
+                            onchange="carregarCategorias(this, 'desp_1_categoria_id')">
+                      <option value="">— Selecione —</option>
+                      {% for t in titulos_despesas %}
+                      <option value="{{ t.id }}" data-categorias='{{ t.categorias | tojson }}'>
+                        {{ t.nome }}
+                      </option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="dcampo" data-dp="2">
+                    <label class="dlbl">Categoria <span class="dobr">obrigatória</span></label>
+                    <select name="desp_1_categoria_id" class="form-select form-select-sm sel-categoria js-dp-cat"
+                            onchange="carregarSubcategorias(this)">
+                      <option value="">— Primeiro o título —</option>
+                    </select>
+                  </div>
+                  <div class="dcampo" data-dp="3">
+                    <label class="dlbl">Subcategoria <span class="dopc">opcional</span></label>
+                    <select name="desp_1_subcategoria_id" class="form-select form-select-sm sel-subcategoria">
+                      <option value="">— Nenhuma —</option>
+                    </select>
+                  </div>
+                  <div class="dcampo" data-dp="3">
+                    <label class="dlbl">Fornecedor <span class="dopc">opcional</span></label>
+                    <div class="input-group input-group-sm">
+                      <select name="desp_1_fornecedor" class="form-select form-select-sm sel-fornecedor" disabled>
+                        <option value="">— Selecione a categoria primeiro —</option>
                       </select>
-                    </div>
-                    <div class="col-md-4">
-                      <label class="form-label form-label-sm mb-0">Categoria</label>
-                      <select name="desp_1_categoria_id" class="form-select form-select-sm sel-categoria"
-                              onchange="carregarSubcategorias(this)">
-                        <option value="">— Primeiro o título —</option>
-                      </select>
-                    </div>
-                    <div class="col-md-4">
-                      <label class="form-label form-label-sm mb-0">Subcategoria (opt.)</label>
-                      <select name="desp_1_subcategoria_id" class="form-select form-select-sm sel-subcategoria">
-                        <option value="">— Nenhuma —</option>
-                      </select>
+                      <button type="button" class="btn btn-outline-primary btn-sm btn-novo-forn" disabled
+                              onclick="criarFornecedorRapido(this)" title="Novo fornecedor">
+                        <i class="bi bi-plus-circle"></i>
+                      </button>
                     </div>
                   </div>
-                  <div class="row g-1 mt-1">
-                    <div class="col-md-4">
-                      <label class="form-label form-label-sm mb-0">Valor R$
-                        <span id="labelValorTotal" class="text-muted ms-1" style="font-size:0.75rem;"></span>
-                      </label>
-                      <input type="text" name="desp_1_valor" id="desp_1_valor"
-                             class="form-control form-control-sm inp-valor"
-                             placeholder="0,00" inputmode="numeric" readonly
-                             style="background:#f8f9fa;">
-                    </div>
-                    <div class="col-md-4">
-                      <label class="form-label form-label-sm mb-0">Fornecedor (opt.)</label>
-                      <div class="input-group input-group-sm">
-                        <select name="desp_1_fornecedor" class="form-select form-select-sm sel-fornecedor" disabled>
-                          <option value="">— Selecione a categoria primeiro —</option>
-                        </select>
-                        <button type="button" class="btn btn-outline-primary btn-sm btn-novo-forn" disabled
-                                onclick="criarFornecedorRapido(this)" title="Novo fornecedor">
-                          <i class="bi bi-plus-circle"></i>
-                        </button>
-                      </div>
-                    </div>
-                    <div class="col-md-4">
-                      <label class="form-label form-label-sm mb-0">Observação (opt.)</label>
-                      <input type="text" name="desp_1_observacao" class="form-control form-control-sm"
-                             placeholder="Observação adicional...">
-                    </div>
+                  <div class="dcampo" data-dp="3">
+                    <label class="dlbl">Valor R$
+                      <span id="labelValorTotal" class="dtot"></span>
+                    </label>
+                    <input type="text" name="desp_1_valor" id="desp_1_valor"
+                           class="form-control form-control-sm inp-valor"
+                           placeholder="0,00" inputmode="numeric" readonly
+                           style="background:#f8f9fa;">
+                  </div>
+                  <div class="dcampo" data-dp="3">
+                    <label class="dlbl">Observação <span class="dopc">opcional</span></label>
+                    <input type="text" name="desp_1_observacao" class="form-control form-control-sm"
+                           placeholder="Observação adicional...">
                   </div>
                 </div>
               </div>
@@ -1014,24 +1040,37 @@ body > .container-fluid:has(#cnc){
                 <strong>Transferência entre contas</strong> — o valor sairá desta conta e entrará como
                 crédito na conta selecionada abaixo.
               </div>
-              <div class="mb-2">
-                <label class="form-label form-label-sm mb-1">Conta de Destino</label>
-                <select name="conta_destino_id" id="selectContaDestino" class="form-select">
-                  <option value="">— Selecione a conta destino —</option>
-                  {% set emp_atual = namespace(nome='') %}
-                  {% for c in todas_contas %}
-                    {% if c.empresa_nome != emp_atual.nome %}
-                      {% if emp_atual.nome %}</optgroup>{% endif %}
-                      <optgroup label="{{ c.empresa_nome or 'Sem empresa' }}">
-                      {% set emp_atual.nome = c.empresa_nome %}
-                    {% endif %}
-                    <option value="{{ c.id }}">{{ c.banco_nome }} – {{ c.apelido }}</option>
-                  {% endfor %}
-                  {% if todas_contas %}</optgroup>{% endif %}
-                </select>
+                            <div class="alert alert-info py-2 px-3 small mb-2">
+                <i class="bi bi-arrow-left-right"></i>
+                <strong>Transferência entre contas</strong> — o valor sairá desta conta e entrará como
+                crédito na conta escolhida abaixo.
               </div>
-              <div class="mb-2">
-                <label class="form-label form-label-sm mb-1">Observação (opt.)</label>
+              <div class="tsf" data-alvo="selectContaDestino">
+                <div class="tsf__e1">
+                  <div class="mp-nome">Passo 1 de 2 — <b>De qual empresa é a conta?</b></div>
+                  <div class="lsel"><div class="lsel__corpo">
+                    <div class="lsel__lista tsf__emp"></div>
+                  </div></div>
+                </div>
+                <div class="tsf__e2" hidden>
+                  <button type="button" class="mp-voltar tsf__volta">
+                    <i class="bi bi-chevron-left"></i> trocar a empresa
+                  </button>
+                  <div class="mp-nome">Passo 2 de 2 — <b>Qual conta d<span
+                    >a </span><span class="tsf__nome"></span>?</b></div>
+                  <div class="lsel"><div class="lsel__corpo">
+                    <div class="lsel__lista tsf__ct"></div>
+                  </div></div>
+                </div>
+              </div>
+              <select name="conta_destino_id" id="selectContaDestino" hidden>
+                <option value="">— Selecione a conta destino —</option>
+                {% for c in todas_contas %}
+                <option value="{{ c.id }}">{{ c.banco_nome }} – {{ c.apelido }}</option>
+                {% endfor %}
+              </select>
+              <div class="dcampo mt-2">
+                <label class="dlbl">Observação <span class="dopc">opcional</span></label>
                 <input type="text" name="transf_observacao" class="form-control form-control-sm"
                        placeholder="Ex: Aporte de capital, transferência mensal...">
               </div>
@@ -1086,7 +1125,9 @@ body > .container-fluid:has(#cnc){
         </ul>
         <div class="tab-content">
           <div class="tab-pane fade show active" id="tabLoteCredito">
-            <p class="small text-muted mb-1">Forma de recebimento para os <strong>créditos</strong> selecionados:</p>
+            <div class="mp"><span class="on"></span></div>
+            <div class="mp-nome">Passo único —
+              <b>Qual forma de recebimento?</b></div>
             <input hidden type="text" id="buscaFormaLote" class="form-control form-control-sm mb-1"
                    placeholder="Buscar..." oninput="filtrarFormasLote()">
             <select id="selectFormaLote" class="form-select" size="7">
@@ -1094,9 +1135,6 @@ body > .container-fluid:has(#cnc){
               <option value="{{ f.id }}" data-nome="{{ f.nome|lower }}">{{ f.nome }}</option>
               {% endfor %}
             </select>
-            <button type="button" class="btn btn-success btn-sm mt-2" onclick="submeterLote('CREDIT')">
-              <i class="bi bi-check-lg"></i> Conciliar Créditos
-            </button>
           </div>
           <div class="tab-pane fade" id="tabLoteDebito">
             <div class="mp"><span class="on" id="mpl1"></span><span id="mpl2"></span></div>
@@ -1140,7 +1178,7 @@ body > .container-fluid:has(#cnc){
 
             <!-- Painel Fornecedor -->
             <div id="lote_aba_fornecedor">
-              <p class="small text-muted mb-1">Fornecedor para os <strong>débitos</strong> selecionados:</p>
+
               <input hidden type="text" id="buscaFornLote" class="form-control form-control-sm mb-1"
                      placeholder="Buscar..." oninput="filtrarFornLote()">
               <select id="selectFornLote" class="form-select" size="7">
@@ -1156,10 +1194,10 @@ body > .container-fluid:has(#cnc){
             <div id="lote_aba_despesa" style="display:none;">
               <p class="small text-muted mb-1">Despesa para os <strong>débitos</strong> selecionados
                 (o valor de cada transação será usado automaticamente):</p>
-              <div class="row g-1">
-                <div class="col-md-4">
-                  <label class="form-label form-label-sm mb-0">Título</label>
-                  <select id="lote_titulo_id" class="form-select form-select-sm"
+              <div class="linha-desp" id="lote_desp_campos">
+                <div class="dcampo" data-dp="1">
+                  <label class="dlbl">Título <span class="dobr">obrigatório</span></label>
+                  <select id="lote_titulo_id" class="form-select form-select-sm js-dp-tit"
                           onchange="carregarCatLote()">
                     <option value="">— Selecione —</option>
                     {% for t in titulos_despesas %}
@@ -1169,15 +1207,15 @@ body > .container-fluid:has(#cnc){
                     {% endfor %}
                   </select>
                 </div>
-                <div class="col-md-4">
-                  <label class="form-label form-label-sm mb-0">Categoria</label>
-                  <select id="lote_categoria_id" class="form-select form-select-sm"
+                <div class="dcampo" data-dp="2">
+                  <label class="dlbl">Categoria <span class="dobr">obrigatória</span></label>
+                  <select id="lote_categoria_id" class="form-select form-select-sm js-dp-cat"
                           onchange="carregarSubCatLote()">
                     <option value="">— Primeiro o título —</option>
                   </select>
                 </div>
-                <div class="col-md-4">
-                  <label class="form-label form-label-sm mb-0">Subcategoria (opt.)</label>
+                <div class="dcampo" data-dp="3">
+                  <label class="dlbl">Subcategoria <span class="dopc">opcional</span></label>
                   <select id="lote_subcategoria_id" class="form-select form-select-sm">
                     <option value="">— Nenhuma —</option>
                   </select>
@@ -1187,30 +1225,37 @@ body > .container-fluid:has(#cnc){
 
             <!-- Painel Transferência -->
             <div id="lote_aba_transferencia" style="display:none;">
-              <div class="alert alert-info py-2 px-3 small mb-2">
+                            <div class="alert alert-info py-2 px-3 small mb-2">
                 <i class="bi bi-arrow-left-right"></i>
                 <strong>Transferência entre contas</strong> — o valor sairá de cada conta selecionada
-                e entrará como crédito na conta de destino abaixo.
+                e entrará como crédito na conta escolhida abaixo.
               </div>
-              <label class="form-label form-label-sm mb-1">Conta de Destino</label>
-              <select id="lote_conta_destino_id" class="form-select">
+              <div class="tsf" data-alvo="lote_conta_destino_id">
+                <div class="tsf__e1">
+                  <div class="mp-nome">Passo 1 de 2 — <b>De qual empresa é a conta?</b></div>
+                  <div class="lsel"><div class="lsel__corpo">
+                    <div class="lsel__lista tsf__emp"></div>
+                  </div></div>
+                </div>
+                <div class="tsf__e2" hidden>
+                  <button type="button" class="mp-voltar tsf__volta">
+                    <i class="bi bi-chevron-left"></i> trocar a empresa
+                  </button>
+                  <div class="mp-nome">Passo 2 de 2 — <b>Qual conta d<span
+                    >a </span><span class="tsf__nome"></span>?</b></div>
+                  <div class="lsel"><div class="lsel__corpo">
+                    <div class="lsel__lista tsf__ct"></div>
+                  </div></div>
+                </div>
+              </div>
+              <select id="lote_conta_destino_id" hidden>
                 <option value="">— Selecione a conta destino —</option>
-                {% set emp_lote = namespace(nome='') %}
                 {% for c in todas_contas %}
-                  {% if c.empresa_nome != emp_lote.nome %}
-                    {% if emp_lote.nome %}</optgroup>{% endif %}
-                    <optgroup label="{{ c.empresa_nome or 'Sem empresa' }}">
-                    {% set emp_lote.nome = c.empresa_nome %}
-                  {% endif %}
-                  <option value="{{ c.id }}">{{ c.banco_nome }} – {{ c.apelido }}</option>
+                <option value="{{ c.id }}">{{ c.banco_nome }} – {{ c.apelido }}</option>
                 {% endfor %}
-                {% if todas_contas %}</optgroup>{% endif %}
               </select>
             </div>
 
-            <button type="button" class="btn btn-danger btn-sm mt-2" onclick="submeterLote('DEBIT')">
-              <i class="bi bi-check-lg"></i> Conciliar Débitos
-            </button>
             </div><!-- /mpl-e2: a escolha do destino -->
           </div>
         </div>
@@ -1220,7 +1265,15 @@ body > .container-fluid:has(#cnc){
                 id="btnVoltarLote" onclick="mplIr(1)" hidden>
           <i class="bi bi-chevron-left"></i> Voltar
         </button>
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+        <!-- Mesmo rodape do individual: os dois fazem a mesma coisa, a unica
+             diferenca e o lote valer para varias de uma vez. O botao de
+             enviar vivia dentro do painel, com nome e cor diferentes em cada
+             aba — dava a impressao de serem telas distintas. -->
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btnConfirmarLote"
+                onclick="submeterLoteAtivo()" hidden>
+          <i class="bi bi-check-lg"></i> Confirmar
+        </button>
       </div>
     </div>
   </div>
@@ -1531,6 +1584,7 @@ function abrirLancamentoFiltros() {
   alternarAbaDebitoLote('');
   lselMontarTudo();
   lselSincronizar();
+  loteRodape();
   bootstrap.Modal.getOrCreateInstance(document.getElementById('modalLote')).show();
 }
 
@@ -1738,10 +1792,15 @@ function lselMonta(sel, aberta) {
       });
       corpo.hidden = !abrir;
       cx.classList.toggle('aberta', abrir);
-      if (abrir) {
+      /* Foco automatico so no mouse. No iPhone, dar foco no campo de
+         busca faz o teclado subir e cobrir a lista que acabou de abrir —
+         foi exatamente o que aconteceu na lista de Titulo. */
+      if (abrir && window.matchMedia &&
+          window.matchMedia('(pointer:fine)').matches) {
         var b = corpo.querySelector('.lsel__busca:not([hidden]) input');
         if (b) b.focus();
       }
+      if (abrir && cx.scrollIntoView) cx.scrollIntoView({ block: 'nearest' });
     });
     cx.appendChild(abre);
   }
@@ -1829,21 +1888,120 @@ function lselPinta(sel, termo) {
   }
 }
 
+/* ── Transferencia: empresa, depois a conta dela ──────────────────────
+   O <select> continua sendo quem envia — some da tela, mas guarda o valor.
+   Estas duas listas so escrevem nele.                                   */
+function tsfContas() { return (typeof _todasContas !== 'undefined' && _todasContas) || []; }
+function tsfEmpresaDe(c) { return c.empresa_nome || 'Sem empresa'; }
+
+function tsfMontar(cx) {
+  if (cx.dataset.pronto) return;
+  var sel = document.getElementById(cx.dataset.alvo);
+  if (!sel) return;
+  cx.dataset.pronto = '1';
+
+  var vistas = [], lista = cx.querySelector('.tsf__emp');
+  tsfContas().forEach(function (c) {
+    var nome = tsfEmpresaDe(c);
+    if (vistas.indexOf(nome) < 0) vistas.push(nome);
+  });
+  vistas.forEach(function (nome) {
+    var qtd = tsfContas().filter(function (c) {
+      return tsfEmpresaDe(c) === nome; }).length;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'lsel__i';
+    var t = document.createElement('span');
+    t.textContent = nome;
+    var q = document.createElement('small');
+    q.className = 'tsf__q';
+    q.textContent = qtd + (qtd === 1 ? ' conta' : ' contas');
+    b.appendChild(t); b.appendChild(q);
+    b.addEventListener('click', function () { tsfEmpresa(cx, nome); });
+    lista.appendChild(b);
+  });
+  if (!vistas.length) {
+    lista.innerHTML = '<div class="lsel__vazio">Nenhuma conta cadastrada</div>';
+  }
+
+  cx.querySelector('.tsf__volta').addEventListener('click', function () {
+    tsfPasso(cx, 1);
+  });
+  tsfSincronizar(cx);
+}
+
+function tsfEmpresa(cx, nome) {
+  var sel = document.getElementById(cx.dataset.alvo);
+  var lista = cx.querySelector('.tsf__ct');
+  cx.dataset.empresa = nome;
+  cx.querySelector('.tsf__nome').textContent = nome;
+  lista.innerHTML = '';
+  tsfContas().filter(function (c) { return tsfEmpresaDe(c) === nome; })
+    .forEach(function (c) {
+      var eu = String(c.id) === String(sel.value);
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'lsel__i' + (eu ? ' on' : '');
+      var t = document.createElement('span');
+      t.textContent = (c.banco_nome || '') + ' – ' + (c.apelido || '');
+      b.appendChild(t);
+      if (eu) {
+        var i = document.createElement('i');
+        i.className = 'bi bi-check-lg tique';
+        b.appendChild(i);
+      }
+      b.addEventListener('click', function () {
+        sel.value = String(c.id);
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        tsfEmpresa(cx, nome);
+      });
+      lista.appendChild(b);
+    });
+  tsfPasso(cx, 2);
+}
+
+function tsfPasso(cx, n) {
+  cx.querySelector('.tsf__e1').hidden = (n !== 1);
+  cx.querySelector('.tsf__e2').hidden = (n !== 2);
+}
+
+/* Quando ja chega com uma conta sugerida, abre direto na empresa dela. */
+function tsfSincronizar(cx) {
+  var sel = document.getElementById(cx.dataset.alvo);
+  if (!sel) return;
+  if (!sel.value) { tsfPasso(cx, 1); return; }
+  var achou = tsfContas().filter(function (c) {
+    return String(c.id) === String(sel.value); })[0];
+  if (achou) tsfEmpresa(cx, tsfEmpresaDe(achou));
+  else tsfPasso(cx, 1);
+}
+
+function tsfSincronizarTudo() {
+  document.querySelectorAll('.tsf').forEach(function (cx) {
+    if (cx.dataset.pronto) tsfSincronizar(cx);
+  });
+}
+
 /* Aberta quando o select e a unica escolha do passo; fechada quando divide o
    passo com outros campos. */
-var LSEL_ABERTAS = ['selectForma', 'selectFornecedor', 'selectContaDestino',
-                    'selectContaOrigem', 'selectFormaLote', 'selectFornLote',
-                    'lote_conta_destino_id'];
+var LSEL_ABERTAS = ['selectForma', 'selectFornecedor',
+                    'selectContaOrigem', 'selectFormaLote', 'selectFornLote'];
+/* Estas duas tem controle proprio (empresa -> conta), entao ficam de fora. */
+var LSEL_FORA = ['selectContaDestino', 'lote_conta_destino_id'];
 
 function lselMontarTudo() {
   document.querySelectorAll('#modalConciliar select, #modalLote select')
     .forEach(function (sel) {
+      if (LSEL_FORA.indexOf(sel.id) >= 0) return;
       lselMonta(sel, LSEL_ABERTAS.indexOf(sel.id) >= 0);
     });
+  document.querySelectorAll('.tsf').forEach(tsfMontar);
 }
 function lselSincronizar() {
   document.querySelectorAll('#modalConciliar select, #modalLote select')
     .forEach(function (sel) { if (sel.dataset.lsel) lselPinta(sel, ''); });
+  dpRevelarTudo();
+  tsfSincronizarTudo();
 }
 
 /* Escolher o destino leva ao passo 2; `mpdVoltar` traz de volta. */
@@ -1934,12 +2092,46 @@ function alternarAbaCredito(aba) {
   mpcIr(aba ? 2 : 1);
 }
 
+/* ── Despesa: revela na ordem da decisao ─────────────────────────────
+   1 titulo (obrigatorio) · 2 categoria (obrigatoria) · 3 o resto.
+   Quem manda e o valor dos selects, nao um contador a parte: assim a
+   sugestao que ja chega preenchida abre o bloco todo sozinha.          */
+function dpRevelar(escopo) {
+  if (!escopo) return;
+  var tit = escopo.querySelector('.js-dp-tit');
+  var cat = escopo.querySelector('.js-dp-cat');
+  var ate = 1;
+  if (tit && tit.value) ate = 2;
+  if (cat && cat.value) ate = 3;
+  escopo.querySelectorAll('.dcampo[data-dp]').forEach(function (c) {
+    c.hidden = Number(c.dataset.dp) > ate;
+  });
+}
+
+function dpRevelarTudo() {
+  document.querySelectorAll('#linhas_despesa .linha-desp, #lote_desp_campos')
+    .forEach(dpRevelar);
+  /* "Dividir em mais uma" so faz sentido depois que a primeira despesa
+     existe de verdade — antes disso nao ha o que dividir. */
+  var b = document.getElementById('btnAdicionarDesp');
+  if (!b) return;
+  var linhas = [].slice.call(
+    document.querySelectorAll('#linhas_despesa .linha-desp'));
+  var prontas = linhas.length > 0 && linhas.every(function (l) {
+    var c = l.querySelector('.js-dp-cat');
+    return c && c.value;
+  });
+  b.hidden = !prontas || _linhaDespIdx >= 3;
+}
+
 function carregarCategorias(selectTitulo, nomeCampoCategoria) {
   const opt = selectTitulo.options[selectTitulo.selectedIndex];
   const linha = selectTitulo.closest('.linha-desp');
   const selCat = linha ? linha.querySelector('.sel-categoria') : document.querySelector(`[name="${nomeCampoCategoria}"]`);
   if (!selCat) return;
   selCat.innerHTML = '<option value="">— Selecione —</option>';
+  /* Antes do return: limpar o titulo tem que recolher o que ja apareceu. */
+  dpRevelarTudo();
   if (!opt || !opt.value) return;
   let cats = [];
   try { cats = JSON.parse(opt.dataset.categorias || '[]'); } catch(e) {}
@@ -1954,6 +2146,7 @@ function carregarCategorias(selectTitulo, nomeCampoCategoria) {
   const selSub = linha ? linha.querySelector('.sel-subcategoria') : null;
   if (selSub) selSub.innerHTML = '<option value="">— Nenhuma —</option>';
   if (window.lselSincronizar) lselSincronizar();   // as listas acompanham
+  dpRevelarTudo();
 }
 
 function carregarSubcategorias(selCategoria) {
@@ -1970,9 +2163,13 @@ function carregarSubcategorias(selCategoria) {
     o.value = s.id; o.textContent = s.nome;
     selSub.appendChild(o);
   });
+  /* Revela ANTES de ir na rede: carregarFornecedoresDespesa faz fetch, e se
+     ele falhar a funcao morre aqui — o usuario ficaria com a categoria
+     escolhida e o resto do formulario sem aparecer, sem entender por que. */
+  if (window.lselSincronizar) lselSincronizar();   // as listas acompanham
+  dpRevelarTudo();
   // Também carrega fornecedores desta categoria
   carregarFornecedoresDespesa(selCategoria);
-  if (window.lselSincronizar) lselSincronizar();   // as listas acompanham
 }
 
 function carregarFornecedoresDespesa(selCategoria) {
@@ -2066,47 +2263,43 @@ function adicionarLinhaDespesa() {
       <button type="button" class="btn btn-outline-danger btn-xs py-0 px-1 btn-remover-desp"
               style="font-size:0.75rem;" onclick="removerLinha(this)">✕</button>
     </div>
-    <div class="row g-1">
-      <div class="col-md-4">
-        <label class="form-label form-label-sm mb-0">Título</label>
-        <select name="desp_${i}_titulo_id" class="form-select form-select-sm sel-titulo"
-                onchange="carregarCategorias(this,'desp_${i}_categoria_id')">${tituloOpts}</select>
-      </div>
-      <div class="col-md-4">
-        <label class="form-label form-label-sm mb-0">Categoria</label>
-        <select name="desp_${i}_categoria_id" class="form-select form-select-sm sel-categoria"
-                onchange="carregarSubcategorias(this)">
-          <option value="">— Primeiro o título —</option>
+    <div class="dcampo" data-dp="1">
+      <label class="dlbl">Título <span class="dobr">obrigatório</span></label>
+      <select name="desp_${i}_titulo_id" class="form-select form-select-sm sel-titulo js-dp-tit"
+              onchange="carregarCategorias(this,'desp_${i}_categoria_id')">${tituloOpts}</select>
+    </div>
+    <div class="dcampo" data-dp="2">
+      <label class="dlbl">Categoria <span class="dobr">obrigatória</span></label>
+      <select name="desp_${i}_categoria_id" class="form-select form-select-sm sel-categoria js-dp-cat"
+              onchange="carregarSubcategorias(this)">
+        <option value="">— Primeiro o título —</option>
+      </select>
+    </div>
+    <div class="dcampo" data-dp="3">
+      <label class="dlbl">Subcategoria <span class="dopc">opcional</span></label>
+      <select name="desp_${i}_subcategoria_id" class="form-select form-select-sm sel-subcategoria">
+        <option value="">— Nenhuma —</option>
+      </select>
+    </div>
+    <div class="dcampo" data-dp="3">
+      <label class="dlbl">Fornecedor <span class="dopc">opcional</span></label>
+      <div class="input-group input-group-sm">
+        <select name="desp_${i}_fornecedor" class="form-select form-select-sm sel-fornecedor" disabled>
+          <option value="">— Selecione a categoria primeiro —</option>
         </select>
-      </div>
-      <div class="col-md-4">
-        <label class="form-label form-label-sm mb-0">Subcategoria (opt.)</label>
-        <select name="desp_${i}_subcategoria_id" class="form-select form-select-sm sel-subcategoria">
-          <option value="">— Nenhuma —</option>
-        </select>
+        <button type="button" class="btn btn-outline-primary btn-sm btn-novo-forn" disabled
+                onclick="criarFornecedorRapido(this)" title="Novo fornecedor">
+          <i class="bi bi-plus-circle"></i>
+        </button>
       </div>
     </div>
-    <div class="row g-1 mt-1">
-      <div class="col-md-4">
-        <label class="form-label form-label-sm mb-0">Valor R$</label>
-        <input type="text" name="desp_${i}_valor" class="form-control form-control-sm inp-valor" placeholder="0,00" inputmode="numeric">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label form-label-sm mb-0">Fornecedor (opt.)</label>
-        <div class="input-group input-group-sm">
-          <select name="desp_${i}_fornecedor" class="form-select form-select-sm sel-fornecedor" disabled>
-            <option value="">— Selecione a categoria primeiro —</option>
-          </select>
-          <button type="button" class="btn btn-outline-primary btn-sm btn-novo-forn" disabled
-                  onclick="criarFornecedorRapido(this)" title="Novo fornecedor">
-            <i class="bi bi-plus-circle"></i>
-          </button>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <label class="form-label form-label-sm mb-0">Observação (opt.)</label>
-        <input type="text" name="desp_${i}_observacao" class="form-control form-control-sm" placeholder="Observação adicional...">
-      </div>
+    <div class="dcampo" data-dp="3">
+      <label class="dlbl">Valor R$</label>
+      <input type="text" name="desp_${i}_valor" class="form-control form-control-sm inp-valor" placeholder="0,00" inputmode="numeric">
+    </div>
+    <div class="dcampo" data-dp="3">
+      <label class="dlbl">Observação <span class="dopc">opcional</span></label>
+      <input type="text" name="desp_${i}_observacao" class="form-control form-control-sm" placeholder="Observação adicional...">
     </div>`;
   document.getElementById('linhas_despesa').appendChild(div);
   // Aplica máscara de moeda no novo input de valor
@@ -2119,8 +2312,8 @@ function adicionarLinhaDespesa() {
     inp1.dataset.somaListener = '1';
   }
   atualizarSoma();
-  if (_linhaDespIdx >= 3) document.getElementById('btnAdicionarDesp').style.display = 'none';
   lselMontarTudo();   // a linha nova tambem vira lista
+  dpRevelarTudo();
 }
 
 function atualizarSoma() {
@@ -2175,7 +2368,33 @@ function mplIr(n) {
     : (nomes[document.getElementById('lote_tipo_debito').value] || 'Escolha');
   var voltar = document.getElementById('btnVoltarLote');
   if (voltar) voltar.hidden = (n !== 2);
+  loteRodape();
 }
+
+/* O botao de enviar vivia dentro do painel, com nome e cor diferentes em
+   cada aba ("Conciliar Créditos" verde, "Conciliar Débitos" vermelho).
+   Agora e um so, no rodape, igual ao individual. */
+function submeterLoteAtivo() {
+  var cred = document.getElementById('tabLoteCredito');
+  submeterLote(cred && cred.classList.contains('active') ? 'CREDIT' : 'DEBIT');
+}
+
+/* No credito e passo unico, entao Confirmar ja vale; no debito so depois de
+   escolhido o destino. */
+function loteRodape() {
+  var b = document.getElementById('btnConfirmarLote');
+  if (!b) return;
+  var cred = document.getElementById('tabLoteCredito');
+  if (cred && cred.classList.contains('active')) { b.hidden = false; return; }
+  var e2 = document.getElementById('mpl-e2');
+  b.hidden = !e2 || e2.hidden;
+}
+
+document.addEventListener('shown.bs.tab', function (ev) {
+  if (ev.target && String(ev.target.dataset.bsTarget || '').indexOf('#tabLote') === 0) {
+    loteRodape();
+  }
+});
 
 function alternarAbaDebitoLote(aba) {
   document.getElementById('lote_aba_fornecedor').style.display = aba === 'fornecedor' ? '' : 'none';
@@ -2207,6 +2426,8 @@ function carregarCatLote() {
   if (!selCat) return;
   selCat.innerHTML = '<option value="">— Selecione —</option>';
   if (selSub) selSub.innerHTML = '<option value="">— Nenhuma —</option>';
+  /* Antes do return: limpar o titulo tem que recolher o que ja apareceu. */
+  dpRevelarTudo();
   if (!opt || !opt.value) return;
   let cats = [];
   try { cats = JSON.parse(opt.dataset.categorias || '[]'); } catch(e) {}
@@ -2224,6 +2445,9 @@ function carregarSubCatLote() {
   const selSub = document.getElementById('lote_subcategoria_id');
   if (!selSub) return;
   selSub.innerHTML = '<option value="">— Nenhuma —</option>';
+  /* A versao individual avisava ao terminar; esta nao avisava ninguem, entao
+     a subcategoria do lote nunca chegava a aparecer. */
+  dpRevelarTudo();
   const opt = selCat ? selCat.options[selCat.selectedIndex] : null;
   if (!opt || !opt.value) return;
   let subs = [];
@@ -2233,6 +2457,7 @@ function carregarSubCatLote() {
     o.value = s.id; o.textContent = s.nome;
     selSub.appendChild(o);
   });
+  if (window.lselSincronizar) lselSincronizar();   // as listas acompanham
 }
 
 function abrirModalLote() {
@@ -2251,10 +2476,12 @@ function abrirModalLote() {
   if (debBtn)  debBtn.closest('li').hidden  = (debitos === 0);
   const alvo = creditos > 0 ? credBtn : debBtn;
   if (alvo) bootstrap.Tab.getOrCreateInstance(alvo).show();
+  loteRodape();
   /* Volta ao passo 1: escolher o destino e uma decisao, nao um padrao. */
   alternarAbaDebitoLote('');
   lselMontarTudo();
   lselSincronizar();
+  loteRodape();
   bootstrap.Modal.getOrCreateInstance(document.getElementById('modalLote')).show();
 }
 
