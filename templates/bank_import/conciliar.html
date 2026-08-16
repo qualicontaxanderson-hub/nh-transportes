@@ -52,7 +52,18 @@ body > .container-fluid:has(#cnc){
 #cnc .n--d{ background:linear-gradient(135deg,#5B6B7F,#465565); }
 
 /* ── Atalhos ──────────────────────────────────────────────────────── */
-#cnc .atalhos{ display:flex; gap:.45rem; flex-wrap:wrap; margin-bottom:.7rem; }
+/* No celular a fila quebrava sozinha e sobrava "Ignorados" pendurado numa
+   segunda linha, torto. Aqui a quebra e de proposito: a acao grande em cima,
+   as duas de apoio dividindo a linha de baixo. */
+#cnc .atalhos{ display:grid; grid-template-columns:1fr 1fr; gap:.45rem;
+  margin-bottom:.7rem; }
+#cnc .atalhos > .at{ justify-content:center; }
+#cnc .atalhos > .at--magia,
+#cnc .atalhos > .recado{ grid-column:1 / -1; }
+@media (min-width:640px){
+  #cnc .atalhos{ display:flex; flex-wrap:wrap; }
+  #cnc .atalhos > .at{ justify-content:flex-start; }
+}
 #cnc .at{ display:inline-flex; align-items:center; gap:.35rem; font-size:.79rem;
   font-weight:700; color:var(--azul); text-decoration:none; background:#fff;
   border:1px solid var(--line-2); border-radius:10px; padding:.42rem .7rem;
@@ -164,14 +175,30 @@ body > .container-fluid:has(#cnc){
 #cnc .pg[disabled]{ color:#b9c1cb; border-color:var(--line); cursor:default; }
 
 /* ── Barra de lote ────────────────────────────────────────────────── */
+/* Cinco botoes numa fila so nao cabem no celular: quebravam sozinhos e
+   sobrava uma segunda linha desalinhada. Aqui a quebra e desenhada — em
+   cima quem escolhe (contador, Todas, Ignorar), embaixo quem age, os tres
+   dividindo a largura em partes iguais. */
 #cnc .lote{ position:fixed; left:0; right:0; bottom:0; z-index:1040;
-  background:var(--azul-deep); color:#fff; padding:.6rem .8rem; display:flex;
-  align-items:center; gap:.5rem; flex-wrap:wrap; transform:translateY(110%);
+  background:var(--azul-deep); color:#fff; padding:.55rem .7rem;
+  display:flex; flex-direction:column; gap:.45rem; transform:translateY(110%);
   transition:transform .18s ease; box-shadow:0 -6px 20px rgba(12,76,134,.25);
-  padding-bottom:calc(.6rem + env(safe-area-inset-bottom)); }
+  padding-bottom:calc(.55rem + env(safe-area-inset-bottom)); }
 #cnc .lote.on{ transform:translateY(0); }
-#cnc .lote .n{ font-weight:800; font-variant-numeric:tabular-nums; }
-#cnc .lote .sep{ margin-left:auto; }
+#cnc .lote__l{ display:flex; align-items:center; gap:.4rem; }
+#cnc .lote .n{ font-weight:800; font-variant-numeric:tabular-nums;
+  font-size:.82rem; margin-right:auto; }
+#cnc .lote .sep{ display:none; }
+/* As tres acoes dividem a linha: cada uma cresce a partir do seu texto, entao
+   "Lancamento unico" fica maior que "Conciliar" sem espremer ninguem. */
+#cnc .lote__l--acoes > .bl{ flex:1 1 auto; justify-content:center;
+  white-space:nowrap; padding:.45rem .45rem; font-size:.76rem; }
+@media (min-width:640px){
+  #cnc .lote{ flex-direction:row; align-items:center; }
+  #cnc .lote__l--acoes{ margin-left:auto; }
+  #cnc .lote__l--acoes > .bl{ flex:0 0 auto; padding:.36rem .7rem;
+    font-size:.79rem; }
+}
 #cnc .bl{ border:0; border-radius:9px; padding:.36rem .7rem; font-size:.79rem;
   font-weight:800; cursor:pointer; background:rgba(255,255,255,.18); color:#fff;
   font-family:inherit; display:inline-flex; align-items:center; gap:.3rem; }
@@ -258,6 +285,58 @@ body > .container-fluid:has(#cnc){
 #cnc .dica{ font-size:.75rem; color:var(--muted); margin-top:.3rem; }
 #cnc :focus-visible{ outline:2px solid var(--azul); outline-offset:2px; }
 @media (prefers-reduced-motion: reduce){ #cnc *{ transition:none !important; } }
+
+/* ── Os modais viram gaveta ───────────────────────────────────────────
+   O modal centralizado do Bootstrap nascia no meio da tela e crescia pros
+   dois lados: no celular sobrava conteudo espremido em cima e os botoes
+   longe do polegar. A gaveta encosta embaixo, igual ao filtro desta mesma
+   tela — que ja era assim desde o comeco.
+   Estes modais ficam FORA de #cnc, por isso repetem as cores que usam.  */
+#modalConciliar, #modalLote{
+  --azul:#1D63A5; --azul-deep:#0C4C86; --ink:#151d27; --muted:#6b7684;
+  --line:#e7ebf1; --line-2:#d9e0e8; --surface:#f7f9fc; }
+#modalConciliar .modal-dialog, #modalLote .modal-dialog{
+  position:fixed; left:0; right:0; bottom:0; width:auto; max-width:none;
+  margin:0; }
+#modalConciliar .modal-content, #modalLote .modal-content{
+  border:0; border-radius:18px 18px 0 0; max-height:92vh;
+  box-shadow:0 -10px 30px rgba(12,25,42,.3); }
+#modalConciliar .modal-header, #modalLote .modal-header{
+  border-radius:18px 18px 0 0; border-bottom:0; padding:.7rem .9rem;
+  flex:0 0 auto; }
+#modalConciliar .modal-title, #modalLote .modal-title{
+  font-size:1rem; font-weight:800; letter-spacing:-.01em; }
+#modalConciliar .modal-body, #modalLote .modal-body{
+  overflow-y:auto; -webkit-overflow-scrolling:touch; padding:.8rem .9rem; }
+
+/* Sobe de baixo, em vez de cair de cima. */
+#modalConciliar.fade .modal-dialog, #modalLote.fade .modal-dialog{
+  transform:translateY(100%); transition:transform .24s cubic-bezier(.22,.7,.3,1); }
+#modalConciliar.show .modal-dialog, #modalLote.show .modal-dialog{ transform:none; }
+
+/* Rodape colado embaixo, respeitando a faixa do iPhone. Botao ocupa a
+   largura que sobra: nada de tres botoes miudos no canto direito. */
+#modalConciliar .modal-footer, #modalLote .modal-footer{
+  border-top:1px solid var(--line); padding:.65rem .9rem; gap:.5rem;
+  flex-wrap:nowrap; flex:0 0 auto;
+  padding-bottom:calc(.65rem + env(safe-area-inset-bottom)); }
+#modalConciliar .modal-footer > .btn, #modalLote .modal-footer > .btn{
+  flex:1; margin:0; font-weight:700; padding:.55rem .7rem; border-radius:10px; }
+#modalConciliar .modal-footer > .bt-volta, #modalLote .modal-footer > .bt-volta{
+  flex:0 0 auto; }
+#modalConciliar .modal-footer > [hidden], #modalLote .modal-footer > [hidden]{
+  display:none; }
+
+@media (min-width:992px){
+  #modalConciliar .modal-dialog, #modalLote .modal-dialog{
+    position:relative; margin:1.75rem auto; max-width:640px; }
+  #modalConciliar .modal-content, #modalLote .modal-content{
+    border-radius:16px; max-height:86vh; }
+  #modalConciliar .modal-header, #modalLote .modal-header{
+    border-radius:16px 16px 0 0; }
+  #modalConciliar.fade .modal-dialog, #modalLote.fade .modal-dialog{
+    transform:translateY(14px); }
+}
 
 /* ── Passo a passo dentro dos modais ──────────────────────────────────
    Quatro abas lado a lado nao cabem no celular: quebravam em duas linhas e
@@ -596,19 +675,22 @@ body > .container-fluid:has(#cnc){
 
   <!-- Barra de lote -->
   <div class="lote" id="cncLote">
-    <span class="n"><span id="contadorSelecionados">0</span> selecionada(s)</span>
-    <span class="sep"></span>
-    <button type="button" class="bl" id="btnSelecionarTodos">Todas</button>
-    <button type="button" class="bl" id="btnIgnorarSelecionados" disabled
-            onclick="ignorarSelecionados()">Ignorar</button>
-    <button type="button" class="bl" id="btnLancamentoUnico" disabled
-            onclick="abrirLancamentoUnico()">Lançamento único</button>
-    {% if total > 0 and f_clientes %}
-    <button type="button" class="bl" id="btnLancamentoFiltros"
-            onclick="abrirLancamentoFiltros()">Todos os {{ total }}</button>
-    {% endif %}
-    <button type="button" class="bl bl--pri" id="btnConciliarSelecionados" disabled
-            onclick="abrirModalLote()"><i class="bi bi-link-45deg"></i> Conciliar</button>
+    <div class="lote__l">
+      <span class="n"><span id="contadorSelecionados">0</span> selecionada(s)</span>
+      <button type="button" class="bl" id="btnSelecionarTodos">Todas</button>
+      <button type="button" class="bl" id="btnIgnorarSelecionados" disabled
+              onclick="ignorarSelecionados()">Ignorar</button>
+    </div>
+    <div class="lote__l lote__l--acoes">
+      <button type="button" class="bl" id="btnLancamentoUnico" disabled
+              onclick="abrirLancamentoUnico()">Lançamento único</button>
+      {% if total > 0 and f_clientes %}
+      <button type="button" class="bl" id="btnLancamentoFiltros"
+              onclick="abrirLancamentoFiltros()">Todos os {{ total }}</button>
+      {% endif %}
+      <button type="button" class="bl bl--pri" id="btnConciliarSelecionados" disabled
+              onclick="abrirModalLote()"><i class="bi bi-link-45deg"></i> Conciliar</button>
+    </div>
   </div>
 
   <!-- Filtro em passos -->
@@ -755,9 +837,6 @@ body > .container-fluid:has(#cnc){
             </div>
 
             <div class="mp-etapa" id="mpc-e2" hidden>
-              <button type="button" class="mp-voltar" onclick="mpcIr(1)">
-                <i class="bi bi-chevron-left"></i> trocar a origem
-              </button>
             <!-- Aba Forma de Recebimento -->
             <div id="aba_cr_forma">
               <label class="form-label fw-semibold">
@@ -838,9 +917,6 @@ body > .container-fluid:has(#cnc){
             </div>
 
             <div class="mp-etapa" id="mpd-e2" hidden>
-              <button type="button" class="mp-voltar" onclick="mpdVoltar()">
-                <i class="bi bi-chevron-left"></i> trocar o destino
-              </button>
 
             <!-- Aba Fornecedor -->
             <div id="aba_fornecedor">
@@ -969,6 +1045,13 @@ body > .container-fluid:has(#cnc){
           </div>
         </div>
         <div class="modal-footer">
+          <!-- "trocar o destino" la em cima era um link de texto e ninguem
+               achava. Voltar mora aqui, do lado de Confirmar, e so existe
+               quando ha pra onde voltar. -->
+          <button type="button" class="btn btn-outline-secondary bt-volta"
+                  id="btnVoltarModal" onclick="mpVoltarModal()" hidden>
+            <i class="bi bi-chevron-left"></i> Voltar
+          </button>
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
           <button type="submit" class="btn btn-primary" id="btnConfirmarModal">
             <i class="bi bi-check-lg"></i> Confirmar
@@ -1054,9 +1137,6 @@ body > .container-fluid:has(#cnc){
             </div>
 
             <div class="mp-etapa" id="mpl-e2" hidden>
-              <button type="button" class="mp-voltar" onclick="mplIr(1)">
-                <i class="bi bi-chevron-left"></i> trocar o destino
-              </button>
 
             <!-- Painel Fornecedor -->
             <div id="lote_aba_fornecedor">
@@ -1136,6 +1216,10 @@ body > .container-fluid:has(#cnc){
         </div>
       </div>
       <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary bt-volta"
+                id="btnVoltarLote" onclick="mplIr(1)" hidden>
+          <i class="bi bi-chevron-left"></i> Voltar
+        </button>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
       </div>
     </div>
@@ -1774,8 +1858,26 @@ function mpdIr(n) {
   document.getElementById('mpdt').textContent = n === 1
     ? 'Para onde vai esta saída?'
     : (nomes[document.getElementById('modal_tipo_debito').value] || 'Escolha');
+  mpRodape(n);
 }
 function mpdVoltar() { mpdIr(1); }
+
+/* Rodape do modal individual. No passo 1 nao ha o que confirmar — so se
+   escolheu o caminho — entao aparece Cancelar sozinho; no passo 2 entram
+   Voltar e Confirmar. */
+function mpRodape(n) {
+  var voltar = document.getElementById('btnVoltarModal');
+  var ok     = document.getElementById('btnConfirmarModal');
+  if (voltar) voltar.hidden = (n !== 2);
+  if (ok)     ok.hidden     = (n !== 2);
+}
+
+/* O Voltar do rodape serve os dois lados do modal: saida e entrada. */
+function mpVoltarModal() {
+  var e2d = document.getElementById('mpd-e2');
+  if (e2d && !e2d.hidden) { mpdIr(1); return; }
+  mpcIr(1);
+}
 
 function alternarAbaDebito(aba) {
   document.getElementById('modal_tipo_debito').value = aba;
@@ -1809,6 +1911,7 @@ function mpcIr(n) {
     ? 'De onde veio esta entrada?'
     : (document.getElementById('tab_cr_transf_btn').classList.contains('active')
        ? 'De qual conta?' : 'Qual forma de recebimento?');
+  mpRodape(n);
 }
 
 function alternarAbaCredito(aba) {
@@ -2070,6 +2173,8 @@ function mplIr(n) {
   document.getElementById('mplt').textContent = n === 1
     ? 'Para onde vão estas saídas?'
     : (nomes[document.getElementById('lote_tipo_debito').value] || 'Escolha');
+  var voltar = document.getElementById('btnVoltarLote');
+  if (voltar) voltar.hidden = (n !== 2);
 }
 
 function alternarAbaDebitoLote(aba) {
