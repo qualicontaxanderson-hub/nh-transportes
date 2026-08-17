@@ -2235,8 +2235,30 @@ function dpLinha() {
   return todas[todas.length - 1];
 }
 
+/* Um lugar so pra fechar e outro pra abrir o campo de valor. */
+function dpTravarValor(inp) {
+  if (!inp) return;
+  inp.setAttribute('readonly', '');
+  inp.style.background = '#f8f9fa';
+  inp.placeholder = '0,00';
+}
+
+function dpAbrirValor(inp) {
+  if (!inp) return;
+  inp.removeAttribute('readonly');
+  inp.style.background = '';
+}
+
 function dpFocar(linha) {
-  dpLinhas().forEach(function (l) { l.dataset.foco = (l === linha) ? '1' : ''; });
+  /* Sair de uma despesa fecha o valor dela de novo e desfaz o "dividindo":
+     o que foi digitado fica, mas o campo volta a ser so leitura. */
+  dpLinhas().forEach(function (l) {
+    if (l !== linha) {
+      l.dataset.dividindo = '';
+      dpTravarValor(l.querySelector('.inp-valor'));
+    }
+    l.dataset.foco = (l === linha) ? '1' : '';
+  });
   dpRevelarTudo();
 }
 
@@ -2429,8 +2451,7 @@ function dpDividir() {
   if (linha.dataset.dividindo !== '1') {
     linha.dataset.dividindo = '1';
     if (inp) {
-      inp.removeAttribute('readonly');
-      inp.style.background = '';
+      dpAbrirValor(inp);
       inp.value = '';
       inp.placeholder = 'quanto vai nesta despesa?';
       if (!inp.dataset.somaListener) {
@@ -2598,16 +2619,11 @@ function dpProximoIdx() {
 function adicionarLinhaDespesa() {
   /* Sem teto: divide em quantas partes a nota exigir. O servidor le os
      indices que chegarem, entao nao ha numero magico dos dois lados. */
-  // Ao adicionar a primeira linha extra, desbloqueia o valor da linha 1 e mostra aviso de soma
-  if (_linhaDespIdx === 1) {
-    const inp1 = document.getElementById('desp_1_valor');
-    if (inp1) {
-      inp1.removeAttribute('readonly');
-      inp1.style.background = '';
-    }
-    const aviso = document.getElementById('avisoSoma');
-    if (aviso) aviso.style.display = '';
-  }
+  /* Quem abre o campo de valor e o "dividir", e so o da despesa em que se
+     esta. Aqui ficava um desbloqueio da despesa 1 que passava por cima
+     disso. A soma continua a vista a partir da primeira divisao. */
+  const aviso = document.getElementById('avisoSoma');
+  if (aviso) aviso.style.display = '';
   /* O indice sai do maior que existe na tela, nao de um contador. Com o
      contador, remover a despesa 2 de tres e adicionar outra gerava um
      segundo desp_3_* — dois campos com o mesmo name, e um dos valores
@@ -2690,6 +2706,9 @@ function adicionarLinhaDespesa() {
     novoInpValor.value = String(sobra);
     mascaraMoeda({ target: novoInpValor });
   }
+  /* Fechado, como a despesa 1 nasce: o valor ja e o que sobrou, e so se
+     mexe nele quem for dividir de novo. */
+  if (novoInpValor) dpTravarValor(novoInpValor);
   dpFocar(div);
 }
 
