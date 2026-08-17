@@ -57,6 +57,15 @@ def recebimentos():
         busca_cliente = (request.args.get('busca_cliente') or '').strip()
         busca_status = (request.args.get('busca_status') or '').strip().lower()
 
+        # Filtro novo: aceita vários clientes e várias situações, os mesmos
+        # nomes que o relatório em PDF usa — o formulário é um só, com dois
+        # botões no fim. Os nomes antigos continuam funcionando para não
+        # quebrar link salvo.
+        f_clientes = [c for c in request.args.getlist('cliente_id') if c.isdigit()]
+        f_situacoes = [s for s in request.args.getlist('situacao') if s]
+        if busca_status and busca_status != 'todos' and not f_situacoes:
+            f_situacoes = [busca_status]
+
         try:
             # Buscar recebimentos/boletos emitidos no período
             sql = """
@@ -81,18 +90,16 @@ def recebimentos():
                 )
             """
             params = [data_inicio, data_fim]
-            if busca_cliente:
+            if f_clientes:
+                sql += " AND c.id_cliente IN (%s)" % ','.join(['%s'] * len(f_clientes))
+                params.extend(f_clientes)
+            elif busca_cliente:
                 sql += " AND (cl.razao_social LIKE %s OR cl.nome_fantasia LIKE %s)"
                 like = f"%{busca_cliente}%"
                 params.extend([like, like])
-            if busca_status and busca_status != 'todos':
-                if busca_status == 'vencido':
-                    sql += " AND (c.status NOT IN ('pago','cancelado') OR c.status IS NULL) AND c.data_vencimento < CURDATE()"
-                elif busca_status == 'pendente':
-                    sql += " AND (c.status NOT IN ('pago','cancelado') OR c.status IS NULL) AND (c.data_vencimento IS NULL OR c.data_vencimento >= CURDATE())"
-                else:
-                    sql += " AND c.status = %s"
-                    params.append(busca_status)
+            # A situação é decidida em Python logo abaixo (display_status), que
+            # é a única regra que sabe separar "pago pelo provedor" de "baixado
+            # na mão". Filtrar aqui em SQL faria as duas telas discordarem.
             # Vencido primeiro e o mais velho no topo (e o que mais cobra
             # atencao); depois a vencer, do mais proximo; por fim os pagos, do
             # mais recente. A tela agrupa, isto so ordena dentro de cada grupo.
@@ -204,6 +211,19 @@ def recebimentos():
                         r['display_status'] = 'pendente'
         except Exception:
             current_app.logger.exception("[recebimentos] erro calculando display_status")
+
+        # Agora sim a situação, com o display_status já calculado. "Pagos"
+        # cobre os dois jeitos de baixar: pelo provedor e na mão.
+        if f_situacoes:
+            alvo = set(f_situacoes)
+            if 'pago' in alvo:
+                alvo.add('quitado')
+            recebimentos_lista = [r for r in recebimentos_lista
+                                  if r.get('display_status') in alvo]
+            total_boletos = sum(
+                float(r.get('valor') or 0) for r in recebimentos_lista
+                if (r.get('status') or '').lower() != 'cancelado')
+            diferenca = total_fretes - total_boletos
         # -------------------------------------------------------------------
 
         # --- o que a gaveta do relatório precisa saber ----------------------
@@ -252,6 +272,8 @@ def recebimentos():
                              data_fim=data_fim,
                              busca_cliente=busca_cliente,
                              busca_status=busca_status,
+                             f_clientes=[int(c) for c in f_clientes],
+                             f_situacoes=f_situacoes,
                              total_fretes=total_fretes,
                              total_boletos=total_boletos,
                              diferenca=diferenca)
@@ -260,6 +282,7 @@ def recebimentos():
         flash(f"Erro ao acessar recebimentos: {str(e)}", "danger")
         return render_template('financeiro/recebimentos.html', recebimentos=[],
                              situacoes_totais=[], clientes_boleto=[],
+                             f_clientes=[], f_situacoes=[],
                              data_inicio='', data_fim='',
                              busca_cliente='', busca_status='',
                              total_fretes=0, total_boletos=0, diferenca=0)
