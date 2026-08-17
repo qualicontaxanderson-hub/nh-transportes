@@ -494,14 +494,23 @@
                  placeholder="Procurar cliente" oninput="frtFiltraCli()">
           <div class="opcs" id="frt-cli" style="margin-top:.4rem;">
             {% for c in clientes_boleto %}
-            <label class="opc" data-nome="{{ c.nome|lower }}">
+            {# As contagens por situação viajam na própria linha: é com elas
+               que o passo 2 esconde quem não tem boleto na situação marcada
+               no passo 1. #}
+            <label class="opc" data-nome="{{ c.nome|lower }}"
+                   data-vencido="{{ c.vencido }}" data-pendente="{{ c.pendente }}"
+                   data-pago="{{ c.pago }}" data-cancelado="{{ c.cancelado }}"
+                   data-n="{{ c.n }}">
               <input type="checkbox" name="cliente_id" value="{{ c.id }}"
                      {{ 'checked' if c.id in f_clientes }}>
-              <span>{{ c.nome }} <small>{{ c.n }} boleto(s)</small></span>
+              <span>{{ c.nome }} <small class="cnt">{{ c.n }} boleto(s)</small></span>
             </label>
             {% else %}
             <div class="aviso-f">Nenhum cliente com boleto emitido.</div>
             {% endfor %}
+            <div class="aviso-f" id="frt-cli-vazio" hidden>
+              Nenhum cliente com boleto nessa situação.
+            </div>
           </div>
           <div class="dica">Pode marcar mais de um. Sem marcar ninguém, vêm todos.</div>
         </div>
@@ -600,7 +609,15 @@ function frtIr(n) {
   document.getElementById('frt-seguir').hidden  = (frtN === 3);
   document.getElementById('frt-aplicar').hidden = (frtN !== 3);
   document.getElementById('frt-pdf').hidden     = (frtN !== 3);
+  /* Ao chegar no cliente, a lista já vem recortada pela situação escolhida. */
+  if (frtN === 2) frtFiltraCli();
 }
+
+/* Mexer na situação refaz a lista de clientes na hora — quem volta ao passo 1
+   e troca a escolha não pode encontrar a lista antiga esperando no passo 2. */
+document.querySelectorAll('#frt-sit input[type=checkbox]').forEach(function (c) {
+  c.addEventListener('change', frtFiltraCli);
+});
 function frtPasso(d) { frtIr(frtN + d); }
 
 function frtTodas(id) {
@@ -609,11 +626,43 @@ function frtTodas(id) {
   cxs.forEach(function (c) { c.checked = algum; });
 }
 
+/* O passo 2 obedece o passo 1: quem não tem boleto na situação marcada não
+   aparece, e a contagem ao lado do nome passa a ser a daquela situação —
+   dizer "53 boleto(s)" filtrando Vencidos seria mentira. */
+function frtSituacoesMarcadas() {
+  return [].slice.call(
+    document.querySelectorAll('#frt-sit input[type=checkbox]:checked'))
+    .map(function (c) { return c.value; });
+}
+
 function frtFiltraCli() {
   var t = (document.getElementById('frt-busca').value || '').toLowerCase();
+  var sits = frtSituacoesMarcadas();
+  var visiveis = 0;
+
   document.querySelectorAll('#frt-cli .opc').forEach(function (o) {
-    o.hidden = !!t && (o.dataset.nome || '').indexOf(t) < 0;
+    var quantos = sits.length
+      ? sits.reduce(function (soma, s) {
+          return soma + (Number(o.dataset[s]) || 0);
+        }, 0)
+      : Number(o.dataset.n) || 0;
+
+    var cabe = (!t || (o.dataset.nome || '').indexOf(t) >= 0) && quantos > 0;
+    o.hidden = !cabe;
+    if (cabe) visiveis++;
+
+    var cnt = o.querySelector('.cnt');
+    if (cnt) cnt.textContent = quantos + ' boleto(s)';
+
+    /* Cliente que sumiu não pode continuar marcado por baixo do pano. */
+    if (!cabe) {
+      var cx = o.querySelector('input[type=checkbox]');
+      if (cx) cx.checked = false;
+    }
   });
+
+  var vazio = document.getElementById('frt-cli-vazio');
+  if (vazio) vazio.hidden = visiveis > 0;
 }
 
 /* Atalhos de período: a conta de "mês passado" na mão é onde mais se erra. */

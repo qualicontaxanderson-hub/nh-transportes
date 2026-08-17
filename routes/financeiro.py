@@ -271,15 +271,33 @@ def recebimentos():
                 situacoes_totais.append({'chave': chave, 'rotulo': rotulo,
                                          'n': int(r['n']), 'v': float(r['v'] or 0)})
 
+            # Por cliente E por situação: o passo do cliente precisa esconder
+            # quem não tem boleto na situação que foi marcada antes. Sem isso
+            # a lista mostrava os 25 clientes mesmo filtrando "Vencidos", que
+            # só tem 6.
             cursor.execute("""
                 SELECT cl.id,
                        COALESCE(cl.nome_fantasia, cl.razao_social) AS nome,
+                       CASE
+                         WHEN LOWER(COALESCE(cb.status,'')) = 'cancelado' THEN 'cancelado'
+                         WHEN COALESCE(cb.pago_via_provedor,0) = 1
+                           OR LOWER(COALESCE(cb.status,'')) = 'pago' THEN 'pago'
+                         WHEN cb.data_vencimento < CURDATE() THEN 'vencido'
+                         ELSE 'pendente'
+                       END AS sit,
                        COUNT(*) AS n
                 FROM cobrancas cb
                 INNER JOIN clientes cl ON cb.id_cliente = cl.id
-                GROUP BY cl.id, nome
+                GROUP BY cl.id, nome, sit
                 ORDER BY nome""")
-            clientes_boleto = cursor.fetchall()
+            porcli = {}
+            for r in cursor.fetchall():
+                c = porcli.setdefault(r['id'], {'id': r['id'], 'nome': r['nome'],
+                                                'n': 0, 'vencido': 0, 'pendente': 0,
+                                                'pago': 0, 'cancelado': 0})
+                c[r['sit']] = int(r['n'])
+                c['n'] += int(r['n'])
+            clientes_boleto = sorted(porcli.values(), key=lambda c: c['nome'] or '')
         except Exception:
             current_app.logger.exception('[recebimentos] totais do relatório')
 
