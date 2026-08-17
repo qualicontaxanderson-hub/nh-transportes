@@ -216,7 +216,7 @@
       <a class="voltar" href="{{ url_for('bank_import.index') }}">
         <i class="bi bi-chevron-left"></i> Banco
       </a>
-      <h3>Recebimentos de frete</h3>
+      <h3>Recebimento Frete</h3>
       <button type="button" class="acao" onclick="frtAbrirFiltro()">
         <i class="bi bi-sliders"></i> Filtro
         {% set n_f = (1 if busca_cliente else 0) + (1 if busca_status and busca_status != 'todos' else 0) %}
@@ -308,7 +308,9 @@
 
         <div class="c-meio">
           <span class="ids">#{{ r.id }}{% if r.frete_numero or r.frete_id %} · frete {{ r.frete_numero or r.frete_id }}{% endif %}</span>
-          <span class="c-valor">R$ {% if r.valor is not none %}{{ ("%.2f"|format(r.valor|float)).replace('.', ',') }}{% else %}0,00{% endif %}</span>
+          {# Era "%.2f" com replace do ponto pela virgula: 1430,00 sem o ponto
+             do milhar. O filtro formatar_moeda ja separa e ja poe o R$. #}
+          <span class="c-valor">{{ r.valor | formatar_moeda if r.valor is not none else 'R$ 0,00' }}</span>
         </div>
 
         <div class="c-baixo">

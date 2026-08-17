@@ -70,7 +70,15 @@ def recebimentos():
                 FROM cobrancas c
                 LEFT JOIN clientes cl ON c.id_cliente = cl.id
                 LEFT JOIN fretes f ON c.frete_id = f.id
-                WHERE c.data_emissao BETWEEN %s AND %s
+                WHERE (
+                    -- Em aberto aparece SEMPRE, de qualquer mes ou ano: um
+                    -- boleto vencido em dezembro nao pode sumir da tela so
+                    -- porque o periodo padrao e o mes corrente.
+                    (c.status NOT IN ('pago','cancelado') OR c.status IS NULL)
+                    -- Ja resolvido (pago ou cancelado) fica no periodo, senao
+                    -- a tela carregaria a historia inteira.
+                    OR c.data_emissao BETWEEN %s AND %s
+                )
             """
             params = [data_inicio, data_fim]
             if busca_cliente:
@@ -85,7 +93,22 @@ def recebimentos():
                 else:
                     sql += " AND c.status = %s"
                     params.append(busca_status)
-            sql += " ORDER BY c.data_vencimento DESC, c.data_emissao DESC"
+            # Vencido primeiro e o mais velho no topo (e o que mais cobra
+            # atencao); depois a vencer, do mais proximo; por fim os pagos, do
+            # mais recente. A tela agrupa, isto so ordena dentro de cada grupo.
+            sql += """
+                ORDER BY
+                  CASE
+                    WHEN (c.status NOT IN ('pago','cancelado') OR c.status IS NULL)
+                         AND c.data_vencimento < CURDATE() THEN 0
+                    WHEN (c.status NOT IN ('pago','cancelado') OR c.status IS NULL) THEN 1
+                    ELSE 2
+                  END,
+                  CASE
+                    WHEN (c.status NOT IN ('pago','cancelado') OR c.status IS NULL)
+                      THEN c.data_vencimento
+                  END ASC,
+                  c.data_vencimento DESC, c.data_emissao DESC"""
             cursor.execute(sql, params)
             recebimentos_lista = cursor.fetchall()
             current_app.logger.info(f"[recebimentos] Encontrados {len(recebimentos_lista)} recebimentos")

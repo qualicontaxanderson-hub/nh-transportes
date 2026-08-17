@@ -4,6 +4,9 @@
     "Memorizações" existia apenas nas Regras. Com a lista aqui, incluir uma
     aba nova é uma linha, e ela nasce em todas as telas ao mesmo tempo.
 
+    "Rec Frete" não é "Frete" de propósito: já existe uma aba Frete no
+    lançamento de fretes, e as duas lado a lado confundiam o usuário.
+
     Quem inclui passa `ativa` com a chave da própria tela:
       {% with ativa = 'resumo' %}{% include 'includes/abas_banco.html' %}{% endwith %}
 -#}
@@ -13,7 +16,7 @@
       ('recebimentos',   'Recebimentos',   'financeiro.recebimento'),
       ('pagamentos',     'Pagamentos',     'financeiro.pagamentos'),
       ('transferencias', 'Transferências', 'financeiro.transferencias'),
-      ('frete',          'Frete',          'financeiro.recebimentos'),
+      ('frete',          'Rec Frete',      'financeiro.recebimentos'),
       ('contas',         'Contas',         'bank_import.gerenciar_contas'),
       ('regras',         'Regras',         'conciliacao_regras.lista'),
       ('memorias',       'Memorizações',   'conciliacao_regras.memorias')] %}
