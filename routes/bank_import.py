@@ -1985,9 +1985,17 @@ def conciliar():
         tipo_tx              = request.form.get('tipo_tx', 'DEBIT')
         tipo_debito          = request.form.get('tipo_debito', 'fornecedor')  # 'fornecedor' | 'despesa' | 'transferencia'
 
-        # Despesas (até 3 linhas de split)
+        # Despesas: quantas vierem. Era range(1, 4) — teto de 3 — e a tela
+        # tinha o mesmo teto. Agora quem manda é o formulário: lemos os
+        # índices que realmente chegaram, o que também cobre buracos
+        # (desp_1 e desp_3, quando a do meio foi removida).
         despesas = []
-        for i in range(1, 4):  # suporta até 3 linhas de split
+        _idx_desp = sorted({
+            int(m.group(1))
+            for m in (re.match(r'^desp_(\d+)_titulo_id$', k) for k in request.form)
+            if m
+        })
+        for i in _idx_desp:
             tid  = request.form.get(f'desp_{i}_titulo_id') or None
             cid  = request.form.get(f'desp_{i}_categoria_id') or None
             scid = request.form.get(f'desp_{i}_subcategoria_id') or None

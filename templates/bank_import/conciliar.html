@@ -2285,7 +2285,7 @@ function dpVoltar() {
   var pos = todas.indexOf(linha);
   if (pos > 0) {
     linha.remove();
-    _linhaDespIdx = Math.max(1, _linhaDespIdx - 1);
+    _linhaDespIdx = Math.max(1, dpProximoIdx() - 1);
     dpFocar(todas[pos - 1]);
     atualizarSoma();
     return true;
@@ -2401,12 +2401,12 @@ function dpRevelarTudo() {
      Conciliar memoriza nao tem como se dividir em dois caminhoes. */
   var b = document.getElementById('btnAdicionarDesp');
   if (b) {
-    b.hidden = dpMemoriza() || _linhaDespIdx >= 3 ||
+    b.hidden = dpMemoriza() ||
       !emFoco || Number(emFoco.dataset.passo || 1) < dpUltimo();
     var t = document.getElementById('txtAdicionarDesp');
     if (t) {
       t.textContent = (emFoco && emFoco.dataset.dividindo === '1')
-        ? 'Pronto — ir para a Despesa ' + (dpLinhas().length + 1)
+        ? 'Pronto — ir para a Despesa ' + (dpLinhas().length + 1)  // pela ordem na tela
         : 'Dividir em mais uma despesa';
     }
     b.classList.toggle('btn-primary', !!(emFoco && emFoco.dataset.dividindo === '1'));
@@ -2586,8 +2586,18 @@ function criarFornecedorRapido(btn) {
 
 
 let _linhaDespIdx = 1;
+
+/* Maior data-idx em uso + 1. */
+function dpProximoIdx() {
+  let maior = 0;
+  document.querySelectorAll('#linhas_despesa .linha-desp').forEach(function (l) {
+    maior = Math.max(maior, Number(l.dataset.idx || 0));
+  });
+  return maior + 1;
+}
 function adicionarLinhaDespesa() {
-  if (_linhaDespIdx >= 3) { alert('Máximo de 3 despesas por transação.'); return; }
+  /* Sem teto: divide em quantas partes a nota exigir. O servidor le os
+     indices que chegarem, entao nao ha numero magico dos dois lados. */
   // Ao adicionar a primeira linha extra, desbloqueia o valor da linha 1 e mostra aviso de soma
   if (_linhaDespIdx === 1) {
     const inp1 = document.getElementById('desp_1_valor');
@@ -2598,8 +2608,12 @@ function adicionarLinhaDespesa() {
     const aviso = document.getElementById('avisoSoma');
     if (aviso) aviso.style.display = '';
   }
-  _linhaDespIdx++;
-  const i = _linhaDespIdx;
+  /* O indice sai do maior que existe na tela, nao de um contador. Com o
+     contador, remover a despesa 2 de tres e adicionar outra gerava um
+     segundo desp_3_* — dois campos com o mesmo name, e um dos valores
+     sumia no envio. */
+  const i = dpProximoIdx();
+  _linhaDespIdx = i;
   // Busca opções de título para copiar
   const tituloOpts = document.querySelector('.sel-titulo')?.innerHTML || '';
   const div = document.createElement('div');
@@ -2696,7 +2710,7 @@ function atualizarSoma() {
 
 function removerLinha(btn) {
   const linha = btn.closest('.linha-desp');
-  if (linha) { linha.remove(); _linhaDespIdx = Math.max(1, _linhaDespIdx - 1); }
+  if (linha) { linha.remove(); _linhaDespIdx = Math.max(1, dpProximoIdx() - 1); }
   document.getElementById('btnAdicionarDesp').style.display = '';
   /* So as despesas do modal individual: #lote_desp_campos tambem tem a
      classe .linha-desp e nao entra nessa contagem. */
