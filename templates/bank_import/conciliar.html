@@ -379,7 +379,9 @@ body > .container-fluid:has(#cnc){
 .dresumo__e{ font-size:.72rem; font-weight:800; color:#1D63A5; }
 .linha-desp{ min-width:0; }
 .linha-desp--resumo{ background:#f7f9fc; padding:.6rem .7rem; }
-.linha-desp--resumo .dcabeca{ display:none; }
+/* !important porque .dcabeca tambem carrega o .d-flex do Bootstrap, que e
+   !important — sem isso o "Despesa 1" antigo aparecia embaixo do resumo. */
+.linha-desp--resumo .dcabeca{ display:none !important; }
 
 /* Mesmo desenho do funil do recebimento: caixa branca, linhas separadas,
    alvo grande o bastante pro dedo. */
@@ -1066,9 +1068,10 @@ body > .container-fluid:has(#cnc){
               <div id="avisoSoma" class="alert alert-warning py-1 px-2 small mb-1" style="display:none;">
                 ⚠️ Soma atual: <strong id="spanSomaAtual">R$ 0,00</strong> de <strong id="spanSomaTotal"></strong>
               </div>
-              <button type="button" class="btn btn-outline-secondary btn-sm mb-1" onclick="adicionarLinhaDespesa()"
-                      id="btnAdicionarDesp">
-                <i class="bi bi-plus-circle"></i> Dividir em mais uma despesa
+              <button type="button" class="btn btn-outline-secondary btn-sm mb-1"
+                      onclick="dpDividir()" id="btnAdicionarDesp">
+                <i class="bi bi-plus-circle"></i>
+                <span id="txtAdicionarDesp">Dividir em mais uma despesa</span>
               </button>
             </div>
 
@@ -2400,8 +2403,58 @@ function dpRevelarTudo() {
   if (b) {
     b.hidden = dpMemoriza() || _linhaDespIdx >= 3 ||
       !emFoco || Number(emFoco.dataset.passo || 1) < dpUltimo();
+    var t = document.getElementById('txtAdicionarDesp');
+    if (t) {
+      t.textContent = (emFoco && emFoco.dataset.dividindo === '1')
+        ? 'Pronto — ir para a Despesa ' + (dpLinhas().length + 1)
+        : 'Dividir em mais uma despesa';
+    }
+    b.classList.toggle('btn-primary', !!(emFoco && emFoco.dataset.dividindo === '1'));
+    b.classList.toggle('btn-outline-secondary', !(emFoco && emFoco.dataset.dividindo === '1'));
   }
   mpdPintar();
+}
+
+/* Dividir em dois tempos.
+
+   Antes, um toque so criava a despesa 2 e deixava a 1 com o valor cheio da
+   transacao — dava a soma estourada e obrigava a reabrir a despesa anterior
+   pra corrigir. Agora o primeiro toque pergunta quanto vai NESTA despesa; o
+   segundo comeca a proxima, do titulo, igual a primeira comecou.          */
+function dpDividir() {
+  var linha = dpLinha();
+  if (!linha) return;
+  var inp = linha.querySelector('.inp-valor');
+
+  if (linha.dataset.dividindo !== '1') {
+    linha.dataset.dividindo = '1';
+    if (inp) {
+      inp.removeAttribute('readonly');
+      inp.style.background = '';
+      inp.value = '';
+      inp.placeholder = 'quanto vai nesta despesa?';
+      if (!inp.dataset.somaListener) {
+        inp.addEventListener('input', atualizarSoma);
+        inp.dataset.somaListener = '1';
+      }
+      try { inp.focus(); } catch (e) {}
+    }
+    var aviso = document.getElementById('avisoSoma');
+    if (aviso) aviso.style.display = '';
+    atualizarSoma();
+    dpRevelarTudo();
+    return;
+  }
+
+  /* Segundo toque: sem valor nao da pra seguir — a despesa 2 nao teria o
+     que sobrar. */
+  if (inp && !(parseFloat(valorMascaraParaFloat(inp.value)) > 0)) {
+    alert('Diga quanto desta transação vai nesta despesa.');
+    try { inp.focus(); } catch (e) {}
+    return;
+  }
+  linha.dataset.dividindo = '';
+  adicionarLinhaDespesa();
 }
 
 /* Comeca onde a sugestao parou; sem sugestao, no primeiro degrau. */
@@ -2609,6 +2662,20 @@ function adicionarLinhaDespesa() {
   /* A nova despesa comeca do titulo, como a primeira comecou — e a anterior
      recolhe pro resumo. Era isso que faltava: eu abria as duas inteiras. */
   div.dataset.passo = 1;
+  /* Ja vem com o que sobrou: e o valor certo em quase todo caso, e da pra
+     mudar se a divisao for em tres. */
+  const totalTx = parseFloat(
+    document.getElementById('modalConciliar')?.dataset?.txValorRaw || '0');
+  let usado = 0;
+  document.querySelectorAll('#linhas_despesa .inp-valor').forEach(function (i2) {
+    if (i2 === novoInpValor) return;
+    usado += parseFloat(valorMascaraParaFloat(i2.value)) || 0;
+  });
+  const sobra = Math.round((totalTx - usado) * 100);
+  if (novoInpValor && sobra > 0) {
+    novoInpValor.value = String(sobra);
+    mascaraMoeda({ target: novoInpValor });
+  }
   dpFocar(div);
 }
 
