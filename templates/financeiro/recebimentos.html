@@ -172,8 +172,16 @@
   }
   #frt .gav__pega{ width:36px; height:4px; background:var(--line-2); border-radius:9px;
     margin:.5rem auto .1rem; flex:0 0 auto; }
-  #frt .passos{ display:flex; gap:.3rem; padding:.4rem .9rem .1rem; }
-  #frt .passo{ flex:1; height:3px; border-radius:9px; background:var(--line-2); }
+  #frt .passos{ display:flex; gap:.45rem; padding:.5rem .9rem .1rem; }
+  #frt .passo{ flex:1; display:block; border:0; background:none; padding:0;
+    cursor:pointer; font-family:inherit; text-align:left; min-width:0; }
+  #frt .passo i{ display:block; height:3px; border-radius:9px;
+    background:var(--line-2); }
+  #frt .passo span{ display:block; font-size:.68rem; font-weight:800;
+    letter-spacing:.02em; color:var(--muted); margin-top:.28rem;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #frt .passo.on i{ background:var(--azul); }
+  #frt .passo.aqui span{ color:var(--azul-deep); }
   #frt .passo.on{ background:var(--azul); }
   #frt .pnome{ padding:.35rem .9rem .4rem; font-size:.76rem; color:var(--muted);
     font-weight:700; }
@@ -193,6 +201,31 @@
   #frt .gr{ margin-bottom:.85rem; }
   #frt .gr__t{ font-size:.69rem; font-weight:800; text-transform:uppercase;
     letter-spacing:.05em; color:var(--muted); margin-bottom:.3rem; }
+
+  /* ── Listas de escolha da gaveta ────────────────────────────────────
+     Estas classes so existiam no #cnc da Conciliação. Aqui as caixinhas
+     nasciam cruas, correndo na linha, sem cartão nem separação — era o
+     "horrível" da tela. Mesmo desenho das outras. */
+  #frt .gr__c{ display:flex; align-items:baseline; gap:.4rem; margin-bottom:.3rem; }
+  #frt .gr__c .gr__t{ margin-bottom:0; }
+  #frt .gr__a{ margin-left:auto; background:none; border:0; padding:0; cursor:pointer;
+    font-size:.74rem; font-weight:800; color:var(--azul); font-family:inherit; }
+  #frt .opcs{ border:1px solid var(--line-2); border-radius:10px; overflow:hidden;
+    max-height:260px; overflow-y:auto; background:#fff; }
+  #frt .opc{ display:flex; align-items:center; gap:.55rem; padding:.5rem .6rem;
+    border-bottom:1px solid var(--line); font-size:.85rem; cursor:pointer; margin:0;
+    min-width:0; }
+  #frt .opc:last-child{ border-bottom:0; }
+  #frt .opc:hover{ background:var(--surface); }
+  #frt .opc input{ width:19px; height:19px; accent-color:var(--azul);
+    flex:0 0 auto; margin:0; }
+  #frt .opc > span{ min-width:0; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; }
+  #frt .opc small{ display:block; font-size:.71rem; color:var(--muted); }
+  #frt .opc:has(input:checked){ background:var(--azul-claro); }
+  #frt .opc[hidden]{ display:none; }
+  #frt .aviso-f{ padding:.85rem .6rem; font-size:.82rem; color:var(--muted);
+    text-align:center; }
   #frt .campo{ width:100%; border:1px solid var(--line-2); border-radius:10px;
     padding:.5rem .65rem; font-size:.85rem; background:#fff; color:var(--ink);
     font-family:inherit; }
@@ -415,10 +448,16 @@
   <form class="gav" id="frt-gav" method="get"
         action="{{ url_for('financeiro.recebimentos') }}">
     <div class="gav__pega"></div>
+    {# Os passos com nome e tocáveis: "e como seleciona o período?" era uma
+       pergunta justa — a barra muda não dizia o que vinha depois, e o único
+       jeito de chegar lá era tocar Continuar duas vezes. #}
     <div class="passos">
-      <span class="passo on" id="frt-p1"></span>
-      <span class="passo" id="frt-p2"></span>
-      <span class="passo" id="frt-p3"></span>
+      <button type="button" class="passo on" id="frt-p1" onclick="frtIr(1)">
+        <i></i><span>Situação</span></button>
+      <button type="button" class="passo" id="frt-p2" onclick="frtIr(2)">
+        <i></i><span>Cliente</span></button>
+      <button type="button" class="passo" id="frt-p3" onclick="frtIr(3)">
+        <i></i><span>Período</span></button>
     </div>
     <div class="pnome">Passo <span id="frt-pn">1</span> de 3 —
       <b id="frt-pt">Situação</b></div>
@@ -473,12 +512,13 @@
           <div class="gr__t">Vencendo entre</div>
           <div class="par">
             <input type="date" class="campo" name="data_inicio" id="frt-ini"
-                   value="{{ data_inicio if request.args.get('data_inicio') else '' }}">
+                   value="{{ data_inicio or '' }}">
             <input type="date" class="campo" name="data_fim" id="frt-fim"
-                   value="{{ data_fim if request.args.get('data_fim') else '' }}">
+                   value="{{ data_fim or '' }}">
           </div>
           <div class="chips" style="margin-top:.5rem;">
-            <button type="button" class="chip on" onclick="frtPeriodo('tudo', this)">Tudo</button>
+            <button type="button" class="chip{{ '' if data_inicio else ' on' }}"
+                    onclick="frtPeriodo('tudo', this)">Tudo</button>
             <button type="button" class="chip" onclick="frtPeriodo('mes', this)">Este mês</button>
             <button type="button" class="chip" onclick="frtPeriodo('anterior', this)">Mês passado</button>
             <button type="button" class="chip" onclick="frtPeriodo('90', this)">Últimos 90 dias</button>
@@ -550,7 +590,9 @@ function frtIr(n) {
   frtN = Math.min(3, Math.max(1, n));
   for (var i = 1; i <= 3; i++) {
     document.getElementById('frt-e' + i).hidden = (i !== frtN);
-    document.getElementById('frt-p' + i).classList.toggle('on', i <= frtN);
+    var p = document.getElementById('frt-p' + i);
+    p.classList.toggle('on', i <= frtN);
+    p.classList.toggle('aqui', i === frtN);
   }
   document.getElementById('frt-pn').textContent = frtN;
   document.getElementById('frt-pt').textContent = FRT_NOMES[frtN - 1];
@@ -603,19 +645,9 @@ function frtPeriodo(qual, bt) {
   }
 }
 
-/* Campo de data vazio não vai pra URL — mesma coisa que já foi feita na
-   conciliação: o GET manda até o que ninguém preencheu. */
-document.getElementById('frt-gav').addEventListener('submit', function () {
-  var apagados = [];
-  this.querySelectorAll('input[name]').forEach(function (c) {
-    if (c.type === 'checkbox' || c.disabled || c.value !== '') return;
-    c.disabled = true;
-    apagados.push(c);
-  });
-  setTimeout(function () {
-    apagados.forEach(function (c) { c.disabled = false; });
-  }, 0);
-});
+/* Aqui a data vazia PRECISA ir pra URL, ao contrário da conciliação: é ela
+   que diz "Tudo" pra rota. Sem o campo, a rota entende primeira visita e
+   volta pro mês corrente — e "Tudo" viraria "este mês" calado. */
 </script>
 
 <!-- Modal: Registrar Pagamento Manual (individual + lote) -->

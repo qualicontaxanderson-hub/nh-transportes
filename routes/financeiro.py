@@ -52,8 +52,16 @@ def recebimentos():
         ultimo_dia = monthrange(hoje.year, hoje.month)[1]
         ultimo_dia_mes = date(hoje.year, hoje.month, ultimo_dia)
         
-        data_inicio = request.args.get('data_inicio', primeiro_dia_mes.strftime('%Y-%m-%d'))
-        data_fim = request.args.get('data_fim', ultimo_dia_mes.strftime('%Y-%m-%d'))
+        # Sem os campos na URL = primeira visita, e aí o padrão é o mês
+        # corrente. Com os campos presentes e VAZIOS = o usuário escolheu
+        # "Tudo" no filtro. Os dois casos precisam ser distinguidos, senão
+        # "Tudo" voltava a ser "este mês" sem avisar ninguém.
+        if 'data_inicio' in request.args or 'data_fim' in request.args:
+            data_inicio = (request.args.get('data_inicio') or '').strip()
+            data_fim = (request.args.get('data_fim') or '').strip()
+        else:
+            data_inicio = primeiro_dia_mes.strftime('%Y-%m-%d')
+            data_fim = ultimo_dia_mes.strftime('%Y-%m-%d')
         busca_cliente = (request.args.get('busca_cliente') or '').strip()
         busca_status = (request.args.get('busca_status') or '').strip().lower()
 
@@ -84,12 +92,17 @@ def recebimentos():
                     -- boleto vencido em dezembro nao pode sumir da tela so
                     -- porque o periodo padrao e o mes corrente.
                     (c.status NOT IN ('pago','cancelado') OR c.status IS NULL)
-                    -- Ja resolvido (pago ou cancelado) fica no periodo, senao
-                    -- a tela carregaria a historia inteira.
-                    OR c.data_emissao BETWEEN %s AND %s
-                )
             """
-            params = [data_inicio, data_fim]
+            params = []
+            if data_inicio and data_fim:
+                # Já resolvido (pago ou cancelado) fica no período; sem período
+                # escolhido ("Tudo"), vem também. Pelo VENCIMENTO, que é a data
+                # que interessa quando se cobra — e a mesma que o PDF usa.
+                sql += " OR c.data_vencimento BETWEEN %s AND %s"
+                params.extend([data_inicio, data_fim])
+            else:
+                sql += " OR 1=1"
+            sql += ")"
             if f_clientes:
                 sql += " AND c.id_cliente IN (%s)" % ','.join(['%s'] * len(f_clientes))
                 params.extend(f_clientes)
@@ -134,6 +147,12 @@ def recebimentos():
                 WHERE f.data_frete BETWEEN %s AND %s
             """
             params_fretes = [data_inicio, data_fim]
+            if not (data_inicio and data_fim):
+                # "Tudo": sem recorte de data, senão o total de fretes viraria
+                # zero calado — comparando data com string vazia.
+                sql_fretes = sql_fretes.replace(
+                    'WHERE f.data_frete BETWEEN %s AND %s', 'WHERE 1=1')
+                params_fretes = []
             if busca_cliente:
                 sql_fretes += " AND (cl.razao_social LIKE %s OR cl.nome_fantasia LIKE %s)"
                 like_f = f"%{busca_cliente}%"
