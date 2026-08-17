@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, current_app, Response, stream_with_context, send_file, abort
-from flask_login import login_required
+from flask_login import login_required, current_user
 from utils.decorators import admin_required
 from utils.db import get_db_connection
 from utils.navegacao import destino_pos_acao
@@ -206,8 +206,48 @@ def recebimentos():
             current_app.logger.exception("[recebimentos] erro calculando display_status")
         # -------------------------------------------------------------------
 
-        return render_template('financeiro/recebimentos.html', 
+        # --- o que a gaveta do relatório precisa saber ----------------------
+        # Contagem de TODOS os boletos por situação (não só os da tela) e a
+        # lista de clientes que têm boleto. A mesma regra do display_status,
+        # escrita em SQL para não trazer as 500 linhas só para contar.
+        situacoes_totais, clientes_boleto = [], []
+        try:
+            cursor.execute("""
+                SELECT sit, COUNT(*) AS n, COALESCE(SUM(valor),0) AS v FROM (
+                  SELECT CASE
+                    WHEN LOWER(COALESCE(status,'')) = 'cancelado' THEN 'cancelado'
+                    WHEN COALESCE(pago_via_provedor,0) = 1
+                      OR (charge_id IS NOT NULL AND charge_id <> ''
+                          AND LOWER(COALESCE(status,'')) = 'pago') THEN 'pago'
+                    WHEN LOWER(COALESCE(status,'')) = 'pago' THEN 'pago'
+                    WHEN data_vencimento < CURDATE() THEN 'vencido'
+                    ELSE 'pendente'
+                  END AS sit, valor
+                  FROM cobrancas
+                ) t GROUP BY sit""")
+            mapa = {r['sit']: r for r in cursor.fetchall()}
+            for chave, rotulo in (('vencido', 'Vencidos'), ('pendente', 'A vencer'),
+                                  ('pago', 'Pagos'), ('cancelado', 'Cancelados')):
+                r = mapa.get(chave) or {'n': 0, 'v': 0}
+                situacoes_totais.append({'chave': chave, 'rotulo': rotulo,
+                                         'n': int(r['n']), 'v': float(r['v'] or 0)})
+
+            cursor.execute("""
+                SELECT cl.id,
+                       COALESCE(cl.nome_fantasia, cl.razao_social) AS nome,
+                       COUNT(*) AS n
+                FROM cobrancas cb
+                INNER JOIN clientes cl ON cb.id_cliente = cl.id
+                GROUP BY cl.id, nome
+                ORDER BY nome""")
+            clientes_boleto = cursor.fetchall()
+        except Exception:
+            current_app.logger.exception('[recebimentos] totais do relatório')
+
+        return render_template('financeiro/recebimentos.html',
                              recebimentos=recebimentos_lista,
+                             situacoes_totais=situacoes_totais,
+                             clientes_boleto=clientes_boleto,
                              data_inicio=data_inicio,
                              data_fim=data_fim,
                              busca_cliente=busca_cliente,
@@ -219,6 +259,7 @@ def recebimentos():
         current_app.logger.error(f"[recebimentos] Erro geral: {str(e)}")
         flash(f"Erro ao acessar recebimentos: {str(e)}", "danger")
         return render_template('financeiro/recebimentos.html', recebimentos=[],
+                             situacoes_totais=[], clientes_boleto=[],
                              data_inicio='', data_fim='',
                              busca_cliente='', busca_status='',
                              total_fretes=0, total_boletos=0, diferenca=0)
@@ -227,6 +268,142 @@ def recebimentos():
             cursor.close()
         if conn:
             conn.close()
+
+
+_SIT_ROTULO = {'vencido': 'Vencidos', 'pendente': 'A vencer',
+               'pago': 'Pagos', 'cancelado': 'Cancelados'}
+
+
+def _situacao_do_boleto(r, hoje):
+    """Mesma regra do display_status da lista, para os dois falarem igual."""
+    status = (r.get('status') or '').strip().lower()
+    if status == 'cancelado':
+        return 'cancelado'
+    try:
+        pago_provedor = bool(int(r.get('pago_via_provedor') or 0))
+    except (TypeError, ValueError):
+        pago_provedor = False
+    charge = r.get('charge_id')
+    if pago_provedor or (charge not in (None, '', 0) and status == 'pago'):
+        return 'pago'
+    if status == 'pago':
+        return 'quitado'
+    dv = r.get('data_vencimento')
+    if dv and hasattr(dv, 'toordinal') and dv < hoje:
+        return 'vencido'
+    return 'pendente'
+
+
+@financeiro_bp.route('/recebimentos/relatorio.pdf')
+@login_required
+def recebimentos_relatorio_pdf():
+    """Relatório de boletos de frete em PDF.
+
+    Filtros, todos opcionais: situacao (repetível), cliente_id (repetível),
+    data_inicio e data_fim — estes pelo VENCIMENTO, que é a data que
+    interessa quando se cobra. Sem nada marcado, sai tudo.
+    """
+    from utils.relatorio_boletos import gerar
+
+    situacoes = [s for s in request.args.getlist('situacao') if s]
+    clientes = [c for c in request.args.getlist('cliente_id') if c.isdigit()]
+    data_ini = (request.args.get('data_inicio') or '').strip()
+    data_fim = (request.args.get('data_fim') or '').strip()
+
+    conn = cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        sql = """
+            SELECT cb.id, cb.valor, cb.data_vencimento, cb.status,
+                   cb.charge_id, cb.pago_via_provedor,
+                   COALESCE(cl.nome_fantasia, cl.razao_social) AS cliente,
+                   f.id AS frete_id, f.data_frete, f.preco_por_litro,
+                   f.valor_total_frete,
+                   p.nome AS produto,
+                   COALESCE(f.quantidade_manual, q.valor) AS quantidade,
+                   o.nome AS origem, d.nome AS destino
+            FROM cobrancas cb
+            LEFT JOIN clientes cl   ON cb.id_cliente = cl.id
+            LEFT JOIN fretes f      ON cb.frete_id = f.id
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
+            LEFT JOIN produto p     ON f.produto_id = p.id
+            LEFT JOIN origens o     ON f.origem_id = o.id
+            LEFT JOIN destinos d    ON f.destino_id = d.id
+            WHERE 1=1
+        """
+        params = []
+        if clientes:
+            sql += " AND cb.id_cliente IN (%s)" % ','.join(['%s'] * len(clientes))
+            params.extend(clientes)
+        if data_ini:
+            sql += " AND cb.data_vencimento >= %s"
+            params.append(data_ini)
+        if data_fim:
+            sql += " AND cb.data_vencimento <= %s"
+            params.append(data_fim)
+        sql += " ORDER BY cb.data_vencimento ASC, cb.id ASC"
+        cursor.execute(sql, params)
+        linhas = cursor.fetchall()
+
+        hoje = date.today()
+        for r in linhas:
+            r['display_status'] = _situacao_do_boleto(r, hoje)
+
+        if situacoes:
+            # 'pago' na tela cobre os dois jeitos de baixar: pelo provedor e
+            # na mão. Quem marca "Pagos" quer os dois.
+            alvo = set(situacoes)
+            if 'pago' in alvo:
+                alvo.add('quitado')
+            linhas = [r for r in linhas if r['display_status'] in alvo]
+
+        # a frase que descreve o filtro, no cabeçalho de toda página
+        partes = []
+        partes.append(' e '.join(_SIT_ROTULO.get(s, s) for s in situacoes)
+                      if situacoes else 'Todas as situações')
+        if clientes:
+            nomes = sorted({r['cliente'] for r in linhas if r.get('cliente')})
+            partes.append(nomes[0] if len(nomes) == 1
+                          else '%d clientes' % len(nomes))
+        else:
+            partes.append('todos os clientes')
+        if data_ini or data_fim:
+            partes.append('vencendo de %s a %s'
+                          % (_data_br_simples(data_ini) or 'início',
+                             _data_br_simples(data_fim) or 'hoje'))
+        else:
+            partes.append('todo o período')
+
+        logo = os.path.join(current_app.root_path, 'static', 'logo-nh.png')
+        pdf = gerar(linhas, filtro=' · '.join(partes),
+                    usuario=getattr(current_user, 'username', '') or '',
+                    logo=logo if os.path.exists(logo) else None)
+
+        nome = 'boletos-frete-%s.pdf' % date.today().strftime('%Y-%m-%d')
+        return Response(pdf, mimetype='application/pdf', headers={
+            'Content-Disposition': 'inline; filename="%s"' % nome,
+        })
+    except Exception as e:
+        current_app.logger.exception('[relatorio_pdf] falhou')
+        flash('Não foi possível gerar o relatório: %s' % e, 'danger')
+        return redirect(url_for('financeiro.recebimentos'))
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+def _data_br_simples(s):
+    """'2026-08-17' -> '17/08/2026'. Vazio devolve vazio."""
+    if not s:
+        return ''
+    try:
+        return datetime.strptime(s[:10], '%Y-%m-%d').strftime('%d/%m/%Y')
+    except ValueError:
+        return s
 
 
 def _get_cobranca_share_info(charge_id):

@@ -16,4 +16,9 @@ requests==2.32.3
 openpyxl==3.1.5
 APScheduler==3.10.4
 
+# Relatorio de boletos em PDF (Rec Frete). Puro Python, sem
+# biblioteca de sistema; pillow e o que le o PNG da logo.
+reportlab==5.0.0
+pillow==12.3.0
+
 # Force rebuild 2026-01-29T16:02 - Ensure troco_pix blueprint loads

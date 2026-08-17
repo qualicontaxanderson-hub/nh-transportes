@@ -401,11 +401,102 @@
     <button type="button" id="btn-reconciliar-efi">
       <i class="bi bi-arrow-repeat"></i> Reconciliar EFI
     </button>
+    <button type="button" onclick="relAbrir()">
+      <i class="bi bi-file-earmark-pdf"></i> Relatório PDF
+    </button>
     <a href="{{ url_for('fretes.lista') }}"><i class="bi bi-truck"></i> Fretes</a>
     <a href="{{ url_for('bank_import.index') }}"><i class="bi bi-arrow-left"></i> Voltar para o Banco</a>
   </div>
 
   <div class="rodape-folga"></div>
+
+
+  <!-- Relatório em PDF, em passos -->
+  <div class="escuro" id="rel-escuro" onclick="relFechar()"></div>
+  <form class="gav" id="rel-gav" method="get" target="_blank"
+        action="{{ url_for('financeiro.recebimentos_relatorio_pdf') }}">
+    <div class="gav__pega"></div>
+    <div class="passos">
+      <span class="passo on" id="rel-p1"></span>
+      <span class="passo" id="rel-p2"></span>
+      <span class="passo" id="rel-p3"></span>
+    </div>
+    <div class="pnome">Passo <span id="rel-pn">1</span> de 3 —
+      <b id="rel-pt">Situação</b></div>
+
+    <div class="gav__b">
+      <div class="etapa" id="rel-e1">
+        <div class="gr">
+          <div class="gr__c">
+            <span class="gr__t">Situação</span>
+            <button type="button" class="gr__a" onclick="relTodas('rel-sit')">marcar todas</button>
+          </div>
+          <div class="opcs" id="rel-sit">
+            {% for s in situacoes_totais %}
+            <label class="opc">
+              <input type="checkbox" name="situacao" value="{{ s.chave }}"
+                     {{ 'checked' if s.chave in ('vencido','pendente') }}>
+              <span>{{ s.rotulo }}
+                <small>{{ s.n }} · R$ {{ "{:,.2f}".format(s.v).replace(',','X').replace('.',',').replace('X','.') }}</small>
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+          <div class="dica">Vem marcado o que está em aberto. Sem marcar
+            nenhuma, saem todas.</div>
+        </div>
+      </div>
+
+      <div class="etapa" id="rel-e2" hidden>
+        <div class="gr">
+          <div class="gr__c">
+            <span class="gr__t">Cliente</span>
+            <button type="button" class="gr__a" onclick="relTodas('rel-cli')">limpar</button>
+          </div>
+          <input type="text" class="campo" id="rel-busca" autocomplete="off"
+                 placeholder="Procurar cliente" oninput="relFiltraCli()">
+          <div class="opcs" id="rel-cli" style="margin-top:.4rem;">
+            {% for c in clientes_boleto %}
+            <label class="opc" data-nome="{{ c.nome|lower }}">
+              <input type="checkbox" name="cliente_id" value="{{ c.id }}">
+              <span>{{ c.nome }} <small>{{ c.n }} boleto(s)</small></span>
+            </label>
+            {% else %}
+            <div class="aviso-f">Nenhum cliente com boleto emitido.</div>
+            {% endfor %}
+          </div>
+          <div class="dica">Sem marcar ninguém, vêm todos.</div>
+        </div>
+      </div>
+
+      <div class="etapa" id="rel-e3" hidden>
+        <div class="gr">
+          <div class="gr__t">Vencendo entre</div>
+          <div class="par">
+            <input type="date" class="campo" name="data_inicio" id="rel-ini">
+            <input type="date" class="campo" name="data_fim" id="rel-fim">
+          </div>
+          <div class="chips" style="margin-top:.5rem;">
+            <button type="button" class="chip on" onclick="relPeriodo('tudo', this)">Tudo</button>
+            <button type="button" class="chip" onclick="relPeriodo('mes', this)">Este mês</button>
+            <button type="button" class="chip" onclick="relPeriodo('anterior', this)">Mês passado</button>
+            <button type="button" class="chip" onclick="relPeriodo('ano', this)">Este ano</button>
+          </div>
+          <div class="dica">Pelo <b>vencimento</b>, não pela emissão — é a data
+            que interessa quando se cobra.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="gav__f">
+      <button type="button" class="bt-g bt-g--ca" id="rel-voltar"
+              onclick="relPasso(-1)" hidden>Voltar</button>
+      <button type="button" class="bt-g bt-g--ok" id="rel-seguir"
+              onclick="relPasso(1)">Continuar</button>
+      <button type="submit" class="bt-g bt-g--ok" id="rel-gerar" hidden>
+        <i class="bi bi-file-earmark-pdf"></i> Gerar PDF</button>
+    </div>
+  </form>
 
   <!-- Filtro em passos -->
   <div class="escuro" id="frt-escuro" onclick="frtFecharFiltro()"></div>
@@ -1132,6 +1223,78 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 })();
+
+/* ── A gaveta do relatório ────────────────────────────────────────────
+   Mesma mecânica da gaveta do filtro logo acima; muda o que se pergunta.  */
+var relPasso_ = 1;
+var REL_NOMES = ['Situação', 'Cliente', 'Período'];
+
+function relAbrir() {
+  relIr(1);
+  document.getElementById('rel-gav').classList.add('on');
+  document.getElementById('rel-escuro').classList.add('on');
+  document.body.style.overflow = 'hidden';
+}
+function relFechar() {
+  document.getElementById('rel-gav').classList.remove('on');
+  document.getElementById('rel-escuro').classList.remove('on');
+  document.body.style.overflow = '';
+}
+function relIr(n) {
+  relPasso_ = Math.max(1, Math.min(3, n));
+  for (var k = 1; k <= 3; k++) {
+    document.getElementById('rel-e' + k).hidden = (k !== relPasso_);
+    document.getElementById('rel-p' + k).classList.toggle('on', k <= relPasso_);
+  }
+  document.getElementById('rel-pn').textContent = relPasso_;
+  document.getElementById('rel-pt').textContent = REL_NOMES[relPasso_ - 1];
+  document.getElementById('rel-voltar').hidden = (relPasso_ === 1);
+  document.getElementById('rel-seguir').hidden = (relPasso_ === 3);
+  document.getElementById('rel-gerar').hidden = (relPasso_ !== 3);
+}
+function relPasso(d) { relIr(relPasso_ + d); }
+
+function relTodas(id) {
+  var cxs = document.querySelectorAll('#' + id + ' input[type=checkbox]');
+  var algum = [].slice.call(cxs).some(function (c) { return !c.checked; });
+  cxs.forEach(function (c) { c.checked = algum; });
+}
+
+function relFiltraCli() {
+  var t = (document.getElementById('rel-busca').value || '').toLowerCase();
+  document.querySelectorAll('#rel-cli .opc').forEach(function (o) {
+    o.hidden = !!t && (o.dataset.nome || '').indexOf(t) < 0;
+  });
+}
+
+function relPeriodo(qual, bt) {
+  var ini = document.getElementById('rel-ini');
+  var fim = document.getElementById('rel-fim');
+  var h = new Date();
+  function iso(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+           '-' + String(d.getDate()).padStart(2, '0');
+  }
+  if (qual === 'tudo') { ini.value = ''; fim.value = ''; }
+  else if (qual === 'mes') {
+    ini.value = iso(new Date(h.getFullYear(), h.getMonth(), 1));
+    fim.value = iso(new Date(h.getFullYear(), h.getMonth() + 1, 0));
+  } else if (qual === 'anterior') {
+    ini.value = iso(new Date(h.getFullYear(), h.getMonth() - 1, 1));
+    fim.value = iso(new Date(h.getFullYear(), h.getMonth(), 0));
+  } else if (qual === 'ano') {
+    ini.value = iso(new Date(h.getFullYear(), 0, 1));
+    fim.value = iso(new Date(h.getFullYear(), 11, 31));
+  }
+  document.querySelectorAll('#rel-e3 .chip').forEach(function (c) {
+    c.classList.toggle('on', c === bt);
+  });
+}
+
+/* O PDF abre em outra aba; a gaveta fecha sozinha pra tela não ficar presa. */
+document.getElementById('rel-gav').addEventListener('submit', function () {
+  setTimeout(relFechar, 300);
+});
 </script>
 
 {% endblock %}
