@@ -226,6 +226,11 @@
   #frt .opc[hidden]{ display:none; }
   #frt .aviso-f{ padding:.85rem .6rem; font-size:.82rem; color:var(--muted);
     text-align:center; }
+  /* Qual situação está valendo aqui — sem isso, sair do passo 1 com três das
+     quatro marcadas parecia que o filtro não tinha pegado. */
+  #frt .sit-eco{ font-size:.78rem; color:var(--ink-2); background:var(--azul-claro);
+    border-radius:8px; padding:.4rem .6rem; margin-bottom:.45rem; }
+  #frt .sit-eco b{ color:var(--azul-deep); }
   #frt .campo{ width:100%; border:1px solid var(--line-2); border-radius:10px;
     padding:.5rem .65rem; font-size:.85rem; background:#fff; color:var(--ink);
     font-family:inherit; }
@@ -467,7 +472,8 @@
         <div class="gr">
           <div class="gr__c">
             <span class="gr__t">Situação</span>
-            <button type="button" class="gr__a" onclick="frtTodas('frt-sit')">marcar todas</button>
+            <button type="button" class="gr__a" id="frt-sit-todas"
+                    onclick="frtTodas('frt-sit')">marcar todas</button>
           </div>
           <div class="opcs" id="frt-sit">
             {% for s in situacoes_totais %}
@@ -490,6 +496,7 @@
             <span class="gr__t">Cliente</span>
             <button type="button" class="gr__a" onclick="frtTodas('frt-cli')">limpar</button>
           </div>
+          <div class="sit-eco" id="frt-eco"></div>
           <input type="text" class="campo" id="frt-busca" autocomplete="off"
                  placeholder="Procurar cliente" oninput="frtFiltraCli()">
           <div class="opcs" id="frt-cli" style="margin-top:.4rem;">
@@ -611,6 +618,7 @@ function frtIr(n) {
   document.getElementById('frt-pdf').hidden     = (frtN !== 3);
   /* Ao chegar no cliente, a lista já vem recortada pela situação escolhida. */
   if (frtN === 2) frtFiltraCli();
+  if (frtN === 1) frtRotuloTodas();
 }
 
 /* Mexer na situação refaz a lista de clientes na hora — quem volta ao passo 1
@@ -624,6 +632,21 @@ function frtTodas(id) {
   var cxs = document.querySelectorAll('#' + id + ' input[type=checkbox]');
   var algum = [].slice.call(cxs).some(function (c) { return !c.checked; });
   cxs.forEach(function (c) { c.checked = algum; });
+  frtFiltraCli();
+  frtRotuloTodas();
+}
+
+/* O botão diz o que vai fazer, não o que já foi feito. Com as quatro
+   marcadas, "marcar todas" era um rótulo que mentia — e tocar numa opção
+   depois disso desmarcava aquela, deixando três: a lista de clientes quase
+   não mudava e parecia travada. */
+function frtRotuloTodas() {
+  var bt = document.getElementById('frt-sit-todas');
+  if (!bt) return;
+  var cxs = [].slice.call(
+    document.querySelectorAll('#frt-sit input[type=checkbox]'));
+  var todas = cxs.length > 0 && cxs.every(function (c) { return c.checked; });
+  bt.textContent = todas ? 'limpar' : 'marcar todas';
 }
 
 /* O passo 2 obedece o passo 1: quem não tem boleto na situação marcada não
@@ -639,6 +662,20 @@ function frtFiltraCli() {
   var t = (document.getElementById('frt-busca').value || '').toLowerCase();
   var sits = frtSituacoesMarcadas();
   var visiveis = 0;
+
+  /* Diz, no próprio passo do cliente, o que está valendo. */
+  var eco = document.getElementById('frt-eco');
+  if (eco) {
+    var nomes = sits.map(function (v) {
+      var cx = document.querySelector('#frt-sit input[value="' + v + '"]');
+      var lin = cx && cx.closest('.opc');
+      var t2 = lin && lin.querySelector('span');
+      return t2 ? t2.childNodes[0].textContent.trim() : v;
+    });
+    eco.innerHTML = nomes.length
+      ? 'Clientes com boleto em <b>' + nomes.join('</b>, <b>') + '</b>'
+      : 'Todas as situações — <b>nenhuma marcada</b> no passo anterior';
+  }
 
   document.querySelectorAll('#frt-cli .opc').forEach(function (o) {
     var quantos = sits.length

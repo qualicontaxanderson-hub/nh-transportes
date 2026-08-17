@@ -21,8 +21,9 @@ from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.platypus import (BaseDocTemplate, Frame, PageTemplate, Paragraph,
-                                Spacer, Table, TableStyle)
+from reportlab.platypus import (BaseDocTemplate, Frame, KeepTogether,
+                                PageTemplate, Paragraph, Spacer, Table,
+                                TableStyle)
 
 # ── Cores, as mesmas da prova ────────────────────────────────────────────
 TINTA      = colors.HexColor('#161b22')
@@ -316,65 +317,102 @@ def _faixa(rotulo, cor, fundo, n, total):
 
 
 def _tabela(itens, rot_prazo, hoje, est):
+    """Uma tabela por CLIENTE: o nome em cima, os boletos dele embaixo.
+
+    Antes era uma lista corrida ordenada por vencimento, com o nome do cliente
+    repetido em toda linha. Quem cobra trabalha por cliente — liga uma vez e
+    resolve tudo dele —, entao o papel passa a ser organizado assim.
+    """
     cab = ParagraphStyle('cab', fontName='Helvetica-Bold', fontSize=6.2,
                          leading=8, textColor=FRACO)
     cab_d = ParagraphStyle('cabd', parent=cab, alignment=TA_RIGHT)
+    nome_cli = ParagraphStyle('nomecli', fontName='Helvetica-Bold', fontSize=9,
+                              leading=11, textColor=TINTA)
+    tot_cli = ParagraphStyle('totcli', fontName='Helvetica-Bold', fontSize=8.6,
+                             leading=11, textColor=TINTA_2, alignment=TA_RIGHT)
 
-    linhas = [[Paragraph('BOLETO', cab), Paragraph('CLIENTE E FRETE', cab),
-               Paragraph('VENCIMENTO', cab),
-               Paragraph((rot_prazo or '').upper(), cab_d),
-               Paragraph('VALOR', cab_d)]]
-
-    soma = 0.0
+    # agrupa mantendo, dentro de cada cliente, a ordem que veio (vencimento)
+    grupos = {}
     for b in itens:
-        soma += float(b.get('valor') or 0)
-        cliente = Paragraph(_escapar(b.get('cliente') or '—'), est['cli'])
-        frase = _frase_frete(b)
-        celula = [cliente]
-        if frase:
-            celula.append(Paragraph(frase, est['det']))
-        else:
-            celula.append(Paragraph('sem frete vinculado', est['det']))
+        grupos.setdefault(b.get('cliente') or '—', []).append(b)
 
-        d = _dias(b.get('data_vencimento'), hoje)
-        if b.get('display_status') in ('pago', 'quitado'):
-            prazo = _data_br(b.get('data_pagamento')) if b.get('data_pagamento') else '—'
-            cor_prazo = TINTA
-        elif d is None:
-            prazo, cor_prazo = '—', FRACO
-        elif d > 0:
-            prazo, cor_prazo = '%d d' % d, VENC
-        elif d == 0:
-            prazo, cor_prazo = 'hoje', ABER
-        else:
-            prazo, cor_prazo = '%d d' % (-d), TINTA
+    # o maior devedor primeiro: e por onde a cobranca comeca
+    ordem = sorted(grupos.items(),
+                   key=lambda kv: -sum(float(x.get('valor') or 0) for x in kv[1]))
 
-        linhas.append([
-            Paragraph('#%s' % _escapar(b.get('id')), est['cel']),
-            celula,
-            Paragraph(_data_br(b.get('data_vencimento')), est['cel']),
-            # hexval() devolve '0xa3262b'; o parser quer '#a3262b'
-            Paragraph('<font color="#%s">%s</font>' % (cor_prazo.hexval()[2:],
-                                                      prazo), est['num']),
-            Paragraph(_moeda(b.get('valor')), est['num']),
-        ])
+    blocos = []
+    soma_faixa = 0.0
+    for nome, linhas_cli in ordem:
+        sub = sum(float(b.get('valor') or 0) for b in linhas_cli)
+        soma_faixa += sub
 
-    linhas.append([Paragraph('<b>Soma</b>', est['cel']), '', '', '',
-                   Paragraph('<b>%s</b>' % _moeda(soma), est['num'])])
+        blocos.append(Table(
+            [[Paragraph(_escapar(nome), nome_cli),
+              Paragraph('%d boleto%s &middot; %s'
+                        % (len(linhas_cli), '' if len(linhas_cli) == 1 else 's',
+                           _moeda(sub, True)), tot_cli)]],
+            colWidths=[UTIL * .62, UTIL * .38],
+            style=TableStyle([
+                ('LINEBELOW', (0, 0), (-1, -1), .6, LINHA),
+                ('TOPPADDING', (0, 0), (-1, -1), 7),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+                ('LEFTPADDING', (0, 0), (-1, -1), 2),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+                ('VALIGN', (0, 0), (-1, -1), 'BOTTOM'),
+            ])))
 
-    t = Table(linhas, colWidths=COLS, repeatRows=1)
-    t.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ('LEFTPADDING', (0, 0), (-1, -1), 4),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
-        ('LINEBELOW', (0, 0), (-1, 0), .5, LINHA),
-        ('LINEBELOW', (0, 1), (-1, -3), .4, LINHA_2),
-        ('LINEABOVE', (0, -1), (-1, -1), .9, TINTA),
-        ('SPAN', (0, -1), (3, -1)),
-    ]))
-    return t, soma
+        corpo = [[Paragraph('BOLETO', cab), Paragraph('FRETE', cab),
+                  Paragraph('VENCIMENTO', cab),
+                  Paragraph((rot_prazo or '').upper(), cab_d),
+                  Paragraph('VALOR', cab_d)]]
+        for b in linhas_cli:
+            frase = _frase_frete(b) or 'sem frete vinculado'
+            d = _dias(b.get('data_vencimento'), hoje)
+            if b.get('display_status') in ('pago', 'quitado'):
+                prazo, cor = (_data_br(b.get('data_pagamento'))
+                              if b.get('data_pagamento') else '—'), TINTA
+            elif d is None:
+                prazo, cor = '—', FRACO
+            elif d > 0:
+                prazo, cor = '%d d' % d, VENC
+            elif d == 0:
+                prazo, cor = 'hoje', ABER
+            else:
+                prazo, cor = '%d d' % (-d), TINTA
+            corpo.append([
+                Paragraph('#%s' % _escapar(b.get('id')), est['cel']),
+                Paragraph(frase, est['det']),
+                Paragraph(_data_br(b.get('data_vencimento')), est['cel']),
+                Paragraph('<font color="#%s">%s</font>'
+                          % (cor.hexval()[2:], prazo), est['num']),
+                Paragraph(_moeda(b.get('valor')), est['num']),
+            ])
+
+        t = Table(corpo, colWidths=COLS)
+        t.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 2.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+            ('LINEBELOW', (0, 1), (-1, -2), .4, LINHA_2),
+        ]))
+        # o nome e a primeira linha do cliente nao se separam na quebra
+        blocos.append(KeepTogether([blocos.pop(), t]))
+
+    total = Table([[Paragraph('<b>Soma</b>', est['cel']), '', '', '',
+                    Paragraph('<b>%s</b>' % _moeda(soma_faixa), est['num'])]],
+                  colWidths=COLS,
+                  style=TableStyle([
+                      ('LINEABOVE', (0, 0), (-1, 0), .9, TINTA),
+                      ('TOPPADDING', (0, 0), (-1, -1), 4),
+                      ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+                      ('LEFTPADDING', (0, 0), (-1, -1), 4),
+                      ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+                      ('SPAN', (0, 0), (3, 0)),
+                  ]))
+    blocos.append(total)
+    return blocos, soma_faixa
 
 
 def gerar(boletos, filtro='', usuario='', logo=None, quando=None):
@@ -411,10 +449,10 @@ def gerar(boletos, filtro='', usuario='', logo=None, quando=None):
         itens = por_faixa.get(chave)
         if not itens:
             continue
-        tabela, soma = _tabela(itens, rot_prazo, hoje, est)
+        blocos, soma = _tabela(itens, rot_prazo, hoje, est)
         corpo.append(_faixa(rotulo, cor, fundo, len(itens), soma))
-        corpo.append(tabela)
-        corpo.append(Spacer(1, 3 * mm))
+        corpo.extend(blocos)
+        corpo.append(Spacer(1, 4 * mm))
 
     if len(corpo) == 2:
         corpo.append(Paragraph(
