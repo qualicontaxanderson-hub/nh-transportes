@@ -332,6 +332,11 @@ def recebimentos():
             conn.close()
 
 
+# A frase que fecha o texto do WhatsApp. Uma linha so, aqui, pra ser
+# facil de mudar ou tirar.
+_FECHO_WHATSAPP = ('Favor verificar. Qualquer duvida estamos a'
+                   ' disposicao.')
+
 _SIT_ROTULO = {'vencido': 'Vencidos', 'pendente': 'A vencer',
                'pago': 'Pagos', 'cancelado': 'Cancelados'}
 
@@ -356,117 +361,142 @@ def _situacao_do_boleto(r, hoje):
     return 'pendente'
 
 
-@financeiro_bp.route('/recebimentos/relatorio.pdf')
-@login_required
-def recebimentos_relatorio_pdf():
-    """Relatório de boletos de frete em PDF.
+def _consultar_relatorio(cursor):
+    """A consulta e os filtros do relatorio, em um lugar so.
 
-    Filtros, todos opcionais: situacao (repetível), cliente_id (repetível),
-    data_inicio e data_fim — estes pelo VENCIMENTO, que é a data que
-    interessa quando se cobra. Sem nada marcado, sai tudo.
+    O PDF e o texto do WhatsApp precisam mostrar exatamente a mesma coisa;
+    se cada um montasse a sua consulta, um dia divergiriam.
+
+    Devolve (linhas, frase_do_filtro, nome_de_quem, ids_dos_clientes).
     """
-    from utils.relatorio_boletos import gerar
-
-    situacoes = [s for s in request.args.getlist('situacao') if s]
+    situacoes = [x for x in request.args.getlist('situacao') if x]
     clientes = [c for c in request.args.getlist('cliente_id') if c.isdigit()]
     data_ini = (request.args.get('data_inicio') or '').strip()
     data_fim = (request.args.get('data_fim') or '').strip()
+
+    sql = (
+        'SELECT cb.id, cb.valor, cb.data_vencimento, cb.status,'
+        '       cb.charge_id, cb.pago_via_provedor,'
+        '       COALESCE(cl.nome_fantasia, cl.razao_social) AS cliente,'
+        '       f.id AS frete_id, f.data_frete, f.preco_por_litro,'
+        '       f.valor_total_frete, p.nome AS produto,'
+        '       COALESCE(f.quantidade_manual, q.valor) AS quantidade,'
+        '       o.nome AS origem, d.nome AS destino'
+        '  FROM cobrancas cb'
+        '  LEFT JOIN clientes cl   ON cb.id_cliente = cl.id'
+        '  LEFT JOIN fretes f      ON cb.frete_id = f.id'
+        '  LEFT JOIN quantidades q ON f.quantidade_id = q.id'
+        '  LEFT JOIN produto p     ON f.produto_id = p.id'
+        '  LEFT JOIN origens o     ON f.origem_id = o.id'
+        '  LEFT JOIN destinos d    ON f.destino_id = d.id'
+        ' WHERE 1=1')
+    params = []
+    if clientes:
+        sql += ' AND cb.id_cliente IN (%s)' % ','.join(['%s'] * len(clientes))
+        params.extend(clientes)
+    if data_ini:
+        sql += ' AND cb.data_vencimento >= %s'
+        params.append(data_ini)
+    if data_fim:
+        sql += ' AND cb.data_vencimento <= %s'
+        params.append(data_fim)
+    sql += ' ORDER BY cb.data_vencimento ASC, cb.id ASC'
+    cursor.execute(sql, params)
+    linhas = cursor.fetchall()
+
+    hoje = date.today()
+    for r in linhas:
+        r['display_status'] = _situacao_do_boleto(r, hoje)
+
+    if situacoes:
+        alvo = set(situacoes)
+        if 'pago' in alvo:
+            alvo.add('quitado')
+        linhas = [r for r in linhas if r['display_status'] in alvo]
+
+    # de quem e o relatorio: com um cliente so, o nome dele
+    if len(clientes) == 1:
+        cursor.execute(
+            'SELECT COALESCE(nome_fantasia, razao_social) AS nome'
+            ' FROM clientes WHERE id = %s', (clientes[0],))
+        quem = (cursor.fetchone() or {}).get('nome') or 'Diversos'
+    else:
+        quem = 'Diversos'
+
+    partes = [' e '.join(_SIT_ROTULO.get(x, x) for x in situacoes)
+              if situacoes else 'Todas as situacoes']
+    partes.append(quem if len(clientes) == 1 else 'todos os clientes')
+    if data_ini or data_fim:
+        partes.append('vencendo de %s a %s'
+                      % (_data_br_simples(data_ini) or 'inicio',
+                         _data_br_simples(data_fim) or 'hoje'))
+    else:
+        partes.append('todo o periodo')
+    return linhas, ' · '.join(partes), quem, clientes
+
+
+@financeiro_bp.route('/recebimentos/relatorio.pdf')
+@login_required
+def recebimentos_relatorio_pdf():
+    """Relatorio de boletos de frete em PDF.
+
+    Filtros, todos opcionais: situacao (repetivel), cliente_id (repetivel),
+    data_inicio e data_fim — estes pelo VENCIMENTO, que e a data que
+    interessa quando se cobra. Sem nada marcado, sai tudo.
+    """
+    from utils.relatorio_boletos import gerar
 
     conn = cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-
-        sql = """
-            SELECT cb.id, cb.valor, cb.data_vencimento, cb.status,
-                   cb.charge_id, cb.pago_via_provedor,
-                   COALESCE(cl.nome_fantasia, cl.razao_social) AS cliente,
-                   f.id AS frete_id, f.data_frete, f.preco_por_litro,
-                   f.valor_total_frete,
-                   p.nome AS produto,
-                   COALESCE(f.quantidade_manual, q.valor) AS quantidade,
-                   o.nome AS origem, d.nome AS destino
-            FROM cobrancas cb
-            LEFT JOIN clientes cl   ON cb.id_cliente = cl.id
-            LEFT JOIN fretes f      ON cb.frete_id = f.id
-            LEFT JOIN quantidades q ON f.quantidade_id = q.id
-            LEFT JOIN produto p     ON f.produto_id = p.id
-            LEFT JOIN origens o     ON f.origem_id = o.id
-            LEFT JOIN destinos d    ON f.destino_id = d.id
-            WHERE 1=1
-        """
-        params = []
-        if clientes:
-            sql += " AND cb.id_cliente IN (%s)" % ','.join(['%s'] * len(clientes))
-            params.extend(clientes)
-        if data_ini:
-            sql += " AND cb.data_vencimento >= %s"
-            params.append(data_ini)
-        if data_fim:
-            sql += " AND cb.data_vencimento <= %s"
-            params.append(data_fim)
-        sql += " ORDER BY cb.data_vencimento ASC, cb.id ASC"
-        cursor.execute(sql, params)
-        linhas = cursor.fetchall()
-
-        hoje = date.today()
-        for r in linhas:
-            r['display_status'] = _situacao_do_boleto(r, hoje)
-
-        if situacoes:
-            # 'pago' na tela cobre os dois jeitos de baixar: pelo provedor e
-            # na mão. Quem marca "Pagos" quer os dois.
-            alvo = set(situacoes)
-            if 'pago' in alvo:
-                alvo.add('quitado')
-            linhas = [r for r in linhas if r['display_status'] in alvo]
-
-        # a frase que descreve o filtro, no cabeçalho de toda página
-        partes = []
-        partes.append(' e '.join(_SIT_ROTULO.get(s, s) for s in situacoes)
-                      if situacoes else 'Todas as situações')
-        if clientes:
-            nomes = sorted({r['cliente'] for r in linhas if r.get('cliente')})
-            partes.append(nomes[0] if len(nomes) == 1
-                          else '%d clientes' % len(nomes))
-        else:
-            partes.append('todos os clientes')
-        if data_ini or data_fim:
-            partes.append('vencendo de %s a %s'
-                          % (_data_br_simples(data_ini) or 'início',
-                             _data_br_simples(data_fim) or 'hoje'))
-        else:
-            partes.append('todo o período')
+        linhas, filtro, quem, _ = _consultar_relatorio(cursor)
 
         logo = os.path.join(current_app.root_path, 'static', 'logo-nh.png')
-        pdf = gerar(linhas, filtro=' · '.join(partes),
+        pdf = gerar(linhas, filtro=filtro,
                     usuario=getattr(current_user, 'username', '') or '',
                     logo=logo if os.path.exists(logo) else None)
 
-        # O nome do arquivo diz de quem e e de quando: com um cliente so,
-        # o nome dele; com varios ou nenhum, 'Diversos'.
-        if len(clientes) == 1:
-            cursor.execute(
-                'SELECT COALESCE(nome_fantasia, razao_social) AS nome'
-                ' FROM clientes WHERE id = %s', (clientes[0],))
-            achou = cursor.fetchone() or {}
-            quem = achou.get('nome') or 'Diversos'
-        else:
-            quem = 'Diversos'
         nome = 'Contas a Receber - %s - %s.pdf' % (
             _nome_de_arquivo(quem), date.today().strftime('%d.%m.%Y'))
-
         return Response(pdf, mimetype='application/pdf', headers={
-            # filename* carrega os acentos; o filename simples e o que os
-            # programas antigos entendem.
             'Content-Disposition':
                 "inline; filename=\"%s\"; filename*=UTF-8''%s"
                 % (_sem_acento(nome), quote(nome)),
         })
     except Exception as e:
         current_app.logger.exception('[relatorio_pdf] falhou')
-        flash('Não foi possível gerar o relatório: %s' % e, 'danger')
+        flash('Nao foi possivel gerar o relatorio: %s' % e, 'danger')
         return redirect(url_for('financeiro.recebimentos'))
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+@financeiro_bp.route('/recebimentos/relatorio.txt')
+@login_required
+def recebimentos_relatorio_texto():
+    """O mesmo relatorio em texto, pronto pro WhatsApp.
+
+    Le os mesmos filtros do PDF e sai da mesma consulta — os dois nunca
+    podem discordar.
+    """
+    from utils.relatorio_boletos import texto_whatsapp
+
+    conn = cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        linhas, _filtro, quem, _ = _consultar_relatorio(cursor)
+        txt = texto_whatsapp(linhas, quem=quem, hoje=date.today(),
+                             fecho=_FECHO_WHATSAPP)
+        return Response(txt, mimetype='text/plain; charset=utf-8')
+    except Exception as e:
+        current_app.logger.exception('[relatorio_texto] falhou')
+        return Response('Nao foi possivel montar o texto: %s' % e,
+                        status=500, mimetype='text/plain; charset=utf-8')
     finally:
         if cursor:
             cursor.close()

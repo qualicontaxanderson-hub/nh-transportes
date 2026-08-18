@@ -473,3 +473,107 @@ def gerar(boletos, filtro='', usuario='', logo=None, quando=None):
     doc.total_paginas = paginas
     doc.build(list(corpo))
     return buf.getvalue()
+
+
+# ── O mesmo relatório em texto, para o WhatsApp ─────────────────────────
+_EMOJI_FAIXA = {'vencido': '🔴', 'pendente': '🟡',
+                'pago': '🟢', 'quitado': '🟢', 'cancelado': '⚪'}
+_RISCO = '━' * 20
+
+
+def _prazo_frase(b, hoje):
+    """"Venceu 30/05/2026 · há 80 dias" / "Vence hoje, 18/08/2026"."""
+    d = _dias(b.get('data_vencimento'), hoje)
+    data = _data_br(b.get('data_vencimento'))
+    if b.get('display_status') in ('pago', 'quitado'):
+        return 'Pago' + (' em ' + _data_br(b['data_pagamento'])
+                         if b.get('data_pagamento') else '')
+    if d is None:
+        return 'Sem data de vencimento'
+    if d > 0:
+        return 'Venceu %s · há %d dia%s' % (data, d, '' if d == 1 else 's')
+    if d == 0:
+        return 'Vence hoje, %s' % data
+    return 'Vence %s · em %d dia%s' % (data, -d, '' if -d == 1 else 's')
+
+
+def _frase_frete_texto(b):
+    """A mesma frase do PDF, sem as marcas de negrito do HTML."""
+    frase = _frase_frete(b)
+    if not frase:
+        return None
+    return (frase.replace('<b>', '').replace('</b>', '')
+            .replace('&middot;', '·').replace('&rarr;', '→')
+            .replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>'))
+
+
+def texto_whatsapp(boletos, quem='Diversos', hoje=None, fecho=None):
+    """O relatório em texto, no formato que o WhatsApp entende (*negrito*).
+
+    Uma empresa só: o nome vai no cabeçalho. Várias: cada faixa se divide por
+    empresa, como no PDF.
+    """
+    hoje = hoje or date.today()
+    linhas = ['📄 *CONTAS A RECEBER*', '🏢 %s' % quem,
+              '📅 Emitido em %s' % hoje.strftime('%d/%m/%Y'), _RISCO]
+
+    por_faixa = {}
+    for b in boletos:
+        por_faixa.setdefault(b.get('display_status') or 'pendente', []).append(b)
+
+    total, n_total = 0.0, 0
+    for chave, rotulo, _c, _f, _p in FAIXAS:
+        itens = por_faixa.get(chave)
+        if not itens:
+            continue
+        soma = sum(float(b.get('valor') or 0) for b in itens)
+        total += soma
+        n_total += len(itens)
+        linhas.append('')
+        linhas.append('%s *%s — %d boleto%s · %s*'
+                      % (_EMOJI_FAIXA.get(chave, '•'), rotulo.upper(),
+                         len(itens), '' if len(itens) == 1 else 's',
+                         _moeda(soma, True)))
+
+        # com mais de uma empresa, separa por empresa dentro da faixa
+        grupos = {}
+        for b in itens:
+            grupos.setdefault(b.get('cliente') or '—', []).append(b)
+        varias = len(grupos) > 1
+        ordem = sorted(grupos.items(),
+                       key=lambda kv: -sum(float(x.get('valor') or 0)
+                                           for x in kv[1]))
+        for nome, doGrupo in ordem:
+            if varias:
+                sub = sum(float(b.get('valor') or 0) for b in doGrupo)
+                linhas.append('')
+                linhas.append('🏢 *%s* — %d · %s'
+                              % (nome, len(doGrupo), _moeda(sub, True)))
+            for b in doGrupo:
+                linhas.append('')
+                linhas.append('• *#%s* — %s' % (b.get('id'),
+                                                _moeda(b.get('valor'), True)))
+                linhas.append('   %s' % _prazo_frase(b, hoje))
+                frete = _frase_frete_texto(b)
+                if frete:
+                    partes = frete.split(' · ')
+                    linhas.append('   %s' % ' · '.join(partes[:-1])
+                                  if len(partes) > 1 else '   %s' % frete)
+                    if len(partes) > 1:
+                        linhas.append('   %s' % partes[-1])
+                else:
+                    linhas.append('   Sem frete vinculado')
+
+    if not n_total:
+        linhas.append('')
+        linhas.append('Nenhum boleto nesta seleção.')
+    else:
+        linhas.append('')
+        linhas.append(_RISCO)
+        linhas.append('💰 *TOTAL EM ABERTO: %s*' % _moeda(total, True))
+        linhas.append('   %d boleto%s' % (n_total, '' if n_total == 1 else 's'))
+
+    if fecho:
+        linhas.append('')
+        linhas.append(fecho)
+    return '\n'.join(linhas)

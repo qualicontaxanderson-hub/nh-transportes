@@ -194,6 +194,16 @@
     font-weight:800; cursor:pointer; font-family:inherit; }
   #frt .bt-g--ok{ flex:1; background:var(--azul); color:#fff; }
   #frt .bt-g--pdf{ background:#8a2b2b; color:#fff; flex:0 0 auto; }
+  #frt .bt-g--whats{ background:#1f8a4c; color:#fff; flex:0 0 auto; }
+  #frt .bt-g--whats:hover{ filter:brightness(1.08); }
+  #frt .par-acao{ display:flex; gap:.45rem; }
+  #frt .par-acao .at-pdf{ flex:0 0 auto; padding-left:1rem; padding-right:1rem; }
+  #frt .at-whats{ flex:1; display:inline-flex; align-items:center;
+    justify-content:center; gap:.4rem; background:#1f8a4c; color:#fff;
+    border:0; border-radius:11px; padding:.6rem .8rem; font-size:.86rem;
+    font-weight:800; font-family:inherit; cursor:pointer; }
+  #frt .at-whats:hover{ filter:brightness(1.08); }
+  #frt .at-whats[disabled]{ opacity:.6; cursor:wait; }
   #frt .atalhos-frt{ margin-bottom:.7rem; }
   #frt .at-pdf{ width:100%; display:inline-flex; align-items:center;
     justify-content:center; gap:.4rem; background:#8a2b2b; color:#fff;
@@ -314,10 +324,17 @@
   {# Depois de conferir na tela, o mesmo recorte vira PDF — sem reabrir o
      filtro. Usa os filtros que estao na URL agora. #}
   <div class="atalhos-frt">
-    <button type="button" class="at-pdf" id="frt-pdf-tela" onclick="frtPdfDaTela(this)">
-      <i class="bi bi-file-earmark-pdf"></i>
-      <span>Compartilhar em PDF</span>
-    </button>
+    <div class="par-acao">
+      <button type="button" class="at-pdf" id="frt-pdf-tela" onclick="frtPdfDaTela(this)">
+        <i class="bi bi-file-earmark-pdf"></i>
+        <span>PDF</span>
+      </button>
+      <button type="button" class="at-whats" id="frt-whats-tela"
+              onclick="frtWhatsDaTela(this)">
+        <i class="bi bi-whatsapp"></i>
+        <span>Copiar para WhatsApp</span>
+      </button>
+    </div>
     <div class="pronto" id="frt-pronto-tela" hidden>
       <span>Relatório pronto.</span>
       <button type="button" class="bt-g bt-g--pdf" onclick="frtCompartilhar()">
@@ -597,8 +614,12 @@
            O JS busca o arquivo e chama a folha nativa do aparelho. -->
       <button type="button" class="bt-g bt-g--pdf" id="frt-pdf" hidden
               data-acao="{{ url_for('financeiro.recebimentos_relatorio_pdf') }}"
+              data-texto="{{ url_for('financeiro.recebimentos_relatorio_texto') }}"
               onclick="frtPdf(this)">
         <i class="bi bi-file-earmark-pdf"></i> <span>PDF</span></button>
+      <button type="button" class="bt-g bt-g--whats" id="frt-whats" hidden
+              onclick="frtWhats(this)">
+        <i class="bi bi-whatsapp"></i> <span>WhatsApp</span></button>
     </div>
   </form>
 
@@ -654,6 +675,7 @@ function frtIr(n) {
   document.getElementById('frt-seguir').hidden  = (frtN === 3);
   document.getElementById('frt-aplicar').hidden = (frtN !== 3);
   document.getElementById('frt-pdf').hidden     = (frtN !== 3);
+  document.getElementById('frt-whats').hidden   = (frtN !== 3);
   /* Ao chegar no cliente, a lista já vem recortada pela situação escolhida. */
   if (frtN === 2) frtFiltraCli();
   if (frtN === 1) frtRotuloTodas();
@@ -906,6 +928,106 @@ function frtAbrirArquivo() {
   setTimeout(function () { URL.revokeObjectURL(u); }, 60000);
   document.getElementById('frt-pronto').hidden = true;
   document.getElementById('frt-pronto-tela').hidden = true;
+}
+
+/* ── Copiar para o WhatsApp ───────────────────────────────────────────
+   O texto vem do servidor, da MESMA consulta que faz o PDF — assim os dois
+   nunca contam histórias diferentes.
+
+   Copiar depois de uma ida à rede é o problema: o Safari só deixa escrever
+   na área de transferência logo depois do toque. Por isso a primeira
+   tentativa entrega ao navegador uma PROMESSA do texto (ClipboardItem), que
+   é a forma que ele aceita — e só se isso não existir é que buscamos antes e
+   copiamos depois.                                                       */
+function frtEnderecoTexto(q) {
+  return document.getElementById('frt-pdf').dataset.texto + (q || '');
+}
+
+function frtAvisaCopiado(bt) {
+  var rot = bt.querySelector('span');
+  var antes = rot.dataset.rotulo || rot.textContent;
+  rot.dataset.rotulo = antes;
+  rot.textContent = 'Copiado!';
+  setTimeout(function () { rot.textContent = antes; }, 2500);
+}
+
+function frtCopiarTexto(bt, endereco) {
+  var rot = bt.querySelector('span');
+  var antes = rot.dataset.rotulo || rot.textContent;
+  rot.dataset.rotulo = antes;
+
+  var buscar = function () {
+    return fetch(endereco, { credentials: 'same-origin' }).then(function (r) {
+      if (!r.ok) throw new Error('O servidor respondeu ' + r.status + '.');
+      var tipo = r.headers.get('content-type') || '';
+      if (tipo.indexOf('text/plain') < 0) {
+        throw new Error('Sua sessão expirou. Entre de novo e tente outra vez.');
+      }
+      return r.text();
+    });
+  };
+
+  /* Caminho bom: o navegador segura a promessa e copia quando chegar. */
+  if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+    try {
+      var item = new ClipboardItem({
+        'text/plain': buscar().then(function (t) {
+          return new Blob([t], { type: 'text/plain' });
+        }),
+      });
+      return navigator.clipboard.write([item])
+        .then(function () { frtAvisaCopiado(bt); })
+        .catch(function () { return frtCopiarDepois(bt, buscar); });
+    } catch (e) {
+      return frtCopiarDepois(bt, buscar);
+    }
+  }
+  return frtCopiarDepois(bt, buscar);
+}
+
+/* Encosto: busca primeiro, copia depois. Se a área de transferência recusar
+   — costuma ser por causa do intervalo —, cai no textarea escondido, que é
+   como o resto do sistema já faz. */
+function frtCopiarDepois(bt, buscar) {
+  var rot = bt.querySelector('span');
+  rot.textContent = 'Montando…';
+  bt.disabled = true;
+  return buscar()
+    .then(function (t) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(t).catch(function () {
+          frtCopiarNaMarra(t);
+        });
+      }
+      frtCopiarNaMarra(t);
+    })
+    .then(function () { frtAvisaCopiado(bt); })
+    .catch(function (e) {
+      alert('Não foi possível copiar o texto: ' + e.message);
+      rot.textContent = rot.dataset.rotulo;
+    })
+    .then(function () { bt.disabled = false; });
+}
+
+function frtCopiarNaMarra(texto) {
+  var ta = document.createElement('textarea');
+  ta.value = texto;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); } catch (e) {}
+  document.body.removeChild(ta);
+}
+
+/* O do filtro usa o que está marcado agora; o da tela, o que está na URL. */
+function frtWhats(bt) {
+  var q = frtEndereco().split('?')[1] || '';
+  frtCopiarTexto(bt, frtEnderecoTexto(q ? '?' + q : ''));
+}
+
+function frtWhatsDaTela(bt) {
+  frtCopiarTexto(bt, frtEnderecoTexto(window.location.search || ''));
 }
 
 /* Aqui a data vazia PRECISA ir pra URL, ao contrário da conciliação: é ela
