@@ -756,6 +756,20 @@ function frtPeriodo(qual, bt) {
    e o toque seguinte compartilha, já com o arquivo na mão.                */
 var frtArquivo = null;
 
+/* A folha nativa so vale onde ela e boa: celular e tablet. O Chrome no
+   Windows TEM navigator.share, mas quem abre e a folha do proprio Windows,
+   que falha com "nao foi possivel mostrar todas as maneiras de
+   compartilhar". No computador o caminho bom e o de sempre: abrir o arquivo,
+   que o navegador ja sabe exibir, baixar e imprimir. */
+function frtTemFolha() {
+  if (!navigator.canShare) return false;
+  try {
+    return window.matchMedia('(pointer: coarse)').matches;
+  } catch (e) {
+    return false;
+  }
+}
+
 function frtEndereco() {
   var form = document.getElementById('frt-gav');
   var q = new URLSearchParams(new FormData(form)).toString();
@@ -763,6 +777,13 @@ function frtEndereco() {
 }
 
 function frtPdf(bt) {
+  /* No computador vai direto, e AQUI, dentro do toque: abrir depois de um
+     fetch cai no bloqueador de pop-up. */
+  if (!frtTemFolha()) {
+    window.open(frtEndereco(), '_blank');
+    frtFecharFiltro();
+    return;
+  }
   var rot = bt.querySelector('span');
   var antes = rot.textContent;
   rot.textContent = 'Gerando…';
@@ -798,8 +819,10 @@ function frtPdf(bt) {
    toque recente, mostra a faixa em vez de reclamar. */
 function frtCompartilhar(automatico) {
   if (!frtArquivo) return;
-  var pode = navigator.canShare && navigator.canShare({ files: [frtArquivo] });
-  if (!pode) { frtAbrirArquivo(); return; }
+  if (!frtTemFolha() || !navigator.canShare({ files: [frtArquivo] })) {
+    frtAbrirArquivo();
+    return;
+  }
   return navigator.share({ files: [frtArquivo], title: 'Boletos de Frete' })
     .then(function () {
       document.getElementById('frt-pronto').hidden = true;
