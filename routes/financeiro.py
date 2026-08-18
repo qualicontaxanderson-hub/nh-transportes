@@ -6,7 +6,9 @@ from utils.navegacao import destino_pos_acao
 from utils.boletos import emitir_boleto_frete, emitir_boleto_multiplo, fetch_charge, fetch_boleto_pdf_stream, update_billet_expire, cancel_charge, _get_bearer_token, _ensure_credentials_from_env
 from datetime import datetime, date, timedelta
 from calendar import monthrange
+from urllib.parse import quote
 import os
+import re
 import requests
 import mysql.connector
 
@@ -441,9 +443,25 @@ def recebimentos_relatorio_pdf():
                     usuario=getattr(current_user, 'username', '') or '',
                     logo=logo if os.path.exists(logo) else None)
 
-        nome = 'boletos-frete-%s.pdf' % date.today().strftime('%Y-%m-%d')
+        # O nome do arquivo diz de quem e e de quando: com um cliente so,
+        # o nome dele; com varios ou nenhum, 'Diversos'.
+        if len(clientes) == 1:
+            cursor.execute(
+                'SELECT COALESCE(nome_fantasia, razao_social) AS nome'
+                ' FROM clientes WHERE id = %s', (clientes[0],))
+            achou = cursor.fetchone() or {}
+            quem = achou.get('nome') or 'Diversos'
+        else:
+            quem = 'Diversos'
+        nome = 'Contas a Receber - %s - %s.pdf' % (
+            _nome_de_arquivo(quem), date.today().strftime('%d.%m.%Y'))
+
         return Response(pdf, mimetype='application/pdf', headers={
-            'Content-Disposition': 'inline; filename="%s"' % nome,
+            # filename* carrega os acentos; o filename simples e o que os
+            # programas antigos entendem.
+            'Content-Disposition':
+                "inline; filename=\"%s\"; filename*=UTF-8''%s"
+                % (_sem_acento(nome), quote(nome)),
         })
     except Exception as e:
         current_app.logger.exception('[relatorio_pdf] falhou')
@@ -454,6 +472,21 @@ def recebimentos_relatorio_pdf():
             cursor.close()
         if conn:
             conn.close()
+
+
+_RX_ARQUIVO = re.compile(r'[\\/:*?"<>|\r\n\t]+')
+
+
+def _nome_de_arquivo(t):
+    """Tira o que o Windows e o iOS nao aceitam em nome de arquivo."""
+    return _RX_ARQUIVO.sub(' ', str(t or '')).strip() or 'Diversos'
+
+
+def _sem_acento(t):
+    """Versao so-ASCII, para o filename simples do cabecalho."""
+    import unicodedata
+    return (unicodedata.normalize('NFKD', str(t))
+            .encode('ascii', 'ignore').decode('ascii')) or 'relatorio.pdf'
 
 
 def _data_br_simples(s):

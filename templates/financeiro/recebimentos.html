@@ -194,6 +194,14 @@
     font-weight:800; cursor:pointer; font-family:inherit; }
   #frt .bt-g--ok{ flex:1; background:var(--azul); color:#fff; }
   #frt .bt-g--pdf{ background:#8a2b2b; color:#fff; flex:0 0 auto; }
+  #frt .atalhos-frt{ margin-bottom:.7rem; }
+  #frt .at-pdf{ width:100%; display:inline-flex; align-items:center;
+    justify-content:center; gap:.4rem; background:#8a2b2b; color:#fff;
+    border:0; border-radius:11px; padding:.6rem .8rem; font-size:.86rem;
+    font-weight:800; font-family:inherit; cursor:pointer; }
+  #frt .at-pdf:hover{ filter:brightness(1.08); }
+  #frt .at-pdf[disabled]{ opacity:.6; cursor:wait; }
+  #frt .atalhos-frt .pronto{ border-top:0; border-radius:11px; margin-top:.45rem; }
   #frt .pronto{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;
     padding:.6rem .9rem; border-top:1px solid var(--line);
     background:var(--azul-claro); }
@@ -300,6 +308,21 @@
     <div class="n n--d">
       <div class="r">Vencido</div>
       <div class="v">R$ {{ "{:,.2f}".format(vencidos | sum(attribute='valor') | float).replace(',','X').replace('.',',').replace('X','.') }}</div>
+    </div>
+  </div>
+
+  {# Depois de conferir na tela, o mesmo recorte vira PDF — sem reabrir o
+     filtro. Usa os filtros que estao na URL agora. #}
+  <div class="atalhos-frt">
+    <button type="button" class="at-pdf" id="frt-pdf-tela" onclick="frtPdfDaTela(this)">
+      <i class="bi bi-file-earmark-pdf"></i>
+      <span>Compartilhar em PDF</span>
+    </button>
+    <div class="pronto" id="frt-pronto-tela" hidden>
+      <span>Relatório pronto.</span>
+      <button type="button" class="bt-g bt-g--pdf" onclick="frtCompartilhar()">
+        <i class="bi bi-share"></i> Compartilhar</button>
+      <button type="button" class="bt-g bt-g--ca" onclick="frtAbrirArquivo()">Abrir</button>
     </div>
   </div>
 
@@ -776,35 +799,43 @@ function frtEndereco() {
   return document.getElementById('frt-pdf').dataset.acao + '?' + q;
 }
 
-function frtPdf(bt) {
-  /* No computador vai direto, e AQUI, dentro do toque: abrir depois de um
-     fetch cai no bloqueador de pop-up. */
-  if (!frtTemFolha()) {
-    window.open(frtEndereco(), '_blank');
-    frtFecharFiltro();
-    return;
+/* Quem batiza o arquivo e o servidor — "Contas a Receber - SINAL VERDE
+   COMERCIO DE COMBUSTIVEIS LTDA - 18.08.2026.pdf". O filename* traz os
+   acentos; o filename simples e o encosto. */
+function frtNomeDoArquivo(cd) {
+  var m = /filename\*=UTF-8''([^;]+)/i.exec(cd || '');
+  if (m) {
+    try { return decodeURIComponent(m[1]); } catch (e) {}
   }
+  m = /filename="([^"]+)"/i.exec(cd || '');
+  if (m) return m[1];
+  return 'Contas a Receber.pdf';
+}
+
+/* O mesmo caminho serve os dois botoes: o do filtro e o da tela. Muda so de
+   onde vem o endereco e qual faixa "Relatorio pronto" aparece. */
+function frtBuscaPdf(bt, endereco, faixa) {
   var rot = bt.querySelector('span');
   var antes = rot.textContent;
+  var cd = '';
   rot.textContent = 'Gerando…';
   bt.disabled = true;
   frtArquivo = null;
-  document.getElementById('frt-pronto').hidden = true;
+  document.getElementById(faixa).hidden = true;
 
-  fetch(frtEndereco(), { credentials: 'same-origin' })
+  return fetch(endereco, { credentials: 'same-origin' })
     .then(function (r) {
       if (!r.ok) throw new Error('O servidor respondeu ' + r.status + '.');
+      cd = r.headers.get('content-disposition') || '';
       var tipo = r.headers.get('content-type') || '';
-      /* Sessão expirada devolve a tela de login, não um PDF. */
       if (tipo.indexOf('pdf') < 0) {
         throw new Error('Sua sessão expirou. Entre de novo e tente outra vez.');
       }
       return r.blob();
     })
     .then(function (blob) {
-      var nome = 'boletos-frete-' + new Date().toISOString().slice(0, 10) + '.pdf';
-      frtArquivo = new File([blob], nome, { type: 'application/pdf' });
-      return frtCompartilhar(true);
+      frtArquivo = new File([blob], frtNomeDoArquivo(cd), { type: 'application/pdf' });
+      return frtCompartilhar(true, faixa);
     })
     .catch(function (e) {
       alert('Não foi possível gerar o relatório: ' + e.message);
@@ -815,10 +846,36 @@ function frtPdf(bt) {
     });
 }
 
+/* O botao da tela usa o filtro que ja esta valendo na URL — o que voce
+   acabou de conferir e o que sai no papel. */
+function frtPdfDaTela(bt) {
+  var base = document.getElementById('frt-pdf').dataset.acao;
+  var q = window.location.search || '';
+  if (!frtTemFolha()) {
+    window.open(base + q, '_blank');
+    return;
+  }
+  frtBuscaPdf(bt, base + q, 'frt-pronto-tela');
+}
+
+function frtPdf(bt) {
+  /* No computador vai direto, e AQUI, dentro do toque: abrir depois de um
+     fetch cai no bloqueador de pop-up. */
+  if (!frtTemFolha()) {
+    window.open(frtEndereco(), '_blank');
+    frtFecharFiltro();
+    return;
+  }
+  frtBuscaPdf(bt, frtEndereco(), 'frt-pronto');
+}
+
 /* `automatico` = veio logo depois de buscar; se a folha recusar por falta de
    toque recente, mostra a faixa em vez de reclamar. */
-function frtCompartilhar(automatico) {
+function frtCompartilhar(automatico, faixa) {
   if (!frtArquivo) return;
+  faixa = faixa || (document.getElementById('frt-pronto-tela')
+    && !document.getElementById('frt-pronto-tela').hidden
+      ? 'frt-pronto-tela' : 'frt-pronto');
   if (!frtTemFolha() || !navigator.canShare({ files: [frtArquivo] })) {
     frtAbrirArquivo();
     return;
@@ -826,13 +883,14 @@ function frtCompartilhar(automatico) {
   return navigator.share({ files: [frtArquivo], title: 'Boletos de Frete' })
     .then(function () {
       document.getElementById('frt-pronto').hidden = true;
+      document.getElementById('frt-pronto-tela').hidden = true;
       frtFecharFiltro();
     })
     .catch(function (e) {
       /* Cancelar no meio da folha é escolha do usuário, não erro. */
       if (e && e.name === 'AbortError') return;
       if (automatico) {
-        document.getElementById('frt-pronto').hidden = false;
+        document.getElementById(faixa).hidden = false;
       } else {
         frtAbrirArquivo();
       }
@@ -847,6 +905,7 @@ function frtAbrirArquivo() {
   window.open(u, '_blank');
   setTimeout(function () { URL.revokeObjectURL(u); }, 60000);
   document.getElementById('frt-pronto').hidden = true;
+  document.getElementById('frt-pronto-tela').hidden = true;
 }
 
 /* Aqui a data vazia PRECISA ir pra URL, ao contrário da conciliação: é ela
