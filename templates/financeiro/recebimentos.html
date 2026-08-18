@@ -194,6 +194,12 @@
     font-weight:800; cursor:pointer; font-family:inherit; }
   #frt .bt-g--ok{ flex:1; background:var(--azul); color:#fff; }
   #frt .bt-g--pdf{ background:#8a2b2b; color:#fff; flex:0 0 auto; }
+  #frt .pronto{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;
+    padding:.6rem .9rem; border-top:1px solid var(--line);
+    background:var(--azul-claro); }
+  #frt .pronto[hidden]{ display:none; }
+  #frt .pronto > span{ font-size:.82rem; font-weight:700; color:var(--azul-deep);
+    margin-right:auto; }
 #frt .bt-g--pdf:hover{ filter:brightness(1.08); }
 #frt .bt-g--ca{ background:var(--surface); color:var(--muted);
     border:1px solid var(--line-2); }
@@ -547,6 +553,12 @@
       </div>
     </div>
 
+    <div class="pronto" id="frt-pronto" hidden>
+      <span>Relatório pronto.</span>
+      <button type="button" class="bt-g bt-g--pdf" onclick="frtCompartilhar()">
+        <i class="bi bi-share"></i> Compartilhar</button>
+      <button type="button" class="bt-g bt-g--ca" onclick="frtAbrirArquivo()">Abrir</button>
+    </div>
     <div class="gav__f">
       <button type="button" class="bt-g bt-g--ca" id="frt-voltar"
               onclick="frtPasso(-1)" hidden>Voltar</button>
@@ -557,10 +569,13 @@
       <!-- Mesmo formulário, outro destino: a rota do PDF lê os mesmos campos.
            Era isso que faltava — o botão do PDF vivia no rodapé da página,
            depois de 50 boletos. -->
-      <button type="submit" class="bt-g bt-g--pdf" id="frt-pdf" hidden
-              formtarget="_blank"
-              formaction="{{ url_for('financeiro.recebimentos_relatorio_pdf') }}">
-        <i class="bi bi-file-earmark-pdf"></i> PDF</button>
+      <!-- Nao e submit: no app instalado na tela de inicio o iOS abre PDF num
+           visualizador sem a barra do Safari, e e ela que tem o compartilhar.
+           O JS busca o arquivo e chama a folha nativa do aparelho. -->
+      <button type="button" class="bt-g bt-g--pdf" id="frt-pdf" hidden
+              data-acao="{{ url_for('financeiro.recebimentos_relatorio_pdf') }}"
+              onclick="frtPdf(this)">
+        <i class="bi bi-file-earmark-pdf"></i> <span>PDF</span></button>
     </div>
   </form>
 
@@ -729,6 +744,86 @@ function frtPeriodo(qual, bt) {
       o.classList.toggle('on', o === bt);
     });
   }
+}
+
+/* ── O PDF, e o compartilhar ──────────────────────────────────────────
+   No app instalado na tela de início o iOS abre PDF num visualizador sem a
+   barra do Safari — sem botão de compartilhar, sem nada. Então buscamos o
+   arquivo aqui e entregamos à folha de compartilhamento do próprio aparelho.
+
+   A folha só abre com toque recente. Como buscar o arquivo leva um instante,
+   esse crédito às vezes expira; nesse caso aparece a faixa "Relatório pronto"
+   e o toque seguinte compartilha, já com o arquivo na mão.                */
+var frtArquivo = null;
+
+function frtEndereco() {
+  var form = document.getElementById('frt-gav');
+  var q = new URLSearchParams(new FormData(form)).toString();
+  return document.getElementById('frt-pdf').dataset.acao + '?' + q;
+}
+
+function frtPdf(bt) {
+  var rot = bt.querySelector('span');
+  var antes = rot.textContent;
+  rot.textContent = 'Gerando…';
+  bt.disabled = true;
+  frtArquivo = null;
+  document.getElementById('frt-pronto').hidden = true;
+
+  fetch(frtEndereco(), { credentials: 'same-origin' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('O servidor respondeu ' + r.status + '.');
+      var tipo = r.headers.get('content-type') || '';
+      /* Sessão expirada devolve a tela de login, não um PDF. */
+      if (tipo.indexOf('pdf') < 0) {
+        throw new Error('Sua sessão expirou. Entre de novo e tente outra vez.');
+      }
+      return r.blob();
+    })
+    .then(function (blob) {
+      var nome = 'boletos-frete-' + new Date().toISOString().slice(0, 10) + '.pdf';
+      frtArquivo = new File([blob], nome, { type: 'application/pdf' });
+      return frtCompartilhar(true);
+    })
+    .catch(function (e) {
+      alert('Não foi possível gerar o relatório: ' + e.message);
+    })
+    .then(function () {
+      rot.textContent = antes;
+      bt.disabled = false;
+    });
+}
+
+/* `automatico` = veio logo depois de buscar; se a folha recusar por falta de
+   toque recente, mostra a faixa em vez de reclamar. */
+function frtCompartilhar(automatico) {
+  if (!frtArquivo) return;
+  var pode = navigator.canShare && navigator.canShare({ files: [frtArquivo] });
+  if (!pode) { frtAbrirArquivo(); return; }
+  return navigator.share({ files: [frtArquivo], title: 'Boletos de Frete' })
+    .then(function () {
+      document.getElementById('frt-pronto').hidden = true;
+      frtFecharFiltro();
+    })
+    .catch(function (e) {
+      /* Cancelar no meio da folha é escolha do usuário, não erro. */
+      if (e && e.name === 'AbortError') return;
+      if (automatico) {
+        document.getElementById('frt-pronto').hidden = false;
+      } else {
+        frtAbrirArquivo();
+      }
+    });
+}
+
+/* Sem folha de compartilhamento — computador, ou navegador que não tem —
+   abre numa aba, que é o que acontecia antes. */
+function frtAbrirArquivo() {
+  if (!frtArquivo) return;
+  var u = URL.createObjectURL(frtArquivo);
+  window.open(u, '_blank');
+  setTimeout(function () { URL.revokeObjectURL(u); }, 60000);
+  document.getElementById('frt-pronto').hidden = true;
 }
 
 /* Aqui a data vazia PRECISA ir pra URL, ao contrário da conciliação: é ela
