@@ -334,8 +334,8 @@ def recebimentos():
 
 # A frase que fecha o texto do WhatsApp. Uma linha so, aqui, pra ser
 # facil de mudar ou tirar.
-_FECHO_WHATSAPP = ('Favor verificar. Qualquer duvida estamos a'
-                   ' disposicao.')
+_FECHO_WHATSAPP = ('Favor verificar. Qualquer dúvida estamos à'
+                   ' disposição.')
 
 _SIT_ROTULO = {'vencido': 'Vencidos', 'pendente': 'A vencer',
                'pago': 'Pagos', 'cancelado': 'Cancelados'}

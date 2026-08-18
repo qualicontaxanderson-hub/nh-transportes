@@ -196,19 +196,19 @@
   #frt .bt-g--pdf{ background:#8a2b2b; color:#fff; flex:0 0 auto; }
   #frt .bt-g--whats{ background:#1f8a4c; color:#fff; flex:0 0 auto; }
   #frt .bt-g--whats:hover{ filter:brightness(1.08); }
-  #frt .par-acao{ display:flex; gap:.45rem; }
-  #frt .par-acao .at-pdf{ flex:0 0 auto; padding-left:1rem; padding-right:1rem; }
-  #frt .at-whats{ flex:1; display:inline-flex; align-items:center;
-    justify-content:center; gap:.4rem; background:#1f8a4c; color:#fff;
-    border:0; border-radius:11px; padding:.6rem .8rem; font-size:.86rem;
-    font-weight:800; font-family:inherit; cursor:pointer; }
+  /* Um par modesto: dois botoes iguais dividindo a linha, altura de botao
+     comum. O PDF ja teve width:100% quando era sozinho — dentro da linha
+     isso o fazia engolir a largura toda e esmagar o WhatsApp a zero. */
+  #frt .par-acao{ display:flex; gap:.45rem; max-width:520px; }
+  #frt .par-acao > button{ flex:1 1 0; width:auto; display:inline-flex;
+    align-items:center; justify-content:center; gap:.4rem; border:0;
+    border-radius:10px; padding:.5rem .7rem; font-size:.82rem;
+    font-weight:800; font-family:inherit; cursor:pointer; color:#fff; }
+  #frt .par-acao > button[disabled]{ opacity:.6; cursor:wait; }
+  #frt .at-whats{ background:#1f8a4c; }
   #frt .at-whats:hover{ filter:brightness(1.08); }
-  #frt .at-whats[disabled]{ opacity:.6; cursor:wait; }
   #frt .atalhos-frt{ margin-bottom:.7rem; }
-  #frt .at-pdf{ width:100%; display:inline-flex; align-items:center;
-    justify-content:center; gap:.4rem; background:#8a2b2b; color:#fff;
-    border:0; border-radius:11px; padding:.6rem .8rem; font-size:.86rem;
-    font-weight:800; font-family:inherit; cursor:pointer; }
+  #frt .at-pdf{ background:#8a2b2b; }
   #frt .at-pdf:hover{ filter:brightness(1.08); }
   #frt .at-pdf[disabled]{ opacity:.6; cursor:wait; }
   #frt .atalhos-frt .pronto{ border-top:0; border-radius:11px; margin-top:.45rem; }
