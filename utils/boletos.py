@@ -166,9 +166,26 @@ def _notification_url():
     return base + "/webhooks/efi"
 
 
+_RX_FONE_EFI = re.compile(r"^[1-9]{2}9?[0-9]{8}$")
+
+
+def _fone_efi(telefone):
+    """Telefone como a EFI exige (DDD + numero, so digitos) — ou None.
+
+    Cliente sem telefone mandava "" e a EFI derrubava o boleto inteiro:
+    "A string nao corresponde ao modelo ^[1-9]{2}9?[0-9]{8}$" (19/08/26).
+    Sem telefone valido o campo simplesmente NAO vai no payload."""
+    d = re.sub(r"\D", "", telefone or "")
+    if d.startswith("55") and len(d) in (12, 13):
+        d = d[2:]
+    if len(d) in (10, 11) and _RX_FONE_EFI.match(d):
+        return d
+    return None
+
+
 def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
     cpf_cnpj = (frete.get("cliente_cnpj") or "").replace(".", "").replace("-", "").replace("/", "").strip()
-    telefone = (frete.get("cliente_telefone") or "").replace("(", "").replace(")", "").replace("-", "").replace(" ", "").strip()
+    telefone = _fone_efi(frete.get("cliente_telefone"))
     cep = (frete.get("cliente_cep") or "").replace("-", "").strip()
     if not cep or len(cep) != 8:
         cep = "74000000"
@@ -180,7 +197,7 @@ def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
             "name": nome_cliente,
             "cpf": cpf_cnpj if len(cpf_cnpj) == 11 else None,
             "cnpj": cpf_cnpj if len(cpf_cnpj) == 14 else None,
-            "phone_number": (telefone or "")[:11],
+            "phone_number": telefone,
             "email": (frete.get("cliente_email") or "")[:100],
             "address": {
                 "street": (frete.get("cliente_endereco") or "")[:80],
@@ -192,6 +209,8 @@ def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
             },
         },
     }
+    if not telefone:
+        banking_billet["customer"].pop("phone_number", None)
     metadata = {"custom_id": str(frete["id"]), "notification_url": _notification_url()}
     body = {"items": items, "payment": {"banking_billet": banking_billet}, "metadata": metadata}
     return body
@@ -205,7 +224,7 @@ def _build_charge_payload(frete, descricao_frete, data_vencimento, valor_total_c
 
 def _build_pay_payload(frete, descricao_frete, data_vencimento, valor_total_centavos):
     cpf_cnpj = (frete.get("cliente_cnpj") or "").replace(".", "").replace("-", "").replace("/", "").strip()
-    telefone = (frete.get("cliente_telefone") or "").replace("(", "").replace(")", "").replace("-", "").replace(" ", "").strip()
+    telefone = _fone_efi(frete.get("cliente_telefone"))
     cep = (frete.get("cliente_cep") or "").replace("-", "").strip()
     if not cep or len(cep) != 8:
         cep = "74000000"
@@ -214,7 +233,7 @@ def _build_pay_payload(frete, descricao_frete, data_vencimento, valor_total_cent
         "name": nome_cliente,
         "cpf": cpf_cnpj if len(cpf_cnpj) == 11 else None,
         "cnpj": cpf_cnpj if len(cpf_cnpj) == 14 else None,
-        "phone_number": (telefone or "")[:11],
+        "phone_number": telefone,
         "email": (frete.get("cliente_email") or "")[:100],
         "address": {
             "street": (frete.get("cliente_endereco") or "")[:80],
@@ -226,6 +245,8 @@ def _build_pay_payload(frete, descricao_frete, data_vencimento, valor_total_cent
         },
         "juridical_person": {"corporate_name": nome_cliente, "cnpj": cpf_cnpj if len(cpf_cnpj) == 14 else None},
     }
+    if not telefone:
+        customer.pop("phone_number", None)
     payment = {"payment": {"banking_billet": {"expire_at": data_vencimento.strftime("%Y-%m-%d"), "customer": customer}}}
     return payment
 
@@ -1047,7 +1068,7 @@ def _build_pay_payload_multi(client_data, data_vencimento):
     Monta payload de payment (banking_billet) para múltiplos fretes com dados do cliente.
     """
     cpf_cnpj = (client_data.get("cliente_cnpj") or "").replace(".", "").replace("-", "").replace("/", "").strip()
-    telefone = (client_data.get("cliente_telefone") or "").replace("(", "").replace(")", "").replace("-", "").replace(" ", "").strip()
+    telefone = _fone_efi(client_data.get("cliente_telefone"))
     cep = (client_data.get("cliente_cep") or "").replace("-", "").strip()
     if not cep or len(cep) != 8:
         cep = "74000000"
@@ -1056,7 +1077,7 @@ def _build_pay_payload_multi(client_data, data_vencimento):
         "name": nome_cliente,
         "cpf": cpf_cnpj if len(cpf_cnpj) == 11 else None,
         "cnpj": cpf_cnpj if len(cpf_cnpj) == 14 else None,
-        "phone_number": (telefone or "")[:11],
+        "phone_number": telefone,
         "email": (client_data.get("cliente_email") or "")[:100],
         "address": {
             "street": (client_data.get("cliente_endereco") or "")[:80],
@@ -1068,6 +1089,8 @@ def _build_pay_payload_multi(client_data, data_vencimento):
         },
         "juridical_person": {"corporate_name": nome_cliente, "cnpj": cpf_cnpj if len(cpf_cnpj) == 14 else None},
     }
+    if not telefone:
+        customer.pop("phone_number", None)
     payment = {"payment": {"banking_billet": {"expire_at": data_vencimento.strftime("%Y-%m-%d"), "customer": customer}}}
     return payment
 
