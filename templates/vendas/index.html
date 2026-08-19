@@ -18,6 +18,15 @@
     color:var(--ink);
   }
 
+  /* Faixa "filtro ativo" com o Limpar na tela (fora da gaveta) */
+  #vendas .vnd-eco{ display:flex; align-items:center; gap:.4rem;
+    background:var(--azul-claro); color:var(--azul-deep); border-radius:10px;
+    padding:.5rem .7rem; font-size:.82rem; font-weight:700;
+    margin-bottom:.7rem; flex-wrap:wrap; }
+  #vendas .vnd-eco a{ margin-left:auto; background:var(--azul); color:#fff;
+    border-radius:8px; padding:.3rem .7rem; font-size:.78rem; font-weight:800;
+    text-decoration:none; }
+
   /* Números em degradê */
   #vendas .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem;
     margin-bottom:.7rem; }
@@ -220,6 +229,14 @@
     </div>
   </div>
 
+  {% if n_filtros %}
+  <div class="vnd-eco">
+    <i class="bi bi-funnel-fill"></i>
+    Filtro ativo — {{ '{:,}'.format(totais.notas).replace(',', '.') }} nota{{ 's' if totais.notas != 1 }} no recorte
+    <a href="/vendas">Limpar</a>
+  </div>
+  {% endif %}
+
   {# =================== NÚMEROS =================== #}
   <div class="nums">
     <div class="n n--notas"><div class="r">Notas</div>
@@ -372,7 +389,6 @@
         <button type="button" class="bt-g bt-g--ca" id="vnd-bt-voltar" hidden
                 onclick="vndIrPasso(Math.max(0, vndPassoAtual() - 1))">
           <i class="bi bi-chevron-left"></i> Voltar</button>
-        <a class="bt-g bt-g--ca" href="/vendas" id="vnd-bt-limpar" hidden>Limpar</a>
         <button type="button" class="bt-g bt-g--ca" id="vnd-bt-pular" onclick="vndPular()">Pular</button>
         <button type="button" class="bt-g bt-g--ok" id="vnd-bt-ir" onclick="vndAvancar()">Avançar</button>
       </div>
@@ -402,7 +418,6 @@
       }
       var ultimo = (n === N - 1);
       document.getElementById('vnd-bt-voltar').hidden = (n === 0);
-      document.getElementById('vnd-bt-limpar').hidden = !ultimo;
       document.getElementById('vnd-bt-pular').hidden = ultimo;
       document.getElementById('vnd-bt-ir').textContent = ultimo ? 'Filtrar' : 'Avançar';
     };

@@ -116,6 +116,14 @@
     <div class="v">{{ (compras_totais.valor or 0) | formatar_moeda }}</div></div>
 </div>
 
+{% if filtros_ativos %}
+<div class="regg-eco">
+  <i class="bi bi-funnel-fill"></i>
+  Filtro ativo — {{ compras_totais.notas }} nota{{ 's' if compras_totais.notas != 1 }} no recorte
+  <a href="{{ url_for('dfe_compras.compras', aba='consultar') }}">Limpar</a>
+</div>
+{% endif %}
+
 <style>
   /* ===== Padrao do Banco na tela de Compras (casca; paineis intactos) ==== */
   #dfec{
@@ -300,9 +308,10 @@
     padding:.5rem .7rem; font-size:.82rem; font-weight:700;
     margin-bottom:.6rem; flex-wrap:wrap; }
   #dfec .regg-eco[hidden]{ display:none; }
-  #dfec .regg-eco button{ margin-left:auto; border:0; background:var(--azul);
-    color:#fff; border-radius:8px; padding:.3rem .7rem; font-size:.78rem;
-    font-weight:800; cursor:pointer; font-family:inherit; }
+  #dfec .regg-eco button, #dfec .regg-eco a{ margin-left:auto; border:0;
+    background:var(--azul); color:#fff; border-radius:8px; padding:.3rem .7rem;
+    font-size:.78rem; font-weight:800; cursor:pointer; font-family:inherit;
+    text-decoration:none; }
 
   /* Regras na WEB: o accordion vira uma grade de cards, tudo aberto.
      No celular continua o accordion de sempre. */
@@ -1230,8 +1239,6 @@
     <div class="gav__f">
       <button type="button" class="bt-g bt-g--ca" id="cmpg-bt-voltar" hidden
               onclick="cmpgIrPasso(Math.max(0, cmpgPasso() - 1))">‹ Voltar</button>
-      <a class="bt-g bt-g--ca" href="{{ url_for('dfe_compras.compras', aba='consultar') }}"
-         id="cmpg-bt-limpar" hidden>Limpar</a>
       <button type="button" class="bt-g bt-g--ca" id="cmpg-bt-pular" onclick="cmpgPular()">Pular</button>
       <button type="button" class="bt-g bt-g--ok" id="cmpg-bt-ir" onclick="cmpgAvancar()">Avançar</button>
     </div>
@@ -1282,8 +1289,6 @@
   <div class="gav__f">
     <button type="button" class="bt-g bt-g--ca" id="regg-bt-voltar" hidden
             onclick="reggIrPasso(0)">‹ Voltar</button>
-    <button type="button" class="bt-g bt-g--ca" id="regg-bt-limpar" hidden
-            onclick="reggLimpar()">Limpar</button>
     <button type="button" class="bt-g bt-g--ca" id="regg-bt-pular"
             onclick="reggPular()">Pular</button>
     <button type="button" class="bt-g bt-g--ok" id="regg-bt-ir"
@@ -1377,7 +1382,6 @@ function cmpAbre(lin) {
     if (n === 2) cmpgProdDep();
     var fim = (n === N - 1);
     document.getElementById('cmpg-bt-voltar').hidden = (n === 0);
-    document.getElementById('cmpg-bt-limpar').hidden = !fim;
     document.getElementById('cmpg-bt-pular').hidden = fim;
     document.getElementById('cmpg-bt-ir').textContent = fim ? 'Filtrar' : 'Avançar';
   };
@@ -1508,7 +1512,6 @@ function dfecFiltro() {
     }
     var fim = (n === 1);
     el('regg-bt-voltar').hidden = !fim;
-    el('regg-bt-limpar').hidden = !fim;
     el('regg-bt-pular').hidden = fim;
     el('regg-bt-ir').textContent = fim ? 'Filtrar' : 'Avançar';
     if (fim) reggDep();
