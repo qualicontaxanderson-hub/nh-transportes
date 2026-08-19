@@ -98,6 +98,41 @@
   #aud .nota-res{ font-size:.78rem; color:var(--muted);
     padding:.6rem .9rem .9rem; margin:0; max-width:62ch; }
   #aud .vazio{ padding:1.2rem 1rem; font-size:.86rem; color:var(--muted); }
+
+  /* No desktop o wrapper .cel nao muda nada no layout da tabela. */
+  #aud .cel{ display:contents; }
+
+  /* ── CELULAR: cada dia vira um cartao ────────────────────────────────
+     A tabela de 680px rolando de lado no dedo era ilegivel: viam-se duas
+     colunas e o resto sumia. Aqui o thead some, cada tr vira um cartao e
+     cada td vira uma linha rotulo/valor. Mesma marcacao, nada duplicado. */
+  @media (max-width: 640px){
+    #aud .rolagem{ overflow:visible; }
+    #aud table, #aud tbody, #aud tr, #aud td{ display:block; min-width:0; }
+    #aud thead{ display:none; }
+    #aud tbody tr{ border:1px solid var(--line-2); border-radius:12px;
+      margin:.55rem .6rem; padding:.15rem .75rem .45rem; background:#fff;
+      box-shadow:var(--shadow); }
+    #aud tbody tr:nth-child(even) td{ background:none; }
+    #aud tr.ruim{ background:var(--negbg); border-color:#f0c9c9; }
+    #aud tr.sobra{ background:var(--posbg); border-color:#cfe6d6; }
+    #aud tr.ruim td, #aud tr.sobra td{ background:none; }
+    #aud td{ display:flex; justify-content:space-between; align-items:baseline;
+      gap:.7rem; border-bottom:1px solid var(--linha2); padding:.4rem 0;
+      white-space:normal; }
+    #aud td:last-child{ border-bottom:0; }
+    #aud td[data-r]::before{ content:attr(data-r); font-size:.62rem;
+      font-weight:800; letter-spacing:.05em; text-transform:uppercase;
+      color:var(--muted); flex:0 0 auto; }
+    #aud .cel{ display:flex; flex-direction:column; align-items:flex-end;
+      gap:.12rem; min-width:0; }
+    #aud .c-dia{ font-weight:800; font-size:.92rem;
+      border-bottom:1px solid var(--line-2); padding:.5rem 0 .4rem; }
+    #aud .c-some{ display:none; }
+    #aud tr.soma{ border-style:dashed; }
+    #aud tr.soma td{ border-top:0; }
+    #aud .parc{ text-align:right; }
+  }
 </style>
 {% endblock %}
 
@@ -169,9 +204,9 @@
         <tbody>
           {% for l in p.linhas %}
           <tr{% if l.destaque %} class="{{ l.destaque }}"{% endif %}>
-            <td>{{ l.data }} <small class="dsem">{{ l.dsem }}</small></td>
-            <td class="n">{{ l.ini }}</td>
-            <td class="n">
+            <td class="c-dia">{{ l.data }} <small class="dsem">{{ l.dsem }}</small></td>
+            <td class="n" data-r="Estoque inicial"><span class="cel">{{ l.ini }}</span></td>
+            <td class="n" data-r="Compras"><span class="cel">
               <span class="dl"><i class="lb ln">N</i>{{ l.cn }}</span>
               <span class="dl"><i class="lb ld">D</i>{{ l.cd }}</span>
               {% if l.parcelas %}
@@ -183,36 +218,36 @@
                 {%- endfor -%}
               </small>
               {% endif %}
-            </td>
-            <td class="n">{{ l.ven }}</td>
-            <td class="n">
+            </span></td>
+            <td class="n" data-r="Vendas"><span class="cel">{{ l.ven }}</span></td>
+            <td class="n" data-r="Estoque escritural"><span class="cel">
               <span class="dl"><i class="lb ln">N</i>{{ l.esc_n }}</span>
               <span class="dl"><i class="lb ld">D</i>{{ l.esc_d }}</span>
-            </td>
-            <td class="n">{{ l.fin }}</td>
-            <td class="n per">
+            </span></td>
+            <td class="n" data-r="Estoque final"><span class="cel">{{ l.fin }}</span></td>
+            <td class="n per" data-r="Perda ou sobra"><span class="cel">
               <span class="dl"><i class="lb ln">N</i><span class="{{ l.per_n.c }}">{{ l.per_n.t }}</span></span>
               <span class="dl"><i class="lb ld">D</i><span class="{{ l.per_d.c }}">{{ l.per_d.t }}</span></span>
-            </td>
-            <td class="n acu">
+            </span></td>
+            <td class="n acu" data-r="Acumulada"><span class="cel">
               <span class="dl"><i class="lb ln">N</i><span class="{{ l.acu_n.c }}">{{ l.acu_n.t }}</span></span>
               <span class="dl"><i class="lb ld">D</i><span class="{{ l.acu_d.c }}">{{ l.acu_d.t }}</span></span>
-            </td>
+            </span></td>
           </tr>
           {% endfor %}
           <tr class="soma">
-            <td>Total</td><td class="n"></td>
-            <td class="n">
+            <td class="c-dia">Total</td><td class="n c-some"></td>
+            <td class="n" data-r="Compras"><span class="cel">
               <span class="dl"><i class="lb ln">N</i>{{ p.tot_cn }}</span>
               <span class="dl"><i class="lb ld">D</i>{{ p.tot_cd }}</span>
-            </td>
-            <td class="n">{{ p.tot_v }}</td>
-            <td class="n"></td><td class="n"></td>
-            <td class="n per">
+            </span></td>
+            <td class="n" data-r="Vendas"><span class="cel">{{ p.tot_v }}</span></td>
+            <td class="n c-some"></td><td class="n c-some"></td>
+            <td class="n per" data-r="Perda ou sobra"><span class="cel">
               <span class="dl"><i class="lb ln">N</i><span class="{{ p.fim_n.c }}">{{ p.fim_n.t }}</span></span>
               <span class="dl"><i class="lb ld">D</i><span class="{{ p.fim_d.c }}">{{ p.fim_d.t }}</span></span>
-            </td>
-            <td class="n"></td>
+            </span></td>
+            <td class="n c-some"></td>
           </tr>
         </tbody>
       </table></div>
@@ -228,28 +263,29 @@
         <tbody>
           {% for r in resumo %}
           <tr>
-            <td><span class="pd" style="background:{{ r.cor }}"></span>{{ r.nome }}</td>
-            <td class="n">{{ r.dias }}</td>
-            <td class="n">
+            <td class="c-dia"><span class="pd" style="background:{{ r.cor }}"></span>{{ r.nome }}</td>
+            <td class="n" data-r="Dias medidos"><span class="cel">{{ r.dias }}</span></td>
+            <td class="n" data-r="Perdas"><span class="cel">
               <span class="dl"><i class="lb ln">N</i><span class="{{ r.per_n.c }}">{{ r.per_n.t }}</span></span>
               <span class="dl"><i class="lb ld">D</i><span class="{{ r.per_d.c }}">{{ r.per_d.t }}</span></span>
-            </td>
-            <td class="n">
+            </span></td>
+            <td class="n" data-r="Sobras"><span class="cel">
               <span class="dl"><i class="lb ln">N</i><span class="{{ r.sob_n.c }}">{{ r.sob_n.t }}</span></span>
               <span class="dl"><i class="lb ld">D</i><span class="{{ r.sob_d.c }}">{{ r.sob_d.t }}</span></span>
-            </td>
-            <td class="n per">
+            </span></td>
+            <td class="n per" data-r="Saldo"><span class="cel">
               <span class="dl"><i class="lb ln">N</i><span class="{{ r.sal_n.c }}">{{ r.sal_n.t }}</span></span>
               <span class="dl"><i class="lb ld">D</i><span class="{{ r.sal_d.c }}">{{ r.sal_d.t }}</span></span>
-            </td>
+            </span></td>
           </tr>
           {% endfor %}
           <tr class="soma">
-            <td>Total</td><td class="n"></td><td class="n"></td><td class="n"></td>
-            <td class="n per">
+            <td class="c-dia">Total</td><td class="n c-some"></td>
+            <td class="n c-some"></td><td class="n c-some"></td>
+            <td class="n per" data-r="Saldo"><span class="cel">
               <span class="dl"><i class="lb ln">N</i><span class="{{ totais.n.c }}">{{ totais.n.t }}</span></span>
               <span class="dl"><i class="lb ld">D</i><span class="{{ totais.d.c }}">{{ totais.d.t }}</span></span>
-            </td>
+            </span></td>
           </tr>
         </tbody>
       </table></div>
