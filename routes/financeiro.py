@@ -76,6 +76,7 @@ def recebimentos():
         if busca_status and busca_status != 'todos' and not f_situacoes:
             f_situacoes = [busca_status]
 
+        contas_banco = []
         try:
             # Buscar recebimentos/boletos emitidos no período
             sql = """
@@ -133,6 +134,12 @@ def recebimentos():
                   c.data_vencimento DESC, c.data_emissao DESC"""
             cursor.execute(sql, params)
             recebimentos_lista = cursor.fetchall()
+            # Contas do modulo Banco (passo "em qual conta caiu" da baixa).
+            cursor.execute(
+                "SELECT id, apelido, banco_nome FROM bank_accounts "
+                "WHERE ativo = 1 ORDER BY apelido"
+            )
+            contas_banco = cursor.fetchall()
             current_app.logger.info(f"[recebimentos] Encontrados {len(recebimentos_lista)} recebimentos")
         except Exception as e:
             current_app.logger.error(f"[recebimentos] Erro SQL: {str(e)}")
@@ -304,7 +311,8 @@ def recebimentos():
             current_app.logger.exception('[recebimentos] totais do relatório')
 
         return render_template('financeiro/recebimentos.html',
-                             recebimentos=recebimentos_lista,
+                             contas_banco=contas_banco,
+            recebimentos=recebimentos_lista,
                              situacoes_totais=situacoes_totais,
                              clientes_boleto=clientes_boleto,
                              data_inicio=data_inicio,
@@ -1116,6 +1124,11 @@ def registrar_pagamento_manual():
         observacao = (data.get('observacao') or '').strip()
         via = (data.get('via') or '').strip()[:60]
         cancelar_efi = str(data.get('cancelar_efi') or '') in ('1', 'true', 'on')
+        try:
+            conta_id = (int(data.get('conta_id'))
+                        if str(data.get('conta_id') or '').strip() else None)
+        except (TypeError, ValueError):
+            conta_id = None
 
         try:
             cobranca_id = int(cobranca_id)
@@ -1170,9 +1183,10 @@ def registrar_pagamento_manual():
                        SET status = 'pago',
                            data_pagamento = %s,
                            recebido_via = COALESCE(NULLIF(%s, ''), recebido_via),
+                           recebido_conta_id = COALESCE(%s, recebido_conta_id),
                            observacao = COALESCE(NULLIF(%s, ''), observacao)
                        WHERE id = %s""",
-                    (data_pagamento, via, observacao, cobranca_id),
+                    (data_pagamento, via, conta_id, observacao, cobranca_id),
                 )
             except Exception:
                 # Fallback: coluna observacao pode não existir ainda
@@ -1404,6 +1418,11 @@ def bulk_registrar_pagamento():
         observacao = (payload.get("observacao") or '').strip()
         via = (payload.get("via") or '').strip()[:60]
         cancelar_efi = bool(payload.get("cancelar_efi"))
+        try:
+            conta_id = (int(payload.get("conta_id"))
+                        if str(payload.get("conta_id") or '').strip() else None)
+        except (TypeError, ValueError):
+            conta_id = None
         credentials_efi = None
         if cancelar_efi:
             try:
@@ -1452,9 +1471,10 @@ def bulk_registrar_pagamento():
                         """UPDATE cobrancas
                            SET status = 'pago', data_pagamento = %s,
                                recebido_via = COALESCE(NULLIF(%s, ''), recebido_via),
+                               recebido_conta_id = COALESCE(%s, recebido_conta_id),
                                observacao = COALESCE(NULLIF(%s, ''), observacao)
                            WHERE id = %s""",
-                        (data_pagamento, via, observacao, cid)
+                        (data_pagamento, via, conta_id, observacao, cid)
                     )
                 except Exception:
                     cur.execute(
