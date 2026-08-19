@@ -294,6 +294,16 @@
     font-size:.78rem; font-weight:700; cursor:pointer; font-family:inherit; }
   #dfec .chip.on{ background:var(--azul); border-color:var(--azul); color:#fff; }
 
+  /* Faixa "filtro ativo" da aba Regras — o limpar visivel na tela. */
+  #dfec .regg-eco{ display:flex; align-items:center; gap:.4rem;
+    background:var(--azul-claro); color:var(--azul-deep); border-radius:10px;
+    padding:.5rem .7rem; font-size:.82rem; font-weight:700;
+    margin-bottom:.6rem; flex-wrap:wrap; }
+  #dfec .regg-eco[hidden]{ display:none; }
+  #dfec .regg-eco button{ margin-left:auto; border:0; background:var(--azul);
+    color:#fff; border-radius:8px; padding:.3rem .7rem; font-size:.78rem;
+    font-weight:800; cursor:pointer; font-family:inherit; }
+
   /* Regras na WEB: o accordion vira uma grade de cards, tudo aberto.
      No celular continua o accordion de sempre. */
   @media (min-width:992px){
@@ -841,6 +851,11 @@
       automaticamente. <strong>Editar</strong> corrige a regra (e opcionalmente as notas já
       lançadas); <strong>apagar</strong> remove só a regra — os itens já classificados permanecem.
     </p>
+    <div class="regg-eco" id="regg-eco" hidden>
+      <i class="bi bi-funnel-fill"></i>
+      Mostrando <b id="regg-eco-n">0</b> de <b>{{ fornecedores_regras|length }}</b> fornecedores
+      <button type="button" onclick="reggLimpar()">limpar filtro</button>
+    </div>
     {% if not regras %}
       <div class="alert alert-light border" id="regras-vazio">Nenhuma regra memorizada ainda.</div>
     {% else %}
@@ -1541,9 +1556,17 @@ function dfecFiltro() {
         vis.forEach(function (op) { ok[op.querySelector('input').value] = 1; });
       }
     }
+    var vivos = 0;
     document.querySelectorAll('#accFornecedores .accordion-item').forEach(function (it) {
       it.hidden = !!(ok && !ok[it.getAttribute('data-cnpj') || '']);
+      if (!it.hidden) vivos++;
     });
+    var eco = document.getElementById('regg-eco');
+    if (eco) {
+      eco.hidden = (ok === null);
+      var n = document.getElementById('regg-eco-n');
+      if (n) n.textContent = vivos;
+    }
     reggFechar();
   };
   window.reggLimpar = function () {
@@ -1552,6 +1575,8 @@ function dfecFiltro() {
     document.querySelectorAll('#accFornecedores .accordion-item').forEach(function (it) {
       it.hidden = false;
     });
+    var eco = document.getElementById('regg-eco');
+    if (eco) eco.hidden = true;
     reggFechar();
   };
   window.reggTodos = function () {
