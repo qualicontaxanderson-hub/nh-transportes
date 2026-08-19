@@ -1,0 +1,276 @@
+{% extends 'base.html' %}
+{% block title %}Auditoria de Estoque{% endblock %}
+
+{% block styles %}
+<style>
+  /* ===== Auditoria de Estoque — o desenho aprovado na prova ============
+     Uma tabela por produto. Inicial, Vendas e Final valem para as duas
+     contas; Compras, Escritural, Perda e Acumulada tem DUAS sublinhas:
+     N (nota fiscal) em cima, D (descarga medida) embaixo.               */
+  #aud{ --line-2:#dde3ec; --muted:#6b7280; --blue:#1D63A5; --blue-deep:#07569C;
+    --neg:#a3262b; --negbg:#fbecec; --pos:#186c37; --posbg:#e6f4ea;
+    --linha2:#f0f2f5;
+    --shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06); }
+
+  /* Filtro recolhido — o mesmo da Conciliação */
+  #aud .filtros{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+    box-shadow:var(--shadow); padding:.7rem 1rem; margin-bottom:1rem; }
+  #aud .filtros>summary{ list-style:none; cursor:pointer; display:flex;
+    align-items:center; gap:.5rem; font-weight:700; color:var(--blue-deep); }
+  #aud .filtros>summary::-webkit-details-marker{ display:none; }
+  #aud .filtros .selo{ font-size:.72rem; font-weight:700; background:#e6f1fb;
+    color:#0c447c; border-radius:999px; padding:.12rem .55rem; }
+  #aud .filtros .chev{ transition:transform .2s; color:var(--muted); margin-left:auto; }
+  #aud .filtros[open] .chev{ transform:rotate(180deg); }
+  #aud .filtros__body{ margin-top:.8rem; display:grid; gap:.6rem;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); align-items:end; }
+  #aud .filtros__body label{ font-size:10.5px; text-transform:uppercase;
+    color:var(--muted); font-weight:700; display:block; margin-bottom:2px; }
+  #aud .filtros__body input,#aud .filtros__body select{ width:100%;
+    border:1px solid var(--line-2); border-radius:8px; padding:.35rem .5rem;
+    font-size:.85rem; }
+  #aud .filtros__btns{ display:flex; gap:.4rem; }
+
+  /* Bloco com as abas de produto */
+  #aud .bloco{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+    box-shadow:var(--shadow); overflow:hidden; margin-bottom:1rem; }
+  #aud .bloco__cab{ padding:.9rem 1rem .5rem; }
+  #aud .bloco__cab p{ margin:0; font-size:.82rem; color:var(--muted); }
+  #aud .bloco__cab p b{ color:#374151; }
+  #aud .abas{ display:flex; gap:.35rem; padding:.5rem .8rem; overflow-x:auto;
+    border-bottom:1px solid var(--line-2); scrollbar-width:none; }
+  #aud .abas::-webkit-scrollbar{ display:none; }
+  #aud .aba{ flex:0 0 auto; border:1px solid var(--line-2); background:#fff;
+    color:#374151; border-radius:999px; padding:.35rem .8rem; font-size:.82rem;
+    font-weight:800; font-family:inherit; cursor:pointer; display:inline-flex;
+    align-items:center; gap:.4rem; }
+  #aud .aba small{ font-weight:700; font-size:.68rem; color:var(--muted);
+    font-variant-numeric:tabular-nums; }
+  #aud .aba.on{ background:var(--pb,#e9f0f8); border-color:var(--pc,var(--blue));
+    color:var(--pc,var(--blue-deep)); }
+  #aud .aba.on small{ color:inherit; }
+  #aud .aba--res.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #aud .painel{ display:none; }
+  #aud .painel.on{ display:block; }
+  #aud .rolagem{ overflow-x:auto; }
+
+  #aud table{ width:100%; border-collapse:collapse; font-size:.8rem; min-width:680px; }
+  #aud .t-res{ min-width:520px; }
+  #aud th{ text-align:left; font-size:.62rem; font-weight:800; letter-spacing:.05em;
+    text-transform:uppercase; color:var(--muted); padding:.55rem .55rem .4rem;
+    border-bottom:1px solid var(--line-2); line-height:1.25; }
+  #aud td{ padding:.48rem .55rem; border-bottom:1px solid var(--linha2);
+    font-variant-numeric:tabular-nums; white-space:nowrap;
+    /* a linha tem dois andares (N/D); o que so tem um — Data, Inicial,
+       Vendas, Final — fica no MEIO, nao pendurado no topo */
+    vertical-align:middle; }
+  #aud th.n, #aud td.n{ text-align:right; }
+  #aud td.per{ font-weight:800; }
+  #aud td.acu{ opacity:.85; }
+  #aud tbody tr:nth-child(even) td{ background:#f7f9fc; }
+  #aud tr.ruim td{ background:var(--negbg); }
+  #aud tr.sobra td{ background:var(--posbg); }
+  #aud tr.soma td{ border-bottom:0; border-top:1.5px solid #1f2937;
+    font-weight:800; background:none; }
+  #aud .dsem{ font-size:.62rem; color:var(--muted); font-weight:700;
+    text-transform:uppercase; letter-spacing:.03em; }
+
+  /* as duas sublinhas: N em cima, D embaixo */
+  #aud .dl{ display:flex; justify-content:flex-end; align-items:baseline; gap:.35rem; }
+  #aud .dl + .dl{ margin-top:.12rem; }
+  #aud .lb{ font-style:normal; font-weight:800; font-size:.58rem; line-height:1;
+    padding:.12rem .28rem; border-radius:5px; }
+  #aud .lb.ln{ background:#e9f0f8; color:var(--blue); }
+  #aud .lb.ld{ background:#eef1f5; color:#5a6675; }
+
+  #aud .pd{ display:inline-block; width:9px; height:9px; border-radius:3px;
+    margin-right:.45rem; }
+  #aud .fi{ display:inline-block; font-style:normal; font-weight:800;
+    font-size:.6rem; line-height:1; padding:.12rem .3rem; border-radius:5px;
+    vertical-align:1px; }
+  #aud .fi.f{ background:var(--negbg); color:var(--neg); }
+  #aud .fi.i{ background:var(--posbg); color:var(--pos); }
+  #aud .parc{ display:block; font-size:.66rem; color:var(--muted);
+    margin-top:.14rem; text-align:right; }
+  #aud .denota{ color:var(--muted); }
+  #aud .neg{ color:var(--neg); } #aud .pos{ color:var(--pos); }
+  #aud .neutro{ color:var(--muted); font-weight:400; }
+  #aud .nota-res{ font-size:.78rem; color:var(--muted);
+    padding:.6rem .9rem .9rem; margin:0; max-width:62ch; }
+  #aud .vazio{ padding:1.2rem 1rem; font-size:.86rem; color:var(--muted); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid" id="aud">
+  {% set mig_titulo = 'Auditoria de Estoque' %}
+  {% set mig_icone = 'bi-clipboard-check' %}
+  {% set aba_ativa = 'auditoria' %}
+  {% include 'includes/nav_migracoes.html' %}
+
+  <details class="filtros"{% if n_filtros %} open{% endif %}>
+    <summary>
+      <i class="bi bi-funnel"></i> Filtros
+      {% if n_filtros %}<span class="selo">{{ n_filtros }} ativo{{ 's' if n_filtros > 1 else '' }}</span>{% endif %}
+      <i class="bi bi-chevron-down chev"></i>
+    </summary>
+    <form method="GET" action="{{ url_for('estoque.auditoria') }}" class="filtros__body">
+      <div>
+        <label>Empresa</label>
+        <select name="empresa">
+          {% for e in empresas %}
+          <option value="{{ e.id }}" {% if cliente_id == e.id %}selected{% endif %}>{{ e.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div><label>Data de</label><input type="date" name="data_ini" value="{{ data_ini }}"></div>
+      <div><label>Data até</label><input type="date" name="data_fim" value="{{ data_fim }}"></div>
+      <div class="filtros__btns">
+        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Filtrar</button>
+        <a href="{{ url_for('estoque.auditoria') }}" class="btn btn-sm btn-outline-secondary">Limpar</a>
+      </div>
+    </form>
+  </details>
+
+  {% if not produtos %}
+  <div class="bloco"><div class="vazio">
+    Nenhuma empresa com leitura de tanque — a auditoria precisa da leitura
+    diária de ABERTURA para fechar a conta.
+  </div></div>
+  {% else %}
+  <div class="bloco">
+    <div class="bloco__cab">
+      <p>Tudo em litros. Em cada dia, <i class="lb ln">N</i> é a conta pela
+      <b>nota fiscal</b> e <i class="lb ld">D</i> pela <b>descarga medida</b>.
+      Compras lançadas no <b>dia em que desceram</b>:
+      <i class="fi f">F</i> nota fracionada &middot;
+      <i class="fi i">I</i> desceu integral.</p>
+    </div>
+    <div class="abas">
+      {% for p in produtos %}
+      <button type="button" class="aba{{ ' on' if loop.first }}"
+              style="--pc:{{ p.cor }};--pb:{{ p.cbg }}" onclick="audTroca({{ loop.index0 }})">
+        {{ p.nome }} <small>N <span class="{{ p.fim_n.c }}">{{ p.fim_n.t }}</span>
+        &middot; D <span class="{{ p.fim_d.c }}">{{ p.fim_d.t }}</span></small>
+      </button>
+      {% endfor %}
+      <button type="button" class="aba aba--res" onclick="audTroca(4)">Resumo</button>
+    </div>
+
+    {% for p in produtos %}
+    <div class="painel{{ ' on' if loop.first }}" data-k="{{ loop.index0 }}">
+      <div class="rolagem"><table>
+        <thead><tr>
+          <th>Data</th><th class="n">Estoque<br>Inicial</th>
+          <th class="n">Compras</th><th class="n">Vendas</th>
+          <th class="n">Estoque<br>Escritural</th><th class="n">Estoque<br>Final</th>
+          <th class="n">Perda<br>ou Sobra</th><th class="n">Acumulada</th>
+        </tr></thead>
+        <tbody>
+          {% for l in p.linhas %}
+          <tr{% if l.destaque %} class="{{ l.destaque }}"{% endif %}>
+            <td>{{ l.data }} <small class="dsem">{{ l.dsem }}</small></td>
+            <td class="n">{{ l.ini }}</td>
+            <td class="n">
+              <span class="dl"><i class="lb ln">N</i>{{ l.cn }}</span>
+              <span class="dl"><i class="lb ld">D</i>{{ l.cd }}</span>
+              {% if l.parcelas %}
+              <small class="parc">
+                {%- for pc in l.parcelas -%}
+                  {%- if not loop.first %} &middot; {% endif -%}
+                  {{ pc.l }}&nbsp;<i class="fi {{ 'f' if pc.frac else 'i' }}">{{ 'F' if pc.frac else 'I' }}</i>
+                  {%- if pc.frac %}&nbsp;<span class="denota">de {{ pc.de }}</span>{% endif -%}
+                {%- endfor -%}
+              </small>
+              {% endif %}
+            </td>
+            <td class="n">{{ l.ven }}</td>
+            <td class="n">
+              <span class="dl"><i class="lb ln">N</i>{{ l.esc_n }}</span>
+              <span class="dl"><i class="lb ld">D</i>{{ l.esc_d }}</span>
+            </td>
+            <td class="n">{{ l.fin }}</td>
+            <td class="n per">
+              <span class="dl"><i class="lb ln">N</i><span class="{{ l.per_n.c }}">{{ l.per_n.t }}</span></span>
+              <span class="dl"><i class="lb ld">D</i><span class="{{ l.per_d.c }}">{{ l.per_d.t }}</span></span>
+            </td>
+            <td class="n acu">
+              <span class="dl"><i class="lb ln">N</i><span class="{{ l.acu_n.c }}">{{ l.acu_n.t }}</span></span>
+              <span class="dl"><i class="lb ld">D</i><span class="{{ l.acu_d.c }}">{{ l.acu_d.t }}</span></span>
+            </td>
+          </tr>
+          {% endfor %}
+          <tr class="soma">
+            <td>Total</td><td class="n"></td>
+            <td class="n">
+              <span class="dl"><i class="lb ln">N</i>{{ p.tot_cn }}</span>
+              <span class="dl"><i class="lb ld">D</i>{{ p.tot_cd }}</span>
+            </td>
+            <td class="n">{{ p.tot_v }}</td>
+            <td class="n"></td><td class="n"></td>
+            <td class="n per">
+              <span class="dl"><i class="lb ln">N</i><span class="{{ p.fim_n.c }}">{{ p.fim_n.t }}</span></span>
+              <span class="dl"><i class="lb ld">D</i><span class="{{ p.fim_d.c }}">{{ p.fim_d.t }}</span></span>
+            </td>
+            <td class="n"></td>
+          </tr>
+        </tbody>
+      </table></div>
+    </div>
+    {% endfor %}
+
+    <div class="painel" data-k="4">
+      <div class="rolagem"><table class="t-res">
+        <thead><tr>
+          <th>Produto</th><th class="n">Dias<br>medidos</th>
+          <th class="n">Perdas</th><th class="n">Sobras</th><th class="n">Saldo</th>
+        </tr></thead>
+        <tbody>
+          {% for r in resumo %}
+          <tr>
+            <td><span class="pd" style="background:{{ r.cor }}"></span>{{ r.nome }}</td>
+            <td class="n">{{ r.dias }}</td>
+            <td class="n">
+              <span class="dl"><i class="lb ln">N</i><span class="{{ r.per_n.c }}">{{ r.per_n.t }}</span></span>
+              <span class="dl"><i class="lb ld">D</i><span class="{{ r.per_d.c }}">{{ r.per_d.t }}</span></span>
+            </td>
+            <td class="n">
+              <span class="dl"><i class="lb ln">N</i><span class="{{ r.sob_n.c }}">{{ r.sob_n.t }}</span></span>
+              <span class="dl"><i class="lb ld">D</i><span class="{{ r.sob_d.c }}">{{ r.sob_d.t }}</span></span>
+            </td>
+            <td class="n per">
+              <span class="dl"><i class="lb ln">N</i><span class="{{ r.sal_n.c }}">{{ r.sal_n.t }}</span></span>
+              <span class="dl"><i class="lb ld">D</i><span class="{{ r.sal_d.c }}">{{ r.sal_d.t }}</span></span>
+            </td>
+          </tr>
+          {% endfor %}
+          <tr class="soma">
+            <td>Total</td><td class="n"></td><td class="n"></td><td class="n"></td>
+            <td class="n per">
+              <span class="dl"><i class="lb ln">N</i><span class="{{ totais.n.c }}">{{ totais.n.t }}</span></span>
+              <span class="dl"><i class="lb ld">D</i><span class="{{ totais.d.c }}">{{ totais.d.t }}</span></span>
+            </td>
+          </tr>
+        </tbody>
+      </table></div>
+      <p class="nota-res">Perdas e sobras somadas em separado: uma sobra num
+      dia não apaga a perda do outro — o saldo é que fecha a conta. Dia sem
+      leitura de fechamento (o último) não entra.</p>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function audTroca(k) {
+  document.querySelectorAll('#aud .painel').forEach(function (p) {
+    p.classList.toggle('on', p.dataset.k == k);
+  });
+  document.querySelectorAll('#aud .aba').forEach(function (a, i) {
+    a.classList.toggle('on', i === k);
+  });
+}
+</script>
+{% endblock %}

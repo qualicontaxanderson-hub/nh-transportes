@@ -733,6 +733,265 @@ _EPS_L = 0.5  # tolerancia p/ considerar recebido nota == descarga
 DATA_CORTE_PENDENTE = '2026-08-01'
 
 
+# ==========================================================================
+# AUDITORIA DE ESTOQUE — uma tabela por produto, com as DUAS contas por dia:
+# N (nota fiscal) e D (descarga medida). Inicial, Vendas e Final sao iguais
+# nas duas; o que muda e a compra — por isso viram sublinhas, nao telas.
+#
+# Regras aprovadas na prova:
+#   Escritural = Inicial + Compras − Vendas
+#   Perda/Sobra = Final − Escritural  (Final = ABERTURA do dia seguinte)
+#   A NOTA MANDA: na linha N entra a quantidade da nota, lancada no dia em
+#   que DESCEU (pelo vinculo). Integral = a nota inteira; fracionada = as
+#   parcelas do vinculo, com a ULTIMA fechando a conta para somar a nota.
+#   Cada parcela sabe de qual nota veio (F "de 13.000") — e nota emitida que
+#   ainda nao desceu nao conta.
+# ==========================================================================
+
+def _aud_num(v):
+    """9573.0 -> '9.573'; None -> em-dash."""
+    if v is None:
+        return '—'
+    s = format(int(round(abs(v))), ',').replace(',', '.')
+    return ('-' if v < 0 else '') + s
+
+
+def _aud_saldo(v):
+    """Perda com sinal e vermelha; sobra sem sinal e verde; zero neutro."""
+    if v is None:
+        return {'t': '—', 'c': 'neutro'}
+    n = int(round(v))
+    if n == 0:
+        return {'t': '0', 'c': 'neutro'}
+    s = format(abs(n), ',').replace(',', '.')
+    if n < 0:
+        return {'t': '−' + s, 'c': 'neg'}
+    return {'t': s, 'c': 'pos'}
+
+
+_AUD_DIAS_SEM = ('seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom')
+
+
+def _auditoria_dados(cur, cliente_id, d_ini, d_fim):
+    """Monta a auditoria: por produto, os dias com as duas contas.
+
+    Pura de Flask de proposito: recebe cursor e datas, devolve estruturas ja
+    formatadas pro template — e o teste roda isto direto contra o banco.
+    """
+    ids_in = ",".join(str(i) for i in CONC_IDS)
+    d_fim_leitura = d_fim + timedelta(days=1)
+
+    # -- leituras ABERTURA (inicial do dia; a do dia+1 e o final) ---------
+    cur.execute(f"""
+        SELECT DATE(l.data_leitura) AS dia, l.produto_id AS pid,
+               SUM(l.volume_atual) AS litros
+        FROM leitura_tanque_diaria l
+        WHERE UPPER(TRIM(l.titulo)) = 'ABERTURA'
+          AND l.cliente_id = %s AND l.produto_id IN ({ids_in})
+          AND DATE(l.data_leitura) BETWEEN %s AND %s
+        GROUP BY dia, pid""", (cliente_id, d_ini, d_fim_leitura))
+    leit = {(r['dia'], r['pid']): float(r['litros'] or 0) for r in cur.fetchall()}
+
+    # -- vendas (mesma ponte por CNPJ da conciliacao) ---------------------
+    cur.execute(f"""
+        SELECT DATE(v.dh_emissao) AS dia, i.produto_id AS pid,
+               SUM(i.quantidade) AS litros
+        FROM vendas_xml_itens i
+        JOIN vendas_xml v ON v.id = i.venda_id
+        JOIN clientes cl
+          ON REPLACE(REPLACE(REPLACE(REPLACE(cl.cnpj, '.', ''), '/', ''), '-', ''), ' ', '')
+             = v.cnpj_emitente
+        WHERE cl.id = %s AND i.produto_id IN ({ids_in})
+          AND i.unidade = 'L' AND v.situacao <> 'cancelada'
+          AND DATE(v.dh_emissao) BETWEEN %s AND %s
+        GROUP BY dia, pid""", (cliente_id, d_ini, d_fim))
+    ven = {(r['dia'], r['pid']): float(r['litros'] or 0) for r in cur.fetchall()}
+
+    # -- linha N: vinculos, com a alocacao "a nota manda" -----------------
+    # Historia completa por item (um item pode ter parcela fora do periodo;
+    # a alocacao precisa dela para a ultima parcela fechar certo).
+    cur.execute(f"""
+        SELECT dn.item_id, i.quantidade AS nota_l, dn.litros AS vinc_l,
+               DATE(COALESCE(dp.data_descarga, dp.data_final, dp.data_inicial)) AS dia,
+               dp.produto_id AS pid
+        FROM descarga_nota dn
+        JOIN dfe_itens i ON i.id = dn.item_id
+        JOIN descargas_pendentes dp ON dp.id = dn.descarga_id
+        WHERE dp.cliente_id = %s AND dp.produto_id IN ({ids_in})
+        ORDER BY dn.item_id, dia, dn.id""", (cliente_id,))
+    por_item = {}
+    for r in cur.fetchall():
+        por_item.setdefault(r['item_id'], []).append(r)
+
+    nota, parcelas = {}, {}
+    for _item, vs in por_item.items():
+        nota_total = float(vs[0]['nota_l'] or 0)
+        frac = len(vs) > 1
+        resto = nota_total
+        for k, r in enumerate(vs):
+            if not frac:
+                usar = nota_total
+            elif k < len(vs) - 1:
+                usar = min(float(r['vinc_l'] or 0), max(resto, 0.0))
+            else:
+                usar = resto
+            resto -= usar
+            if not (d_ini <= r['dia'] <= d_fim):
+                continue
+            ky = (r['dia'], r['pid'])
+            nota[ky] = nota.get(ky, 0.0) + usar
+            parcelas.setdefault(ky, []).append(
+                {'l': _aud_num(usar), 'frac': frac, 'de': _aud_num(nota_total)})
+
+    # -- linha D: a descarga medida ---------------------------------------
+    cur.execute(f"""
+        SELECT DATE(COALESCE(d.data_descarga, d.data_final, d.data_inicial)) AS dia,
+               d.produto_id AS pid, SUM(d.total_descarga) AS litros
+        FROM descargas_pendentes d
+        WHERE d.cliente_id = %s AND d.produto_id IN ({ids_in})
+          AND DATE(COALESCE(d.data_descarga, d.data_final, d.data_inicial))
+              BETWEEN %s AND %s
+        GROUP BY dia, pid""", (cliente_id, d_ini, d_fim))
+    desc = {(r['dia'], r['pid']): float(r['litros'] or 0) for r in cur.fetchall()}
+
+    # -- montagem ---------------------------------------------------------
+    produtos, resumo = [], []
+    tot_res_n = tot_res_d = 0.0
+    for pid, info in sorted(CONC_PRODUTOS.items(), key=lambda kv: kv[1]['ordem']):
+        linhas = []
+        acu_n = acu_d = 0.0
+        tot_cn = tot_cd = tot_v = 0.0
+        perdas_n = sobras_n = perdas_d = sobras_d = 0.0
+        dias_medidos = 0
+        fim_n = fim_d = None
+        d = d_ini
+        while d <= d_fim:
+            i2 = leit.get((d, pid))
+            f2 = leit.get((d + timedelta(days=1), pid))
+            v = ven.get((d, pid), 0.0)
+            cn_ = nota.get((d, pid), 0.0)
+            cd = desc.get((d, pid), 0.0)
+            esc_n = (i2 + cn_ - v) if i2 is not None else None
+            esc_d = (i2 + cd - v) if i2 is not None else None
+            per_n = (f2 - esc_n) if (esc_n is not None and f2 is not None) else None
+            per_d = (f2 - esc_d) if (esc_d is not None and f2 is not None) else None
+            if per_n is not None:
+                acu_n += per_n
+                fim_n = acu_n
+                dias_medidos += 1
+                if per_n < 0:
+                    perdas_n += per_n
+                else:
+                    sobras_n += per_n
+            if per_d is not None:
+                acu_d += per_d
+                fim_d = acu_d
+                if per_d < 0:
+                    perdas_d += per_d
+                else:
+                    sobras_d += per_d
+            tot_cn += cn_
+            tot_cd += cd
+            tot_v += v
+
+            piores = [x for x in (per_n, per_d) if x is not None]
+            destaque = ''
+            if piores and min(piores) < -300:
+                destaque = 'ruim'
+            elif piores and max(piores) > 300 and min(piores) > -300:
+                destaque = 'sobra'
+
+            linhas.append({
+                'data': d.strftime('%d/%m'), 'dsem': _AUD_DIAS_SEM[d.weekday()],
+                'destaque': destaque,
+                'ini': _aud_num(i2), 'ven': _aud_num(v), 'fin': _aud_num(f2),
+                'cn': _aud_num(cn_), 'cd': _aud_num(cd),
+                'esc_n': _aud_num(esc_n), 'esc_d': _aud_num(esc_d),
+                'per_n': _aud_saldo(per_n), 'per_d': _aud_saldo(per_d),
+                'acu_n': _aud_saldo(acu_n if per_n is not None else None),
+                'acu_d': _aud_saldo(acu_d if per_d is not None else None),
+                'parcelas': parcelas.get((d, pid), []),
+            })
+            d += timedelta(days=1)
+
+        produtos.append({
+            'pid': pid, 'nome': info['nome'], 'cor': info['cor'],
+            'cbg': info['cbg'], 'linhas': linhas,
+            'tot_cn': _aud_num(tot_cn), 'tot_cd': _aud_num(tot_cd),
+            'tot_v': _aud_num(tot_v),
+            'fim_n': _aud_saldo(fim_n), 'fim_d': _aud_saldo(fim_d),
+        })
+        resumo.append({
+            'nome': info['nome'], 'cor': info['cor'], 'dias': dias_medidos,
+            'per_n': _aud_saldo(perdas_n if perdas_n else 0),
+            'per_d': _aud_saldo(perdas_d if perdas_d else 0),
+            'sob_n': _aud_saldo(sobras_n if sobras_n else 0),
+            'sob_d': _aud_saldo(sobras_d if sobras_d else 0),
+            'sal_n': _aud_saldo(fim_n if fim_n is not None else 0),
+            'sal_d': _aud_saldo(fim_d if fim_d is not None else 0),
+        })
+        tot_res_n += (fim_n or 0)
+        tot_res_d += (fim_d or 0)
+
+    return produtos, resumo, {'n': _aud_saldo(tot_res_n), 'd': _aud_saldo(tot_res_d)}
+
+
+@estoque_bp.route('/estoque/auditoria', methods=['GET'])
+@login_required
+def auditoria():
+    hoje = date.today()
+    f_empresa = (request.args.get('empresa') or '').strip()
+    f_ini = (request.args.get('data_ini') or '').strip()
+    f_fim = (request.args.get('data_fim') or '').strip()
+    try:
+        d_ini = datetime.strptime(f_ini, '%Y-%m-%d').date() if f_ini else hoje - timedelta(days=13)
+        d_fim = datetime.strptime(f_fim, '%Y-%m-%d').date() if f_fim else hoje
+    except ValueError:
+        d_ini, d_fim = hoje - timedelta(days=13), hoje
+    if d_fim < d_ini:
+        d_ini, d_fim = d_fim, d_ini
+    # Teto de 92 dias: cada dia sao 4 produtos x varias consultas em memoria;
+    # um range de anos por engano nao pode derrubar a tela.
+    if (d_fim - d_ini).days > 92:
+        d_ini = d_fim - timedelta(days=92)
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        # empresas auditaveis: as que tem leitura de tanque
+        cur.execute(
+            """
+            SELECT DISTINCT c.id, COALESCE(NULLIF(c.nome_fantasia, ''),
+                                           c.razao_social) AS nome
+            FROM clientes c
+            WHERE c.id IN (SELECT cliente_id FROM leitura_tanque_diaria
+                           WHERE cliente_id IS NOT NULL)
+            ORDER BY nome
+            """
+        )
+        empresas = cur.fetchall()
+        cliente_id = None
+        if f_empresa.isdigit() and any(e['id'] == int(f_empresa) for e in empresas):
+            cliente_id = int(f_empresa)
+        elif empresas:
+            cliente_id = empresas[0]['id']
+
+        produtos, resumo, totais = ([], [], {'n': _aud_saldo(None), 'd': _aud_saldo(None)})
+        if cliente_id:
+            produtos, resumo, totais = _auditoria_dados(cur, cliente_id, d_ini, d_fim)
+
+        return render_template(
+            'estoque/auditoria.html',
+            empresas=empresas, cliente_id=cliente_id,
+            produtos=produtos, resumo=resumo, totais=totais,
+            data_ini=d_ini.strftime('%Y-%m-%d'), data_fim=d_fim.strftime('%Y-%m-%d'),
+            n_filtros=(1 if f_empresa else 0) + (1 if f_ini or f_fim else 0),
+        )
+    finally:
+        cur.close()
+        conn.close()
+
+
 @estoque_bp.route('/estoque/conciliacao', methods=['GET'])
 @login_required
 def conciliacao():

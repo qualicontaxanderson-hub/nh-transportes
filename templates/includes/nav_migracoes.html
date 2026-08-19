@@ -17,7 +17,7 @@
      {% include 'includes/nav_migracoes.html' %}
 
    Valores de aba_ativa: 'vendas' | 'compras' | 'ctes' | 'estoque' |
-                         'conciliacao' | 'tempo_real' | 'pendente'
+                         'conciliacao' | 'auditoria' | 'tempo_real' | 'pendente'
    A aba da tela atual fica destacada (azul #1D63A5) e NÃO é clicável.
 
    REGRA DO CABECALHO: ao lado do titulo entra SO informacao (contadores em
@@ -91,7 +91,7 @@
   .nav-migracoes .nav-link:hover{ color:#1D63A5; background:#fff; }
   .nav-migracoes .nav-link.active{ background:#1D63A5; color:#fff; cursor:default;
     box-shadow:0 1px 2px rgba(16,24,40,.18); }
-  /* No celular aperta um tico: sao 7 abas — assim cabem em 2 linhas, nao 3. */
+  /* No celular aperta um tico: sao 8 abas — assim cabem em 2 linhas, nao 3. */
   @media (max-width:575.98px){
     .nav-migracoes .nav-link{ font-size:.82rem; padding:.38rem .6rem; }
   }
@@ -115,6 +115,7 @@
     ('ctes',    'CT-e',    'bi-truck',                   url_for('dfe_ctes.index')),
     ('estoque', 'Estoque', 'bi-box-seam',                url_for('estoque.index')),
     ('conciliacao', 'Conciliação', 'bi-clipboard-data',  url_for('estoque.conciliacao')),
+    ('auditoria', 'Auditoria', 'bi-clipboard-check',     url_for('estoque.auditoria')),
     ('tempo_real', 'Tempo Real', 'bi-speedometer2',      url_for('estoque.tempo_real')),
     ('pendente', 'Pendente', 'bi-hourglass-split',       url_for('estoque.pendente_descer'))
 ] %}
