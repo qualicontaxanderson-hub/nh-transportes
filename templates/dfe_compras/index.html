@@ -93,7 +93,7 @@
     <h3>Compras — DFe</h3>
     <button id="btnCapturar" type="button" class="acao" onclick="capturarAgora()">
       <i class="bi bi-cloud-download"></i> Capturar</button>
-    <button type="button" class="acao" onclick="cmpgAbrir()">
+    <button type="button" class="acao" onclick="dfecFiltro()">
       <i class="bi bi-sliders"></i> Filtro
       {% if filtros_ativos %}<span style="background:#fff;color:#0C4C86;border-radius:99px;min-width:17px;height:17px;display:inline-grid;place-items:center;font-size:.66rem;">{{ filtros_ativos }}</span>{% endif %}
     </button>
@@ -1223,6 +1223,59 @@
   </form>
 </div>
 
+{# ========== FILTRO DAS REGRAS (2 passos: Empresa > Fornecedor) ==========
+   Filtra os CARDS da aba Regras ali mesmo, sem recarregar nem trocar de
+   aba — e so consulta. #}
+<script type="application/json" id="regg-ef">{{ emp_forn | tojson }}</script>
+<div class="escuro" id="regg-escuro" onclick="reggFechar()"></div>
+<div class="gav" id="regg-gav" role="dialog" aria-label="Filtro das regras">
+  <div class="gav__pega"></div>
+  <div class="passos">
+    <button type="button" class="passo on aqui" onclick="reggIrPasso(0)"><i></i><span>1 · Empresa</span></button>
+    <button type="button" class="passo" onclick="reggIrPasso(1)"><i></i><span>2 · Fornecedor</span></button>
+  </div>
+
+  <div class="etapa" id="regg-et0">
+    <div class="pnome"><b>Empresa</b>restringe os fornecedores — ou pule</div>
+    <div class="gav__b">
+      <div class="opcs">
+        {% for e in empresas %}
+        <label class="opc"><input type="checkbox" class="regg-emp" value="{{ e.id }}">
+          <span>{{ e.nome }}</span></label>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="etapa" id="regg-et1" hidden>
+    <div class="pnome"><b>Fornecedor</b>quais regras mostrar</div>
+    <div class="gav__b">
+      <div class="gr__c"><span class="gr__t">Fornecedores com regra</span>
+        <button type="button" class="gr__a" data-alvo="regg-l-forn"
+                onclick="reggTodos()">marcar todos</button></div>
+      <input class="campo" type="search" placeholder="Buscar fornecedor…"
+             oninput="reggBusca(this)">
+      <div class="opcs" id="regg-l-forn">
+        {% for g in fornecedores_regras %}
+        <label class="opc"><input type="checkbox" class="regg-forn" value="{{ g.emit_cnpj or '' }}">
+          <span>{{ g.nome or '(sem nome)' }}<small>{{ g.regras|length }} regra{{ 's' if g.regras|length != 1 }}</small></span></label>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="gav__f">
+    <button type="button" class="bt-g bt-g--ca" id="regg-bt-voltar" hidden
+            onclick="reggIrPasso(0)">‹ Voltar</button>
+    <button type="button" class="bt-g bt-g--ca" id="regg-bt-limpar" hidden
+            onclick="reggLimpar()">Limpar</button>
+    <button type="button" class="bt-g bt-g--ca" id="regg-bt-pular"
+            onclick="reggPular()">Pular</button>
+    <button type="button" class="bt-g bt-g--ok" id="regg-bt-ir"
+            onclick="reggAvancar()">Avançar</button>
+  </div>
+</div>
+
 {# ========== CLASSIFICADOR EM PASSOS (celular) ==========
    1) o que e  2) produto (so combustivel)  3) Memorizar / So desta vez.
    So preenche os selects escondidos do item e chama classificar(). #}
@@ -1406,6 +1459,119 @@ function cmpAbre(lin) {
   }
   var lf = document.getElementById('cmpg-l-forn');
   if (lf) lf.addEventListener('change', cmpgProdDep);
+})();
+
+// ── Filtro sensivel a sub-aba: nas Regras abre a gaveta propria (2
+// passos, filtra os cards na hora); nas demais, a gaveta de Compras.
+function dfecFiltro() {
+  var regras = document.getElementById('pane-regras');
+  if (regras && regras.classList.contains('active')) { reggAbrir(); return; }
+  cmpgAbrir();
+}
+(function () {
+  var passo = 0;
+  var EF = {};
+  try { EF = JSON.parse(document.getElementById('regg-ef').textContent) || {}; }
+  catch (e) { EF = {}; }
+  function el(id) { return document.getElementById(id); }
+  window.reggAbrir = function () {
+    reggIrPasso(0);
+    el('regg-gav').classList.add('on');
+    el('regg-escuro').classList.add('on');
+  };
+  window.reggFechar = function () {
+    el('regg-gav').classList.remove('on');
+    el('regg-escuro').classList.remove('on');
+  };
+  window.reggIrPasso = function (n) {
+    passo = n;
+    var ps = el('regg-gav').querySelectorAll('.passo');
+    for (var i = 0; i < 2; i++) {
+      el('regg-et' + i).hidden = (i !== n);
+      ps[i].classList.toggle('aqui', i === n);
+      ps[i].classList.toggle('on', i <= n);
+    }
+    var fim = (n === 1);
+    el('regg-bt-voltar').hidden = !fim;
+    el('regg-bt-limpar').hidden = !fim;
+    el('regg-bt-pular').hidden = fim;
+    el('regg-bt-ir').textContent = fim ? 'Filtrar' : 'Avançar';
+    if (fim) reggDep();
+  };
+  /* Passo 2 obedece o passo 1: so fornecedores das empresas marcadas. */
+  function reggDep() {
+    var emps = Array.prototype.map.call(
+      document.querySelectorAll('.regg-emp:checked'),
+      function (i) { return i.value; });
+    var ok = null;
+    if (emps.length) {
+      ok = {};
+      emps.forEach(function (e) {
+        (EF[e] || []).forEach(function (c) { ok[c] = 1; });
+      });
+    }
+    document.querySelectorAll('#regg-l-forn .opc').forEach(function (op) {
+      var inp = op.querySelector('input');
+      var fora = ok && !ok[inp.value];
+      op.hidden = !!fora;
+      if (fora) inp.checked = false;
+    });
+  }
+  window.reggPular = function () {
+    document.querySelectorAll('.regg-emp').forEach(function (c) { c.checked = false; });
+    reggIrPasso(1);
+  };
+  window.reggAvancar = function () {
+    if (passo === 0) { reggIrPasso(1); return; }
+    // Filtrar: esconde os cards fora da escolha e fica NA aba Regras.
+    var marc = Array.prototype.map.call(
+      document.querySelectorAll('.regg-forn:checked'),
+      function (i) { return i.value; });
+    var ok = null;
+    if (marc.length) {
+      ok = {};
+      marc.forEach(function (c) { ok[c] = 1; });
+    } else {
+      // sem fornecedor marcado, vale a empresa (fornecedores visiveis)
+      var todos = document.querySelectorAll('#regg-l-forn .opc');
+      var vis = Array.prototype.filter.call(todos,
+        function (op) { return !op.hidden; });
+      if (vis.length < todos.length) {
+        ok = {};
+        vis.forEach(function (op) { ok[op.querySelector('input').value] = 1; });
+      }
+    }
+    document.querySelectorAll('#accFornecedores .accordion-item').forEach(function (it) {
+      it.hidden = !!(ok && !ok[it.getAttribute('data-cnpj') || '']);
+    });
+    reggFechar();
+  };
+  window.reggLimpar = function () {
+    document.querySelectorAll('.regg-emp, .regg-forn').forEach(function (c) { c.checked = false; });
+    document.querySelectorAll('#regg-l-forn .opc').forEach(function (op) { op.hidden = false; });
+    document.querySelectorAll('#accFornecedores .accordion-item').forEach(function (it) {
+      it.hidden = false;
+    });
+    reggFechar();
+  };
+  window.reggTodos = function () {
+    var todos = document.querySelectorAll('#regg-l-forn .opc');
+    var vis = Array.prototype.filter.call(todos,
+      function (op) { return !op.hidden; });
+    var tudo = vis.length && vis.every(function (op) {
+      return op.querySelector('input').checked; });
+    vis.forEach(function (op) { op.querySelector('input').checked = !tudo; });
+    var b = document.querySelector('.gr__a[data-alvo="regg-l-forn"]');
+    if (b) b.textContent = tudo ? 'marcar todos' : 'desmarcar todos';
+  };
+  window.reggBusca = function (inp) {
+    var q = inp.value.trim().toLowerCase();
+    document.querySelectorAll('#regg-l-forn .opc').forEach(function (op) {
+      op.hidden = q && op.textContent.toLowerCase().indexOf(q) === -1;
+    });
+  };
+  var le = document.querySelector('#regg-et0 .opcs');
+  if (le) le.addEventListener('change', function () { if (passo === 1) reggDep(); });
 })();
 
 // ── Classificador em passos (celular): preenche os selects do item e

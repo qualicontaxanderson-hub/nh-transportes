@@ -285,6 +285,20 @@ def compras():
         forn_prod = {}
         for r in cur.fetchall():
             forn_prod.setdefault(r['cnpj'], {})[str(r['pid'])] = r['n']
+        # Empresa -> fornecedores dela (o filtro das REGRAS usa: passo 1
+        # Empresa restringe o passo 2 Fornecedor).
+        cur.execute(
+            """
+            SELECT d.cliente_id AS emp, d.emit_cnpj AS cnpj
+            FROM dfe_documentos d
+            WHERE d.tipo = 'NFe' AND d.cliente_id IS NOT NULL
+              AND d.emit_cnpj IS NOT NULL AND d.emit_cnpj <> ''
+            GROUP BY d.cliente_id, d.emit_cnpj
+            """
+        )
+        emp_forn = {}
+        for r in cur.fetchall():
+            emp_forn.setdefault(str(r['emp']), []).append(r['cnpj'])
 
         # 2) LISTA por nota (limitada). Agrupa por documento (PK) -> os demais
         #    campos de d/emp sao funcionalmente dependentes.
@@ -558,7 +572,7 @@ def compras():
             filtros=f,
             f_emp=f_emp, f_forn=f_forn, f_prodf=f_prodf,
             dias=dias, op_forn=op_forn, op_prodf=op_prodf, emp_n=emp_n,
-            forn_prod=forn_prod,
+            forn_prod=forn_prod, emp_forn=emp_forn,
             empresas=empresas,
             compras=compras,
             compras_totais=compras_totais,
