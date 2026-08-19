@@ -289,6 +289,7 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
         """
         SELECT id, cliente_id, produto_id, produto_nome, tanque, status,
                total_descarga, total_descarga_20c,
+               volume_inicial, volume_final, origem,
                COALESCE(data_final, data_inicial, data_descarga) AS dt,
                COALESCE((SELECT SUM(dn.litros) FROM descarga_nota dn
                           WHERE dn.descarga_id = descargas_pendentes.id), 0) AS vinculado
@@ -300,6 +301,21 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
     d = cur.fetchone()
     if not d:
         return None
+    # Capacidade do tanque (ultima leitura conhecida) -> 'livre' no
+    # modal: capacidade - volume_final, o espaco depois da descarga.
+    if d.get('tanque') is not None:
+        try:
+            cur.execute(
+                'SELECT capacidade FROM leitura_tanque_diaria'
+                ' WHERE cliente_id = %s AND tanque = %s'
+                '   AND capacidade IS NOT NULL'
+                ' ORDER BY data_leitura DESC LIMIT 1',
+                (d['cliente_id'], d['tanque']))
+            r = cur.fetchone()
+            d['capacidade'] = (float(r['capacidade'])
+                               if r and r['capacidade'] else None)
+        except Exception:
+            d['capacidade'] = None
 
     recebido = _f(d["total_descarga"]) or 0.0
     vinculado = _f(d["vinculado"]) or 0.0

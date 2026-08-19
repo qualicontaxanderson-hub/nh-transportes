@@ -576,6 +576,72 @@ def descarga_manual():
         conn.close()
 
 
+@estoque_bp.route('/estoque/descarga/<int:descarga_id>/volumes', methods=['POST'])
+@login_required
+def corrigir_volumes(descarga_id):
+    """Corrige os volumes de uma descarga medida errada pelo ELS.
+
+    O caso real que motivou isto: descarga #88 de 11/08, em que o sensor
+    marcou volume inicial 449 L com o tanque em ~3.400 — o proprio e-mail do
+    ELS avisou "Volume inicial suspeito". A correcao NAO e automatica: quem
+    decide e o usuario, por este botao.
+
+    Recebe volume_inicial e volume_final; o total e SEMPRE final - inicial
+    (nao se digita total na mao). O 20°C e reescalado na mesma proporcao do
+    que havia. O valor antigo fica registrado na descricao, com autor e data
+    — corrigir nao pode apagar a historia.
+    """
+    vi = (request.form.get('volume_inicial') or '').replace(',', '.').strip()
+    vf = (request.form.get('volume_final') or '').replace(',', '.').strip()
+    try:
+        vi, vf = float(vi), float(vf)
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'erro': 'Volumes inválidos.'}), 400
+    if vi < 0 or vf <= vi:
+        return jsonify({'ok': False,
+                        'erro': 'O volume final tem de ser maior que o inicial.'}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            'SELECT volume_inicial, volume_final, total_descarga,'
+            '       total_descarga_20c, descricao'
+            ' FROM descargas_pendentes WHERE id = %s', (descarga_id,))
+        d = cur.fetchone()
+        if not d:
+            return jsonify({'ok': False, 'erro': 'Descarga não encontrada.'}), 404
+
+        total = round(vf - vi, 3)
+        # 20°C reescalado na proporcao antiga; sem base, fica igual ao total.
+        t_old = float(d['total_descarga'] or 0)
+        c_old = float(d['total_descarga_20c'] or 0)
+        t20 = round(total * (c_old / t_old), 3) if (t_old and c_old) else total
+
+        usuario = getattr(current_user, 'username', '') or 'sistema'
+        carimbo = ('[volumes corrigidos por %s em %s: era %s→%s L (total %s)]'
+                   % (usuario, date.today().strftime('%d/%m/%Y'),
+                      d['volume_inicial'], d['volume_final'],
+                      d['total_descarga']))
+        descricao = ((d['descricao'] or '') + ' ' + carimbo).strip()[:1000]
+
+        cur.execute(
+            'UPDATE descargas_pendentes'
+            ' SET volume_inicial=%s, volume_final=%s, total_descarga=%s,'
+            '     total_descarga_20c=%s, descricao=%s'
+            ' WHERE id=%s',
+            (vi, vf, total, t20, descricao, descarga_id))
+        conn.commit()
+        return jsonify({'ok': True, 'total': total})
+    except Exception as e:
+        conn.rollback()
+        current_app.logger.exception('[corrigir_volumes] falhou')
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
 @estoque_bp.route('/estoque/descarga/<int:descarga_id>/excluir', methods=['POST'])
 @login_required
 def excluir_descarga(descarga_id):

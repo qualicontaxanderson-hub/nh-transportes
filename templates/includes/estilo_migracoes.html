@@ -278,6 +278,33 @@
 .mig-modo__tit{ font-weight:700; font-size:.87rem; }
 .mig-modo__tit .q{ font-variant-numeric:tabular-nums; }
 .mig-modo__sub{ font-size:11px; color:var(--muted); line-height:1.35; }
+/* A regua da descarga no topo do modal, com o corrigir discreto ao lado. */
+.mig-vdsc__regua{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;
+  font-size:12px; color:var(--muted); margin-top:.35rem;
+  font-variant-numeric:tabular-nums; }
+.mig-vdsc__regua b{ color:var(--ink); font-weight:700; }
+.mig-vdsc__regua[hidden]{ display:none; }
+.mig-vdsc__fix{ border:1px solid var(--line-2); background:var(--surface);
+  color:var(--blue); border-radius:7px; padding:.14rem .5rem; font-size:11px;
+  font-weight:800; font-family:inherit; cursor:pointer; }
+.mig-vdsc__fix:hover{ border-color:var(--blue); }
+.mig-vdsc__fix--ok{ background:var(--blue); color:#fff; border-color:var(--blue); }
+.mig-vdsc__regua--form label{ display:inline-flex; align-items:center; gap:.3rem;
+  font-size:11px; font-weight:700; }
+.mig-vdsc__regua--form input{ width:96px; border:1px solid var(--line-2);
+  border-radius:7px; padding:.2rem .4rem; font-size:12px; font-family:inherit; }
+
+/* Parcial/Integral em linhas discretas. Em coluna, o flex-basis de 190px
+   das caixas virava ALTURA: dois blocos gigantes vazios. */
+.mig-modo__ops--lista{ flex-direction:column; gap:.3rem; }
+.mig-modo__ops--lista .mig-modo__op{ flex:0 0 auto; align-items:center;
+  padding:.42rem .55rem; }
+.mig-modo__lin{ display:flex; align-items:baseline; gap:.45rem; min-width:0;
+  font-size:.84rem; }
+.mig-modo__lin b{ font-weight:800; }
+.mig-modo__lin span{ font-size:11.5px; color:var(--muted); overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap; }
+
 .mig-modo__campo{ margin-top:.6rem; padding-top:.6rem; border-top:1px solid var(--line); }
 .mig-modo__campo[hidden]{ display:none; }
 /* Abaixo de 420px as duas opcoes viram pilha: alvo de toque largo no celular. */

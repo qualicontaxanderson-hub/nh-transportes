@@ -509,6 +509,28 @@
       '<div class="mig-vdsc__meta">TQ&nbsp;' + esc(dsc.tanque === null ? '—' : dsc.tanque) + '</div></div>' +
       '<div class="mig-vdsc__tot"><b>' + fmt(estado.recebido) + ' L</b>' +
       '<div class="mig-vdsc__meta">recebido no tanque</div></div></div>' +
+      // A regua da descarga: de onde partiu, onde parou e o que ainda cabe.
+      // Foi uma leitura inicial errada (449 L com o tanque em ~3.400) que
+      // inflou uma descarga em 3.000 L — com os numeros a vista e o botao de
+      // corrigir, quem percebe o erro resolve na hora.
+      (dsc.volume_inicial !== null && dsc.volume_inicial !== undefined
+        ? '<div class="mig-vdsc__regua" id="vdscRegua">' +
+          '<span>régua <b>' + fmt(dsc.volume_inicial) + '</b> → <b>' +
+          fmt(dsc.volume_final) + ' L</b>' +
+          (dsc.capacidade
+            ? ' · livre <b>' + fmt(dsc.capacidade - dsc.volume_final) + ' L</b>'
+            : '') + '</span>' +
+          '<button type="button" class="mig-vdsc__fix js-fix-vol">corrigir</button>' +
+          '</div>' +
+          '<div class="mig-vdsc__regua mig-vdsc__regua--form" id="vdscReguaForm" hidden>' +
+          '<label>inicial <input type="number" step="0.001" id="fixIni" value="' +
+          Number(dsc.volume_inicial) + '"></label>' +
+          '<label>final <input type="number" step="0.001" id="fixFim" value="' +
+          Number(dsc.volume_final) + '"></label>' +
+          '<button type="button" class="mig-vdsc__fix mig-vdsc__fix--ok js-fix-salvar">salvar</button>' +
+          '<button type="button" class="mig-vdsc__fix js-fix-cancela">cancelar</button>' +
+          '</div>'
+        : '') +
       '<div class="mig-bar"><i style="width:' + pct + '%"></i></div>' +
       '<div class="mig-vdsc__prog"><span>vinculado <b>' + fmt(estado.vinculado) + ' L</b> (' + pct + '%)</span>' +
       // Com as notas fechadas o numero vira PERDA/SOBRA (sinal + cor). Só
@@ -584,22 +606,23 @@
         '<input type="number" step="0.001" min="0" class="form-control form-control-sm" ' +
         'id="vincLitros" style="max-width:180px">' +
         '<div class="mig-hint" id="vincHint"></div>' +
-        '<div class="mig-vlbl mig-vlbl--forte" style="margin-top:.85rem">' +
-        '<i class="bi bi-question-circle"></i> Esta nota está encerrada?</div>' +
-        '<div class="mig-modo__ops" style="flex-direction:column">' +
+        '<div class="mig-vlbl" style="margin-top:.7rem">Esta nota está encerrada?</div>' +
+        // Linhas discretas, nao caixas: em coluna, o flex-basis de 190px das
+        // caixas virava ALTURA — dois blocos gigantes vazios na tela.
+        '<div class="mig-modo__ops mig-modo__ops--lista">' +
         // NENHUM marcado de proposito: sem escolha explicita o botao nao
         // habilita. Era o `checked` daqui que gravava 'parcial' sem o usuario
         // nunca ter visto a pergunta.
         '<label class="mig-modo__op">' +
         '<input type="radio" name="vmodo" value="parcial">' +
-        '<div><div class="mig-modo__tit">PARCIAL — ainda falta descarregar</div>' +
-        '<div class="mig-modo__sub">A nota guarda saldo e volta nos próximos dias, em destaque.</div>' +
-        '</div></label>' +
+        '<div class="mig-modo__lin"><b>Parcial</b>' +
+        '<span>ainda falta descarregar — a nota guarda saldo e volta</span></div>' +
+        '</label>' +
         '<label class="mig-modo__op">' +
         '<input type="radio" name="vmodo" value="integral">' +
-        '<div><div class="mig-modo__tit">INTEGRAL — fecha a nota agora</div>' +
-        '<div class="mig-modo__sub">Último lançamento. A nota sai das candidatas e a perda/sobra é apurada.</div>' +
-        '</div></label>' +
+        '<div class="mig-modo__lin"><b>Integral</b>' +
+        '<span>fecha a nota agora — sai das candidatas e apura a perda</span></div>' +
+        '</label>' +
         '</div>' +
         '<div id="vincAvisos"></div>' +
         '<div class="mig-vlbl" style="margin-top:.7rem">Observação ' +
@@ -717,6 +740,38 @@
                          esc(e.message || e) + '</div>';
       });
   }
+
+  // ---- corrigir volumes da descarga ----
+  body.addEventListener('click', function (ev) {
+    if (ev.target.closest('.js-fix-vol')) {
+      document.getElementById('vdscRegua').hidden = true;
+      document.getElementById('vdscReguaForm').hidden = false;
+      return;
+    }
+    if (ev.target.closest('.js-fix-cancela')) {
+      document.getElementById('vdscRegua').hidden = false;
+      document.getElementById('vdscReguaForm').hidden = true;
+      return;
+    }
+    if (ev.target.closest('.js-fix-salvar')) {
+      var bt = ev.target.closest('.js-fix-salvar');
+      bt.disabled = true; bt.textContent = 'salvando…';
+      var fd = new FormData();
+      fd.append('volume_inicial', document.getElementById('fixIni').value);
+      fd.append('volume_final', document.getElementById('fixFim').value);
+      fetch('/estoque/descarga/' + descId + '/volumes', {method: 'POST', body: fd})
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d.ok) throw new Error(d.erro || 'falha');
+          abrir(descId);            // recarrega o modal com o total novo
+        })
+        .catch(function (e) {
+          alert('Não deu para corrigir: ' + (e.message || e));
+          bt.disabled = false; bt.textContent = 'salvar';
+        });
+      return;
+    }
+  });
 
   // ---- eventos ----
   document.addEventListener('click', function (ev) {
