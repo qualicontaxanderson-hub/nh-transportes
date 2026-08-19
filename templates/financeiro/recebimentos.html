@@ -247,14 +247,10 @@
   #frt .opc small{ display:block; font-size:.71rem; color:var(--muted); }
   #frt .opc:has(input:checked){ background:var(--azul-claro); }
   #frt .opc[hidden]{ display:none; }
-  #frt .opc-btn{ display:block; width:100%; text-align:left; background:#fff;
-    border:0; border-bottom:1px solid var(--line); padding:.6rem .7rem;
-    font-size:.88rem; font-weight:800; color:var(--ink); cursor:pointer;
-    font-family:inherit; }
-  #frt .opc-btn:last-child{ border-bottom:0; }
-  #frt .opc-btn:hover{ background:var(--surface); }
-  #frt .opc-btn small{ display:block; font-size:.71rem; color:var(--muted);
+  #rpg-gav .opcs{ max-height:none; }
+  #rpg-gav .opc small{ display:block; font-size:.71rem; color:var(--muted);
     font-weight:600; }
+  #rpg-gav .opc > span{ white-space:normal; font-weight:700; }
   #frt .aviso-f{ padding:.85rem .6rem; font-size:.82rem; color:var(--muted);
     text-align:center; }
   /* Qual situação está valendo aqui — sem isso, sair do passo 1 com três das
@@ -521,11 +517,16 @@
       <div class="gav__b">
         <div class="gr__t" style="margin-bottom:.3rem">Como o dinheiro entrou?</div>
         <div class="opcs">
-          <button type="button" class="opc-btn" onclick="rpgForma('Pix')">Pix<small>caiu numa conta via Pix</small></button>
-          <button type="button" class="opc-btn" onclick="rpgForma('Transferência')">Transferência<small>TED/DOC numa conta</small></button>
-          <button type="button" class="opc-btn" onclick="rpgForma('Cartão')">Cartão<small>maquininha ligada a uma conta</small></button>
-          <button type="button" class="opc-btn" onclick="rpgForma('Dinheiro')">Dinheiro<small>não passa por conta — pula o passo 2</small></button>
-          <button type="button" class="opc-btn" onclick="rpgForma('Outro')">Outro</button>
+          <label class="opc"><input type="radio" name="rpg-r-forma" value="Pix" checked>
+            <span>Pix<small>caiu numa conta via Pix</small></span></label>
+          <label class="opc"><input type="radio" name="rpg-r-forma" value="Transferência">
+            <span>Transferência<small>TED/DOC numa conta</small></span></label>
+          <label class="opc"><input type="radio" name="rpg-r-forma" value="Cartão">
+            <span>Cartão<small>maquininha ligada a uma conta</small></span></label>
+          <label class="opc"><input type="radio" name="rpg-r-forma" value="Dinheiro">
+            <span>Dinheiro<small>não passa por conta — pula o passo 2</small></span></label>
+          <label class="opc"><input type="radio" name="rpg-r-forma" value="Outro">
+            <span>Outro</span></label>
         </div>
       </div>
     </div>
@@ -535,7 +536,9 @@
         <div class="gr__t" style="margin-bottom:.3rem">Em qual conta caiu?</div>
         <div class="opcs">
           {% for cb in contas_banco %}
-          <button type="button" class="opc-btn" onclick="rpgConta({{ cb.id }}, '{{ cb.apelido }}')">{{ cb.apelido }}<small>{{ cb.banco_nome }}</small></button>
+          <label class="opc"><input type="radio" name="rpg-r-conta" value="{{ cb.id }}"
+                 data-nome="{{ cb.apelido }}">
+            <span>{{ cb.apelido }}<small>{{ cb.banco_nome }}</small></span></label>
           {% endfor %}
         </div>
       </div>
@@ -561,8 +564,8 @@
       <button type="button" class="bt-g bt-g--ca" id="rpg-voltar" hidden
               onclick="rpgVoltar()">‹ Voltar</button>
       <button type="button" class="bt-g bt-g--ca" onclick="rpgFechar()">Cancelar</button>
-      <button type="button" class="bt-g bt-g--ok" id="rpg-confirmar" hidden
-              onclick="rpgConfirmar(this)"><i class="bi bi-check2-circle"></i> Confirmar</button>
+      <button type="button" class="bt-g bt-g--ok" id="rpg-avancar"
+              onclick="rpgAvancar(this)">Avançar</button>
     </div>
 
     <form method="post" action="{{ url_for('financeiro.registrar_pagamento_manual') }}"
@@ -1280,9 +1283,9 @@ document.addEventListener('DOMContentLoaded', function () {
   // ── Registrar Pagamento em passos (gaveta: Forma > Conta > Confirmar) ──
   var rpgGav = document.getElementById('rpg-gav');
   var rpgEscuro = document.getElementById('rpg-escuro');
-  var rpgIds = [], rpgSingle = true;
-  var rpgFormaTxt = '', rpgContaId = '', rpgContaNome = '';
+  var rpgIds = [], rpgSingle = true, rpgPassoAtual = 0;
   function rpgPasso(n) {
+    rpgPassoAtual = n;
     var ps = rpgGav.querySelectorAll('.passo');
     for (var i = 0; i < 3; i++) {
       document.getElementById('rpg-et' + i).hidden = (i !== n);
@@ -1290,11 +1293,23 @@ document.addEventListener('DOMContentLoaded', function () {
       ps[i].classList.toggle('on', i <= n);
     }
     document.getElementById('rpg-voltar').hidden = (n === 0);
-    document.getElementById('rpg-confirmar').hidden = (n !== 2);
+    document.getElementById('rpg-avancar').textContent =
+      (n === 2) ? 'Confirmar' : 'Avançar';
+  }
+  function rpgForma() {
+    var m = rpgGav.querySelector('input[name="rpg-r-forma"]:checked');
+    return m ? m.value : '';
+  }
+  function rpgConta() {
+    return rpgGav.querySelector('input[name="rpg-r-conta"]:checked');
+  }
+  function rpgVia() {
+    var c = rpgConta();
+    var semConta = (rpgForma() === 'Dinheiro' || rpgForma() === 'Outro');
+    return rpgForma() + ((!semConta && c) ? ' · ' + c.dataset.nome : '');
   }
   window.rpgAbrir = function(ids, rotulo, single) {
     rpgIds = ids; rpgSingle = !!single;
-    rpgFormaTxt = ''; rpgContaId = ''; rpgContaNome = '';
     document.getElementById('rpg-titulo').textContent = single
       ? 'Registrar Pagamento'
       : 'Registrar Pagamento — ' + ids.length + ' cobrança(s)';
@@ -1302,6 +1317,8 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('rpg-data').value = new Date().toISOString().split('T')[0];
     document.getElementById('rpg-obs').value = '';
     document.getElementById('rpg-efi').checked = true;
+    var c = rpgConta();
+    if (c) c.checked = false;
     rpgPasso(0);
     rpgGav.classList.add('on');
     rpgEscuro.classList.add('on');
@@ -1311,47 +1328,58 @@ document.addEventListener('DOMContentLoaded', function () {
     rpgEscuro.classList.remove('on');
   };
   window.rpgVoltar = function() {
-    if (!document.getElementById('rpg-et2').hidden && rpgContaId) { rpgPasso(1); return; }
+    if (rpgPassoAtual === 2) {
+      var semConta = (rpgForma() === 'Dinheiro' || rpgForma() === 'Outro');
+      rpgPasso(semConta ? 0 : 1);
+      return;
+    }
     rpgPasso(0);
   };
+  window.rpgAvancar = function(btn) {
+    if (rpgPassoAtual === 0) {
+      /* Dinheiro/Outro não passam por conta: pulam o passo 2. */
+      var semConta = (rpgForma() === 'Dinheiro' || rpgForma() === 'Outro');
+      if (semConta) { rpgResumo(); rpgPasso(2); return; }
+      rpgPasso(1);
+      return;
+    }
+    if (rpgPassoAtual === 1) {
+      if (!rpgConta()) { alert('Escolha em qual conta o dinheiro caiu.'); return; }
+      rpgResumo(); rpgPasso(2);
+      return;
+    }
+    rpgConfirmar(btn);
+  };
   function rpgResumo() {
-    document.getElementById('rpg-resumo').textContent =
-      rpgFormaTxt + (rpgContaNome ? ' · ' + rpgContaNome : '');
+    document.getElementById('rpg-resumo').textContent = rpgVia();
   }
-  window.rpgForma = function(f) {
-    rpgFormaTxt = f; rpgContaId = ''; rpgContaNome = '';
-    /* Dinheiro/Outro não passam por conta: pulam o passo 2. */
-    if (f === 'Dinheiro' || f === 'Outro') { rpgResumo(); rpgPasso(2); return; }
-    rpgPasso(1);
-  };
-  window.rpgConta = function(id, nome) {
-    rpgContaId = String(id); rpgContaNome = nome;
-    rpgResumo(); rpgPasso(2);
-  };
-  window.rpgConfirmar = async function(btn) {
-    var via = rpgFormaTxt + (rpgContaNome ? ' · ' + rpgContaNome : '');
+  async function rpgConfirmar(btn) {
+    var via = rpgVia();
     var dataPag = document.getElementById('rpg-data').value;
     if (!dataPag) { alert('Informe a data do pagamento.'); return; }
     var obs = document.getElementById('rpg-obs').value;
     var efi = document.getElementById('rpg-efi').checked;
+    var c = rpgConta();
+    var semConta = (rpgForma() === 'Dinheiro' || rpgForma() === 'Outro');
+    var contaId = (!semConta && c) ? c.value : '';
     if (rpgSingle) {
       document.getElementById('rpg-f-id').value = rpgIds[0];
       document.getElementById('rpg-f-data').value = dataPag;
       document.getElementById('rpg-f-obs').value = obs;
       document.getElementById('rpg-f-via').value = via;
-      document.getElementById('rpg-f-conta').value = rpgContaId;
+      document.getElementById('rpg-f-conta').value = contaId;
       document.getElementById('rpg-f-efi').value = efi ? '1' : '';
       document.getElementById('rpg-form').submit();
       return;
     }
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Salvando…';
+    btn.textContent = 'Salvando…';
     try {
       var resp = await fetch('/financeiro/bulk-registrar-pagamento/', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
         body: JSON.stringify({cobranca_ids: rpgIds, data_pagamento: dataPag,
-                              observacao: obs, via: via, conta_id: rpgContaId,
+                              observacao: obs, via: via, conta_id: contaId,
                               cancelar_efi: efi})
       });
       var j = await resp.json();
@@ -1374,9 +1402,9 @@ document.addEventListener('DOMContentLoaded', function () {
       rpgFechar();
     } finally {
       btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-check2-circle"></i> Confirmar';
+      btn.textContent = 'Confirmar';
     }
-  };
+  }
   qsa('.btn-registrar-pag').forEach(function(btn) {
     btn.addEventListener('click', function() {
       rpgAbrir([btn.dataset.cobrancaId],
