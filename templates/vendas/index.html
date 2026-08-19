@@ -162,10 +162,12 @@
 
   /* ── WEB (>=992px): teto de largura e colunas de tabela ──────────── */
   @media (min-width:992px){
-    #vendas{ max-width:1180px; margin-left:auto; margin-right:auto; }
-    #vendas .lin{ grid-template-columns:46px 96px 250px minmax(0,1fr) 118px 108px;
+    /* Tela cheia (o teto de 1180px centrado pareceu caixinha amadora):
+       vendedor e produto crescem proporcionais, 1.1fr pra 2fr. */
+    #vendas .lin{
+      grid-template-columns:52px 104px minmax(230px,1.1fr) minmax(0,2fr) 132px 116px;
       grid-template-areas:"hora num quem oque selo valor";
-      gap:.15rem .9rem; align-items:center; padding:.44rem .8rem; }
+      gap:.15rem 1.1rem; align-items:center; padding:.48rem .9rem; }
     #vendas .c-hora::before{ content:''; }
     #vendas .c-num, #vendas .c-hora{ font-size:.76rem; }
     #vendas .c-oque{ justify-self:start; font-size:.79rem; color:var(--ink-2); }
