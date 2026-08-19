@@ -37,18 +37,18 @@
   #aud .bloco__cab{ padding:.9rem 1rem .5rem; }
   #aud .bloco__cab p{ margin:0; font-size:.82rem; color:var(--muted); }
   #aud .bloco__cab p b{ color:#374151; }
-  #aud .abas{ display:flex; gap:.35rem; padding:.5rem .8rem; overflow-x:auto;
+  #aud-abas{ display:flex; gap:.35rem; padding:.5rem .8rem; overflow-x:auto;
     border-bottom:1px solid var(--line-2); scrollbar-width:none; }
-  #aud .abas::-webkit-scrollbar{ display:none; }
-  #aud .aba{ flex:0 0 auto; border:1px solid var(--line-2); background:#fff;
+  #aud-abas::-webkit-scrollbar{ display:none; }
+  #aud-abas .aba{ flex:0 0 auto; border:1px solid var(--line-2); background:#fff;
     color:#374151; border-radius:999px; padding:.35rem .8rem; font-size:.82rem;
     font-weight:800; font-family:inherit; cursor:pointer; display:inline-flex;
     align-items:center; gap:.4rem; }
   #aud .aba small{ font-weight:700; font-size:.68rem; color:var(--muted);
     font-variant-numeric:tabular-nums; }
-  #aud .aba.on{ background:var(--pb,#e9f0f8); border-color:var(--pc,var(--blue));
+  #aud-abas .aba.on{ background:var(--pb,#e9f0f8); border-color:var(--pc,var(--blue));
     color:var(--pc,var(--blue-deep)); }
-  #aud .aba.on small{ color:inherit; }
+  #aud-abas .aba.on small{ color:inherit; }
   #aud .aba--res.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
   #aud .painel{ display:none; }
   #aud .painel.on{ display:block; }
@@ -108,6 +108,7 @@
      cada td vira uma linha rotulo/valor. Mesma marcacao, nada duplicado. */
   @media (max-width: 640px){
     #aud .rolagem{ overflow:visible; }
+    #aud .t-res{ min-width:0; }
     #aud table, #aud tbody, #aud tr, #aud td{ display:block; min-width:0; }
     #aud thead{ display:none; }
     #aud tbody tr{ border:1px solid var(--line-2); border-radius:12px;
@@ -265,7 +266,7 @@
       <i class="fi f">F</i> nota fracionada &middot;
       <i class="fi i">I</i> desceu integral.</p>
     </div>
-    <div class="abas">
+    <div class="abas" id="aud-abas">
       {% for p in produtos %}
       <button type="button" class="aba{{ ' on' if loop.first }}"
               style="--pc:{{ p.cor }};--pb:{{ p.cbg }}" onclick="audTroca({{ loop.index0 }})">
@@ -388,7 +389,7 @@ function audTroca(k) {
   document.querySelectorAll('#aud .painel').forEach(function (p) {
     p.classList.toggle('on', p.dataset.k == k);
   });
-  document.querySelectorAll('#aud .aba').forEach(function (a, i) {
+  document.querySelectorAll('#aud-abas .aba').forEach(function (a, i) {
     a.classList.toggle('on', i === k);
   });
 }
