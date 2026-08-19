@@ -4,75 +4,161 @@
 {% block styles %}{% include 'includes/estilo_migracoes.html' %}{% endblock %}
 
 {% block content %}
-<div class="mig">
+<div class="mig" id="estq">
 
   {# Icone por combustivel (Bootstrap Icons, ja carregado no base.html).
      O slug vem de _slug_produto() em routes/estoque.py. Usado nas duas abas. #}
   {% set ICO_PROD = {'gas':'bi-fuel-pump', 'eta':'bi-flower1', 's500':'bi-truck',
                      's10':'bi-truck', 'diesel':'bi-truck', 'outro':'bi-droplet'} %}
 
-  {# =================== CABECALHO + NAVEGACAO (topo padrao) =================== #}
-  {% set mig_titulo = 'Estoque Migrados' %}
-  {% set mig_icone = 'bi-box-seam' %}
-  {% set mig_selos %}
-    <span class="mig-pill"><i class="bi bi-rulers"></i> {{ totais.leituras }} leituras</span>
-    <span class="mig-pill"><i class="bi bi-truck"></i> {{ totais.descargas }} descargas</span>
-  {% endset %}
-  {% set aba_ativa = 'estoque' %}
-  {% include 'includes/nav_migracoes.html' %}
+  {# =================== TOPO PADRAO DO BANCO =================== #}
+  {% with esc = '#estq' %}{% include 'includes/abas_banco_css.html' %}{% endwith %}
+  <div id="estq-topo">
+    <div class="topo__l1">
+      <h3>Estoque Migrados</h3>
+      <button type="button" class="acao" onclick="etgAbrir()">
+        <i class="bi bi-sliders"></i> Filtro
+        {% if n_filtros %}<span style="background:#fff;color:#0C4C86;border-radius:99px;min-width:17px;height:17px;display:inline-grid;place-items:center;font-size:.66rem;">{{ n_filtros }}</span>{% endif %}
+      </button>
+    </div>
+    <div class="abas">
+      {% with ativa = 'estoque' %}{% include 'includes/abas_migracoes.html' %}{% endwith %}
+    </div>
+  </div>
 
-  {# =================== FILTROS =================== #}
-  {# Recolhido por padrao; o selo abaixo denuncia filtro ativo sem precisar abrir. #}
-  <details class="mig-filtros">
-    <summary>
-      <i class="bi bi-funnel"></i> Filtros
-      {% if n_filtros %}
-      <span class="mig-pill mig-pill-strong mig-filtros__n">
-        {{ n_filtros }} ativo{{ '' if n_filtros == 1 else 's' }}
-      </span>
-      {% endif %}
-      <i class="bi bi-chevron-down"></i>
-    </summary>
-    <form method="GET" action="/estoque" class="form-row">
-      <input type="hidden" name="tab" value="{{ tab }}">
-      <div class="row g-3">
-        <div class="col-12 col-md-3">
-          <label class="form-label">Empresa</label>
-          <select name="empresa" class="form-select form-select-sm">
-            <option value="">Todas</option>
-            {% for e in empresas %}
-            <option value="{{ e.id }}" {% if filtros.empresa == e.id|string %}selected{% endif %}>{{ e.nome }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-12 col-md-3">
-          <label class="form-label">Produto</label>
-          <select name="produto" class="form-select form-select-sm">
-            <option value="">Todos</option>
-            {% for p in produtos %}
-            <option value="{{ p }}" {% if filtros.produto == p %}selected{% endif %}>{{ p }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-6 col-md-2">
-          <label class="form-label">Data de</label>
-          <input type="date" name="data_ini" class="form-control form-control-sm"
-                 value="{{ filtros.data_ini or data_ini_default }}">
-        </div>
-        <div class="col-6 col-md-2">
-          <label class="form-label">Data até</label>
-          <input type="date" name="data_fim" class="form-control form-control-sm"
-                 value="{{ filtros.data_fim or data_fim_default }}">
-        </div>
-        <div class="col-12 col-md-2 d-flex align-items-end gap-2">
-          <button type="submit" class="btn btn-sm btn-primary flex-fill"><i class="bi bi-search"></i> Buscar</button>
-        </div>
-      </div>
-      <div class="mt-2">
-        <a href="/estoque" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-circle"></i> Limpar filtros</a>
-      </div>
-    </form>
-  </details>
+  {% if n_filtros %}
+  <div class="estq-eco">
+    <i class="bi bi-funnel-fill"></i>
+    Filtro ativo — {{ totais.leituras }} leituras · {{ totais.descargas }} descargas no recorte
+    <a href="/estoque{% if tab != 'leituras' %}?tab={{ tab }}{% endif %}">Limpar</a>
+  </div>
+  {% endif %}
+
+  {# =================== NUMEROS =================== #}
+  <div class="estq-nums">
+    <div class="n n--leit"><div class="r">Leituras</div>
+      <div class="v">{{ totais.leituras }}</div></div>
+    <div class="n n--desc"><div class="r">Descargas</div>
+      <div class="v">{{ totais.descargas }}</div></div>
+    <div class="n n--litros"><div class="r">Litros descarregados</div>
+      <div class="v">{{ totais.litros | fmtnum(0) }} L</div></div>
+    <div class="n n--pend{{ '' if totais.sem_vinculo else ' zero' }}"><div class="r">Sem vínculo</div>
+      <div class="v">{{ totais.sem_vinculo }}</div></div>
+  </div>
+
+<style>
+  /* ── Padrao do Banco por cima da casca .mig (motor intacto) ── */
+  #estq{ --eq-azul:#1D63A5; --eq-deep:#0C4C86; --eq-claro:#eaf1f9;
+    --eq-line:#e7ebf1; --eq-line2:#d9e0e8; --eq-surface:#f7f9fc;
+    --eq-muted:#6b7684; --eq-ink:#151d27; }
+  #estq .estq-eco{ display:flex; align-items:center; gap:.4rem;
+    background:var(--eq-claro); color:var(--eq-deep); border-radius:10px;
+    padding:.5rem .7rem; font-size:.82rem; font-weight:700;
+    margin-bottom:.7rem; flex-wrap:wrap; }
+  #estq .estq-eco a{ margin-left:auto; background:var(--eq-azul); color:#fff;
+    border-radius:8px; padding:.3rem .7rem; font-size:.78rem; font-weight:800;
+    text-decoration:none; }
+  #estq .estq-nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem;
+    margin-bottom:.7rem; }
+  @media (min-width:768px){ #estq .estq-nums{ grid-template-columns:repeat(4,1fr); } }
+  #estq .estq-nums .n{ border-radius:13px; padding:.55rem .75rem; color:#fff;
+    box-shadow:0 2px 8px rgba(20,35,60,.12); }
+  #estq .estq-nums .r{ font-size:.66rem; font-weight:800;
+    text-transform:uppercase; letter-spacing:.06em; opacity:.92; }
+  #estq .estq-nums .v{ font-size:1.02rem; font-weight:800;
+    letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1.28; }
+  #estq .n--leit{ background:linear-gradient(135deg,#2E6FB0,#1D63A5); }
+  #estq .n--desc{ background:linear-gradient(135deg,#5B6B7F,#465565); }
+  #estq .n--litros{ background:linear-gradient(135deg,#22A24B,#17963C); }
+  #estq .n--pend{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
+  #estq .n--pend.zero{ background:linear-gradient(135deg,#5B6B7F,#465565); }
+
+  /* sub-abas em pilula (mesma mecanica Bootstrap) */
+  #estq .mig-subtabs{ border:0; gap:.35rem; flex-wrap:nowrap; overflow-x:auto;
+    scrollbar-width:none; margin-bottom:.7rem; }
+  #estq .mig-subtabs::-webkit-scrollbar{ display:none; }
+  #estq .mig-subtabs .nav-item{ flex:0 0 auto; }
+  #estq .mig-subtabs .nav-link{ border:1px solid var(--eq-line2) !important;
+    border-radius:99px !important; background:#fff; color:#3a4655;
+    font-size:.8rem; font-weight:800; padding:.38rem .8rem; }
+  #estq .mig-subtabs .nav-link.active{ background:var(--eq-azul); color:#fff;
+    border-color:var(--eq-azul) !important; }
+  #estq .mig-subtabs .nav-link .mig-pill{ background:var(--eq-claro);
+    color:var(--eq-deep); }
+  #estq .mig-subtabs .nav-link.active .mig-pill{ background:#fff; }
+
+  /* cabecalho de cada dia vestido de banda */
+  #estq .mig-dia__head{ background:var(--eq-claro); color:var(--eq-deep);
+    border-bottom:1px solid var(--eq-line2); }
+
+  /* Gaveta do filtro em passos */
+  #estq .escuro{ position:fixed; inset:0; background:rgba(12,25,42,.45);
+    z-index:1050; opacity:0; pointer-events:none; transition:opacity .2s; }
+  #estq .escuro.on{ opacity:1; pointer-events:auto; }
+  #estq .gav{ position:fixed; left:0; right:0; bottom:0; z-index:1051;
+    background:#fff; border-radius:18px 18px 0 0; max-height:88vh; display:flex;
+    flex-direction:column; transform:translateY(101%);
+    transition:transform .24s cubic-bezier(.22,.7,.3,1);
+    box-shadow:0 -10px 30px rgba(12,25,42,.3); }
+  #estq .gav.on{ transform:translateY(0); }
+  @media (min-width:992px){
+    #estq .gav{ left:50%; right:auto; bottom:auto; top:8vh; width:520px;
+      border-radius:16px; transform:translate(-50%,10px); opacity:0;
+      pointer-events:none; max-height:84vh; }
+    #estq .gav.on{ transform:translate(-50%,0); opacity:1; pointer-events:auto; }
+    #estq .gav__pega{ display:none; }
+  }
+  #estq .gav__pega{ width:36px; height:4px; background:var(--eq-line2);
+    border-radius:9px; margin:.5rem auto .1rem; flex:0 0 auto; }
+  #estq .passos{ display:flex; gap:.45rem; padding:.5rem .9rem .1rem; }
+  #estq .passo{ flex:1; border:0; background:none; padding:0; cursor:pointer;
+    font-family:inherit; text-align:left; min-width:0; }
+  #estq .passo i{ display:block; height:3px; border-radius:9px;
+    background:var(--eq-line2); }
+  #estq .passo span{ display:block; font-size:.66rem; font-weight:800;
+    color:var(--eq-muted); margin-top:.28rem; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
+  #estq .passo.on i{ background:var(--eq-azul); }
+  #estq .passo.aqui span{ color:var(--eq-deep); }
+  #estq .pnome{ padding:.35rem .9rem .4rem; font-size:.76rem;
+    color:var(--eq-muted); font-weight:700; }
+  #estq .pnome b{ color:var(--eq-ink); font-size:.95rem; display:block; }
+  #estq .gav__b{ overflow-y:auto; padding:0 .9rem .7rem; }
+  #estq .gav__f{ border-top:1px solid var(--eq-line); padding:.65rem .9rem;
+    display:flex; gap:.5rem; background:#fff;
+    padding-bottom:calc(.65rem + env(safe-area-inset-bottom)); }
+  #estq .bt-g{ border:0; border-radius:10px; padding:.55rem .8rem;
+    font-size:.87rem; font-weight:800; cursor:pointer; font-family:inherit; }
+  #estq .bt-g--ok{ flex:1; background:var(--eq-azul); color:#fff; }
+  #estq .bt-g--ca{ background:var(--eq-surface); color:var(--eq-muted);
+    border:1px solid var(--eq-line2); }
+  #estq .etapa[hidden]{ display:none; }
+  #estq .gr__t{ font-size:.69rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--eq-muted); margin:0 0 .3rem;
+    display:block; }
+  #estq .opcs{ border:1px solid var(--eq-line2); border-radius:10px;
+    overflow:hidden; background:#fff; }
+  #estq .opc{ display:flex; align-items:center; gap:.55rem;
+    padding:.5rem .6rem; border-bottom:1px solid var(--eq-line);
+    font-size:.85rem; cursor:pointer; margin:0; min-width:0; }
+  #estq .opc:last-child{ border-bottom:0; }
+  #estq .opc:hover{ background:var(--eq-surface); }
+  #estq .opc input{ width:19px; height:19px; accent-color:var(--eq-azul);
+    flex:0 0 auto; margin:0; }
+  #estq .opc:has(input:checked){ background:var(--eq-claro); }
+  #estq .campo{ width:100%; border:1px solid var(--eq-line2);
+    border-radius:10px; padding:.5rem .65rem; font-size:.85rem;
+    background:#fff; font-family:inherit; margin-bottom:.4rem; }
+  #estq .par{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; }
+  #estq .chips{ display:flex; flex-wrap:wrap; gap:.35rem;
+    margin-bottom:.85rem; }
+  #estq .chip{ border:1px solid var(--eq-line2); background:#fff;
+    color:#3a4655; border-radius:99px; padding:.32rem .7rem; font-size:.78rem;
+    font-weight:700; cursor:pointer; font-family:inherit; }
+  #estq .chip.on{ background:var(--eq-azul); border-color:var(--eq-azul);
+    color:#fff; }
+</style>
+
 
   {# =================== ABAS INTERNAS =================== #}
   <ul class="nav mig-subtabs" id="estqTabs" role="tablist">
@@ -204,10 +290,7 @@
     {# ---------------- ABA DESCARGAS ---------------- #}
     <div class="tab-pane fade {% if tab == 'descargas' %}show active{% endif %}" id="pane-descargas" role="tabpanel">
       <div class="d-flex justify-content-between align-items-end gap-3 flex-wrap">
-        <div class="mig-stats flex-fill">
-          <div class="mig-stat"><div class="rot">Descargas</div><div class="val">{{ totais.descargas }}</div></div>
-          <div class="mig-stat"><div class="rot">Total (litros)</div><div class="val ok">{{ totais.litros | fmtnum(0) }} L</div></div>
-        </div>
+        <div class="flex-fill"></div>
         {# toolbar: reler e-mails de descarga (lidos+nao-lidos, ultimos 3 dias) #}
         <div class="mig-toolbar mb-3 d-flex align-items-center gap-2">
           <button type="button" class="btn btn-sm btn-outline-primary" id="btnReler">
@@ -377,6 +460,128 @@
       </div>
     </div>
   </div>
+
+
+  {# =================== FILTRO EM PASSOS (gaveta) =================== #}
+  <div class="escuro" id="etg-escuro" onclick="etgFechar()"></div>
+  <div class="gav" id="etg-gav" role="dialog" aria-label="Filtro do estoque">
+    <div class="gav__pega"></div>
+    <div class="passos">
+      <button type="button" class="passo on aqui" onclick="etgIrPasso(0)"><i></i><span>1 · Empresa</span></button>
+      <button type="button" class="passo" onclick="etgIrPasso(1)"><i></i><span>2 · Produto</span></button>
+      <button type="button" class="passo" onclick="etgIrPasso(2)"><i></i><span>3 · Período</span></button>
+    </div>
+
+    <form method="GET" action="/estoque" id="etg-form" style="display:contents">
+      <input type="hidden" name="tab" value="{{ tab }}">
+
+      <div class="etapa" id="etg-et0">
+        <div class="pnome"><b>Empresa</b>de qual posto — ou pule o passo</div>
+        <div class="gav__b">
+          <div class="opcs">
+            <label class="opc"><input type="radio" name="empresa" value=""{% if not filtros.empresa %} checked{% endif %}>
+              <span>Todas</span></label>
+            {% for e in empresas %}
+            <label class="opc"><input type="radio" name="empresa" value="{{ e.id }}"{% if filtros.empresa == e.id|string %} checked{% endif %}>
+              <span>{{ e.nome }}</span></label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="etapa" id="etg-et1" hidden>
+        <div class="pnome"><b>Produto</b>filtra as leituras — ou pule</div>
+        <div class="gav__b">
+          <div class="opcs">
+            <label class="opc"><input type="radio" name="produto" value=""{% if not filtros.produto %} checked{% endif %}>
+              <span>Todos</span></label>
+            {% for p in produtos %}
+            <label class="opc"><input type="radio" name="produto" value="{{ p }}"{% if filtros.produto == p %} checked{% endif %}>
+              <span>{{ p | title }}</span></label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="etapa" id="etg-et2" hidden>
+        <div class="pnome"><b>Período</b>pela data da leitura/descarga</div>
+        <div class="gav__b">
+          <div class="chips">
+            <button type="button" class="chip" onclick="etgPeriodo(this, 'hoje')">Hoje</button>
+            <button type="button" class="chip" onclick="etgPeriodo(this, '7')">7 dias</button>
+            <button type="button" class="chip" onclick="etgPeriodo(this, '30')">30 dias</button>
+            <button type="button" class="chip" onclick="etgPeriodo(this, 'mes')">Mês corrente</button>
+          </div>
+          <span class="gr__t">Ou escolha as datas</span>
+          <div class="par">
+            <input class="campo" type="date" name="data_ini" id="etg-d1" value="{{ filtros.data_ini or data_ini_default }}">
+            <input class="campo" type="date" name="data_fim" id="etg-d2" value="{{ filtros.data_fim or data_fim_default }}">
+          </div>
+        </div>
+      </div>
+
+      <div class="gav__f">
+        <button type="button" class="bt-g bt-g--ca" id="etg-bt-voltar" hidden
+                onclick="etgIrPasso(Math.max(0, etgPasso() - 1))">‹ Voltar</button>
+        <button type="button" class="bt-g bt-g--ca" id="etg-bt-pular" onclick="etgPular()">Pular</button>
+        <button type="button" class="bt-g bt-g--ok" id="etg-bt-ir" onclick="etgAvancar()">Avançar</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+  (function () {
+    var passo = 0, N = 3;
+    var gav = document.getElementById('etg-gav');
+    var escuro = document.getElementById('etg-escuro');
+    window.etgPasso = function () { return passo; };
+    window.etgAbrir = function () {
+      gav.classList.add('on'); escuro.classList.add('on');
+    };
+    window.etgFechar = function () {
+      gav.classList.remove('on'); escuro.classList.remove('on');
+    };
+    window.etgIrPasso = function (n) {
+      passo = n;
+      var ps = gav.querySelectorAll('.passo');
+      for (var i = 0; i < N; i++) {
+        document.getElementById('etg-et' + i).hidden = (i !== n);
+        ps[i].classList.toggle('aqui', i === n);
+        ps[i].classList.toggle('on', i <= n);
+      }
+      var fim = (n === N - 1);
+      document.getElementById('etg-bt-voltar').hidden = (n === 0);
+      document.getElementById('etg-bt-pular').hidden = fim;
+      document.getElementById('etg-bt-ir').textContent = fim ? 'Filtrar' : 'Avançar';
+    };
+    /* Pular = volta a opcao "Todas/Todos" do passo e segue. */
+    window.etgPular = function () {
+      var pri = document.getElementById('etg-et' + passo)
+        .querySelector('input[type=radio][value=""]');
+      if (pri) pri.checked = true;
+      etgIrPasso(passo + 1);
+    };
+    window.etgAvancar = function () {
+      if (passo < N - 1) { etgIrPasso(passo + 1); return; }
+      document.getElementById('etg-form').submit();
+    };
+    window.etgPeriodo = function (chip, tipo) {
+      chip.parentElement.querySelectorAll('.chip').forEach(function (c) {
+        c.classList.toggle('on', c === chip);
+      });
+      function iso(d) {
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+               + '-' + String(d.getDate()).padStart(2, '0');
+      }
+      var h = new Date(), d1 = new Date(), d2 = new Date();
+      if (tipo === '7') { d1.setDate(h.getDate() - 6); }
+      else if (tipo === '30') { d1.setDate(h.getDate() - 29); }
+      else if (tipo === 'mes') { d1 = new Date(h.getFullYear(), h.getMonth(), 1); }
+      document.getElementById('etg-d1').value = iso(d1);
+      document.getElementById('etg-d2').value = iso(d2);
+    };
+  })();
+  </script>
 
 </div>{# /.mig #}
 {% endblock %}

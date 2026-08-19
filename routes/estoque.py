@@ -213,10 +213,19 @@ def index():
             p_d,
         )
         agg_d = cur.fetchone() or {}
+        # Descargas ainda SEM nota vinculada (fora as ignoradas) — o numero
+        # ambar do topo, que e o que pede acao nesta tela.
+        w_sv = where_d + (" AND " if where_d else " WHERE ") + \
+            "d.status <> 'ignorada' AND NOT EXISTS " \
+            "(SELECT 1 FROM descarga_nota v WHERE v.descarga_id = d.id)"
+        cur.execute(f"SELECT COUNT(*) AS n FROM descargas_pendentes d{w_sv}", p_d)
+        sem_vinculo = (cur.fetchone() or {}).get('n') or 0
+
         totais = {
             'leituras':  total_leituras,
             'descargas': agg_d.get('n') or 0,
             'litros':    agg_d.get('litros') or 0,
+            'sem_vinculo': sem_vinculo,
         }
 
         # -------- Leituras (paginada) --------
