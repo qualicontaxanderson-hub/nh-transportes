@@ -294,6 +294,22 @@
     font-size:.78rem; font-weight:700; cursor:pointer; font-family:inherit; }
   #dfec .chip.on{ background:var(--azul); border-color:var(--azul); color:#fff; }
 
+  /* Regras na WEB: o accordion vira uma grade de cards, tudo aberto.
+     No celular continua o accordion de sempre. */
+  @media (min-width:992px){
+    #dfec #accFornecedores{ display:grid;
+      grid-template-columns:repeat(auto-fill, minmax(430px, 1fr));
+      gap:.6rem; align-items:start; }
+    #dfec #accFornecedores .accordion-item{ border:1px solid var(--line-2);
+      border-radius:12px !important; overflow:hidden; background:#fff;
+      box-shadow:0 1px 3px rgba(16,45,80,.06); }
+    #dfec #accFornecedores .accordion-button{ pointer-events:none;
+      background:var(--surface); box-shadow:none; padding:.55rem .7rem; }
+    #dfec #accFornecedores .accordion-button::after{ display:none; }
+    #dfec #accFornecedores .accordion-collapse{ display:block !important;
+      height:auto !important; }
+  }
+
   /* Classificador em passos (celular) */
   #dfec .opc--btn{ display:block; width:100%; text-align:left; background:#fff;
     border:0; border-bottom:1px solid var(--line); padding:.62rem .7rem;
@@ -1124,6 +1140,7 @@
     <button type="button" class="passo" onclick="cmpgIrPasso(3)"><i></i><span>4 · Período</span></button>
   </div>
 
+  <script type="application/json" id="cmpg-fp">{{ forn_prod | tojson }}</script>
   <form method="GET" action="{{ url_for('dfe_compras.compras') }}" id="cmpg-form" style="display:contents">
     <input type="hidden" name="aba" value="consultar">
     <input type="hidden" name="situacao" id="cmpg-sit" value="{{ filtros.situacao }}">
@@ -1289,6 +1306,7 @@ function cmpAbre(lin) {
       ps[i].classList.toggle('aqui', i === n);
       ps[i].classList.toggle('on', i <= n);
     }
+    if (n === 2) cmpgProdDep();
     var fim = (n === N - 1);
     document.getElementById('cmpg-bt-voltar').hidden = (n === 0);
     document.getElementById('cmpg-bt-limpar').hidden = !fim;
@@ -1356,6 +1374,38 @@ function cmpAbre(lin) {
     var el = document.getElementById(alvo);
     if (el) { el.addEventListener('change', function () { rotulo(alvo); }); rotulo(alvo); }
   });
+
+  /* Passo 3 obedece o passo 2: com fornecedor(es) marcado(s), so aparecem
+     os produtos que EXISTEM daquele(s) fornecedor(es), com a contagem dele. */
+  var FP = {};
+  try { FP = JSON.parse(document.getElementById('cmpg-fp').textContent) || {}; }
+  catch (e) { FP = {}; }
+  function cmpgProdDep() {
+    var marcados = Array.prototype.map.call(
+      document.querySelectorAll('#cmpg-l-forn input:checked'),
+      function (i) { return i.value; });
+    document.querySelectorAll('#cmpg-l-prod .opc').forEach(function (op) {
+      var inp = op.querySelector('input');
+      var sm = op.querySelector('small');
+      if (sm && !sm.dataset.orig) sm.dataset.orig = sm.textContent;
+      if (!marcados.length) {
+        op.hidden = false;
+        if (sm) sm.textContent = sm.dataset.orig;
+        return;
+      }
+      var soma = 0;
+      marcados.forEach(function (c) {
+        soma += (FP[c] && FP[c][inp.value]) || 0;
+      });
+      op.hidden = (soma === 0);
+      if (soma === 0) inp.checked = false;
+      else if (sm) sm.textContent = soma + (soma === 1 ? ' nota' : ' notas')
+                                    + ' do(s) marcado(s)';
+    });
+    rotulo('cmpg-l-prod');
+  }
+  var lf = document.getElementById('cmpg-l-forn');
+  if (lf) lf.addEventListener('change', cmpgProdDep);
 })();
 
 // ── Classificador em passos (celular): preenche os selects do item e

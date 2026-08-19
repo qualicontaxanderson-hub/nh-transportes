@@ -268,6 +268,23 @@ def compras():
             """
         )
         emp_n = {r['id']: r['n'] for r in cur.fetchall()}
+        # Fornecedor -> {produto: notas}: o passo Produto da gaveta so mostra
+        # o que existe do fornecedor marcado ("pra ficar algo util").
+        cur.execute(
+            """
+            SELECT d.emit_cnpj AS cnpj,
+                   COALESCE(i.classificado_produto_id, i.produto_id) AS pid,
+                   COUNT(DISTINCT d.id) AS n
+            FROM dfe_documentos d
+            JOIN dfe_itens i ON i.documento_id = d.id
+            WHERE d.tipo = 'NFe' AND d.emit_cnpj IS NOT NULL AND d.emit_cnpj <> ''
+              AND COALESCE(i.classificado_produto_id, i.produto_id) IS NOT NULL
+            GROUP BY cnpj, pid
+            """
+        )
+        forn_prod = {}
+        for r in cur.fetchall():
+            forn_prod.setdefault(r['cnpj'], {})[str(r['pid'])] = r['n']
 
         # 2) LISTA por nota (limitada). Agrupa por documento (PK) -> os demais
         #    campos de d/emp sao funcionalmente dependentes.
@@ -541,6 +558,7 @@ def compras():
             filtros=f,
             f_emp=f_emp, f_forn=f_forn, f_prodf=f_prodf,
             dias=dias, op_forn=op_forn, op_prodf=op_prodf, emp_n=emp_n,
+            forn_prod=forn_prod,
             empresas=empresas,
             compras=compras,
             compras_totais=compras_totais,
