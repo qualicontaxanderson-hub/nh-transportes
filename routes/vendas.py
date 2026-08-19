@@ -105,7 +105,10 @@ def index():
             'valor':      agg.get('total_valor') or 0,
             'canceladas': agg.get('total_canceladas') or 0,
         }
-        autorizadas = totais['notas'] - totais['canceladas']
+        # COUNT vem int, mas SUM(CASE...) vem Decimal — sem o int(),
+        # float/Decimal estoura TypeError (500 em producao, 19/08).
+        totais['canceladas'] = int(totais['canceladas'])
+        autorizadas = int(totais['notas']) - totais['canceladas']
         totais['ticket'] = (float(totais['valor']) / autorizadas
                             if autorizadas > 0 else 0)
 
