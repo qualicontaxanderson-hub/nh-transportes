@@ -136,8 +136,13 @@ def recebimentos():
             recebimentos_lista = cursor.fetchall()
             # Contas do modulo Banco (passo "em qual conta caiu" da baixa).
             cursor.execute(
-                "SELECT id, apelido, banco_nome FROM bank_accounts "
-                "WHERE ativo = 1 ORDER BY apelido"
+                """SELECT ba.id, ba.apelido, ba.banco_nome, ba.cliente_id,
+                          COALESCE(NULLIF(c.nome_fantasia, ''), c.razao_social)
+                              AS empresa_nome
+                   FROM bank_accounts ba
+                   LEFT JOIN clientes c ON c.id = ba.cliente_id
+                   WHERE ba.ativo = 1
+                   ORDER BY empresa_nome, ba.apelido"""
             )
             contas_banco = cursor.fetchall()
             current_app.logger.info(f"[recebimentos] Encontrados {len(recebimentos_lista)} recebimentos")

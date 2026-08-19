@@ -507,8 +507,9 @@
     <div class="gav__pega"></div>
     <div class="passos">
       <button type="button" class="passo on aqui"><i></i><span>1 · Forma</span></button>
-      <button type="button" class="passo"><i></i><span>2 · Conta</span></button>
-      <button type="button" class="passo"><i></i><span>3 · Confirmar</span></button>
+      <button type="button" class="passo"><i></i><span>2 · Empresa</span></button>
+      <button type="button" class="passo"><i></i><span>3 · Conta</span></button>
+      <button type="button" class="passo"><i></i><span>4 · Confirmar</span></button>
     </div>
     <div class="pnome"><b id="rpg-titulo">Registrar Pagamento</b>
       <span id="rpg-cliente"></span></div>
@@ -533,18 +534,31 @@
 
     <div class="etapa" id="rpg-et1" hidden>
       <div class="gav__b">
-        <div class="gr__t" style="margin-bottom:.3rem">Em qual conta caiu?</div>
+        <div class="gr__t" style="margin-bottom:.3rem">Em qual empresa entrou?</div>
         <div class="opcs">
-          {% for cb in contas_banco %}
-          <label class="opc"><input type="radio" name="rpg-r-conta" value="{{ cb.id }}"
-                 data-nome="{{ cb.apelido }}">
-            <span>{{ cb.apelido }}<small>{{ cb.banco_nome }}</small></span></label>
+          {% for emp_id, grupo in contas_banco|groupby('cliente_id') %}
+          {% set g0 = (grupo|list)[0] %}
+          <label class="opc"><input type="radio" name="rpg-r-emp" value="{{ emp_id }}">
+            <span>{{ g0.empresa_nome or 'Sem empresa' }}<small>{{ grupo|list|length }} conta{{ 's' if grupo|list|length != 1 }}</small></span></label>
           {% endfor %}
         </div>
       </div>
     </div>
 
     <div class="etapa" id="rpg-et2" hidden>
+      <div class="gav__b">
+        <div class="gr__t" style="margin-bottom:.3rem">Em qual conta caiu?</div>
+        <div class="opcs" id="rpg-l-contas">
+          {% for cb in contas_banco %}
+          <label class="opc"><input type="radio" name="rpg-r-conta" value="{{ cb.id }}"
+                 data-nome="{{ cb.apelido }}" data-emp="{{ cb.cliente_id }}">
+            <span>{{ cb.apelido }}<small>{{ cb.banco_nome }}</small></span></label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="etapa" id="rpg-et3" hidden>
       <div class="gav__b">
         <div class="sit-eco"><small style="display:block;font-weight:600">Recebido via</small>
           <b id="rpg-resumo">—</b></div>
@@ -1280,33 +1294,50 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 
-  // ── Registrar Pagamento em passos (gaveta: Forma > Conta > Confirmar) ──
+  // ── Registrar Pagamento em passos (Forma > Empresa > Conta > Confirmar)
+  // Mesmo desenho do /financeiro/recebimento: a conta so existe dentro da
+  // empresa — o passo 3 mostra apenas as contas da empresa marcada.
   var rpgGav = document.getElementById('rpg-gav');
   var rpgEscuro = document.getElementById('rpg-escuro');
   var rpgIds = [], rpgSingle = true, rpgPassoAtual = 0;
   function rpgPasso(n) {
     rpgPassoAtual = n;
     var ps = rpgGav.querySelectorAll('.passo');
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < 4; i++) {
       document.getElementById('rpg-et' + i).hidden = (i !== n);
       ps[i].classList.toggle('aqui', i === n);
       ps[i].classList.toggle('on', i <= n);
     }
     document.getElementById('rpg-voltar').hidden = (n === 0);
     document.getElementById('rpg-avancar').textContent =
-      (n === 2) ? 'Confirmar' : 'Avançar';
+      (n === 3) ? 'Confirmar' : 'Avançar';
   }
   function rpgForma() {
     var m = rpgGav.querySelector('input[name="rpg-r-forma"]:checked');
     return m ? m.value : '';
+  }
+  function rpgSemConta() {
+    return rpgForma() === 'Dinheiro' || rpgForma() === 'Outro';
+  }
+  function rpgEmp() {
+    return rpgGav.querySelector('input[name="rpg-r-emp"]:checked');
   }
   function rpgConta() {
     return rpgGav.querySelector('input[name="rpg-r-conta"]:checked');
   }
   function rpgVia() {
     var c = rpgConta();
-    var semConta = (rpgForma() === 'Dinheiro' || rpgForma() === 'Outro');
-    return rpgForma() + ((!semConta && c) ? ' · ' + c.dataset.nome : '');
+    return rpgForma() + ((!rpgSemConta() && c) ? ' · ' + c.dataset.nome : '');
+  }
+  /* A conta so existe dentro da empresa: filtra as opcoes do passo 3. */
+  function rpgFiltraContas() {
+    var emp = rpgEmp();
+    document.querySelectorAll('#rpg-l-contas .opc').forEach(function(op) {
+      var inp = op.querySelector('input');
+      var fora = emp && inp.dataset.emp !== emp.value;
+      op.hidden = !!fora;
+      if (fora) inp.checked = false;
+    });
   }
   window.rpgAbrir = function(ids, rotulo, single) {
     rpgIds = ids; rpgSingle = !!single;
@@ -1317,8 +1348,8 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('rpg-data').value = new Date().toISOString().split('T')[0];
     document.getElementById('rpg-obs').value = '';
     document.getElementById('rpg-efi').checked = true;
-    var c = rpgConta();
-    if (c) c.checked = false;
+    var e = rpgEmp(); if (e) e.checked = false;
+    var c = rpgConta(); if (c) c.checked = false;
     rpgPasso(0);
     rpgGav.classList.add('on');
     rpgEscuro.classList.add('on');
@@ -1328,24 +1359,24 @@ document.addEventListener('DOMContentLoaded', function () {
     rpgEscuro.classList.remove('on');
   };
   window.rpgVoltar = function() {
-    if (rpgPassoAtual === 2) {
-      var semConta = (rpgForma() === 'Dinheiro' || rpgForma() === 'Outro');
-      rpgPasso(semConta ? 0 : 1);
-      return;
-    }
-    rpgPasso(0);
+    if (rpgPassoAtual === 3) { rpgPasso(rpgSemConta() ? 0 : 2); return; }
+    rpgPasso(Math.max(0, rpgPassoAtual - 1));
   };
   window.rpgAvancar = function(btn) {
     if (rpgPassoAtual === 0) {
-      /* Dinheiro/Outro não passam por conta: pulam o passo 2. */
-      var semConta = (rpgForma() === 'Dinheiro' || rpgForma() === 'Outro');
-      if (semConta) { rpgResumo(); rpgPasso(2); return; }
+      if (rpgSemConta()) { rpgResumo(); rpgPasso(3); return; }
       rpgPasso(1);
       return;
     }
     if (rpgPassoAtual === 1) {
+      if (!rpgEmp()) { alert('Escolha a empresa.'); return; }
+      rpgFiltraContas();
+      rpgPasso(2);
+      return;
+    }
+    if (rpgPassoAtual === 2) {
       if (!rpgConta()) { alert('Escolha em qual conta o dinheiro caiu.'); return; }
-      rpgResumo(); rpgPasso(2);
+      rpgResumo(); rpgPasso(3);
       return;
     }
     rpgConfirmar(btn);
@@ -1360,8 +1391,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var obs = document.getElementById('rpg-obs').value;
     var efi = document.getElementById('rpg-efi').checked;
     var c = rpgConta();
-    var semConta = (rpgForma() === 'Dinheiro' || rpgForma() === 'Outro');
-    var contaId = (!semConta && c) ? c.value : '';
+    var contaId = (!rpgSemConta() && c) ? c.value : '';
     if (rpgSingle) {
       document.getElementById('rpg-f-id').value = rpgIds[0];
       document.getElementById('rpg-f-data').value = dataPag;
