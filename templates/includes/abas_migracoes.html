@@ -1,0 +1,31 @@
+{#- Abas do módulo Migrações — uma lista só, no padrão do Banco.
+
+    Mesma ideia de includes/abas_banco.html: cada tela inclui esta lista e
+    marca a sua chave, assim uma aba nova nasce em todas de uma vez.
+
+    As telas antigas ainda usam includes/nav_migracoes.html; conforme cada
+    uma migra pro topo azul (Vendas foi a primeira), ela troca pra cá.
+
+      {% with ativa = 'vendas' %}{% include 'includes/abas_migracoes.html' %}{% endwith %}
+-#}
+{%- for chave, rotulo, destino in [
+      ('vendas',      'Vendas',      'vendas.index'),
+      ('compras',     'Compras',     'dfe_compras.compras'),
+      ('ctes',        'CT-e',        'dfe_ctes.index'),
+      ('estoque',     'Estoque',     'estoque.index'),
+      ('conciliacao', 'Conciliação', 'estoque.conciliacao'),
+      ('auditoria',   'Auditoria',   'estoque.auditoria'),
+      ('tempo_real',  'Tempo Real',  'estoque.tempo_real'),
+      ('pendente',    'Pendente',    'estoque.pendente_descer')] %}
+<a class="aba{{ ' on' if ativa == chave }}" href="{{ url_for(destino) }}">{{ rotulo }}</a>
+{%- endfor %}
+<script>
+(function () {
+  /* A barra abre mostrando a aba DA TELA, não o começo da lista. */
+  var barra = document.currentScript.parentElement;
+  var atual = barra.querySelector('.aba.on');
+  if (!atual) return;
+  barra.scrollLeft = Math.max(0, atual.offsetLeft
+                                 - (barra.clientWidth - atual.offsetWidth) / 2);
+})();
+</script>

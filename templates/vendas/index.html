@@ -3,68 +3,112 @@
 
 {% block styles %}
 <style>
-  /* ===== /vendas no visual .mig (paleta hardcoded: esta tela nao importa os
-     tokens do design system). SOMENTE a LISTA foi migrada — o modal/cupom
-     (_detalhe_conteudo.html) e o motor de PDF/WhatsApp ficam intactos. ===== */
-  #vendas{ --line-2:#dde3ec; --surface-1:#f1f4f8; --muted:#6b7280; --blue:#1D63A5; --blue-deep:#07569C;
-    --shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06); }
-  /* Totalizadores: .mig-stats/.mig-stat vem de includes/nav_migracoes.html. */
-  /* Filtro recolhido */
-  #vendas .venda-filtros{ background:#fff; border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow);
-    padding:.7rem 1rem; margin-bottom:1rem; }
-  #vendas .venda-filtros>summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:.5rem;
-    font-weight:700; color:var(--blue-deep); }
-  #vendas .venda-filtros>summary::-webkit-details-marker{ display:none; }
-  #vendas .venda-filtros .selo{ font-size:.72rem; font-weight:700; background:#e6f1fb; color:#0c447c; border-radius:999px; padding:.12rem .55rem; }
-  #vendas .venda-filtros .chev{ transition:transform .2s; color:var(--muted); }
-  #vendas .venda-filtros[open] .chev{ transform:rotate(180deg); }
-  #vendas .venda-filtros__body{ margin-top:.8rem; display:grid; gap:.6rem; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); align-items:end; }
-  #vendas .venda-filtros__body label{ font-size:10.5px; text-transform:uppercase; color:var(--muted); font-weight:700; display:block; margin-bottom:2px; }
-  #vendas .venda-filtros__body input,#vendas .venda-filtros__body select{ width:100%; border:1px solid var(--line-2); border-radius:8px; padding:.35rem .5rem; font-size:.85rem; }
-  #vendas .venda-filtros__btns{ display:flex; gap:.4rem; }
-  /* Card de venda */
-  #vendas .venda{ background:#fff; border:1px solid var(--line-2); border-left:4px solid var(--blue); border-radius:12px;
-    box-shadow:var(--shadow); padding:.7rem .85rem; margin-bottom:.6rem; cursor:pointer; display:flex; gap:.75rem; align-items:center; }
-  #vendas .venda:hover{ background:#f7fafe; }
-  #vendas .venda__ico{ flex:0 0 auto; display:inline-grid; place-items:center; width:2.2rem; height:2.2rem; border-radius:10px;
-    background:#e6f1fb; color:var(--blue); font-size:1.05rem; }
-  #vendas .venda__main{ min-width:0; flex:1; }
-  #vendas .venda__top{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
-  #vendas .venda__vend{ font-weight:700; font-size:.95rem; }
-  #vendas .pill{ background:var(--surface-1); border:1px solid var(--line-2); border-radius:6px; padding:.03rem .4rem;
-    font-family:ui-monospace,Menlo,monospace; font-size:.76rem; color:#334155; }
-  #vendas .tipo{ font-size:.68rem; font-weight:800; border-radius:5px; padding:.05rem .35rem; background:#eef2f7; color:#42506a; }
-  #vendas .venda__meta{ font-size:.8rem; color:#42506a; margin-top:.2rem; }
-  #vendas .venda__meta .sep{ color:#c4ccd6; margin:0 .2rem; }
-  #vendas .venda__itens{ font-size:.76rem; color:#6b7280; margin-top:.25rem; }
-  #vendas .venda__itens-full{ list-style:none; padding:0; margin:.35rem 0 0; border-top:1px solid var(--line-2);
-    padding-top:.35rem; font-size:.78rem; }
-  #vendas .venda__itens-full li{ display:flex; justify-content:space-between; gap:.5rem; }
-  #vendas .venda__itens-full .prod{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  #vendas .venda__itens-full .q{ color:#6b7280; }
-  #vendas .venda__right{ flex:0 0 auto; text-align:right; }
-  #vendas .venda__val{ font-weight:800; color:#27500a; font-variant-numeric:tabular-nums; white-space:nowrap; }
-  #vendas .receb{ display:inline-block; border-radius:20px; padding:2px 9px; font-size:11.5px; font-weight:600;
-    line-height:1.4; white-space:nowrap; margin-top:.2rem; }
-  #vendas .sit{ font-size:.72rem; font-weight:700; border-radius:999px; padding:.12rem .55rem; white-space:nowrap; }
-  #vendas .sit-ok{ background:#e6f1fb; color:#0c447c; } #vendas .sit-no{ background:#fcebeb; color:#a32d2d; }
-  /* Venda cancelada */
-  #vendas .venda--canc{ border-left-color:#c4ccd6; }
-  #vendas .venda--canc .venda__ico{ background:#eceef1; color:#9aa4b2; }
-  #vendas .venda--canc .venda__vend, #vendas .venda--canc .venda__meta{ color:#9aa4b2; }
-  #vendas .venda--canc .venda__num{ text-decoration:line-through; }
-  #vendas .venda--canc .venda__val{ color:#9aa4b2; text-decoration:line-through; }
-  #vendas .venda-empty{ text-align:center; color:var(--muted); padding:2.5rem 1rem; background:#fff;
-    border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); }
-  #vendas .venda-empty .bi{ font-size:1.6rem; display:block; margin-bottom:.4rem; opacity:.5; }
-  @media (max-width:575px){
-    #vendas .venda{ flex-wrap:wrap; }
-    #vendas .venda__right{ text-align:left; width:100%; display:flex; justify-content:space-between; align-items:center; }
-    #vendas .receb{ margin-top:0; }
+  /* ===================================================================
+     /vendas no padrão das telas do Banco (Transferências, Rec Frete):
+     topo azul com abas em pílula, números em degradê, lista branca
+     agrupada por dia. SOMENTE a casca foi trocada — o modal do cupom
+     (_detalhe_conteudo.html) e o motor de PDF/WhatsApp ficam intactos.
+     =================================================================== */
+  #vendas{
+    --azul:#1D63A5; --azul-deep:#0C4C86; --azul-claro:#eaf1f9;
+    --ink:#151d27; --ink-2:#3a4655; --muted:#6b7684;
+    --line:#e7ebf1; --line-2:#d9e0e8; --surface:#f7f9fc;
+    --ign:#4b5563; --ign-bg:#eceef1;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    color:var(--ink);
   }
-  .pag-nums .page-link{ min-width:2.1rem; text-align:center; border-radius:8px !important; margin:0 2px; border-color:#dde3ec; color:#1D63A5; }
-  .pag-nums .page-item.active .page-link{ background:#1D63A5; border-color:#1D63A5; color:#fff; }
+
+  /* Números em degradê */
+  #vendas .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem;
+    margin-bottom:.7rem; }
+  @media (min-width:768px){ #vendas .nums{ grid-template-columns:repeat(4,1fr); } }
+  #vendas .nums .n{ border-radius:13px; padding:.55rem .75rem; color:#fff;
+    box-shadow:0 2px 8px rgba(20,35,60,.12); }
+  #vendas .nums .r{ font-size:.66rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.06em; opacity:.92; }
+  #vendas .nums .v{ font-size:1.02rem; font-weight:800; letter-spacing:-.02em;
+    font-variant-numeric:tabular-nums; line-height:1.28; }
+  #vendas .n--notas{ background:linear-gradient(135deg,#2E6FB0,#1D63A5); }
+  #vendas .n--valor{ background:linear-gradient(135deg,#22A24B,#17963C); }
+  #vendas .n--canc{ background:linear-gradient(135deg,#5B6B7F,#465565); }
+  #vendas .n--canc.tem{ background:linear-gradient(135deg,#C2504A,#A32D2D); }
+  #vendas .n--tick{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
+
+  /* Filtros (recolhido; a gaveta em passos vem na próxima etapa) */
+  #vendas .venda-filtros{ background:#fff; border:1px solid var(--line-2);
+    border-radius:12px; padding:.7rem 1rem; margin-bottom:.7rem; }
+  #vendas .venda-filtros>summary{ list-style:none; cursor:pointer; display:flex;
+    align-items:center; gap:.5rem; font-weight:700; color:var(--azul-deep); }
+  #vendas .venda-filtros>summary::-webkit-details-marker{ display:none; }
+  #vendas .venda-filtros .selo-f{ font-size:.72rem; font-weight:700;
+    background:var(--azul-claro); color:var(--azul-deep); border-radius:999px;
+    padding:.12rem .55rem; }
+  #vendas .venda-filtros .chev{ margin-left:auto; transition:transform .2s;
+    color:var(--muted); }
+  #vendas .venda-filtros[open] .chev{ transform:rotate(180deg); }
+  #vendas .venda-filtros__body{ margin-top:.8rem; display:grid; gap:.6rem;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); align-items:end; }
+  #vendas .venda-filtros__body label{ font-size:10.5px; text-transform:uppercase;
+    color:var(--muted); font-weight:700; display:block; margin-bottom:2px; }
+  #vendas .venda-filtros__body input{ width:100%; border:1px solid var(--line-2);
+    border-radius:8px; padding:.35rem .5rem; font-size:.85rem; }
+  #vendas .venda-filtros__btns{ display:flex; gap:.4rem; }
+
+  /* Lista agrupada por dia */
+  #vendas .lst{ background:#fff; border:1px solid var(--line-2);
+    border-radius:12px; overflow:hidden; }
+  #vendas .banda{ display:flex; align-items:center; gap:.5rem; padding:.45rem .7rem;
+    background:var(--azul-claro); color:var(--azul-deep); font-size:.79rem;
+    font-weight:800; border-bottom:1px solid var(--line-2); position:sticky;
+    top:0; z-index:3; }
+  #vendas .banda .tot{ margin-left:auto; font-variant-numeric:tabular-nums;
+    font-weight:700; font-size:.74rem; }
+  #vendas .lin{ display:grid; grid-template-columns:minmax(0,1fr); gap:.1rem;
+    padding:.5rem .7rem; border-bottom:1px solid var(--line); cursor:pointer; }
+  #vendas .lin:last-child{ border-bottom:0; }
+  #vendas .lin:hover{ background:var(--surface); }
+  #vendas .c-desc{ display:flex; align-items:center; gap:.4rem; min-width:0;
+    font-size:.87rem; font-weight:800; letter-spacing:-.01em; }
+  #vendas .c-desc > span{ min-width:0; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; }
+  #vendas .tipo{ flex:0 0 auto; font-size:.62rem; font-weight:800;
+    border-radius:5px; padding:.08rem .35rem; background:#eef2f7; color:#42506a; }
+  #vendas .c-meio{ display:flex; align-items:center; gap:.35rem; min-width:0; }
+  #vendas .ids{ font-family:var(--mono); font-size:.72rem; color:var(--muted);
+    font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    min-width:0; }
+  #vendas .c-valor{ margin-left:auto; flex:0 0 auto; font-size:.95rem;
+    font-weight:800; color:var(--azul-deep); font-variant-numeric:tabular-nums;
+    letter-spacing:-.02em; white-space:nowrap; }
+  #vendas .c-baixo{ display:flex; align-items:center; gap:.4rem; min-width:0;
+    margin-top:.14rem; }
+  #vendas .selo{ flex:0 0 auto; display:inline-block; font-size:.66rem;
+    font-weight:800; border-radius:5px; padding:.08rem .38rem; white-space:nowrap; }
+  #vendas .itens{ font-size:.72rem; color:var(--muted); min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-left:auto; }
+  #vendas .lin--canc .c-desc, #vendas .lin--canc .ids{ color:#9aa4b2; }
+  #vendas .lin--canc .c-valor{ color:#9aa4b2; text-decoration:line-through; }
+  #vendas .selo--canc{ background:var(--ign-bg); color:var(--ign); }
+  #vendas .vazio{ text-align:center; color:var(--muted); padding:2.4rem 1rem;
+    font-size:.85rem; }
+  #vendas .vazio b{ display:block; color:var(--ink); font-size:.95rem;
+    margin-bottom:.25rem; }
+
+  /* Pé: atalho + paginação */
+  #vendas .pe{ display:flex; gap:.45rem; flex-wrap:wrap; margin-top:.8rem;
+    align-items:center; }
+  #vendas .pe > a{ display:inline-flex; align-items:center; gap:.3rem;
+    font-size:.79rem; font-weight:700; color:var(--azul); text-decoration:none;
+    background:#fff; border:1px solid var(--line-2); border-radius:10px;
+    padding:.4rem .7rem; }
+  #vendas .pe > a:hover{ border-color:var(--azul); }
+  .pag-nums .page-link{ min-width:2.1rem; text-align:center;
+    border-radius:8px !important; margin:0 2px; border-color:#d9e0e8;
+    color:#1D63A5; }
+  .pag-nums .page-item.active .page-link{ background:#1D63A5;
+    border-color:#1D63A5; color:#fff; }
 </style>
+{% with esc = '#vendas' %}{% include 'includes/abas_banco_css.html' %}{% endwith %}
 {% endblock %}
 
 {% block content %}
@@ -72,96 +116,117 @@
   'PIX APP':'#0d9488','PIX Manual':'#b45309','Débito APP':'#1d4ed8','Débito Manual':'#2563eb',
   'Crédito APP':'#7c3aed','Crédito Manual':'#8b5cf6','Dinheiro':'#059669','Cheque':'#475569',
   'Prazo':'#d97706','Transferência':'#0891b2','Combo':'#64748b','Outros':'#64748b'} %}
-<div id="vendas">
-{% set mig_titulo = 'Vendas Migradas' %}
-{% set mig_icone = 'bi-receipt' %}
-{% set mig_barra %}
-  <a href="{{ url_for('vendas.classificar') }}" class="mig-btn">
-    <i class="bi bi-tags"></i> Classificar produtos
-  </a>
-{% endset %}
-
-{% set aba_ativa = 'vendas' %}
-{% include 'includes/nav_migracoes.html' %}
-
-{# =================== TOTALIZADORES =================== #}
-<div class="mig-stats">
-  <div class="mig-stat"><div class="rot">Notas</div><div class="val blue">{{ totais.notas }}</div></div>
-  <div class="mig-stat"><div class="rot">Valor (autorizadas)</div><div class="val green">{{ (totais.valor or 0) | formatar_moeda }}</div></div>
-  <div class="mig-stat"><div class="rot">Canceladas</div><div class="val {% if totais.canceladas %}red{% endif %}">{{ totais.canceladas }}</div></div>
-</div>
-
-{# =================== FILTROS (recolhido) =================== #}
 {% set filtros_ativos = [filtros.data_ini, filtros.data_fim, filtros.vendedor, filtros.produto, filtros.forma_pgto]|select|list|length %}
-<details class="venda-filtros"{% if filtros_ativos %} open{% endif %}>
-  <summary>
-    <i class="bi bi-funnel"></i> Filtros
-    {% if filtros_ativos %}<span class="selo">{{ filtros_ativos }} ativo{{ 's' if filtros_ativos > 1 else '' }}</span>{% endif %}
-    <i class="bi bi-chevron-down chev ms-auto"></i>
-  </summary>
-  <form method="GET" action="/vendas" class="venda-filtros__body">
-    <div><label>Data de</label><input type="date" name="data_ini" value="{{ filtros.data_ini or data_ini_default }}"></div>
-    <div><label>Data até</label><input type="date" name="data_fim" value="{{ filtros.data_fim or data_fim_default }}"></div>
-    <div><label>Vendedor</label><input type="text" name="vendedor" value="{{ filtros.vendedor }}" placeholder="nome no XML"></div>
-    <div><label>Produto</label><input type="text" name="produto" value="{{ filtros.produto }}" placeholder="descrição do item"></div>
-    <div><label>Forma pgto</label><input type="text" name="forma_pgto" value="{{ filtros.forma_pgto }}" placeholder="ex.: Dinheiro"></div>
-    <div class="venda-filtros__btns">
-      <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Filtrar</button>
-      <a href="/vendas" class="btn btn-sm btn-outline-secondary">Limpar</a>
-    </div>
-  </form>
-</details>
+<div class="container-fluid" id="vendas">
 
-{# =================== LISTA (cards, web + mobile) =================== #}
-{% if not notas %}
-  <div class="venda-empty"><i class="bi bi-receipt"></i>
-    Nenhuma venda no período/filtro. Assim que a captura trouxer uma NF-e/NFC-e, ela aparece aqui.</div>
-{% else %}
-  {% for n in notas %}
-  {% set cancelada = (n.situacao == 'cancelada') %}
-  {% set tipo = 'NF-e' if n.modelo == 55 else 'NFC-e' %}
-  {% set itens = itens_por_venda.get(n.id, []) %}
-  <div class="venda{% if cancelada %} venda--canc{% endif %}"
-       data-venda-id="{{ n.id }}"
-       data-venda-titulo="{{ tipo }} nº {{ n.numero }}/{{ n.serie }}"
-       data-venda-cancelada="{{ '1' if cancelada else '0' }}">
-    <span class="venda__ico"><i class="bi bi-receipt"></i></span>
-    <div class="venda__main">
-      <div class="venda__top">
-        <span class="venda__vend">{{ n.vendedor_raw or 'Sem vendedor' }}</span>
-        <span class="tipo">{{ tipo }}</span>
-        <span class="pill venda__num">nº {{ n.numero }}/{{ n.serie }}</span>
-        {% if cancelada %}<span class="sit sit-no">cancelada</span>
-        {% else %}<span class="sit sit-ok">{{ n.situacao }}</span>{% endif %}
-      </div>
-      <div class="venda__meta">
-        {{ n.dh_emissao.strftime('%d/%m/%Y %H:%M') if n.dh_emissao else '—' }}
-        {% if n.cliente_nome %}<span class="sep">·</span> {{ n.cliente_nome }}{% endif %}
-      </div>
-      {% if itens %}
-      <div class="venda__itens d-none d-md-block">
-        {% for it in itens[:3] %}{{ it.produto_xml or '—' }}{% if not loop.last %} <span class="sep">·</span> {% endif %}{% endfor %}{% if itens|length > 3 %} <span class="sep">·</span> +{{ itens|length - 3 }}{% endif %}
-      </div>
-      <ul class="venda__itens-full d-md-none">
-        {% for it in itens %}
-        <li>
-          <span class="prod">{{ it.produto_xml or '—' }}
-            <span class="q">{{ it.quantidade }} {{ it.unidade or '' }} × {{ (it.valor_unitario or 0) | formatar_moeda }}</span>
-          </span>
-          <span class="text-nowrap">{{ (it.valor_total or 0) | formatar_moeda }}</span>
-        </li>
-        {% endfor %}
-      </ul>
-      {% endif %}
+  <!-- Topo padrão (mesmo das telas do Banco) -->
+  <div id="vendas-topo">
+    <div class="topo__l1">
+      <h3>Vendas Migradas</h3>
+      <button type="button" class="acao" onclick="vndAbrirFiltros()">
+        <i class="bi bi-sliders"></i> Filtro
+        {% if filtros_ativos %}<span style="background:#fff;color:#0C4C86;border-radius:99px;min-width:17px;height:17px;display:inline-grid;place-items:center;font-size:.66rem;">{{ filtros_ativos }}</span>{% endif %}
+      </button>
     </div>
-    <div class="venda__right">
-      <div class="venda__val">{{ (n.valor_total or 0) | formatar_moeda }}</div>
-      {% set c = cor_receb.get(n.recebimento, '#64748b') %}
-      <span class="receb" style="color:{{ c }};background:{{ c }}22">{{ n.recebimento }}</span>
+    <div class="abas">
+      {% with ativa = 'vendas' %}{% include 'includes/abas_migracoes.html' %}{% endwith %}
     </div>
   </div>
-  {% endfor %}
-{% endif %}
+
+  {# =================== NÚMEROS =================== #}
+  <div class="nums">
+    <div class="n n--notas"><div class="r">Notas</div>
+      <div class="v">{{ '{:,}'.format(totais.notas).replace(',', '.') }}</div></div>
+    <div class="n n--valor"><div class="r">Valor (autorizadas)</div>
+      <div class="v">{{ (totais.valor or 0) | formatar_moeda }}</div></div>
+    <div class="n n--canc{{ ' tem' if totais.canceladas }}"><div class="r">Canceladas</div>
+      <div class="v">{{ totais.canceladas }}</div></div>
+    <div class="n n--tick"><div class="r">Ticket médio</div>
+      <div class="v">{{ (totais.ticket or 0) | formatar_moeda }}</div></div>
+  </div>
+
+  {# =================== FILTROS (recolhido) =================== #}
+  <details class="venda-filtros" id="vnd-filtros"{% if filtros_ativos %} open{% endif %}>
+    <summary>
+      <i class="bi bi-funnel"></i> Filtros
+      {% if filtros_ativos %}<span class="selo-f">{{ filtros_ativos }} ativo{{ 's' if filtros_ativos > 1 else '' }}</span>{% endif %}
+      <i class="bi bi-chevron-down chev"></i>
+    </summary>
+    <form method="GET" action="/vendas" class="venda-filtros__body">
+      <div><label>Data de</label><input type="date" name="data_ini" value="{{ filtros.data_ini or data_ini_default }}"></div>
+      <div><label>Data até</label><input type="date" name="data_fim" value="{{ filtros.data_fim or data_fim_default }}"></div>
+      <div><label>Vendedor</label><input type="text" name="vendedor" value="{{ filtros.vendedor }}" placeholder="nome no XML"></div>
+      <div><label>Produto</label><input type="text" name="produto" value="{{ filtros.produto }}" placeholder="descrição do item"></div>
+      <div><label>Forma pgto</label><input type="text" name="forma_pgto" value="{{ filtros.forma_pgto }}" placeholder="ex.: Dinheiro"></div>
+      <div class="venda-filtros__btns">
+        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Filtrar</button>
+        <a href="/vendas" class="btn btn-sm btn-outline-secondary">Limpar</a>
+      </div>
+    </form>
+  </details>
+  <script>
+    function vndAbrirFiltros() {
+      var d = document.getElementById('vnd-filtros');
+      d.open = true;
+      d.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  </script>
+
+  {# =================== LISTA (agrupada por dia) =================== #}
+  <div class="lst">
+  {% if not notas %}
+    <div class="vazio"><b>Nenhuma venda no período.</b>
+      {% if filtros_ativos %}Nada corresponde ao filtro — tente outro período ou limpe a busca.
+      {% else %}Assim que a captura trouxer uma NF-e/NFC-e, ela aparece aqui.{% endif %}</div>
+  {% else %}
+    {% set ns = namespace(dia=None) %}
+    {% for n in notas %}
+    {% set cancelada = (n.situacao == 'cancelada') %}
+    {% set tipo = 'NF-e' if n.modelo == 55 else 'NFC-e' %}
+    {% set itens = itens_por_venda.get(n.id, []) %}
+    {% set dia_n = n.dh_emissao.date() if n.dh_emissao else None %}
+
+    {% if loop.first or dia_n != ns.dia %}
+      {% set ns.dia = dia_n %}
+      {% set d = dias.get(dia_n) %}
+      <div class="banda"><i class="bi bi-calendar3"></i>
+        {{ d.rot if d else 'Sem data' }}
+        {% if d %}<span class="tot">{{ d.n }} nota{{ 's' if d.n != 1 }} · {{ d.valor | formatar_moeda }}</span>{% endif %}
+      </div>
+    {% endif %}
+
+    <div class="lin{% if cancelada %} lin--canc{% endif %}"
+         data-venda-id="{{ n.id }}"
+         data-venda-titulo="{{ tipo }} nº {{ n.numero }}/{{ n.serie }}"
+         data-venda-cancelada="{{ '1' if cancelada else '0' }}">
+      <div class="c-desc">
+        <span>{{ n.vendedor_raw or 'Sem vendedor' }}</span>
+        <span class="tipo">{{ tipo }}</span>
+      </div>
+      <div class="c-meio">
+        <span class="ids">nº {{ n.numero }}/{{ n.serie }} · {{ n.dh_emissao.strftime('%H:%M') if n.dh_emissao else '—' }}{% if n.cliente_nome %} · {{ n.cliente_nome }}{% endif %}</span>
+        <span class="c-valor">{{ (n.valor_total or 0) | formatar_moeda }}</span>
+      </div>
+      <div class="c-baixo">
+        {% if cancelada %}
+          <span class="selo selo--canc">Cancelada</span>
+        {% else %}
+          {% set c = cor_receb.get(n.recebimento, '#64748b') %}
+          <span class="selo" style="color:{{ c }};background:{{ c }}22">{{ n.recebimento }}</span>
+        {% endif %}
+        {% if itens %}
+          <span class="itens">{{ itens[0].produto_xml or '—' }}{% if itens[0].unidade == 'L' %} · {{ '%.2f'|format(itens[0].quantidade or 0)|replace('.', ',') }} L{% endif %}{% if itens|length > 1 %} · +{{ itens|length - 1 }}{% endif %}</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  {% endif %}
+  </div>
+
+  {# =================== PÉ: atalho + paginação =================== #}
+  <div class="pe">
+    <a href="{{ url_for('vendas.classificar') }}"><i class="bi bi-tags"></i> Classificar produtos</a>
+  </div>
 
 {# =================== PAGINACAO =================== #}
 {% if total_paginas > 1 %}

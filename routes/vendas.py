@@ -105,6 +105,9 @@ def index():
             'valor':      agg.get('total_valor') or 0,
             'canceladas': agg.get('total_canceladas') or 0,
         }
+        autorizadas = totais['notas'] - totais['canceladas']
+        totais['ticket'] = (float(totais['valor']) / autorizadas
+                            if autorizadas > 0 else 0)
 
         # ---------- Paginacao ----------
         total_notas = totais['notas'] or 0
@@ -154,6 +157,34 @@ def index():
             for it in cur.fetchall():
                 itens_por_venda.setdefault(it['venda_id'], []).append(it)
 
+        # ---------- Faixas por dia (cabecalho de cada grupo da lista) ----
+        # Conta sobre TODO o filtro, nao so a pagina: se um dia quebra entre
+        # paginas, a faixa ainda mostra o total do dia inteiro.
+        _DIAS_SEM = ('Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta',
+                     'Sábado', 'Domingo')
+        dias = {}
+        dias_pg = sorted({n['dh_emissao'].date() for n in notas
+                          if n.get('dh_emissao')})
+        if dias_pg:
+            ph = ",".join(["%s"] * len(dias_pg))
+            cond = where + [f"DATE(v.dh_emissao) IN ({ph})"]
+            cur.execute(
+                f"""
+                SELECT DATE(v.dh_emissao) AS dia, COUNT(*) AS n,
+                       COALESCE(SUM(CASE WHEN v.situacao <> 'cancelada'
+                                         THEN v.valor_total ELSE 0 END), 0) AS valor
+                FROM vendas_xml v
+                WHERE {" AND ".join(cond)}
+                GROUP BY dia
+                """,
+                params + dias_pg,
+            )
+            for r in cur.fetchall():
+                d = r['dia']
+                dias[d] = {'rot': _DIAS_SEM[d.weekday()] + ' · '
+                                  + d.strftime('%d/%m'),
+                           'n': r['n'], 'valor': float(r['valor'] or 0)}
+
         # Periodo padrao para o form (ultimos 90 dias, sem forcar filtro).
         hoje = date.today()
         data_ini_default = f['data_ini'] or (hoje - timedelta(days=90)).strftime('%Y-%m-%d')
@@ -167,6 +198,7 @@ def index():
             notas=notas,
             itens_por_venda=itens_por_venda,
             totais=totais,
+            dias=dias,
             filtros=f,
             data_ini_default=data_ini_default,
             data_fim_default=data_fim_default,
