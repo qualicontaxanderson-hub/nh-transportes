@@ -104,11 +104,20 @@
 {% endmacro %}
 
 <div id="conc" class="show-nota">
-{% set mig_titulo = 'Conciliação de Estoque' %}
-{% set mig_icone = 'bi-clipboard-data' %}
-
-{% set aba_ativa = 'conciliacao' %}
-{% include 'includes/nav_migracoes.html' %}
+{% with esc = '#conc' %}{% include 'includes/abas_banco_css.html' %}{% endwith %}
+{% with esc = '#conc' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
+<div id="conc-topo">
+  <div class="topo__l1">
+    <h3>Conciliação de Estoque</h3>
+      <button type="button" class="acao" onclick="cngAbrir()">
+        <i class="bi bi-sliders"></i> Filtro
+        {% if n_filtros %}<span style="background:#fff;color:#0C4C86;border-radius:99px;min-width:17px;height:17px;display:inline-grid;place-items:center;font-size:.66rem;">{{ n_filtros }}</span>{% endif %}
+      </button>
+  </div>
+  <div class="abas">
+    {% with ativa = 'conciliacao' %}{% include 'includes/abas_migracoes.html' %}{% endwith %}
+  </div>
+</div>
 
 <div class="legenda">
   <span><i style="background:#BA7517"></i> Gasolina</span>
@@ -118,39 +127,116 @@
 </div>
 
 {# =================== FILTROS =================== #}
-<details class="filtros"{% if n_filtros %} open{% endif %}>
-  <summary>
-    <i class="bi bi-funnel"></i> Filtros
-    {% if n_filtros %}<span class="selo">{{ n_filtros }} ativo{{ 's' if n_filtros > 1 else '' }}</span>{% endif %}
-    <i class="bi bi-chevron-down chev"></i>
-  </summary>
-  <form method="GET" action="{{ url_for('estoque.conciliacao') }}" class="filtros__body">
-    <div>
-      <label>Empresa</label>
-      <select name="empresa">
-        <option value="">Todas</option>
+{% if n_filtros %}
+<div class="g-eco"><i class="bi bi-funnel-fill"></i>
+  Filtro ativo <a href="{{ url_for('estoque.conciliacao') }}">Limpar</a></div>
+{% endif %}
+
+<div class="escuro" id="cng-escuro" onclick="cngFechar()"></div>
+<div class="gav" id="cng-gav" role="dialog" aria-label="Filtro da conciliação">
+  <div class="gav__pega"></div>
+  <div class="passos">
+    <button type="button" class="passo on aqui" onclick="cngIr(0)"><i></i><span>1 · Empresa</span></button>
+    <button type="button" class="passo" onclick="cngIr(1)"><i></i><span>2 · Produto</span></button>
+    <button type="button" class="passo" onclick="cngIr(2)"><i></i><span>3 · Período</span></button>
+  </div>
+  <form method="GET" action="{{ url_for('estoque.conciliacao') }}" id="cng-form" style="display:contents">
+    <div class="etapa" id="cng-et0">
+      <div class="pnome"><b>Empresa</b>de qual posto — ou pule o passo</div>
+      <div class="gav__b"><div class="opcs">
+        <label class="opc"><input type="radio" name="empresa" value=""{% if not filtros.empresa %} checked{% endif %}><span>Todas</span></label>
         {% for e in empresas %}
-        <option value="{{ e.id }}" {% if filtros.empresa == e.id|string %}selected{% endif %}>{{ e.nome }}</option>
+        <label class="opc"><input type="radio" name="empresa" value="{{ e.id }}"{% if filtros.empresa == e.id|string %} checked{% endif %}><span>{{ e.nome }}</span></label>
         {% endfor %}
-      </select>
+      </div></div>
     </div>
-    <div>
-      <label>Produto</label>
-      <select name="produto">
-        <option value="">Todos os combustíveis</option>
+    <div class="etapa" id="cng-et1" hidden>
+      <div class="pnome"><b>Produto</b>marque um — ou pule</div>
+      <div class="gav__b"><div class="opcs">
+        <label class="opc"><input type="radio" name="produto" value=""{% if not filtros.produto %} checked{% endif %}><span>Todos os combustíveis</span></label>
         {% for pid, info in produtos_opts %}
-        <option value="{{ pid }}" {% if filtros.produto == pid|string %}selected{% endif %}>{{ info.nome }}</option>
+        <label class="opc"><input type="radio" name="produto" value="{{ pid }}"{% if filtros.produto == pid|string %} checked{% endif %}><span>{{ info.nome }}</span></label>
         {% endfor %}
-      </select>
+      </div></div>
     </div>
-    <div><label>Data de</label><input type="date" name="data_ini" value="{{ filtros.data_ini or data_ini_default }}"></div>
-    <div><label>Data até</label><input type="date" name="data_fim" value="{{ filtros.data_fim or data_fim_default }}"></div>
-    <div class="filtros__btns">
-      <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Filtrar</button>
-      <a href="{{ url_for('estoque.conciliacao') }}" class="btn btn-sm btn-outline-secondary">Limpar</a>
+    <div class="etapa" id="cng-et2" hidden>
+      <div class="pnome"><b>Período</b>o intervalo conciliado</div>
+      <div class="gav__b">
+        <div class="chips">
+          <button type="button" class="chip" onclick="cngPeriodo(this, 'hoje')">Hoje</button>
+          <button type="button" class="chip" onclick="cngPeriodo(this, '7')">7 dias</button>
+          <button type="button" class="chip" onclick="cngPeriodo(this, '30')">30 dias</button>
+          <button type="button" class="chip" onclick="cngPeriodo(this, 'mes')">Mês corrente</button>
+        </div>
+        <span class="gr__t">Ou escolha as datas</span>
+        <div class="par">
+          <input class="campo" type="date" name="data_ini" id="cng-d1" value="{{ filtros.data_ini or data_ini_default }}">
+          <input class="campo" type="date" name="data_fim" id="cng-d2" value="{{ filtros.data_fim or data_fim_default }}">
+        </div>
+      </div>
+    </div>
+    <div class="gav__f">
+      <button type="button" class="bt-g bt-g--ca" id="cng-bt-voltar" hidden onclick="cngIr(Math.max(0, cngPasso() - 1))">‹ Voltar</button>
+      <button type="button" class="bt-g bt-g--ca" id="cng-bt-pular" onclick="cngPular()">Pular</button>
+      <button type="button" class="bt-g bt-g--ok" id="cng-bt-ir" onclick="cngAvancar()">Avançar</button>
     </div>
   </form>
-</details>
+</div>
+
+<script>
+(function () {
+  var passo = 0, N = 3;
+  var gav = document.getElementById('cng-gav');
+  var escuro = document.getElementById('cng-escuro');
+  window.cngPasso = function () { return passo; };
+  window.cngAbrir = function () {
+    gav.classList.add('on'); escuro.classList.add('on');
+  };
+  window.cngFechar = function () {
+    gav.classList.remove('on'); escuro.classList.remove('on');
+  };
+  window.cngIr = function (n) {
+    passo = n;
+    var ps = gav.querySelectorAll('.passo');
+    for (var i = 0; i < N; i++) {
+      document.getElementById('cng-et' + i).hidden = (i !== n);
+      ps[i].classList.toggle('aqui', i === n);
+      ps[i].classList.toggle('on', i <= n);
+    }
+    var fim = (n === N - 1);
+    document.getElementById('cng-bt-voltar').hidden = (n === 0);
+    var pular = document.getElementById('cng-bt-pular');
+    if (pular) pular.hidden = fim;
+    document.getElementById('cng-bt-ir').textContent = fim ? 'Filtrar' : 'Avançar';
+  };
+  window.cngPular = function () {
+    var pri = document.getElementById('cng-et' + passo)
+      .querySelector('input[type=radio][value=""]');
+    if (pri) pri.checked = true;
+    cngIr(passo + 1);
+  };
+  window.cngAvancar = function () {
+    if (passo < N - 1) { cngIr(passo + 1); return; }
+    document.getElementById('cng-form').submit();
+  };
+    window.cngPeriodo = function (chip, tipo) {
+      chip.parentElement.querySelectorAll('.chip').forEach(function (c) {
+        c.classList.toggle('on', c === chip);
+      });
+      function iso(d) {
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+               + '-' + String(d.getDate()).padStart(2, '0');
+      }
+      var h = new Date(), d1 = new Date(), d2 = new Date();
+      if (tipo === '7') { d1.setDate(h.getDate() - 6); }
+      else if (tipo === '30') { d1.setDate(h.getDate() - 29); }
+      else if (tipo === 'mes') { d1 = new Date(h.getFullYear(), h.getMonth(), 1); }
+      document.getElementById('cng-d1').value = iso(d1);
+      document.getElementById('cng-d2').value = iso(d2);
+    };
+})();
+</script>
+
 
 {# alternador global (só aparece no mobile via CSS) #}
 <div class="switcher">

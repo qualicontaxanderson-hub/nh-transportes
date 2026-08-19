@@ -45,15 +45,18 @@
 
 {% block content %}
 <div id="treal">
-{% set mig_titulo = 'Estoque em Tempo Real' %}
-{% set mig_icone = 'bi-speedometer2' %}
-{% set mig_selos %}
-  <span class="mig-pill"><i class="bi bi-building"></i>
-    {{ empresa_nome if um_empresa else 'Todas as empresas' }}</span>
-  <span class="mig-pill"><i class="bi bi-clock"></i> atualizado {{ agora_hm }}</span>
-{% endset %}
-{% set aba_ativa = 'tempo_real' %}
-{% include 'includes/nav_migracoes.html' %}
+{% with esc = '#trq' %}{% include 'includes/abas_banco_css.html' %}{% endwith %}
+{% with esc = '#trq' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
+<div id="trq-topo">
+  <div class="topo__l1">
+    <h3>Estoque em Tempo Real</h3>
+    <span style="margin-left:auto;font-size:.74rem;font-weight:700;opacity:.85">
+      <i class="bi bi-clock"></i> atualizado {{ agora_hm }}</span>
+  </div>
+  <div class="abas">
+    {% with ativa = 'tempo_real' %}{% include 'includes/abas_migracoes.html' %}{% endwith %}
+  </div>
+</div>
 
 <form method="GET" action="{{ url_for('estoque.tempo_real') }}" class="filtro">
   <label>Empresa</label>

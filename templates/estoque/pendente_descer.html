@@ -48,50 +48,106 @@
 
 {% block content %}
 <div id="pend">
-{% set mig_titulo = 'Pendente pra Descer' %}
-{% set mig_icone = 'bi-hourglass-split' %}
-
-{% set aba_ativa = 'pendente' %}
-{% include 'includes/nav_migracoes.html' %}
+{% with esc = '#pend' %}{% include 'includes/abas_banco_css.html' %}{% endwith %}
+{% with esc = '#pend' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
+<div id="pend-topo">
+  <div class="topo__l1">
+    <h3>Pendente pra Descer</h3>
+      <button type="button" class="acao" onclick="pngAbrir()">
+        <i class="bi bi-sliders"></i> Filtro
+        {% if n_filtros %}<span style="background:#fff;color:#0C4C86;border-radius:99px;min-width:17px;height:17px;display:inline-grid;place-items:center;font-size:.66rem;">{{ n_filtros }}</span>{% endif %}
+      </button>
+  </div>
+  <div class="abas">
+    {% with ativa = 'pendente' %}{% include 'includes/abas_migracoes.html' %}{% endwith %}
+  </div>
+</div>
 
 {# =================== TOTALIZADORES =================== #}
-<div class="mig-stats">
-  <div class="mig-stat"><div class="rot">Notas pendentes</div><div class="val blue">{{ totais.notas }}</div></div>
-  <div class="mig-stat"><div class="rot">Litros pra descer</div><div class="val amber">{{ totais.litros | fmtnum(0) }}</div></div>
+<div class="g-nums duas">
+  <div class="n n--azul"><div class="r">Notas pendentes</div><div class="v">{{ totais.notas }}</div></div>
+  <div class="n n--ambar"><div class="r">Litros pra descer</div><div class="v">{{ totais.litros | fmtnum(0) }} L</div></div>
 </div>
 
 {# =================== FILTROS =================== #}
-<details class="filtros"{% if n_filtros %} open{% endif %}>
-  <summary>
-    <i class="bi bi-funnel"></i> Filtros
-    {% if n_filtros %}<span class="selo">{{ n_filtros }} ativo{{ 's' if n_filtros > 1 else '' }}</span>{% endif %}
-    <i class="bi bi-chevron-down chev"></i>
-  </summary>
-  <form method="GET" action="{{ url_for('estoque.pendente_descer') }}" class="filtros__body">
-    <div>
-      <label>Empresa</label>
-      <select name="empresa">
-        <option value="">Todas</option>
+{% if n_filtros %}
+<div class="g-eco"><i class="bi bi-funnel-fill"></i>
+  Filtro ativo <a href="{{ url_for('estoque.pendente_descer') }}">Limpar</a></div>
+{% endif %}
+
+<div class="escuro" id="png-escuro" onclick="pngFechar()"></div>
+<div class="gav" id="png-gav" role="dialog" aria-label="Filtro dos pendentes">
+  <div class="gav__pega"></div>
+  <div class="passos">
+    <button type="button" class="passo on aqui" onclick="pngIr(0)"><i></i><span>1 · Empresa</span></button>
+    <button type="button" class="passo" onclick="pngIr(1)"><i></i><span>2 · Produto</span></button>
+  </div>
+  <form method="GET" action="{{ url_for('estoque.pendente_descer') }}" id="png-form" style="display:contents">
+    <div class="etapa" id="png-et0">
+      <div class="pnome"><b>Empresa</b>de qual posto — ou pule o passo</div>
+      <div class="gav__b"><div class="opcs">
+        <label class="opc"><input type="radio" name="empresa" value=""{% if not empresa %} checked{% endif %}><span>Todas</span></label>
         {% for e in empresas %}
-        <option value="{{ e.id }}" {% if empresa == e.id|string %}selected{% endif %}>{{ e.nome }}</option>
+        <label class="opc"><input type="radio" name="empresa" value="{{ e.id }}"{% if empresa == e.id|string %} checked{% endif %}><span>{{ e.nome }}</span></label>
         {% endfor %}
-      </select>
+      </div></div>
     </div>
-    <div>
-      <label>Produto</label>
-      <select name="produto">
-        <option value="">Todos os combustíveis</option>
+    <div class="etapa" id="png-et1" hidden>
+      <div class="pnome"><b>Produto</b>marque um — ou pule</div>
+      <div class="gav__b"><div class="opcs">
+        <label class="opc"><input type="radio" name="produto" value=""{% if not produto %} checked{% endif %}><span>Todos os combustíveis</span></label>
         {% for pid, info in produtos_opts %}
-        <option value="{{ pid }}" {% if produto == pid|string %}selected{% endif %}>{{ info.nome }}</option>
+        <label class="opc"><input type="radio" name="produto" value="{{ pid }}"{% if produto == pid|string %} checked{% endif %}><span>{{ info.nome }}</span></label>
         {% endfor %}
-      </select>
+      </div></div>
     </div>
-    <div class="filtros__btns">
-      <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Filtrar</button>
-      <a href="{{ url_for('estoque.pendente_descer') }}" class="btn btn-sm btn-outline-secondary">Limpar</a>
+    <div class="gav__f">
+      <button type="button" class="bt-g bt-g--ca" id="png-bt-voltar" hidden onclick="pngIr(Math.max(0, pngPasso() - 1))">‹ Voltar</button>
+      <button type="button" class="bt-g bt-g--ca" id="png-bt-pular" onclick="pngPular()">Pular</button>
+      <button type="button" class="bt-g bt-g--ok" id="png-bt-ir" onclick="pngAvancar()">Avançar</button>
     </div>
   </form>
-</details>
+</div>
+
+<script>
+(function () {
+  var passo = 0, N = 2;
+  var gav = document.getElementById('png-gav');
+  var escuro = document.getElementById('png-escuro');
+  window.pngPasso = function () { return passo; };
+  window.pngAbrir = function () {
+    gav.classList.add('on'); escuro.classList.add('on');
+  };
+  window.pngFechar = function () {
+    gav.classList.remove('on'); escuro.classList.remove('on');
+  };
+  window.pngIr = function (n) {
+    passo = n;
+    var ps = gav.querySelectorAll('.passo');
+    for (var i = 0; i < N; i++) {
+      document.getElementById('png-et' + i).hidden = (i !== n);
+      ps[i].classList.toggle('aqui', i === n);
+      ps[i].classList.toggle('on', i <= n);
+    }
+    var fim = (n === N - 1);
+    document.getElementById('png-bt-voltar').hidden = (n === 0);
+    var pular = document.getElementById('png-bt-pular');
+    if (pular) pular.hidden = fim;
+    document.getElementById('png-bt-ir').textContent = fim ? 'Filtrar' : 'Avançar';
+  };
+  window.pngPular = function () {
+    var pri = document.getElementById('png-et' + passo)
+      .querySelector('input[type=radio][value=""]');
+    if (pri) pri.checked = true;
+    pngIr(passo + 1);
+  };
+  window.pngAvancar = function () {
+    if (passo < N - 1) { pngIr(passo + 1); return; }
+    document.getElementById('png-form').submit();
+  };
+})();
+</script>
+
 
 {# =================== LISTA =================== #}
 {% if not cards %}

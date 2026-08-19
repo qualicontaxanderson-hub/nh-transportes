@@ -138,34 +138,118 @@
 
 {% block content %}
 <div class="container-fluid" id="aud">
-  {% set mig_titulo = 'Auditoria de Estoque' %}
-  {% set mig_icone = 'bi-clipboard-check' %}
-  {% set aba_ativa = 'auditoria' %}
-  {% include 'includes/nav_migracoes.html' %}
+  {% with esc = '#aud' %}{% include 'includes/abas_banco_css.html' %}{% endwith %}
+{% with esc = '#aud' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
+<div id="aud-topo">
+  <div class="topo__l1">
+    <h3>Auditoria de Estoque</h3>
+      <button type="button" class="acao" onclick="augAbrir()">
+        <i class="bi bi-sliders"></i> Filtro
+        {% if n_filtros %}<span style="background:#fff;color:#0C4C86;border-radius:99px;min-width:17px;height:17px;display:inline-grid;place-items:center;font-size:.66rem;">{{ n_filtros }}</span>{% endif %}
+      </button>
+  </div>
+  <div class="abas">
+    {% with ativa = 'auditoria' %}{% include 'includes/abas_migracoes.html' %}{% endwith %}
+  </div>
+</div>
 
-  <details class="filtros"{% if n_filtros %} open{% endif %}>
-    <summary>
-      <i class="bi bi-funnel"></i> Filtros
-      {% if n_filtros %}<span class="selo">{{ n_filtros }} ativo{{ 's' if n_filtros > 1 else '' }}</span>{% endif %}
-      <i class="bi bi-chevron-down chev"></i>
-    </summary>
-    <form method="GET" action="{{ url_for('estoque.auditoria') }}" class="filtros__body">
-      <div>
-        <label>Empresa</label>
-        <select name="empresa">
+  {% if n_filtros %}
+  <div class="g-eco"><i class="bi bi-funnel-fill"></i>
+    Filtro ativo <a href="{{ url_for('estoque.auditoria') }}">Limpar</a></div>
+  {% endif %}
+
+  <div class="escuro" id="aug-escuro" onclick="augFechar()"></div>
+  <div class="gav" id="aug-gav" role="dialog" aria-label="Filtro da auditoria">
+    <div class="gav__pega"></div>
+    <div class="passos">
+      <button type="button" class="passo on aqui" onclick="augIr(0)"><i></i><span>1 · Empresa</span></button>
+      <button type="button" class="passo" onclick="augIr(1)"><i></i><span>2 · Período</span></button>
+    </div>
+    <form method="GET" action="{{ url_for('estoque.auditoria') }}" id="aug-form" style="display:contents">
+      <div class="etapa" id="aug-et0">
+        <div class="pnome"><b>Empresa</b>qual posto auditar</div>
+        <div class="gav__b"><div class="opcs">
           {% for e in empresas %}
-          <option value="{{ e.id }}" {% if cliente_id == e.id %}selected{% endif %}>{{ e.nome }}</option>
+          <label class="opc"><input type="radio" name="empresa" value="{{ e.id }}"{% if cliente_id == e.id %} checked{% endif %}><span>{{ e.nome }}</span></label>
           {% endfor %}
-        </select>
+        </div></div>
       </div>
-      <div><label>Data de</label><input type="date" name="data_ini" value="{{ data_ini }}"></div>
-      <div><label>Data até</label><input type="date" name="data_fim" value="{{ data_fim }}"></div>
-      <div class="filtros__btns">
-        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Filtrar</button>
-        <a href="{{ url_for('estoque.auditoria') }}" class="btn btn-sm btn-outline-secondary">Limpar</a>
+      <div class="etapa" id="aug-et1" hidden>
+        <div class="pnome"><b>Período</b>abre no mês corrente</div>
+        <div class="gav__b">
+          <div class="chips">
+            <button type="button" class="chip" onclick="augPeriodo(this, '7')">7 dias</button>
+            <button type="button" class="chip" onclick="augPeriodo(this, '30')">30 dias</button>
+            <button type="button" class="chip on" onclick="augPeriodo(this, 'mes')">Mês corrente</button>
+          </div>
+          <span class="gr__t">Ou escolha as datas</span>
+          <div class="par">
+            <input class="campo" type="date" name="data_ini" id="aug-d1" value="{{ data_ini }}">
+            <input class="campo" type="date" name="data_fim" id="aug-d2" value="{{ data_fim }}">
+          </div>
+        </div>
+      </div>
+      <div class="gav__f">
+        <button type="button" class="bt-g bt-g--ca" id="aug-bt-voltar" hidden onclick="augIr(Math.max(0, augPasso() - 1))">‹ Voltar</button>
+        <button type="button" class="bt-g bt-g--ok" id="aug-bt-ir" onclick="augAvancar()">Avançar</button>
       </div>
     </form>
-  </details>
+  </div>
+
+<script>
+(function () {
+  var passo = 0, N = 2;
+  var gav = document.getElementById('aug-gav');
+  var escuro = document.getElementById('aug-escuro');
+  window.augPasso = function () { return passo; };
+  window.augAbrir = function () {
+    gav.classList.add('on'); escuro.classList.add('on');
+  };
+  window.augFechar = function () {
+    gav.classList.remove('on'); escuro.classList.remove('on');
+  };
+  window.augIr = function (n) {
+    passo = n;
+    var ps = gav.querySelectorAll('.passo');
+    for (var i = 0; i < N; i++) {
+      document.getElementById('aug-et' + i).hidden = (i !== n);
+      ps[i].classList.toggle('aqui', i === n);
+      ps[i].classList.toggle('on', i <= n);
+    }
+    var fim = (n === N - 1);
+    document.getElementById('aug-bt-voltar').hidden = (n === 0);
+    var pular = document.getElementById('aug-bt-pular');
+    if (pular) pular.hidden = fim;
+    document.getElementById('aug-bt-ir').textContent = fim ? 'Filtrar' : 'Avançar';
+  };
+  window.augPular = function () {
+    var pri = document.getElementById('aug-et' + passo)
+      .querySelector('input[type=radio][value=""]');
+    if (pri) pri.checked = true;
+    augIr(passo + 1);
+  };
+  window.augAvancar = function () {
+    if (passo < N - 1) { augIr(passo + 1); return; }
+    document.getElementById('aug-form').submit();
+  };
+    window.augPeriodo = function (chip, tipo) {
+      chip.parentElement.querySelectorAll('.chip').forEach(function (c) {
+        c.classList.toggle('on', c === chip);
+      });
+      function iso(d) {
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+               + '-' + String(d.getDate()).padStart(2, '0');
+      }
+      var h = new Date(), d1 = new Date(), d2 = new Date();
+      if (tipo === '7') { d1.setDate(h.getDate() - 6); }
+      else if (tipo === '30') { d1.setDate(h.getDate() - 29); }
+      else if (tipo === 'mes') { d1 = new Date(h.getFullYear(), h.getMonth(), 1); }
+      document.getElementById('aug-d1').value = iso(d1);
+      document.getElementById('aug-d2').value = iso(d2);
+    };
+})();
+</script>
+
 
   {% if not produtos %}
   <div class="bloco"><div class="vazio">

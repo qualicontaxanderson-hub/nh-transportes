@@ -1,0 +1,96 @@
+{#- Gaveta de filtro em passos + faixa "filtro ativo" + numeros em degrade,
+    parametrizados pelo seletor raiz da tela (mesma ideia do abas_banco_css):
+
+      {% with esc = '#conc' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
+
+    As telas grandes (vendas/compras/ctes/estoque) trazem essas regras no
+    proprio bloco de estilo; este include e para as telas pequenas da
+    familia nao repetirem 150 linhas de CSS cada. Valores identicos, de
+    proposito.
+-#}
+<style>
+{{ esc }} .g-eco{ display:flex; align-items:center; gap:.4rem;
+  background:#eaf1f9; color:#0C4C86; border-radius:10px; padding:.5rem .7rem;
+  font-size:.82rem; font-weight:700; margin-bottom:.7rem; flex-wrap:wrap; }
+{{ esc }} .g-eco a{ margin-left:auto; background:#1D63A5; color:#fff;
+  border-radius:8px; padding:.3rem .7rem; font-size:.78rem; font-weight:800;
+  text-decoration:none; }
+{{ esc }} .g-nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem;
+  margin-bottom:.7rem; }
+@media (min-width:768px){ {{ esc }} .g-nums{ grid-template-columns:repeat(4,1fr); } }
+{{ esc }} .g-nums.duas{ grid-template-columns:1fr 1fr; }
+{{ esc }} .g-nums .n{ border-radius:13px; padding:.55rem .75rem; color:#fff;
+  box-shadow:0 2px 8px rgba(20,35,60,.12); }
+{{ esc }} .g-nums .r{ font-size:.66rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.06em; opacity:.92; }
+{{ esc }} .g-nums .v{ font-size:1.02rem; font-weight:800; letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums; line-height:1.28; }
+{{ esc }} .g-nums .n--azul{ background:linear-gradient(135deg,#2E6FB0,#1D63A5); }
+{{ esc }} .g-nums .n--verde{ background:linear-gradient(135deg,#22A24B,#17963C); }
+{{ esc }} .g-nums .n--ambar{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
+{{ esc }} .g-nums .n--cinza{ background:linear-gradient(135deg,#5B6B7F,#465565); }
+
+{{ esc }} .escuro{ position:fixed; inset:0; background:rgba(12,25,42,.45);
+  z-index:1050; opacity:0; pointer-events:none; transition:opacity .2s; }
+{{ esc }} .escuro.on{ opacity:1; pointer-events:auto; }
+{{ esc }} .gav{ position:fixed; left:0; right:0; bottom:0; z-index:1051;
+  background:#fff; border-radius:18px 18px 0 0; max-height:88vh; display:flex;
+  flex-direction:column; transform:translateY(101%);
+  transition:transform .24s cubic-bezier(.22,.7,.3,1);
+  box-shadow:0 -10px 30px rgba(12,25,42,.3); }
+{{ esc }} .gav.on{ transform:translateY(0); }
+@media (min-width:992px){
+  {{ esc }} .gav{ left:50%; right:auto; bottom:auto; top:8vh; width:520px;
+    border-radius:16px; transform:translate(-50%,10px); opacity:0;
+    pointer-events:none; max-height:84vh; }
+  {{ esc }} .gav.on{ transform:translate(-50%,0); opacity:1; pointer-events:auto; }
+  {{ esc }} .gav__pega{ display:none; }
+}
+{{ esc }} .gav__pega{ width:36px; height:4px; background:#d9e0e8;
+  border-radius:9px; margin:.5rem auto .1rem; flex:0 0 auto; }
+{{ esc }} .passos{ display:flex; gap:.45rem; padding:.5rem .9rem .1rem; }
+{{ esc }} .passo{ flex:1; border:0; background:none; padding:0; cursor:pointer;
+  font-family:inherit; text-align:left; min-width:0; }
+{{ esc }} .passo i{ display:block; height:3px; border-radius:9px;
+  background:#d9e0e8; }
+{{ esc }} .passo span{ display:block; font-size:.66rem; font-weight:800;
+  color:#6b7684; margin-top:.28rem; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; }
+{{ esc }} .passo.on i{ background:#1D63A5; }
+{{ esc }} .passo.aqui span{ color:#0C4C86; }
+{{ esc }} .pnome{ padding:.35rem .9rem .4rem; font-size:.76rem; color:#6b7684;
+  font-weight:700; }
+{{ esc }} .pnome b{ color:#151d27; font-size:.95rem; display:block; }
+{{ esc }} .gav__b{ overflow-y:auto; padding:0 .9rem .7rem; }
+{{ esc }} .gav__f{ border-top:1px solid #e7ebf1; padding:.65rem .9rem;
+  display:flex; gap:.5rem; background:#fff;
+  padding-bottom:calc(.65rem + env(safe-area-inset-bottom)); }
+{{ esc }} .bt-g{ border:0; border-radius:10px; padding:.55rem .8rem;
+  font-size:.87rem; font-weight:800; cursor:pointer; font-family:inherit; }
+{{ esc }} .bt-g--ok{ flex:1; background:#1D63A5; color:#fff; }
+{{ esc }} .bt-g--ca{ background:#f7f9fc; color:#6b7684;
+  border:1px solid #d9e0e8; }
+{{ esc }} .etapa[hidden]{ display:none; }
+{{ esc }} .gr__t{ font-size:.69rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.05em; color:#6b7684; margin:0 0 .3rem; display:block; }
+{{ esc }} .opcs{ border:1px solid #d9e0e8; border-radius:10px; overflow:hidden;
+  background:#fff; }
+{{ esc }} .opc{ display:flex; align-items:center; gap:.55rem;
+  padding:.5rem .6rem; border-bottom:1px solid #e7ebf1; font-size:.85rem;
+  cursor:pointer; margin:0; min-width:0; }
+{{ esc }} .opc:last-child{ border-bottom:0; }
+{{ esc }} .opc:hover{ background:#f7f9fc; }
+{{ esc }} .opc input{ width:19px; height:19px; accent-color:#1D63A5;
+  flex:0 0 auto; margin:0; }
+{{ esc }} .opc:has(input:checked){ background:#eaf1f9; }
+{{ esc }} .campo{ width:100%; border:1px solid #d9e0e8; border-radius:10px;
+  padding:.5rem .65rem; font-size:.85rem; background:#fff; font-family:inherit;
+  margin-bottom:.4rem; }
+{{ esc }} .par{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; }
+{{ esc }} .chips{ display:flex; flex-wrap:wrap; gap:.35rem;
+  margin-bottom:.85rem; }
+{{ esc }} .chip{ border:1px solid #d9e0e8; background:#fff; color:#3a4655;
+  border-radius:99px; padding:.32rem .7rem; font-size:.78rem; font-weight:700;
+  cursor:pointer; font-family:inherit; }
+{{ esc }} .chip.on{ background:#1D63A5; border-color:#1D63A5; color:#fff; }
+</style>
