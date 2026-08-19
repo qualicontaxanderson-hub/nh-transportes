@@ -51,6 +51,10 @@ def index():
         'transportadora': (request.args.get('transportadora') or '').strip(),
         'tomador':        (request.args.get('tomador') or '').strip(),
     }
+    # Filtros em LISTA da gaveta em passos; os de texto continuam validos.
+    f_emp = [v for v in request.args.getlist('emp') if v.strip().isdigit()]
+    f_transp = [v for v in request.args.getlist('transp') if v.strip()]
+    f_toma = [v for v in request.args.getlist('toma') if v.strip()]
     try:
         pagina = max(1, int(request.args.get('page', 1)))
     except (TypeError, ValueError):
@@ -71,13 +75,24 @@ def index():
             where.append("d.emit_nome LIKE %s"); params.append(f"%{f['transportadora']}%")
         if f['tomador']:
             where.append("c.toma_nome LIKE %s"); params.append(f"%{f['tomador']}%")
+        if f_emp:
+            ph = ",".join(["%s"] * len(f_emp))
+            where.append(f"d.cliente_id IN ({ph})"); params.extend(f_emp)
+        if f_transp:
+            ph = ",".join(["%s"] * len(f_transp))
+            where.append(f"d.emit_cnpj IN ({ph})"); params.extend(f_transp)
+        if f_toma:
+            ph = ",".join(["%s"] * len(f_toma))
+            where.append(f"c.toma_cnpj IN ({ph})"); params.extend(f_toma)
         where_sql = " WHERE " + " AND ".join(where)
 
         # ---------- Totais (qtd + soma do frete) ----------
         cur.execute(
             f"""
             SELECT COUNT(*) AS total_ctes,
-                   COALESCE(SUM(COALESCE(c.vprest, d.valor_total)), 0) AS total_frete
+                   COALESCE(SUM(COALESCE(c.vprest, d.valor_total)), 0) AS total_frete,
+                   COALESCE(SUM(CASE WHEN d.situacao IN ('cancelada', 'denegada')
+                                     THEN 1 ELSE 0 END), 0) AS cancelados
             FROM dfe_documentos d
             LEFT JOIN dfe_cte c ON c.documento_id = d.id
             {where_sql}
@@ -85,7 +100,31 @@ def index():
             params,
         )
         agg = cur.fetchone() or {}
-        totais = {'ctes': agg.get('total_ctes') or 0, 'frete': agg.get('total_frete') or 0}
+        totais = {'ctes': agg.get('total_ctes') or 0,
+                  'frete': agg.get('total_frete') or 0,
+                  'cancelados': int(agg.get('cancelados') or 0)}
+        totais['medio'] = (float(totais['frete']) / totais['ctes']
+                           if totais['ctes'] else 0)
+
+        # Faixas por dia (cabecalho dos grupos da lista).
+        _DIAS_SEM = ('Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta',
+                     'Sábado', 'Domingo')
+        cur.execute(
+            f"""
+            SELECT DATE(d.dh_emissao) AS dia, COUNT(*) AS n,
+                   COALESCE(SUM(COALESCE(c.vprest, d.valor_total)), 0) AS frete
+            FROM dfe_documentos d
+            LEFT JOIN dfe_cte c ON c.documento_id = d.id
+            {where_sql}
+            GROUP BY dia
+            """,
+            params,
+        )
+        dias = {}
+        for r in cur.fetchall():
+            d2 = r['dia']
+            dias[d2] = {'rot': _DIAS_SEM[d2.weekday()] + ' · ' + d2.strftime('%d/%m'),
+                        'n': r['n'], 'frete': float(r['frete'] or 0)}
 
         total_ctes = totais['ctes'] or 0
         total_paginas = max(1, math.ceil(total_ctes / POR_PAGINA))
@@ -125,14 +164,53 @@ def index():
         )
         empresas = cur.fetchall()
 
+        # Opcoes da gaveta (contagens globais de CT-e).
+        cur.execute(
+            """SELECT d.emit_cnpj AS cnpj,
+                      SUBSTRING_INDEX(GROUP_CONCAT(d.emit_nome SEPARATOR '||'), '||', 1) AS nome,
+                      COUNT(*) AS n
+                 FROM dfe_documentos d
+                WHERE d.tipo = 'CTe' AND d.emit_cnpj <> ''
+                GROUP BY d.emit_cnpj ORDER BY n DESC"""
+        )
+        op_transp = cur.fetchall()
+        cur.execute(
+            """SELECT c.toma_cnpj AS cnpj,
+                      SUBSTRING_INDEX(GROUP_CONCAT(c.toma_nome SEPARATOR '||'), '||', 1) AS nome,
+                      COUNT(*) AS n
+                 FROM dfe_documentos d
+                 JOIN dfe_cte c ON c.documento_id = d.id
+                WHERE d.tipo = 'CTe' AND c.toma_cnpj IS NOT NULL AND c.toma_cnpj <> ''
+                GROUP BY c.toma_cnpj ORDER BY n DESC"""
+        )
+        op_toma = cur.fetchall()
+        cur.execute(
+            """SELECT d.cliente_id AS id, COUNT(*) AS n
+                 FROM dfe_documentos d
+                WHERE d.tipo = 'CTe' AND d.cliente_id IS NOT NULL
+                GROUP BY d.cliente_id"""
+        )
+        emp_n = {r['id']: r['n'] for r in cur.fetchall()}
+
+        n_filtros = (sum(1 for k in f if f[k])
+                     + (1 if f_emp else 0) + (1 if f_transp else 0)
+                     + (1 if f_toma else 0))
+
         hoje = date.today()
         data_ini_default = f['data_ini'] or (hoje - timedelta(days=90)).strftime('%Y-%m-%d')
         data_fim_default = f['data_fim'] or hoje.strftime('%Y-%m-%d')
-        qs_filtros = urlencode({k: v for k, v in f.items() if v})
+        qs_filtros = urlencode(
+            [(k, v) for k, v in f.items() if v]
+            + [('emp', v) for v in f_emp]
+            + [('transp', v) for v in f_transp]
+            + [('toma', v) for v in f_toma]
+        )
 
         return render_template(
             'dfe_ctes/index.html',
             ctes=ctes, totais=totais, filtros=f, empresas=empresas,
+            dias=dias, op_transp=op_transp, op_toma=op_toma, emp_n=emp_n,
+            f_emp=f_emp, f_transp=f_transp, f_toma=f_toma, n_filtros=n_filtros,
             data_ini_default=data_ini_default, data_fim_default=data_fim_default,
             pagina=pagina, total_paginas=total_paginas, por_pagina=POR_PAGINA,
             paginas=_janela_paginas(pagina, total_paginas), qs_filtros=qs_filtros,

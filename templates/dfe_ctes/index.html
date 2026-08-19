@@ -3,138 +3,438 @@
 
 {% block styles %}
 <style>
-  /* ===== /dfe/ctes no visual .mig (paleta hardcoded: esta tela nao importa os
-     tokens do design system). ===== */
-  #ctes{ --line-2:#dde3ec; --surface-1:#f1f4f8; --muted:#6b7280; --blue:#1D63A5; --blue-deep:#07569C;
-    --shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06); }
-  /* Totalizadores: .mig-stats/.mig-stat vem de includes/nav_migracoes.html. */
-  /* Filtro recolhido */
-  #ctes .cte-filtros{ background:#fff; border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow);
-    padding:.7rem 1rem; margin-bottom:1rem; }
-  #ctes .cte-filtros>summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:.5rem;
-    font-weight:700; color:var(--blue-deep); }
-  #ctes .cte-filtros>summary::-webkit-details-marker{ display:none; }
-  #ctes .cte-filtros .selo{ font-size:.72rem; font-weight:700; background:#e6f1fb; color:#0c447c; border-radius:999px; padding:.12rem .55rem; }
-  #ctes .cte-filtros .chev{ transition:transform .2s; color:var(--muted); }
-  #ctes .cte-filtros[open] .chev{ transform:rotate(180deg); }
-  #ctes .cte-filtros__body{ margin-top:.8rem; display:grid; gap:.6rem; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); align-items:end; }
-  #ctes .cte-filtros__body label{ font-size:10.5px; text-transform:uppercase; color:var(--muted); font-weight:700; display:block; margin-bottom:2px; }
-  #ctes .cte-filtros__body input,#ctes .cte-filtros__body select{ width:100%; border:1px solid var(--line-2); border-radius:8px; padding:.35rem .5rem; font-size:.85rem; }
-  #ctes .cte-filtros__btns{ display:flex; gap:.4rem; }
-  /* Card CT-e */
-  #ctes .cte{ background:#fff; border:1px solid var(--line-2); border-left:4px solid var(--blue); border-radius:12px;
-    box-shadow:var(--shadow); padding:.7rem .85rem; margin-bottom:.6rem; cursor:pointer; display:flex; gap:.75rem; align-items:center; }
-  #ctes .cte:hover{ background:#f7fafe; }
-  #ctes .cte__ico{ flex:0 0 auto; display:inline-grid; place-items:center; width:2.2rem; height:2.2rem; border-radius:10px;
-    background:#e6f1fb; color:var(--blue); font-size:1.05rem; }
-  #ctes .cte__main{ min-width:0; flex:1; }
-  #ctes .cte__top{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
-  #ctes .cte__forn{ font-weight:700; font-size:.95rem; }
-  #ctes .pill{ background:var(--surface-1); border:1px solid var(--line-2); border-radius:6px; padding:.03rem .4rem;
-    font-family:ui-monospace,Menlo,monospace; font-size:.76rem; color:#334155; }
-  #ctes .cte__meta{ font-size:.8rem; color:#42506a; margin-top:.2rem; }
-  #ctes .cte__meta .sep{ color:#c4ccd6; margin:0 .2rem; }
-  #ctes .cte__right{ flex:0 0 auto; text-align:right; }
-  #ctes .cte__frete{ font-weight:800; color:#27500a; font-variant-numeric:tabular-nums; white-space:nowrap; }
-  #ctes .pill-nfe{ display:inline-block; background:#e6f1fb; color:#0c447c; border-radius:999px; padding:.06rem .5rem;
-    font-size:.72rem; font-weight:700; margin-top:.2rem; white-space:nowrap; }
-  #ctes .sit{ font-size:.72rem; font-weight:700; border-radius:999px; padding:.12rem .55rem; white-space:nowrap; }
-  #ctes .sit-ok{ background:#e6f1fb; color:#0c447c; } #ctes .sit-no{ background:#fcebeb; color:#a32d2d; }
-  /* CT-e cancelado */
-  #ctes .cte--canc{ border-left-color:#c4ccd6; }
-  #ctes .cte--canc .cte__ico{ background:#eceef1; color:#9aa4b2; }
-  #ctes .cte--canc .cte__forn, #ctes .cte--canc .cte__meta{ color:#9aa4b2; }
-  #ctes .cte--canc .cte__num{ text-decoration:line-through; }
-  #ctes .cte--canc .cte__frete{ color:#9aa4b2; text-decoration:line-through; }
-  #ctes .cte-empty{ text-align:center; color:var(--muted); padding:2.5rem 1rem; background:#fff;
-    border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); }
-  #ctes .cte-empty .bi{ font-size:1.6rem; display:block; margin-bottom:.4rem; opacity:.5; }
-  @media (max-width:575px){
-    #ctes .cte{ flex-wrap:wrap; }
-    #ctes .cte__right{ text-align:left; width:100%; display:flex; justify-content:space-between; align-items:center; }
-    #ctes .pill-nfe{ margin-top:0; }
+  /* ===================================================================
+     /dfe/ctes no padrão do Banco: topo azul com as abas da família,
+     números em degradê, lista por dia (cartão no celular / colunas na
+     web) e o filtro em gaveta de 4 passos. O modal de detalhe do CT-e
+     fica intacto.
+     =================================================================== */
+  #ctes{
+    --azul:#1D63A5; --azul-deep:#0C4C86; --azul-claro:#eaf1f9;
+    --ink:#151d27; --ink-2:#3a4655; --muted:#6b7684;
+    --line:#e7ebf1; --line-2:#d9e0e8; --surface:#f7f9fc;
+    --ok:#1c6b34; --ok-bg:#e4f4e8; --ign:#4b5563; --ign-bg:#eceef1;
+    --danger:#a32d2d; --danger-bg:#fbe9e9;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    color:var(--ink);
   }
-  .pag-nums .page-link{ min-width:2.1rem; text-align:center; border-radius:8px !important; margin:0 2px; border-color:#dde3ec; color:#1D63A5; }
-  .pag-nums .page-item.active .page-link{ background:#1D63A5; border-color:#1D63A5; color:#fff; }
+
+  /* Faixa "filtro ativo" com o Limpar na tela */
+  #ctes .cte-eco{ display:flex; align-items:center; gap:.4rem;
+    background:var(--azul-claro); color:var(--azul-deep); border-radius:10px;
+    padding:.5rem .7rem; font-size:.82rem; font-weight:700;
+    margin-bottom:.7rem; flex-wrap:wrap; }
+  #ctes .cte-eco a{ margin-left:auto; background:var(--azul); color:#fff;
+    border-radius:8px; padding:.3rem .7rem; font-size:.78rem; font-weight:800;
+    text-decoration:none; }
+
+  /* Números em degradê */
+  #ctes .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem;
+    margin-bottom:.7rem; }
+  @media (min-width:768px){ #ctes .nums{ grid-template-columns:repeat(4,1fr); } }
+  #ctes .nums .n{ border-radius:13px; padding:.55rem .75rem; color:#fff;
+    box-shadow:0 2px 8px rgba(20,35,60,.12); }
+  #ctes .nums .r{ font-size:.66rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.06em; opacity:.92; }
+  #ctes .nums .v{ font-size:1.02rem; font-weight:800; letter-spacing:-.02em;
+    font-variant-numeric:tabular-nums; line-height:1.28; }
+  #ctes .n--qtd{ background:linear-gradient(135deg,#2E6FB0,#1D63A5); }
+  #ctes .n--frete{ background:linear-gradient(135deg,#22A24B,#17963C); }
+  #ctes .n--medio{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
+  #ctes .n--canc{ background:linear-gradient(135deg,#5B6B7F,#465565); }
+  #ctes .n--canc.tem{ background:linear-gradient(135deg,#C2504A,#A32D2D); }
+
+  /* Lista por dia — mesma linha de células de /vendas */
+  #ctes .lst{ background:#fff; border:1px solid var(--line-2);
+    border-radius:12px; overflow:hidden; }
+  #ctes .banda{ display:flex; align-items:center; gap:.5rem; padding:.45rem .8rem;
+    background:var(--azul-claro); color:var(--azul-deep); font-size:.79rem;
+    font-weight:800; border-bottom:1px solid var(--line-2); position:sticky;
+    top:0; z-index:3; }
+  #ctes .banda .tot{ margin-left:auto; font-variant-numeric:tabular-nums;
+    font-weight:700; font-size:.74rem; }
+  #ctes .lin{ display:grid; gap:.1rem .35rem; align-items:baseline;
+    grid-template-columns:auto auto minmax(0,1fr) auto;
+    grid-template-areas:"quem quem quem quem" "num emp . valor"
+                        "selo oque oque oque";
+    padding:.5rem .7rem; border-bottom:1px solid var(--line); cursor:pointer; }
+  #ctes .lin:last-child{ border-bottom:0; }
+  #ctes .lin:hover{ background:var(--surface); }
+  #ctes .c-quem{ grid-area:quem; min-width:0; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; font-size:.87rem;
+    font-weight:800; letter-spacing:-.01em; }
+  #ctes .c-num{ grid-area:num; font-family:var(--mono); font-size:.72rem;
+    color:var(--muted); font-weight:600; white-space:nowrap; }
+  #ctes .c-emp{ grid-area:emp; font-size:.72rem; color:var(--muted);
+    font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    min-width:0; }
+  #ctes .c-emp::before{ content:'· '; }
+  #ctes .c-valor{ grid-area:valor; justify-self:end; font-size:.95rem;
+    font-weight:800; color:var(--azul-deep); font-variant-numeric:tabular-nums;
+    white-space:nowrap; }
+  #ctes .c-selo{ grid-area:selo; justify-self:start; display:flex;
+    flex-wrap:wrap; gap:.25rem; }
+  #ctes .selo{ display:inline-block; font-size:.66rem; font-weight:800;
+    border-radius:5px; padding:.08rem .38rem; white-space:nowrap; }
+  #ctes .selo--ok{ background:var(--ok-bg); color:var(--ok); }
+  #ctes .selo--no{ background:var(--danger-bg); color:var(--danger); }
+  #ctes .selo--nfe{ background:var(--azul-claro); color:var(--azul-deep); }
+  #ctes .c-oque{ grid-area:oque; font-size:.72rem; color:var(--muted);
+    min-width:0; max-width:100%; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; justify-self:end; }
+  #ctes .lin--canc .c-quem, #ctes .lin--canc .c-num, #ctes .lin--canc .c-emp,
+  #ctes .lin--canc .c-oque{ color:#9aa4b2; }
+  #ctes .lin--canc .c-valor{ color:#9aa4b2; text-decoration:line-through; }
+  #ctes .vazio{ text-align:center; color:var(--muted); padding:2.4rem 1rem;
+    font-size:.85rem; }
+  #ctes .vazio b{ display:block; color:var(--ink); font-size:.95rem;
+    margin-bottom:.25rem; }
+  @media (min-width:992px){
+    #ctes .lin{ grid-template-columns:110px minmax(110px,.55fr)
+        minmax(210px,1fr) minmax(0,1.8fr) minmax(120px,auto) 110px;
+      grid-template-areas:"num emp quem oque selo valor";
+      gap:.15rem 1rem; align-items:center; padding:.48rem .9rem; }
+    #ctes .c-num, #ctes .c-emp{ font-size:.76rem; }
+    #ctes .c-emp::before{ content:''; }
+    #ctes .c-oque{ justify-self:start; font-size:.79rem; color:var(--ink-2); }
+    #ctes .c-valor{ font-size:.9rem; }
+    #ctes .selo{ font-size:.68rem; padding:.12rem .45rem; }
+  }
+
+  .pag-nums .page-link{ min-width:2.1rem; text-align:center;
+    border-radius:8px !important; margin:0 2px; border-color:#d9e0e8;
+    color:#1D63A5; }
+  .pag-nums .page-item.active .page-link{ background:#1D63A5;
+    border-color:#1D63A5; color:#fff; }
+
+  /* Gaveta de filtro em passos (mesma das outras telas) */
+  #ctes .escuro{ position:fixed; inset:0; background:rgba(12,25,42,.45);
+    z-index:1050; opacity:0; pointer-events:none; transition:opacity .2s; }
+  #ctes .escuro.on{ opacity:1; pointer-events:auto; }
+  #ctes .gav{ position:fixed; left:0; right:0; bottom:0; z-index:1051;
+    background:#fff; border-radius:18px 18px 0 0; max-height:88vh; display:flex;
+    flex-direction:column; transform:translateY(101%);
+    transition:transform .24s cubic-bezier(.22,.7,.3,1);
+    box-shadow:0 -10px 30px rgba(12,25,42,.3); }
+  #ctes .gav.on{ transform:translateY(0); }
+  @media (min-width:992px){
+    #ctes .gav{ left:50%; right:auto; bottom:auto; top:8vh; width:520px;
+      border-radius:16px; transform:translate(-50%,10px); opacity:0;
+      pointer-events:none; max-height:84vh; }
+    #ctes .gav.on{ transform:translate(-50%,0); opacity:1; pointer-events:auto; }
+    #ctes .gav__pega{ display:none; }
+  }
+  #ctes .gav__pega{ width:36px; height:4px; background:var(--line-2);
+    border-radius:9px; margin:.5rem auto .1rem; flex:0 0 auto; }
+  #ctes .passos{ display:flex; gap:.45rem; padding:.5rem .9rem .1rem; }
+  #ctes .passo{ flex:1; border:0; background:none; padding:0; cursor:pointer;
+    font-family:inherit; text-align:left; min-width:0; }
+  #ctes .passo i{ display:block; height:3px; border-radius:9px;
+    background:var(--line-2); }
+  #ctes .passo span{ display:block; font-size:.66rem; font-weight:800;
+    color:var(--muted); margin-top:.28rem; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
+  #ctes .passo.on i{ background:var(--azul); }
+  #ctes .passo.aqui span{ color:var(--azul-deep); }
+  #ctes .pnome{ padding:.35rem .9rem .4rem; font-size:.76rem; color:var(--muted);
+    font-weight:700; }
+  #ctes .pnome b{ color:var(--ink); font-size:.95rem; display:block; }
+  #ctes .gav__b{ overflow-y:auto; padding:0 .9rem .7rem; }
+  #ctes .gav__f{ border-top:1px solid var(--line); padding:.65rem .9rem;
+    display:flex; gap:.5rem; background:#fff;
+    padding-bottom:calc(.65rem + env(safe-area-inset-bottom)); }
+  #ctes .bt-g{ border:0; border-radius:10px; padding:.55rem .8rem;
+    font-size:.87rem; font-weight:800; cursor:pointer; font-family:inherit;
+    text-decoration:none; text-align:center; }
+  #ctes .bt-g--ok{ flex:1; background:var(--azul); color:#fff; }
+  #ctes .bt-g--ca{ background:var(--surface); color:var(--muted);
+    border:1px solid var(--line-2); }
+  #ctes .etapa[hidden]{ display:none; }
+  #ctes .gr__c{ display:flex; align-items:baseline; gap:.4rem;
+    margin-bottom:.3rem; }
+  #ctes .gr__t{ font-size:.69rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); }
+  #ctes .gr__a{ margin-left:auto; background:none; border:0; padding:0;
+    cursor:pointer; font-size:.74rem; font-weight:800; color:var(--azul);
+    font-family:inherit; }
+  #ctes .opcs{ border:1px solid var(--line-2); border-radius:10px;
+    overflow:hidden; max-height:250px; overflow-y:auto; background:#fff; }
+  #ctes .opc{ display:flex; align-items:center; gap:.55rem; padding:.5rem .6rem;
+    border-bottom:1px solid var(--line); font-size:.85rem; cursor:pointer;
+    margin:0; min-width:0; }
+  #ctes .opc:last-child{ border-bottom:0; }
+  #ctes .opc:hover{ background:var(--surface); }
+  #ctes .opc input{ width:19px; height:19px; accent-color:var(--azul);
+    flex:0 0 auto; margin:0; }
+  #ctes .opc > span{ min-width:0; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; }
+  #ctes .opc small{ display:block; font-size:.71rem; color:var(--muted); }
+  #ctes .opc:has(input:checked){ background:var(--azul-claro); }
+  #ctes .opc[hidden]{ display:none; }
+  #ctes .campo{ width:100%; border:1px solid var(--line-2); border-radius:10px;
+    padding:.5rem .65rem; font-size:.85rem; background:#fff;
+    font-family:inherit; margin-bottom:.4rem; }
+  #ctes .par{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; }
+  #ctes .chips{ display:flex; flex-wrap:wrap; gap:.35rem; margin-bottom:.85rem; }
+  #ctes .chip{ border:1px solid var(--line-2); background:#fff;
+    color:var(--ink-2); border-radius:99px; padding:.32rem .7rem;
+    font-size:.78rem; font-weight:700; cursor:pointer; font-family:inherit; }
+  #ctes .chip.on{ background:var(--azul); border-color:var(--azul); color:#fff; }
+  #ctes :focus-visible{ outline:2px solid var(--azul); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce){ #ctes *{ transition:none !important; } }
 </style>
+{% with esc = '#ctes' %}{% include 'includes/abas_banco_css.html' %}{% endwith %}
 {% endblock %}
 
 {% block content %}
-<div id="ctes">
-{% set mig_titulo = 'CT-e Migrados' %}
-{% set mig_icone = 'bi-truck' %}
-{% set aba_ativa = 'ctes' %}
-{% include 'includes/nav_migracoes.html' %}
+<div class="container-fluid" id="ctes">
 
-{# =================== TOTALIZADORES =================== #}
-<div class="mig-stats">
-  <div class="mig-stat"><div class="rot">CT-e</div><div class="val blue">{{ totais.ctes }}</div></div>
-  <div class="mig-stat"><div class="rot">Soma do frete</div><div class="val green">{{ (totais.frete or 0) | formatar_moeda }}</div></div>
-</div>
-
-{# =================== FILTROS (recolhido) =================== #}
-{% set filtros_ativos = [filtros.empresa, filtros.data_ini, filtros.data_fim, filtros.transportadora, filtros.tomador]|select|list|length %}
-<details class="cte-filtros">
-  <summary>
-    <i class="bi bi-funnel"></i> Filtros
-    {% if filtros_ativos %}<span class="selo">{{ filtros_ativos }} ativo{{ 's' if filtros_ativos > 1 else '' }}</span>{% endif %}
-    <i class="bi bi-chevron-down chev ms-auto"></i>
-  </summary>
-  <form method="GET" action="/dfe/ctes" class="cte-filtros__body">
-    <div>
-      <label>Empresa</label>
-      <select name="empresa">
-        <option value="">Todas</option>
-        {% for e in empresas %}
-        <option value="{{ e.id }}" {% if filtros.empresa == e.id|string %}selected{% endif %}>{{ e.nome }}</option>
-        {% endfor %}
-      </select>
+  <!-- Topo padrão (mesmo das telas do Banco) -->
+  <div id="ctes-topo">
+    <div class="topo__l1">
+      <h3>CT-e Migrados</h3>
+      <button type="button" class="acao" onclick="ctgAbrir()">
+        <i class="bi bi-sliders"></i> Filtro
+        {% if n_filtros %}<span style="background:#fff;color:#0C4C86;border-radius:99px;min-width:17px;height:17px;display:inline-grid;place-items:center;font-size:.66rem;">{{ n_filtros }}</span>{% endif %}
+      </button>
     </div>
-    <div><label>Data de</label><input type="date" name="data_ini" value="{{ filtros.data_ini or data_ini_default }}"></div>
-    <div><label>Data até</label><input type="date" name="data_fim" value="{{ filtros.data_fim or data_fim_default }}"></div>
-    <div><label>Transportadora</label><input type="text" name="transportadora" value="{{ filtros.transportadora }}" placeholder="nome do emitente"></div>
-    <div><label>Tomador</label><input type="text" name="tomador" value="{{ filtros.tomador }}" placeholder="quem paga o frete"></div>
-    <div class="cte-filtros__btns">
-      <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Filtrar</button>
-      <a href="/dfe/ctes" class="btn btn-sm btn-outline-secondary">Limpar</a>
-    </div>
-  </form>
-</details>
-
-{# =================== LISTA (cards, web + mobile) =================== #}
-{% if not ctes %}
-  <div class="cte-empty"><i class="bi bi-truck"></i>
-    Nenhum CT-e no período/filtro. Assim que a captura da SEFAZ trouxer um CT-e, ele aparece aqui.</div>
-{% else %}
-  {% for c in ctes %}
-  {% set cancel = c.situacao in ['cancelada', 'denegada'] %}
-  <div class="cte{% if cancel %} cte--canc{% endif %}"
-       data-cte-id="{{ c.id }}"
-       data-cte-titulo="CT-e nº {{ c.numero }}/{{ c.serie }}"
-       data-cte-cancel="{{ '1' if cancel else '0' }}">
-    <span class="cte__ico"><i class="bi bi-truck"></i></span>
-    <div class="cte__main">
-      <div class="cte__top">
-        <span class="cte__forn">{{ c.emit_nome or '(sem transportadora)' }}</span>
-        <span class="pill cte__num">nº {{ c.numero }}/{{ c.serie }}</span>
-        {% if cancel %}<span class="sit sit-no">{{ c.situacao|upper }}</span>
-        {% else %}<span class="sit sit-ok">autorizada</span>{% endif %}
-      </div>
-      <div class="cte__meta">
-        {{ c.dh_emissao.strftime('%d/%m/%Y %H:%M') if c.dh_emissao else '—' }}
-        {% if c.mun_ini %}<span class="sep">·</span> {{ c.mun_ini }}/{{ c.uf_ini }} → {{ c.mun_fim }}/{{ c.uf_fim }}{% endif %}
-        {% if c.motorista_nome %}<span class="sep">·</span> {{ c.motorista_nome }}{% endif %}
-        {% if c.placa %}<span class="sep">·</span> {{ c.placa }}{% endif %}
-        {% if c.toma_nome %}<span class="sep">·</span> tomador: {{ c.toma_nome }}{% endif %}
-      </div>
-    </div>
-    <div class="cte__right">
-      <div class="cte__frete">{{ (c.frete or 0) | formatar_moeda }}</div>
-      {% if c.qt_nfe %}<div class="pill-nfe">{{ c.qt_nfe }} NF-e</div>{% endif %}
+    <div class="abas">
+      {% with ativa = 'ctes' %}{% include 'includes/abas_migracoes.html' %}{% endwith %}
     </div>
   </div>
-  {% endfor %}
-{% endif %}
+
+  {% if n_filtros %}
+  <div class="cte-eco">
+    <i class="bi bi-funnel-fill"></i>
+    Filtro ativo — {{ totais.ctes }} CT-e no recorte
+    <a href="/dfe/ctes">Limpar</a>
+  </div>
+  {% endif %}
+
+  {# =================== NÚMEROS =================== #}
+  <div class="nums">
+    <div class="n n--qtd"><div class="r">CT-e no período</div>
+      <div class="v">{{ totais.ctes }}</div></div>
+    <div class="n n--frete"><div class="r">Soma do frete</div>
+      <div class="v">{{ (totais.frete or 0) | formatar_moeda }}</div></div>
+    <div class="n n--medio"><div class="r">Frete médio</div>
+      <div class="v">{{ (totais.medio or 0) | formatar_moeda }}</div></div>
+    <div class="n n--canc{{ ' tem' if totais.cancelados }}"><div class="r">Cancelados</div>
+      <div class="v">{{ totais.cancelados }}</div></div>
+  </div>
+
+  {# =================== LISTA (agrupada por dia) =================== #}
+  <div class="lst">
+  {% if not ctes %}
+    <div class="vazio"><b>Nenhum CT-e no período.</b>
+      {% if n_filtros %}Nada corresponde ao filtro — tente outro período ou limpe a busca.
+      {% else %}Assim que a captura da SEFAZ trouxer um CT-e, ele aparece aqui.{% endif %}</div>
+  {% else %}
+    {% set ns = namespace(dia=None) %}
+    {% for c in ctes %}
+    {% set cancel = c.situacao in ['cancelada', 'denegada'] %}
+    {% set dia_n = c.dh_emissao.date() if c.dh_emissao else None %}
+
+    {% if loop.first or dia_n != ns.dia %}
+      {% set ns.dia = dia_n %}
+      {% set dd = dias.get(dia_n) %}
+      <div class="banda">{{ dd.rot if dd else 'Sem data' }}
+        {% if dd %}<span class="tot">{{ dd.n }} CT-e · {{ dd.frete | formatar_moeda }}</span>{% endif %}
+      </div>
+    {% endif %}
+
+    <div class="lin{% if cancel %} lin--canc{% endif %}"
+         data-cte-id="{{ c.id }}"
+         data-cte-titulo="CT-e nº {{ c.numero }}/{{ c.serie }}"
+         data-cte-cancel="{{ '1' if cancel else '0' }}">
+      <span class="c-num">nº {{ c.numero }}/{{ c.serie }}</span>
+      <span class="c-emp">{{ c.empresa_nome or '—' }}</span>
+      <span class="c-quem">{{ c.emit_nome or '(sem transportadora)' }}</span>
+      <span class="c-oque">
+        {%- if c.mun_ini %}{{ c.mun_ini }}/{{ c.uf_ini }} → {{ c.mun_fim }}/{{ c.uf_fim }}{% endif -%}
+        {%- if c.motorista_nome %} · {{ c.motorista_nome }}{% endif -%}
+        {%- if c.placa %} · {{ c.placa }}{% endif -%}
+        {%- if c.toma_nome %} · tomador: {{ c.toma_nome }}{% endif -%}
+      </span>
+      <span class="c-selo">
+        {%- if cancel %}<span class="selo selo--no">{{ c.situacao|upper }}</span>
+        {%- else %}<span class="selo selo--ok">autorizada</span>{% endif %}
+        {%- if c.qt_nfe %} <span class="selo selo--nfe">{{ c.qt_nfe }} NF-e</span>{% endif %}
+      </span>
+      <span class="c-valor">{{ (c.frete or 0) | formatar_moeda }}</span>
+    </div>
+    {% endfor %}
+  {% endif %}
+  </div>
+
+  {# =================== FILTRO EM PASSOS (gaveta) =================== #}
+  <div class="escuro" id="ctg-escuro" onclick="ctgFechar()"></div>
+  <div class="gav" id="ctg-gav" role="dialog" aria-label="Filtro dos CT-e">
+    <div class="gav__pega"></div>
+    <div class="passos">
+      <button type="button" class="passo on aqui" onclick="ctgIrPasso(0)"><i></i><span>1 · Empresa</span></button>
+      <button type="button" class="passo" onclick="ctgIrPasso(1)"><i></i><span>2 · Transportadora</span></button>
+      <button type="button" class="passo" onclick="ctgIrPasso(2)"><i></i><span>3 · Tomador</span></button>
+      <button type="button" class="passo" onclick="ctgIrPasso(3)"><i></i><span>4 · Período</span></button>
+    </div>
+
+    <form method="GET" action="/dfe/ctes" id="ctg-form" style="display:contents">
+
+      <div class="etapa" id="ctg-et0">
+        <div class="pnome"><b>Empresa</b>quem recebeu o CT-e — ou pule o passo</div>
+        <div class="gav__b">
+          <div class="opcs">
+            {% for e in empresas %}
+            <label class="opc"><input type="checkbox" name="emp" value="{{ e.id }}"{% if e.id|string in f_emp %} checked{% endif %}>
+              <span>{{ e.nome }}{% if emp_n.get(e.id) %}<small>{{ emp_n.get(e.id) }} CT-e</small>{% endif %}</span></label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="etapa" id="ctg-et1" hidden>
+        <div class="pnome"><b>Transportadora</b>marque uma ou mais — ou pule</div>
+        <div class="gav__b">
+          <div class="gr__c"><span class="gr__t">Transportadoras</span>
+            <button type="button" class="gr__a" data-alvo="ctg-l-transp"
+                    onclick="ctgTodos('ctg-l-transp')">marcar todas</button></div>
+          <input class="campo" type="search" placeholder="Buscar transportadora…"
+                 oninput="ctgBusca(this, 'ctg-l-transp')">
+          <div class="opcs" id="ctg-l-transp">
+            {% for o in op_transp %}
+            <label class="opc"><input type="checkbox" name="transp" value="{{ o.cnpj }}"{% if o.cnpj in f_transp %} checked{% endif %}>
+              <span>{{ o.nome or o.cnpj }}<small>{{ o.n }} CT-e</small></span></label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="etapa" id="ctg-et2" hidden>
+        <div class="pnome"><b>Tomador</b>pra quem foi o frete — ou pule</div>
+        <div class="gav__b">
+          <div class="gr__c"><span class="gr__t">Tomadores</span>
+            <button type="button" class="gr__a" data-alvo="ctg-l-toma"
+                    onclick="ctgTodos('ctg-l-toma')">marcar todos</button></div>
+          <input class="campo" type="search" placeholder="Buscar tomador…"
+                 oninput="ctgBusca(this, 'ctg-l-toma')">
+          <div class="opcs" id="ctg-l-toma">
+            {% for o in op_toma %}
+            <label class="opc"><input type="checkbox" name="toma" value="{{ o.cnpj }}"{% if o.cnpj in f_toma %} checked{% endif %}>
+              <span>{{ o.nome or o.cnpj }}<small>{{ o.n }} CT-e</small></span></label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="etapa" id="ctg-et3" hidden>
+        <div class="pnome"><b>Período</b>pela data de emissão</div>
+        <div class="gav__b">
+          <div class="chips">
+            <button type="button" class="chip" onclick="ctgPeriodo(this, 'hoje')">Hoje</button>
+            <button type="button" class="chip" onclick="ctgPeriodo(this, '7')">7 dias</button>
+            <button type="button" class="chip" onclick="ctgPeriodo(this, '30')">30 dias</button>
+            <button type="button" class="chip" onclick="ctgPeriodo(this, 'mes')">Mês corrente</button>
+          </div>
+          <div class="gr__c"><span class="gr__t">Ou escolha as datas</span></div>
+          <div class="par">
+            <input class="campo" type="date" name="data_ini" id="ctg-d1" value="{{ filtros.data_ini or data_ini_default }}">
+            <input class="campo" type="date" name="data_fim" id="ctg-d2" value="{{ filtros.data_fim or data_fim_default }}">
+          </div>
+        </div>
+      </div>
+
+      <div class="gav__f">
+        <button type="button" class="bt-g bt-g--ca" id="ctg-bt-voltar" hidden
+                onclick="ctgIrPasso(Math.max(0, ctgPasso() - 1))">‹ Voltar</button>
+        <button type="button" class="bt-g bt-g--ca" id="ctg-bt-pular" onclick="ctgPular()">Pular</button>
+        <button type="button" class="bt-g bt-g--ok" id="ctg-bt-ir" onclick="ctgAvancar()">Avançar</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+  (function () {
+    var passo = 0, N = 4;
+    var gav = document.getElementById('ctg-gav');
+    var escuro = document.getElementById('ctg-escuro');
+    window.ctgPasso = function () { return passo; };
+    window.ctgAbrir = function () {
+      gav.classList.add('on'); escuro.classList.add('on');
+    };
+    window.ctgFechar = function () {
+      gav.classList.remove('on'); escuro.classList.remove('on');
+    };
+    window.ctgIrPasso = function (n) {
+      passo = n;
+      var ps = gav.querySelectorAll('.passo');
+      for (var i = 0; i < N; i++) {
+        document.getElementById('ctg-et' + i).hidden = (i !== n);
+        ps[i].classList.toggle('aqui', i === n);
+        ps[i].classList.toggle('on', i <= n);
+      }
+      var fim = (n === N - 1);
+      document.getElementById('ctg-bt-voltar').hidden = (n === 0);
+      document.getElementById('ctg-bt-pular').hidden = fim;
+      document.getElementById('ctg-bt-ir').textContent = fim ? 'Filtrar' : 'Avançar';
+    };
+    window.ctgPular = function () {
+      document.getElementById('ctg-et' + passo)
+        .querySelectorAll('input[type=checkbox]').forEach(function (c) { c.checked = false; });
+      ctgIrPasso(passo + 1);
+    };
+    window.ctgAvancar = function () {
+      if (passo < N - 1) { ctgIrPasso(passo + 1); return; }
+      document.getElementById('ctg-form').submit();
+    };
+    function visiveis(alvo) {
+      return Array.prototype.filter.call(
+        document.getElementById(alvo).querySelectorAll('.opc'),
+        function (op) { return !op.hidden; });
+    }
+    function rotulo(alvo) {
+      var b = document.querySelector('.gr__a[data-alvo="' + alvo + '"]');
+      if (!b) return;
+      var vis = visiveis(alvo);
+      var tudo = vis.length && vis.every(function (op) {
+        return op.querySelector('input').checked; });
+      b.textContent = tudo ? 'desmarcar todas' : (alvo === 'ctg-l-toma' ? 'marcar todos' : 'marcar todas');
+      if (tudo && alvo === 'ctg-l-toma') b.textContent = 'desmarcar todos';
+    }
+    window.ctgTodos = function (alvo) {
+      var vis = visiveis(alvo);
+      var tudo = vis.length && vis.every(function (op) {
+        return op.querySelector('input').checked; });
+      vis.forEach(function (op) { op.querySelector('input').checked = !tudo; });
+      rotulo(alvo);
+    };
+    window.ctgBusca = function (inp, alvo) {
+      var q = inp.value.trim().toLowerCase();
+      document.getElementById(alvo).querySelectorAll('.opc').forEach(function (op) {
+        op.hidden = q && op.textContent.toLowerCase().indexOf(q) === -1;
+      });
+      rotulo(alvo);
+    };
+    window.ctgPeriodo = function (chip, tipo) {
+      chip.parentElement.querySelectorAll('.chip').forEach(function (c) {
+        c.classList.toggle('on', c === chip);
+      });
+      function iso(d) {
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+               + '-' + String(d.getDate()).padStart(2, '0');
+      }
+      var h = new Date(), d1 = new Date(), d2 = new Date();
+      if (tipo === '7') { d1.setDate(h.getDate() - 6); }
+      else if (tipo === '30') { d1.setDate(h.getDate() - 29); }
+      else if (tipo === 'mes') { d1 = new Date(h.getFullYear(), h.getMonth(), 1); }
+      document.getElementById('ctg-d1').value = iso(d1);
+      document.getElementById('ctg-d2').value = iso(d2);
+    };
+    ['ctg-l-transp', 'ctg-l-toma'].forEach(function (alvo) {
+      var el = document.getElementById(alvo);
+      if (el) { el.addEventListener('change', function () { rotulo(alvo); }); rotulo(alvo); }
+    });
+  })();
+  </script>
 
 {# =================== PAGINACAO =================== #}
 {% if total_paginas > 1 %}
