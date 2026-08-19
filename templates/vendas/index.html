@@ -124,32 +124,57 @@
     top:0; z-index:3; }
   #vendas .banda .tot{ margin-left:auto; font-variant-numeric:tabular-nums;
     font-weight:700; font-size:.74rem; }
-  #vendas .lin{ display:grid; grid-template-columns:minmax(0,1fr); gap:.1rem;
+  /* A linha em celulas nomeadas: o celular monta o cartao de 3 andares
+     e a web monta colunas de tabela — MESMA marcacao, so muda o grid.
+     Na web de 1900px o valor ia parar longe do resto; com colunas e teto
+     de largura ele fica colado no conteudo. */
+  #vendas .lin{ display:grid; gap:.1rem .35rem; align-items:baseline;
+    grid-template-columns:auto auto minmax(0,1fr) auto;
+    grid-template-areas:"quem quem quem quem" "num hora . valor"
+                        "selo oque oque oque";
     padding:.5rem .7rem; border-bottom:1px solid var(--line); cursor:pointer; }
   #vendas .lin:last-child{ border-bottom:0; }
   #vendas .lin:hover{ background:var(--surface); }
-  #vendas .c-desc{ display:flex; align-items:center; gap:.4rem; min-width:0;
-    font-size:.87rem; font-weight:800; letter-spacing:-.01em; }
-  #vendas .c-desc > span{ min-width:0; overflow:hidden; text-overflow:ellipsis;
+  #vendas .c-quem{ grid-area:quem; display:flex; align-items:center; gap:.4rem;
+    min-width:0; font-size:.87rem; font-weight:800; letter-spacing:-.01em; }
+  #vendas .c-quem > span{ min-width:0; overflow:hidden; text-overflow:ellipsis;
     white-space:nowrap; }
   #vendas .tipo{ flex:0 0 auto; font-size:.62rem; font-weight:800;
     border-radius:5px; padding:.08rem .35rem; background:#eef2f7; color:#42506a; }
-  #vendas .c-meio{ display:flex; align-items:center; gap:.35rem; min-width:0; }
-  #vendas .ids{ font-family:var(--mono); font-size:.72rem; color:var(--muted);
-    font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-    min-width:0; }
-  #vendas .c-valor{ margin-left:auto; flex:0 0 auto; font-size:.95rem;
+  #vendas .c-num, #vendas .c-hora{ font-family:var(--mono); font-size:.72rem;
+    color:var(--muted); font-weight:600; white-space:nowrap; }
+  #vendas .c-num{ grid-area:num; }
+  #vendas .c-hora{ grid-area:hora; }
+  #vendas .c-hora::before{ content:'· '; }
+  #vendas .c-valor{ grid-area:valor; justify-self:end; font-size:.95rem;
     font-weight:800; color:var(--azul-deep); font-variant-numeric:tabular-nums;
     letter-spacing:-.02em; white-space:nowrap; }
-  #vendas .c-baixo{ display:flex; align-items:center; gap:.4rem; min-width:0;
-    margin-top:.14rem; }
-  #vendas .selo{ flex:0 0 auto; display:inline-block; font-size:.66rem;
-    font-weight:800; border-radius:5px; padding:.08rem .38rem; white-space:nowrap; }
-  #vendas .itens{ font-size:.72rem; color:var(--muted); min-width:0;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-left:auto; }
-  #vendas .lin--canc .c-desc, #vendas .lin--canc .ids{ color:#9aa4b2; }
+  #vendas .c-selo{ grid-area:selo; justify-self:start; }
+  #vendas .selo{ display:inline-block; font-size:.66rem; font-weight:800;
+    border-radius:5px; padding:.08rem .38rem; white-space:nowrap; }
+  #vendas .c-oque{ grid-area:oque; font-size:.72rem; color:var(--muted);
+    min-width:0; max-width:100%; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; justify-self:end; }
+  #vendas .lin--canc .c-quem, #vendas .lin--canc .c-num,
+  #vendas .lin--canc .c-hora, #vendas .lin--canc .c-oque{ color:#9aa4b2; }
   #vendas .lin--canc .c-valor{ color:#9aa4b2; text-decoration:line-through; }
   #vendas .selo--canc{ background:var(--ign-bg); color:var(--ign); }
+
+  /* ── WEB (>=992px): teto de largura e colunas de tabela ──────────── */
+  @media (min-width:992px){
+    #vendas{ max-width:1180px; margin-left:auto; margin-right:auto; }
+    #vendas .lin{ grid-template-columns:46px 96px 250px minmax(0,1fr) 118px 108px;
+      grid-template-areas:"hora num quem oque selo valor";
+      gap:.15rem .9rem; align-items:center; padding:.44rem .8rem; }
+    #vendas .c-hora::before{ content:''; }
+    #vendas .c-num, #vendas .c-hora{ font-size:.76rem; }
+    #vendas .c-oque{ justify-self:start; font-size:.79rem; color:var(--ink-2); }
+    #vendas .c-oque .cli{ color:var(--muted); }
+    #vendas .lin--canc .c-oque{ color:#9aa4b2; }
+    #vendas .c-valor{ font-size:.9rem; }
+    #vendas .selo{ font-size:.68rem; padding:.12rem .45rem; }
+    #vendas .banda{ padding:.45rem .8rem; }
+  }
   #vendas .vazio{ text-align:center; color:var(--muted); padding:2.4rem 1rem;
     font-size:.85rem; }
   #vendas .vazio b{ display:block; color:var(--ink); font-size:.95rem;
@@ -232,25 +257,18 @@
          data-venda-id="{{ n.id }}"
          data-venda-titulo="{{ tipo }} nº {{ n.numero }}/{{ n.serie }}"
          data-venda-cancelada="{{ '1' if cancelada else '0' }}">
-      <div class="c-desc">
-        <span>{{ n.vendedor_raw or 'Sem vendedor' }}</span>
-        <span class="tipo">{{ tipo }}</span>
-      </div>
-      <div class="c-meio">
-        <span class="ids">nº {{ n.numero }}/{{ n.serie }} · {{ n.dh_emissao.strftime('%H:%M') if n.dh_emissao else '—' }}{% if n.cliente_nome %} · {{ n.cliente_nome }}{% endif %}</span>
-        <span class="c-valor">{{ (n.valor_total or 0) | formatar_moeda }}</span>
-      </div>
-      <div class="c-baixo">
-        {% if cancelada %}
-          <span class="selo selo--canc">Cancelada</span>
-        {% else %}
-          {% set c = cor_receb.get(n.recebimento, '#64748b') %}
-          <span class="selo" style="color:{{ c }};background:{{ c }}22">{{ n.recebimento }}</span>
-        {% endif %}
-        {% if itens %}
-          <span class="itens">{{ itens[0].produto_xml or '—' }}{% if itens[0].unidade == 'L' %} · {{ '%.2f'|format(itens[0].quantidade or 0)|replace('.', ',') }} L{% endif %}{% if itens|length > 1 %} · +{{ itens|length - 1 }}{% endif %}</span>
-        {% endif %}
-      </div>
+      <span class="c-quem"><span>{{ n.vendedor_raw or 'Sem vendedor' }}</span>
+        <span class="tipo">{{ tipo }}</span></span>
+      <span class="c-hora">{{ n.dh_emissao.strftime('%H:%M') if n.dh_emissao else '—' }}</span>
+      <span class="c-num">nº {{ n.numero }}/{{ n.serie }}</span>
+      <span class="c-selo">
+        {%- if cancelada %}<span class="selo selo--canc">Cancelada</span>
+        {%- else %}{% set c = cor_receb.get(n.recebimento, '#64748b') %}
+        <span class="selo" style="color:{{ c }};background:{{ c }}22">{{ n.recebimento }}</span>
+        {%- endif %}
+      </span>
+      <span class="c-oque">{% if itens %}{{ itens[0].produto_xml or '—' }}{% if itens[0].unidade == 'L' %} · {{ '%.2f'|format(itens[0].quantidade or 0)|replace('.', ',') }} L{% endif %}{% if itens|length > 1 %} · +{{ itens|length - 1 }}{% endif %}{% endif %}{% if n.cliente_nome %}<span class="cli"> · {{ n.cliente_nome }}</span>{% endif %}</span>
+      <span class="c-valor">{{ (n.valor_total or 0) | formatar_moeda }}</span>
     </div>
     {% endfor %}
   {% endif %}
