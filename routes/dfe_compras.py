@@ -124,12 +124,18 @@ def compras():
             'data_ini':   (request.args.get('data_ini') or '').strip(),
             'data_fim':   (request.args.get('data_fim') or '').strip(),
         }
+        # Filtros em LISTA da gaveta em passos; os de texto acima seguem
+        # valendo (URL antiga salva nao quebra).
+        f_emp = [v for v in request.args.getlist('emp') if v.strip().isdigit()]
+        f_forn = [v for v in request.args.getlist('forn') if v.strip()]
+        f_prodf = [v for v in request.args.getlist('prod') if v.strip().isdigit()]
         # Pre-filtrado: ultimos 30 dias por padrao (o usuario pode trocar).
         c_data_ini = f['data_ini'] or (hoje - timedelta(days=30)).strftime('%Y-%m-%d')
         c_data_fim = f['data_fim'] or hoje.strftime('%Y-%m-%d')
         # Selo "N ativos": conta filtros ALEM do periodo default.
         filtros_ativos = sum(1 for k in ('empresa', 'fornecedor', 'categoria', 'situacao') if f[k]) \
-            + (1 if f['data_ini'] else 0) + (1 if f['data_fim'] else 0)
+            + (1 if f['data_ini'] else 0) + (1 if f['data_fim'] else 0) \
+            + (1 if f_emp else 0) + (1 if f_forn else 0) + (1 if f_prodf else 0)
 
         where = ["d.tipo = 'NFe'"]
         params = []
@@ -147,6 +153,22 @@ def compras():
             where.append("EXISTS (SELECT 1 FROM dfe_itens ix "
                          "WHERE ix.documento_id = d.id AND ix.categoria = %s)")
             params.append(f['categoria'])
+        if f_emp:
+            ph = ",".join(["%s"] * len(f_emp))
+            where.append(f"d.cliente_id IN ({ph})")
+            params.extend(f_emp)
+        if f_forn:
+            ph = ",".join(["%s"] * len(f_forn))
+            where.append(f"d.emit_cnpj IN ({ph})")
+            params.extend(f_forn)
+        if f_prodf:
+            ph = ",".join(["%s"] * len(f_prodf))
+            where.append(
+                "EXISTS (SELECT 1 FROM dfe_itens ip "
+                "WHERE ip.documento_id = d.id "
+                f"AND COALESCE(ip.classificado_produto_id, ip.produto_id) IN ({ph}))"
+            )
+            params.extend(f_prodf)
         where_sql = " AND ".join(where)
 
         LIMITE = 500
@@ -182,6 +204,70 @@ def compras():
             'valor':  agg.get('valor') or 0,
             'notas':  agg.get('notas') or 0,
         }
+
+        # 1b) FAIXAS POR DIA (cabecalho de cada grupo da lista): conta TODAS
+        #     as notas do dia (a lista mostra as ignoradas tambem); o valor
+        #     desconta itens 'ignorar' — igual a coluna V.total.
+        _DIAS_SEM = ('Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta',
+                     'Sábado', 'Domingo')
+        cur.execute(
+            f"""
+            SELECT sub.dia, COUNT(*) AS notas,
+                   COALESCE(SUM(sub.litros), 0) AS litros,
+                   COALESCE(SUM(sub.nota_valor - sub.val_ignorado), 0) AS valor
+            FROM (
+                SELECT d.id, DATE(d.dh_emissao) AS dia,
+                       d.valor_total AS nota_valor,
+                       SUM(CASE WHEN i.categoria = 'combustivel'
+                                THEN i.quantidade ELSE 0 END) AS litros,
+                       SUM(CASE WHEN i.categoria = 'ignorar'
+                                THEN i.valor_total ELSE 0 END) AS val_ignorado
+                FROM dfe_documentos d
+                JOIN dfe_itens i ON i.documento_id = d.id
+                WHERE {where_sql}
+                GROUP BY d.id, dia, d.valor_total
+            ) sub
+            GROUP BY sub.dia
+            """,
+            params,
+        )
+        dias = {}
+        for r in cur.fetchall():
+            d2 = r['dia']
+            dias[d2] = {'rot': _DIAS_SEM[d2.weekday()] + ' · ' + d2.strftime('%d/%m'),
+                        'notas': r['notas'], 'litros': float(r['litros'] or 0),
+                        'valor': float(r['valor'] or 0)}
+
+        # 1c) OPCOES DA GAVETA (contagens globais de NFe; tabelas pequenas).
+        cur.execute(
+            """
+            SELECT d.emit_cnpj AS cnpj,
+                   SUBSTRING_INDEX(GROUP_CONCAT(d.emit_nome SEPARATOR '||'), '||', 1) AS nome,
+                   COUNT(*) AS n
+            FROM dfe_documentos d
+            WHERE d.tipo = 'NFe' AND d.emit_cnpj IS NOT NULL AND d.emit_cnpj <> ''
+            GROUP BY d.emit_cnpj ORDER BY n DESC
+            """
+        )
+        op_forn = cur.fetchall()
+        cur.execute(
+            """
+            SELECT p.id, p.nome, COUNT(DISTINCT i.documento_id) AS n
+            FROM dfe_itens i
+            JOIN produto p ON p.id = COALESCE(i.classificado_produto_id, i.produto_id)
+            GROUP BY p.id, p.nome ORDER BY n DESC
+            """
+        )
+        op_prodf = cur.fetchall()
+        cur.execute(
+            """
+            SELECT d.cliente_id AS id, COUNT(*) AS n
+            FROM dfe_documentos d
+            WHERE d.tipo = 'NFe' AND d.cliente_id IS NOT NULL
+            GROUP BY d.cliente_id
+            """
+        )
+        emp_n = {r['id']: r['n'] for r in cur.fetchall()}
 
         # 2) LISTA por nota (limitada). Agrupa por documento (PK) -> os demais
         #    campos de d/emp sao funcionalmente dependentes.
@@ -453,6 +539,8 @@ def compras():
             categorias=CATEGORIAS,
             rot_categoria=rot_categoria,
             filtros=f,
+            f_emp=f_emp, f_forn=f_forn, f_prodf=f_prodf,
+            dias=dias, op_forn=op_forn, op_prodf=op_prodf, emp_n=emp_n,
             empresas=empresas,
             compras=compras,
             compras_totais=compras_totais,

@@ -85,18 +85,241 @@
 {% endmacro %}
 
 {% block content %}
-{% set mig_titulo = 'Classificação de Compras — DFe' %}
-{% set mig_icone = 'bi-tags' %}
-{% set mig_barra %}
-  <button id="btnCapturar" class="mig-btn mig-btn--ok" onclick="capturarAgora()">
-    <i class="bi bi-cloud-download"></i> Capturar agora
-  </button>
-  <span class="mig-pill" title="a captura roda num serviço separado do site">
-    <i class="bi bi-hdd-network"></i> Serviço isolado</span>
-  <span id="capturaMsg" class="small text-muted"></span>
-{% endset %}
-{% set aba_ativa = 'compras' %}
-{% include 'includes/nav_migracoes.html' %}
+{% with esc = '#dfec' %}{% include 'includes/abas_banco_css.html' %}{% endwith %}
+<div class="container-fluid" id="dfec">
+
+<div id="dfec-topo">
+  <div class="topo__l1">
+    <h3>Compras — DFe</h3>
+    <button id="btnCapturar" type="button" class="acao" onclick="capturarAgora()">
+      <i class="bi bi-cloud-download"></i> Capturar</button>
+    <button type="button" class="acao" onclick="cmpgAbrir()">
+      <i class="bi bi-sliders"></i> Filtro
+      {% if filtros_ativos %}<span style="background:#fff;color:#0C4C86;border-radius:99px;min-width:17px;height:17px;display:inline-grid;place-items:center;font-size:.66rem;">{{ filtros_ativos }}</span>{% endif %}
+    </button>
+  </div>
+  <div class="abas">
+    {% with ativa = 'compras' %}{% include 'includes/abas_migracoes.html' %}{% endwith %}
+  </div>
+</div>
+<div id="capturaMsg" class="small text-muted mb-1"></div>
+
+{# =================== NÚMEROS =================== #}
+<div class="nums">
+  <div class="n n--pend"><div class="r">A classificar</div>
+    <div class="v">{{ total_pendentes_itens }} it. · {{ total_pendentes_notas }} nota{{ 's' if total_pendentes_notas != 1 }}</div></div>
+  <div class="n n--notas"><div class="r">Notas no período</div>
+    <div class="v">{{ compras_totais.notas }}</div></div>
+  <div class="n n--litros"><div class="r">Litros</div>
+    <div class="v">{{ _litros(compras_totais.litros) }} L</div></div>
+  <div class="n n--valor"><div class="r">Valor do período</div>
+    <div class="v">{{ (compras_totais.valor or 0) | formatar_moeda }}</div></div>
+</div>
+
+<style>
+  /* ===== Padrao do Banco na tela de Compras (casca; paineis intactos) ==== */
+  #dfec{
+    --azul:#1D63A5; --azul-deep:#0C4C86; --azul-claro:#eaf1f9;
+    --ink:#151d27; --ink-2:#3a4655; --muted:#6b7684;
+    --line:#e7ebf1; --line-2:#d9e0e8; --surface:#f7f9fc;
+    --ok:#1c6b34; --ok-bg:#e4f4e8; --pend:#8a5a00; --pend-bg:#fdf0d6;
+    --ign:#4b5563; --ign-bg:#eceef1; --danger:#a32d2d; --danger-bg:#fbe9e9;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  #dfec .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem;
+    margin-bottom:.7rem; }
+  @media (min-width:768px){ #dfec .nums{ grid-template-columns:repeat(4,1fr); } }
+  #dfec .nums .n{ border-radius:13px; padding:.55rem .75rem; color:#fff;
+    box-shadow:0 2px 8px rgba(20,35,60,.12); }
+  #dfec .nums .r{ font-size:.66rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.06em; opacity:.92; }
+  #dfec .nums .v{ font-size:1.02rem; font-weight:800; letter-spacing:-.02em;
+    font-variant-numeric:tabular-nums; line-height:1.28; }
+  #dfec .n--pend{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
+  #dfec .n--notas{ background:linear-gradient(135deg,#2E6FB0,#1D63A5); }
+  #dfec .n--litros{ background:linear-gradient(135deg,#5B6B7F,#465565); }
+  #dfec .n--valor{ background:linear-gradient(135deg,#22A24B,#17963C); }
+
+  /* Sub-abas: o nav-tabs do Bootstrap vestido de pilula (mesma mecanica). */
+  #dfec #abas{ border:0; gap:.35rem; flex-wrap:nowrap; overflow-x:auto;
+    scrollbar-width:none; }
+  #dfec #abas::-webkit-scrollbar{ display:none; }
+  #dfec #abas .nav-item{ flex:0 0 auto; }
+  #dfec #abas .nav-link{ border:1px solid var(--line-2) !important;
+    border-radius:99px !important; background:#fff; color:var(--ink-2);
+    font-size:.8rem; font-weight:800; padding:.38rem .8rem; }
+  #dfec #abas .nav-link.active{ background:var(--azul); color:#fff;
+    border-color:var(--azul) !important; }
+  #dfec #abas .badge{ border-radius:99px; font-size:.64rem; }
+
+  /* Lista de Compras por dia — mesma linha de celulas de /vendas. */
+  #dfec .lst-cmp{ background:#fff; border:1px solid var(--line-2);
+    border-radius:12px; overflow:hidden; }
+  #dfec .banda{ display:flex; align-items:center; gap:.5rem; padding:.45rem .8rem;
+    background:var(--azul-claro); color:var(--azul-deep); font-size:.79rem;
+    font-weight:800; border-bottom:1px solid var(--line-2); position:sticky;
+    top:0; z-index:3; }
+  #dfec .banda .tot{ margin-left:auto; font-variant-numeric:tabular-nums;
+    font-weight:700; font-size:.74rem; }
+  #dfec .lin{ display:grid; gap:.1rem .35rem; align-items:baseline;
+    grid-template-columns:auto auto minmax(0,1fr) auto;
+    grid-template-areas:"quem quem quem quem" "num emp . valor"
+                        "selo oque oque oque";
+    padding:.5rem .7rem; border-bottom:1px solid var(--line); cursor:pointer; }
+  #dfec .lin:hover{ background:var(--surface); }
+  #dfec .c-quem{ grid-area:quem; min-width:0; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; font-size:.87rem;
+    font-weight:800; letter-spacing:-.01em; }
+  #dfec .c-num{ grid-area:num; font-family:var(--mono); font-size:.72rem;
+    color:var(--muted); font-weight:600; white-space:nowrap; }
+  #dfec .c-emp{ grid-area:emp; font-size:.72rem; color:var(--muted);
+    font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    min-width:0; }
+  #dfec .c-emp::before{ content:'· '; }
+  #dfec .c-valor{ grid-area:valor; justify-self:end; font-size:.95rem;
+    font-weight:800; color:var(--azul-deep); font-variant-numeric:tabular-nums;
+    white-space:nowrap; }
+  #dfec .c-selo{ grid-area:selo; justify-self:start; display:flex;
+    flex-wrap:wrap; gap:.25rem; min-width:0; }
+  #dfec .selo2{ display:inline-block; font-size:.66rem; font-weight:800;
+    border-radius:5px; padding:.08rem .38rem; white-space:nowrap; }
+  #dfec .selo2--ok{ background:var(--ok-bg); color:var(--ok); }
+  #dfec .selo2--no{ background:var(--danger-bg); color:var(--danger); }
+  #dfec .selo2--desc{ background:var(--pend-bg); color:var(--pend); }
+  #dfec .selo2--ign{ background:var(--ign-bg); color:var(--ign); }
+  #dfec .c-oque{ grid-area:oque; font-size:.72rem; color:var(--muted);
+    min-width:0; max-width:100%; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; justify-self:end; }
+  #dfec .lin--ign .c-quem, #dfec .lin--ign .c-num, #dfec .lin--ign .c-emp,
+  #dfec .lin--ign .c-oque{ color:#9aa4b2; }
+  #dfec .lin--ign .c-valor{ color:#9aa4b2; }
+  #dfec .detbox{ border-bottom:1px solid var(--line); }
+  #dfec .detbox > .cmp-det{ padding:.6rem .8rem; background:var(--surface); }
+  @media (min-width:992px){
+    #dfec .lin{ grid-template-columns:110px minmax(120px,.6fr) minmax(200px,1fr)
+        minmax(0,1.6fr) minmax(150px,auto) 116px;
+      grid-template-areas:"num emp quem oque selo valor";
+      gap:.15rem 1rem; align-items:center; padding:.48rem .9rem; }
+    #dfec .c-num, #dfec .c-emp{ font-size:.76rem; }
+    #dfec .c-emp::before{ content:''; }
+    #dfec .c-oque{ justify-self:start; font-size:.79rem; color:var(--ink-2); }
+    #dfec .c-valor{ font-size:.9rem; }
+    #dfec .selo2{ font-size:.68rem; padding:.12rem .45rem; }
+  }
+
+  /* Classificar: na web o item se distribui (produto | classificacao). */
+  @media (min-width:992px){
+    #dfec .cls-item__body{ display:grid;
+      grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);
+      grid-template-areas:"a e" "b e" "c e" "d e"; gap:.15rem 2.2rem;
+      align-items:center; }
+    #dfec .cls-item__body > .lbl{ grid-area:a; }
+    #dfec .cls-item__body > .xprod{ grid-area:b; }
+    #dfec .cls-item__body > .pills{ grid-area:c; }
+    #dfec .cls-item__body > .meta{ grid-area:d; }
+    #dfec .cls-item__body > .cls-sep{ display:none; }
+    #dfec .cls-item__body > .cls-class{ grid-area:e; }
+  }
+
+  /* Gaveta de filtro em passos (mesma das outras telas). */
+  #dfec .escuro{ position:fixed; inset:0; background:rgba(12,25,42,.45);
+    z-index:1050; opacity:0; pointer-events:none; transition:opacity .2s; }
+  #dfec .escuro.on{ opacity:1; pointer-events:auto; }
+  #dfec .gav{ position:fixed; left:0; right:0; bottom:0; z-index:1051;
+    background:#fff; border-radius:18px 18px 0 0; max-height:88vh; display:flex;
+    flex-direction:column; transform:translateY(101%);
+    transition:transform .24s cubic-bezier(.22,.7,.3,1);
+    box-shadow:0 -10px 30px rgba(12,25,42,.3); }
+  #dfec .gav.on{ transform:translateY(0); }
+  @media (min-width:992px){
+    #dfec .gav{ left:50%; right:auto; bottom:auto; top:8vh; width:520px;
+      border-radius:16px; transform:translate(-50%,10px); opacity:0;
+      pointer-events:none; max-height:84vh; }
+    #dfec .gav.on{ transform:translate(-50%,0); opacity:1; pointer-events:auto; }
+    #dfec .gav__pega{ display:none; }
+  }
+  #dfec .gav__pega{ width:36px; height:4px; background:var(--line-2);
+    border-radius:9px; margin:.5rem auto .1rem; flex:0 0 auto; }
+  #dfec .passos{ display:flex; gap:.45rem; padding:.5rem .9rem .1rem; }
+  #dfec .passo{ flex:1; border:0; background:none; padding:0; cursor:pointer;
+    font-family:inherit; text-align:left; min-width:0; }
+  #dfec .passo i{ display:block; height:3px; border-radius:9px;
+    background:var(--line-2); }
+  #dfec .passo span{ display:block; font-size:.66rem; font-weight:800;
+    color:var(--muted); margin-top:.28rem; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
+  #dfec .passo.on i{ background:var(--azul); }
+  #dfec .passo.aqui span{ color:var(--azul-deep); }
+  #dfec .pnome{ padding:.35rem .9rem .4rem; font-size:.76rem; color:var(--muted);
+    font-weight:700; }
+  #dfec .pnome b{ color:var(--ink); font-size:.95rem; display:block; }
+  #dfec .gav__b{ overflow-y:auto; padding:0 .9rem .7rem; }
+  #dfec .gav__f{ border-top:1px solid var(--line); padding:.65rem .9rem;
+    display:flex; gap:.5rem; background:#fff;
+    padding-bottom:calc(.65rem + env(safe-area-inset-bottom)); }
+  #dfec .bt-g{ border:0; border-radius:10px; padding:.55rem .8rem;
+    font-size:.87rem; font-weight:800; cursor:pointer; font-family:inherit;
+    text-decoration:none; text-align:center; }
+  #dfec .bt-g--ok{ flex:1; background:var(--azul); color:#fff; }
+  #dfec .bt-g--ca{ background:var(--surface); color:var(--muted);
+    border:1px solid var(--line-2); }
+  #dfec .etapa[hidden]{ display:none; }
+  #dfec .gr__c{ display:flex; align-items:baseline; gap:.4rem;
+    margin-bottom:.3rem; }
+  #dfec .gr__t{ font-size:.69rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); }
+  #dfec .gr__a{ margin-left:auto; background:none; border:0; padding:0;
+    cursor:pointer; font-size:.74rem; font-weight:800; color:var(--azul);
+    font-family:inherit; }
+  #dfec .opcs{ border:1px solid var(--line-2); border-radius:10px;
+    overflow:hidden; max-height:250px; overflow-y:auto; background:#fff; }
+  #dfec .opc{ display:flex; align-items:center; gap:.55rem; padding:.5rem .6rem;
+    border-bottom:1px solid var(--line); font-size:.85rem; cursor:pointer;
+    margin:0; min-width:0; }
+  #dfec .opc:last-child{ border-bottom:0; }
+  #dfec .opc input{ width:19px; height:19px; accent-color:var(--azul);
+    flex:0 0 auto; margin:0; }
+  #dfec .opc > span{ min-width:0; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; }
+  #dfec .opc small{ display:block; font-size:.71rem; color:var(--muted); }
+  #dfec .opc:has(input:checked){ background:var(--azul-claro); }
+  #dfec .opc[hidden]{ display:none; }
+  #dfec .campo{ width:100%; border:1px solid var(--line-2); border-radius:10px;
+    padding:.5rem .65rem; font-size:.85rem; background:#fff;
+    font-family:inherit; margin-bottom:.4rem; }
+  #dfec .par{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; }
+  #dfec .chips{ display:flex; flex-wrap:wrap; gap:.35rem; margin-bottom:.85rem; }
+  #dfec .chip{ border:1px solid var(--line-2); background:#fff;
+    color:var(--ink-2); border-radius:99px; padding:.32rem .7rem;
+    font-size:.78rem; font-weight:700; cursor:pointer; font-family:inherit; }
+  #dfec .chip.on{ background:var(--azul); border-color:var(--azul); color:#fff; }
+
+  /* Classificador em passos (celular) */
+  #dfec .opc--btn{ display:block; width:100%; text-align:left; background:#fff;
+    border:0; border-bottom:1px solid var(--line); padding:.62rem .7rem;
+    font-size:.88rem; font-weight:700; color:var(--ink); cursor:pointer;
+    font-family:inherit; }
+  #dfec .opc--btn:last-child{ border-bottom:0; }
+  #dfec .opc--btn:hover{ background:var(--surface); }
+  #dfec .opc--btn small{ display:block; font-size:.71rem; color:var(--muted);
+    font-weight:600; }
+  #dfec .clsg-resumo{ background:var(--azul-claro); color:var(--azul-deep);
+    border-radius:10px; padding:.6rem .7rem; font-size:.9rem; font-weight:800;
+    margin-bottom:.6rem; }
+  #dfec .clsg-resumo small{ display:block; font-weight:600; font-size:.72rem;
+    color:var(--ink-2); }
+  #dfec .clsg-aviso{ font-size:.78rem; color:var(--pend);
+    background:var(--pend-bg); border-radius:8px; padding:.45rem .6rem; }
+  #dfec .cls-tap{ display:none; }
+  @media (max-width:991px){
+    /* No celular os selects somem: o item inteiro abre o passo a passo. */
+    #dfec .cls-item{ cursor:pointer; }
+    #dfec .cls-item .cls-sep, #dfec .cls-item .cls-class{ display:none; }
+    #dfec .cls-tap{ display:inline-flex; align-items:center; gap:.3rem;
+      margin-top:.35rem; font-size:.78rem; font-weight:800; color:var(--azul);
+      background:var(--azul-claro); border-radius:99px; padding:.25rem .65rem; }
+  }
+</style>
 
 <ul class="nav nav-tabs mb-3" id="abas" role="tablist">
   <li class="nav-item" role="presentation">
@@ -493,17 +716,17 @@
         </button>
         <div class="cls-body">
           {% for it in n.itens %}
-          <div class="cls-item" id="item-{{ it.item_id }}" data-item="{{ it.item_id }}">
+          <div class="cls-item" id="item-{{ it.item_id }}" data-item="{{ it.item_id }}"
+               onclick="clsgAbrir({{ it.item_id }}, this)">
             <div class="cls-item__body">
               <div class="lbl">Fornecedor chama</div>
               <div class="xprod">{{ it.produto_xml or '(sem descrição)' }}</div>
               <div class="pills">
                 <span class="pill"><b>cProd</b> {{ it.cprod_fornecedor or '—' }}</span>
-                {% if it.ncm %}<span class="pill"><b>NCM</b> {{ it.ncm }}</span>{% endif %}
-                {% if it.cod_anp %}<span class="pill"><b>ANP</b> {{ it.cod_anp }}</span>{% endif %}
                 {% if it.cean %}<span class="pill"><b>EAN</b> {{ it.cean }}</span>{% endif %}
               </div>
-              <div class="meta"><b>{{ it.quantidade }}</b> {{ it.unidade or '' }} · <b>{{ (it.item_valor or 0) | formatar_moeda }}</b></div>
+              <div class="meta"><b>{{ it.quantidade }}</b> {{ it.unidade or '' }} · <b>{{ (it.item_valor or 0) | formatar_moeda }}</b>
+                <span class="cls-tap">Toque para classificar ›</span></div>
               <div class="cls-sep"></div>
               <div class="cls-class">
                 <div class="lbl">Classificar como</div>
@@ -547,80 +770,6 @@
   <div class="tab-pane fade {% if aba == 'consultar' %}show active{% endif %}"
        id="pane-consultar" role="tabpanel">
 
-    {# ---- Totalizador do período ---- #}
-    <div class="cmp-stats">
-      <div class="cmp-stat">
-        <div class="rot">Período</div>
-        <div class="val val-sm">{{ data_ini_default[8:10] }}/{{ data_ini_default[5:7] }} — {{ data_fim_default[8:10] }}/{{ data_fim_default[5:7] }}/{{ data_fim_default[0:4] }}</div>
-      </div>
-      <div class="cmp-stat">
-        <div class="rot">Litros de combustível</div>
-        <div class="val val-green">{{ '{:,.0f}'.format((compras_totais.litros or 0)|float).replace(',', '.') }} L</div>
-      </div>
-      <div class="cmp-stat">
-        <div class="rot">Total R$ (compras)</div>
-        <div class="val val-blue">{{ (compras_totais.valor or 0) | formatar_moeda }}</div>
-      </div>
-      <div class="cmp-stat">
-        <div class="rot">Notas</div>
-        <div class="val">{{ compras_totais.notas }}</div>
-      </div>
-    </div>
-
-    {# ---- Filtro recolhido (details sem open) + selo N ativos ---- #}
-    <details class="cmp-filtros"{% if filtros_ativos %} data-tem="1"{% endif %}>
-      <summary>
-        <i class="bi bi-funnel"></i> Filtros
-        {% if filtros_ativos %}<span class="selo">{{ filtros_ativos }} ativo{{ 's' if filtros_ativos > 1 else '' }}</span>{% endif %}
-        <i class="bi bi-chevron-down chev ms-auto"></i>
-      </summary>
-      <form method="GET" action="{{ url_for('dfe_compras.compras') }}" class="cmp-filtros__body">
-        <input type="hidden" name="aba" value="consultar">
-        <div>
-          <label>Data de</label>
-          <input type="date" name="data_ini" value="{{ filtros.data_ini or data_ini_default }}">
-        </div>
-        <div>
-          <label>Data até</label>
-          <input type="date" name="data_fim" value="{{ filtros.data_fim or data_fim_default }}">
-        </div>
-        <div>
-          <label>Empresa</label>
-          <select name="empresa">
-            <option value="">Todas</option>
-            {% for e in empresas %}
-            <option value="{{ e.id }}" {% if filtros.empresa == e.id|string %}selected{% endif %}>{{ e.nome }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div>
-          <label>Fornecedor / CNPJ</label>
-          <input type="text" name="fornecedor" value="{{ filtros.fornecedor }}" placeholder="nome ou CNPJ">
-        </div>
-        <div>
-          <label>Categoria</label>
-          <select name="categoria">
-            <option value="">Todas</option>
-            {% for val, rot in categorias %}
-            <option value="{{ val }}" {% if filtros.categoria == val %}selected{% endif %}>{{ rot }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div>
-          <label>Situação</label>
-          <select name="situacao">
-            <option value="">Todas</option>
-            <option value="autorizado" {% if filtros.situacao == 'autorizado' %}selected{% endif %}>autorizada</option>
-            <option value="cancelada"  {% if filtros.situacao == 'cancelada'  %}selected{% endif %}>cancelada</option>
-            <option value="denegada"   {% if filtros.situacao == 'denegada'   %}selected{% endif %}>denegada</option>
-          </select>
-        </div>
-        <div class="cmp-filtros__btns">
-          <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Filtrar</button>
-          <a href="{{ url_for('dfe_compras.compras', aba='consultar') }}" class="btn btn-sm btn-outline-secondary">Limpar</a>
-        </div>
-      </form>
-    </details>
 
     {% if truncado %}
       <div class="alert alert-warning py-2 small">
@@ -633,69 +782,35 @@
       <div class="cmp-empty"><i class="bi bi-inbox"></i> Nenhuma compra no período/filtro.</div>
     {% else %}
 
-    {# ===== DESKTOP: tabela com linha por nota + expandir ===== #}
-    <div class="cmp-card d-none d-md-block">
-      <table class="cmp-tbl">
-        <thead>
-          <tr>
-            <th style="width:28px"></th><th>Data</th><th>Empresa</th><th>Fornecedor</th>
-            <th>Nosso produto</th><th class="num">Litros</th><th class="num">V.unit</th>
-            <th class="num">V.total</th><th>Situação</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for c in compras %}
-          <tr class="compra-row" data-doc="{{ c.doc_id }}" onclick="toggleCompra(this)">
-            <td><i class="bi bi-chevron-right caret"></i></td>
-            <td class="nowrap">{{ c.dh_emissao.strftime('%d/%m/%Y') if c.dh_emissao else '—' }}
-              <div class="cmp-nf">NF nº {{ c.numero or '—' }}</div></td>
-            <td class="muted text-truncate" style="max-width:130px">{{ c.empresa_nome or '—' }}</td>
-            <td class="forn">{{ c.emit_nome or '(sem nome)' }}</td>
-            <td class="{{ 'prod-n' if c.n_produtos > 1 else 'prod-1' }}">
-              {% if c.todos_ignorados %}<span class="badge-ign">Ignorada</span>
-              {% else %}{{ c.produto_label }}{% if c.tem_ignorado %} <span class="badge-ign">{{ c.n_ignorados }} item ignorado</span>{% endif %}{% endif %}
-              {% if c.saldo_descer %}<span class="selo-descer" title="comprou mas não desceu tudo"><i class="bi bi-hourglass-split"></i> faltam {{ '{:,.0f}'.format(c.saldo_descer).replace(',', '.') }} L pra descer</span>{% endif %}</td>
-            <td class="num">{% if c.litros and c.litros|float > 0 %}{{ '{:,.0f}'.format(c.litros|float).replace(',', '.') }} L{% else %}—{% endif %}</td>
-            <td class="num">{% if c.v_unit %}{{ '%.2f'|format(c.v_unit)|replace('.', ',') }}{% else %}—{% endif %}</td>
-            <td class="num">{% if c.todos_ignorados %}<s class="text-muted">{{ (c.nota_valor or 0) | formatar_moeda }}</s>{% else %}{{ (c.valor_liquido or 0) | formatar_moeda }}{% endif %}</td>
-            <td><span class="sit {{ 'sit-ok' if c.situacao_ok else 'sit-no' }}">{{ 'autorizada' if c.situacao_ok else c.situacao }}</span></td>
-          </tr>
-          <tr class="compra-det" id="compra-det-{{ c.doc_id }}" style="display:none">
-            <td colspan="9">
-              <div class="cmp-det">
-                {{ cmp_detalhe(c) }}
-              </div>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-
-    {# ===== MOBILE: cards já abertos ===== #}
-    <div class="d-md-none">
-      {% for c in compras %}
-      <div class="cmp-mcard">
-        <div class="cmp-mcard__top">
-          <div>
-            <div class="cmp-mcard__data">{{ c.dh_emissao.strftime('%d/%m/%Y') if c.dh_emissao else '—' }}
-              <span class="cmp-mcard__nf">· NF nº {{ c.numero or '—' }}</span></div>
-            <div class="cmp-mcard__emp">{{ c.empresa_nome or '—' }} · {{ c.emit_nome or '(sem nome)' }}</div>
-          </div>
-          <span class="sit {{ 'sit-ok' if c.situacao_ok else 'sit-no' }}">{{ 'autorizada' if c.situacao_ok else c.situacao }}</span>
+    {% set ns = namespace(dia=None) %}
+    <div class="lst-cmp">
+    {% for c in compras %}
+      {% set dia_n = c.dh_emissao.date() if c.dh_emissao else None %}
+      {% if loop.first or dia_n != ns.dia %}
+        {% set ns.dia = dia_n %}
+        {% set dd = dias.get(dia_n) %}
+        <div class="banda">{{ dd.rot if dd else 'Sem data' }}
+          {% if dd %}<span class="tot">{{ dd.notas }} nota{{ 's' if dd.notas != 1 }}{% if dd.litros %} · {{ _litros(dd.litros) }} L{% endif %} · {{ dd.valor | formatar_moeda }}</span>{% endif %}
         </div>
-        <div class="cmp-mcard__vals">
-          <span><span class="k">Produtos:</span>
-            {% if c.todos_ignorados %}<b><span class="badge-ign">Ignorada</span></b>
-            {% else %}<b>{{ c.produto_label }}</b>{% if c.tem_ignorado %} <span class="badge-ign">{{ c.n_ignorados }} ignorado</span>{% endif %}{% endif %}
-            {% if c.saldo_descer %}<span class="selo-descer"><i class="bi bi-hourglass-split"></i> faltam {{ '{:,.0f}'.format(c.saldo_descer).replace(',', '.') }} L pra descer</span>{% endif %}</span>
-          <span><span class="k">Litros:</span> <b>{% if c.litros and c.litros|float > 0 %}{{ '{:,.0f}'.format(c.litros|float).replace(',', '.') }} L{% else %}—{% endif %}</b></span>
-          <span><span class="k">V.unit:</span> <b>{% if c.v_unit %}{{ '%.2f'|format(c.v_unit)|replace('.', ',') }}{% else %}—{% endif %}</b></span>
-          <span><span class="k">Total:</span> <b>{% if c.todos_ignorados %}<s class="text-muted">{{ (c.nota_valor or 0) | formatar_moeda }}</s>{% else %}{{ (c.valor_liquido or 0) | formatar_moeda }}{% endif %}</b></span>
-        </div>
-        {{ cmp_detalhe(c) }}
+      {% endif %}
+      <div class="lin{% if c.todos_ignorados %} lin--ign{% endif %}" onclick="cmpAbre(this)">
+        <span class="c-num">NF {{ c.numero or '—' }}{% if c.serie %}/{{ c.serie }}{% endif %}</span>
+        <span class="c-emp">{{ c.empresa_nome or '—' }}</span>
+        <span class="c-quem">{{ c.emit_nome or '(sem nome)' }}</span>
+        <span class="c-oque">
+          {%- if c.todos_ignorados %}{{ c.n_ignorados }} ite{{ 'ns' if c.n_ignorados != 1 else 'm' }} ignorado{{ 's' if c.n_ignorados != 1 }}
+          {%- else %}{{ c.produto_label }}{% if c.litros and c.litros|float > 0 %} · {{ _litros(c.litros) }} L{% endif %}{% if c.v_unit %} · R$ {{ _unit(c.v_unit) }}/L{% endif %}{% endif -%}
+        </span>
+        <span class="c-selo">
+          <span class="selo2 {{ 'selo2--ok' if c.situacao_ok else 'selo2--no' }}">{{ 'autorizada' if c.situacao_ok else c.situacao }}</span>
+          {%- if c.saldo_descer %} <span class="selo2 selo2--desc"><i class="bi bi-hourglass-split"></i> faltam {{ _litros(c.saldo_descer) }} L</span>{% endif %}
+          {%- if c.todos_ignorados %} <span class="selo2 selo2--ign">Ignorada</span>
+          {%- elif c.tem_ignorado %} <span class="selo2 selo2--ign">{{ c.n_ignorados }} ignorado{{ 's' if c.n_ignorados != 1 }}</span>{% endif %}
+        </span>
+        <span class="c-valor">{% if c.todos_ignorados %}<s>{{ (c.nota_valor or 0) | formatar_moeda }}</s>{% else %}{{ (c.valor_liquido or 0) | formatar_moeda }}{% endif %}</span>
       </div>
-      {% endfor %}
+      <div class="detbox" hidden><div class="cmp-det">{{ cmp_detalhe(c) }}</div></div>
+    {% endfor %}
     </div>
 
     {% endif %}
@@ -997,21 +1112,314 @@
     </div>
   </div>
 </div>
+
+{# =================== FILTRO EM PASSOS (gaveta) =================== #}
+<div class="escuro" id="cmpg-escuro" onclick="cmpgFechar()"></div>
+<div class="gav" id="cmpg-gav" role="dialog" aria-label="Filtro das compras">
+  <div class="gav__pega"></div>
+  <div class="passos">
+    <button type="button" class="passo on aqui" onclick="cmpgIrPasso(0)"><i></i><span>1 · Empresa</span></button>
+    <button type="button" class="passo" onclick="cmpgIrPasso(1)"><i></i><span>2 · Fornecedor</span></button>
+    <button type="button" class="passo" onclick="cmpgIrPasso(2)"><i></i><span>3 · Produto</span></button>
+    <button type="button" class="passo" onclick="cmpgIrPasso(3)"><i></i><span>4 · Período</span></button>
+  </div>
+
+  <form method="GET" action="{{ url_for('dfe_compras.compras') }}" id="cmpg-form" style="display:contents">
+    <input type="hidden" name="aba" value="consultar">
+    <input type="hidden" name="situacao" id="cmpg-sit" value="{{ filtros.situacao }}">
+
+    <div class="etapa" id="cmpg-et0">
+      <div class="pnome"><b>Empresa</b>quem comprou — ou pule o passo</div>
+      <div class="gav__b">
+        <div class="opcs">
+          {% for e in empresas %}
+          <label class="opc"><input type="checkbox" name="emp" value="{{ e.id }}"{% if e.id|string in f_emp %} checked{% endif %}>
+            <span>{{ e.nome }}{% if emp_n.get(e.id) %}<small>{{ emp_n.get(e.id) }} notas</small>{% endif %}</span></label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="etapa" id="cmpg-et1" hidden>
+      <div class="pnome"><b>Fornecedor</b>marque um ou mais — ou pule o passo</div>
+      <div class="gav__b">
+        <div class="gr__c"><span class="gr__t">Fornecedores</span>
+          <button type="button" class="gr__a" data-alvo="cmpg-l-forn"
+                  onclick="cmpgTodos('cmpg-l-forn')">marcar todos</button></div>
+        <input class="campo" type="search" placeholder="Buscar fornecedor…"
+               oninput="cmpgBusca(this, 'cmpg-l-forn')">
+        <div class="opcs" id="cmpg-l-forn">
+          {% for o in op_forn %}
+          <label class="opc"><input type="checkbox" name="forn" value="{{ o.cnpj }}"{% if o.cnpj in f_forn %} checked{% endif %}>
+            <span>{{ o.nome or o.cnpj }}<small>{{ o.n }} nota{{ 's' if o.n != 1 }}</small></span></label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="etapa" id="cmpg-et2" hidden>
+      <div class="pnome"><b>Produto</b>o NOSSO produto — ou pule o passo</div>
+      <div class="gav__b">
+        <div class="gr__c"><span class="gr__t">Produtos</span>
+          <button type="button" class="gr__a" data-alvo="cmpg-l-prod"
+                  onclick="cmpgTodos('cmpg-l-prod')">marcar todos</button></div>
+        <div class="opcs" id="cmpg-l-prod">
+          {% for o in op_prodf %}
+          <label class="opc"><input type="checkbox" name="prod" value="{{ o.id }}"{% if o.id|string in f_prodf %} checked{% endif %}>
+            <span>{{ o.nome }}<small>{{ o.n }} nota{{ 's' if o.n != 1 }}</small></span></label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="etapa" id="cmpg-et3" hidden>
+      <div class="pnome"><b>Período</b>pela data de emissão</div>
+      <div class="gav__b">
+        <div class="chips">
+          <button type="button" class="chip" onclick="cmpgPeriodo(this, 'hoje')">Hoje</button>
+          <button type="button" class="chip" onclick="cmpgPeriodo(this, '7')">7 dias</button>
+          <button type="button" class="chip" onclick="cmpgPeriodo(this, '30')">30 dias</button>
+          <button type="button" class="chip" onclick="cmpgPeriodo(this, 'mes')">Mês corrente</button>
+        </div>
+        <div class="gr__c"><span class="gr__t">Ou escolha as datas</span></div>
+        <div class="par">
+          <input class="campo" type="date" name="data_ini" id="cmpg-d1" value="{{ filtros.data_ini or data_ini_default }}">
+          <input class="campo" type="date" name="data_fim" id="cmpg-d2" value="{{ filtros.data_fim or data_fim_default }}">
+        </div>
+        <div class="gr__c"><span class="gr__t">Situação</span></div>
+        <div class="chips">
+          <button type="button" class="chip{{ ' on' if not filtros.situacao }}" onclick="cmpgSit(this, '')">Todas</button>
+          <button type="button" class="chip{{ ' on' if filtros.situacao == 'autorizado' }}" onclick="cmpgSit(this, 'autorizado')">Autorizadas</button>
+          <button type="button" class="chip{{ ' on' if filtros.situacao == 'cancelada' }}" onclick="cmpgSit(this, 'cancelada')">Canceladas</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="gav__f">
+      <button type="button" class="bt-g bt-g--ca" id="cmpg-bt-voltar" hidden
+              onclick="cmpgIrPasso(Math.max(0, cmpgPasso() - 1))">‹ Voltar</button>
+      <a class="bt-g bt-g--ca" href="{{ url_for('dfe_compras.compras', aba='consultar') }}"
+         id="cmpg-bt-limpar" hidden>Limpar</a>
+      <button type="button" class="bt-g bt-g--ca" id="cmpg-bt-pular" onclick="cmpgPular()">Pular</button>
+      <button type="button" class="bt-g bt-g--ok" id="cmpg-bt-ir" onclick="cmpgAvancar()">Avançar</button>
+    </div>
+  </form>
+</div>
+
+{# ========== CLASSIFICADOR EM PASSOS (celular) ==========
+   1) o que e  2) produto (so combustivel)  3) Memorizar / So desta vez.
+   So preenche os selects escondidos do item e chama classificar(). #}
+<div class="escuro" id="clsg-escuro" onclick="clsgFechar()"></div>
+<div class="gav" id="clsg-gav" role="dialog" aria-label="Classificar item">
+  <div class="gav__pega"></div>
+  <div class="pnome"><b id="clsg-prod-nome">Classificar</b><span id="clsg-forn"></span></div>
+
+  <div class="etapa" id="clsg-et0">
+    <div class="gr__c" style="padding:0 .9rem"><span class="gr__t">1 · O que é?</span></div>
+    <div class="gav__b">
+      <div class="opcs">
+        {% for val, rot in categorias %}
+        <button type="button" class="opc--btn" onclick="clsgCat('{{ val }}', '{{ rot }}')">{{ rot }}
+          {%- if val == 'combustivel' %}<small>abre a lista dos nossos produtos</small>
+          {%- elif val == 'ignorar' %}<small>nota que não é nossa — não cria regra</small>{% endif %}</button>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="etapa" id="clsg-et1" hidden>
+    <div class="gr__c" style="padding:0 .9rem"><span class="gr__t">2 · Qual produto?</span></div>
+    <div class="gav__b">
+      <div class="opcs">
+        {% for p in produtos %}
+        <button type="button" class="opc--btn" onclick="clsgProd({{ p.id }}, '{{ p.nome }}')">{{ p.nome }}</button>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="etapa" id="clsg-et2" hidden>
+    <div class="gav__b">
+      <div class="clsg-resumo"><small>Classificar como</small><span id="clsg-resumo">—</span></div>
+      <div class="clsg-aviso" id="clsg-aviso" hidden>“Ignorar” é decisão nota a nota — não cria regra. Por isso só “Só desta vez”.</div>
+    </div>
+    <div class="gav__f">
+      <button type="button" class="bt-g bt-g--ok" id="clsg-mem"
+              onclick="clsgFinaliza('memorizar')"><i class="bi bi-bookmark-star"></i> Memorizar</button>
+      <button type="button" class="bt-g bt-g--ca" onclick="clsgFinaliza('so_desta_vez')">Só desta vez</button>
+    </div>
+  </div>
+
+  <div class="gav__f">
+    <button type="button" class="bt-g bt-g--ca" id="clsg-bt-voltar" hidden onclick="clsgVoltar()">‹ Voltar</button>
+    <button type="button" class="bt-g bt-g--ca" style="flex:1" onclick="clsgFechar()">Cancelar</button>
+  </div>
+</div>
+
+</div>{# /#dfec #}
 {% endblock %}
 
 {% block scripts %}
 <script>
 // (Aba Classificar: o card da nota abre/fecha via onclick inline no cabeçalho.)
 
-// Expandir/recolher o detalhe de UMA nota na aba Compras (desktop).
-function toggleCompra(row) {
-  var doc = row.getAttribute('data-doc');
-  var det = document.getElementById('compra-det-' + doc);
-  if (!det) return;
-  var aberto = det.style.display !== 'none';
-  det.style.display = aberto ? 'none' : 'table-row';
-  row.classList.toggle('open', !aberto);
+// Expandir/recolher o detalhe de UMA nota na lista de Compras.
+function cmpAbre(lin) {
+  var det = lin.nextElementSibling;
+  if (det && det.classList.contains('detbox')) det.hidden = !det.hidden;
 }
+
+// ── Gaveta de filtro em passos (Empresa > Fornecedor > Produto > Período) ──
+(function () {
+  var passo = 0, N = 4;
+  var gav = document.getElementById('cmpg-gav');
+  var escuro = document.getElementById('cmpg-escuro');
+  window.cmpgPasso = function () { return passo; };
+  window.cmpgAbrir = function () {
+    gav.classList.add('on'); escuro.classList.add('on');
+  };
+  window.cmpgFechar = function () {
+    gav.classList.remove('on'); escuro.classList.remove('on');
+  };
+  window.cmpgIrPasso = function (n) {
+    passo = n;
+    var ps = gav.querySelectorAll('.passo');
+    for (var i = 0; i < N; i++) {
+      document.getElementById('cmpg-et' + i).hidden = (i !== n);
+      ps[i].classList.toggle('aqui', i === n);
+      ps[i].classList.toggle('on', i <= n);
+    }
+    var fim = (n === N - 1);
+    document.getElementById('cmpg-bt-voltar').hidden = (n === 0);
+    document.getElementById('cmpg-bt-limpar').hidden = !fim;
+    document.getElementById('cmpg-bt-pular').hidden = fim;
+    document.getElementById('cmpg-bt-ir').textContent = fim ? 'Filtrar' : 'Avançar';
+  };
+  window.cmpgPular = function () {
+    document.getElementById('cmpg-et' + passo)
+      .querySelectorAll('input[type=checkbox]').forEach(function (c) { c.checked = false; });
+    cmpgIrPasso(passo + 1);
+  };
+  window.cmpgAvancar = function () {
+    if (passo < N - 1) { cmpgIrPasso(passo + 1); return; }
+    document.getElementById('cmpg-form').submit();
+  };
+  function visiveis(alvo) {
+    return Array.prototype.filter.call(
+      document.getElementById(alvo).querySelectorAll('.opc'),
+      function (op) { return !op.hidden; });
+  }
+  function rotulo(alvo) {
+    var b = document.querySelector('.gr__a[data-alvo="' + alvo + '"]');
+    if (!b) return;
+    var vis = visiveis(alvo);
+    var tudo = vis.length && vis.every(function (op) {
+      return op.querySelector('input').checked; });
+    b.textContent = tudo ? 'desmarcar todos' : 'marcar todos';
+  }
+  window.cmpgTodos = function (alvo) {
+    var vis = visiveis(alvo);
+    var tudo = vis.length && vis.every(function (op) {
+      return op.querySelector('input').checked; });
+    vis.forEach(function (op) { op.querySelector('input').checked = !tudo; });
+    rotulo(alvo);
+  };
+  window.cmpgBusca = function (inp, alvo) {
+    var q = inp.value.trim().toLowerCase();
+    document.getElementById(alvo).querySelectorAll('.opc').forEach(function (op) {
+      op.hidden = q && op.textContent.toLowerCase().indexOf(q) === -1;
+    });
+    rotulo(alvo);
+  };
+  window.cmpgPeriodo = function (chip, tipo) {
+    chip.parentElement.querySelectorAll('.chip').forEach(function (c) {
+      c.classList.toggle('on', c === chip);
+    });
+    function iso(d) {
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+             + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    var h = new Date(), d1 = new Date(), d2 = new Date();
+    if (tipo === '7') { d1.setDate(h.getDate() - 6); }
+    else if (tipo === '30') { d1.setDate(h.getDate() - 29); }
+    else if (tipo === 'mes') { d1 = new Date(h.getFullYear(), h.getMonth(), 1); }
+    document.getElementById('cmpg-d1').value = iso(d1);
+    document.getElementById('cmpg-d2').value = iso(d2);
+  };
+  window.cmpgSit = function (chip, val) {
+    chip.parentElement.querySelectorAll('.chip').forEach(function (c) {
+      c.classList.toggle('on', c === chip);
+    });
+    document.getElementById('cmpg-sit').value = val;
+  };
+  ['cmpg-l-forn', 'cmpg-l-prod'].forEach(function (alvo) {
+    var el = document.getElementById(alvo);
+    if (el) { el.addEventListener('change', function () { rotulo(alvo); }); rotulo(alvo); }
+  });
+})();
+
+// ── Classificador em passos (celular): preenche os selects do item e
+// chama o classificar() de sempre. Na web (>=992px) nao abre: os selects
+// inline continuam sendo o caminho.
+(function () {
+  var item = null, passo = 0;
+  var cat = null, catRot = '', prod = null, prodRot = '';
+  function el(id) { return document.getElementById(id); }
+  function mostra(n) {
+    passo = n;
+    for (var i = 0; i < 3; i++) el('clsg-et' + i).hidden = (i !== n);
+    el('clsg-bt-voltar').hidden = (n === 0);
+  }
+  window.clsgAbrir = function (itemId, linha) {
+    if (window.matchMedia('(min-width: 992px)').matches) return;
+    item = itemId; cat = prod = null; catRot = prodRot = '';
+    var card = linha.closest('.cls-card');
+    el('clsg-prod-nome').textContent =
+      (linha.querySelector('.xprod') || {}).textContent || 'Classificar';
+    el('clsg-forn').textContent =
+      card ? (card.querySelector('.cls-head__forn') || {}).textContent || '' : '';
+    mostra(0);
+    el('clsg-gav').classList.add('on');
+    el('clsg-escuro').classList.add('on');
+  };
+  window.clsgFechar = function () {
+    el('clsg-gav').classList.remove('on');
+    el('clsg-escuro').classList.remove('on');
+  };
+  window.clsgVoltar = function () {
+    if (passo === 2 && cat === 'combustivel') { mostra(1); return; }
+    mostra(0);
+  };
+  function resumo() {
+    el('clsg-resumo').textContent = catRot + (prodRot ? ' · ' + prodRot : '');
+    var ign = (cat === 'ignorar');
+    el('clsg-aviso').hidden = !ign;
+    el('clsg-mem').style.display = ign ? 'none' : '';
+  }
+  window.clsgCat = function (v, rot) {
+    cat = v; catRot = rot; prod = null; prodRot = '';
+    if (v === 'combustivel') { mostra(1); return; }
+    resumo(); mostra(2);
+  };
+  window.clsgProd = function (id, nome) {
+    prod = id; prodRot = nome;
+    resumo(); mostra(2);
+  };
+  window.clsgFinaliza = function (modo) {
+    var linha = document.getElementById('item-' + item);
+    if (!linha) { clsgFechar(); return; }
+    var selCat = linha.querySelector('.sel-cat');
+    selCat.value = cat;
+    toggleProduto(selCat, item);
+    if (prod) {
+      var sp = document.getElementById('prod-' + item);
+      if (sp) sp.value = prod;
+    }
+    clsRefreshBtns(item);
+    clsgFechar();
+    classificar(item, modo);
+  };
+})();
 
 // Mostra/oculta o dropdown de produto conforme a categoria (só combustível)
 // e recalcula o estado (aceso/travado) dos botões daquele item.
