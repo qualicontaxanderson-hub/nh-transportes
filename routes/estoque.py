@@ -943,11 +943,14 @@ def auditoria():
     f_empresa = (request.args.get('empresa') or '').strip()
     f_ini = (request.args.get('data_ini') or '').strip()
     f_fim = (request.args.get('data_fim') or '').strip()
+    # Sem filtro, vem o MES CORRENTE: do dia 1 ate hoje. E o recorte que o
+    # posto fecha — "quanto perdemos em agosto" — nao uma janela movel.
     try:
-        d_ini = datetime.strptime(f_ini, '%Y-%m-%d').date() if f_ini else hoje - timedelta(days=13)
+        d_ini = (datetime.strptime(f_ini, '%Y-%m-%d').date()
+                 if f_ini else hoje.replace(day=1))
         d_fim = datetime.strptime(f_fim, '%Y-%m-%d').date() if f_fim else hoje
     except ValueError:
-        d_ini, d_fim = hoje - timedelta(days=13), hoje
+        d_ini, d_fim = hoje.replace(day=1), hoje
     if d_fim < d_ini:
         d_ini, d_fim = d_fim, d_ini
     # Teto de 92 dias: cada dia sao 4 produtos x varias consultas em memoria;
