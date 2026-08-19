@@ -330,6 +330,12 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
         "tanque": d["tanque"], "status": d["status"], "data": dia,
         "recebido": recebido, "vinculado": vinculado, "precisa": precisa,
         "total_descarga": recebido, "total_descarga_20c": _f(d["total_descarga_20c"]),
+        # A regua do modal (e o botao corrigir): sem estas chaves aqui, o
+        # SELECT ate as traz, mas este reempacote as derrubava no caminho.
+        "volume_inicial": _f(d.get("volume_inicial")),
+        "volume_final": _f(d.get("volume_final")),
+        "capacidade": d.get("capacidade"),
+        "origem": d.get("origem"),
     }
 
     if not d["produto_id"] or not dia:
