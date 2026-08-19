@@ -55,6 +55,11 @@ def index():
         'produto':    (request.args.get('produto') or '').strip(),
         'forma_pgto': (request.args.get('forma_pgto') or '').strip(),
     }
+    # Filtros em LISTA da gaveta em passos (marcar varios). Os de texto
+    # acima continuam aceitos — URL antiga salva nao quebra.
+    f_vend = [v for v in request.args.getlist('vend') if v.strip()]
+    f_prod = [v for v in request.args.getlist('prod') if v.strip()]
+    f_forma = [v for v in request.args.getlist('forma') if v.strip()]
     try:
         pagina = max(1, int(request.args.get('page', 1)))
     except (TypeError, ValueError):
@@ -83,6 +88,27 @@ def index():
                 "WHERE it.venda_id = v.id AND it.produto_xml LIKE %s)"
             )
             params.append(f"%{f['produto']}%")
+        if f_vend:
+            com_nome = [v for v in f_vend if v != '__sem__']
+            partes = []
+            if com_nome:
+                ph_v = ",".join(["%s"] * len(com_nome))
+                partes.append(f"v.vendedor_raw IN ({ph_v})")
+                params.extend(com_nome)
+            if '__sem__' in f_vend:
+                partes.append("(v.vendedor_raw IS NULL OR v.vendedor_raw = '')")
+            where.append("(" + " OR ".join(partes) + ")")
+        if f_prod:
+            ph_p = ",".join(["%s"] * len(f_prod))
+            where.append(
+                "EXISTS (SELECT 1 FROM vendas_xml_itens itf "
+                f"WHERE itf.venda_id = v.id AND itf.produto_xml IN ({ph_p}))"
+            )
+            params.extend(f_prod)
+        if f_forma:
+            ph_f = ",".join(["%s"] * len(f_forma))
+            where.append(f"v.forma_pagamento IN ({ph_f})")
+            params.extend(f_forma)
 
         where_sql = (" WHERE " + " AND ".join(where)) if where else ""
 
@@ -193,8 +219,49 @@ def index():
         data_ini_default = f['data_ini'] or (hoje - timedelta(days=90)).strftime('%Y-%m-%d')
         data_fim_default = f['data_fim'] or hoje.strftime('%Y-%m-%d')
 
-        # Querystring dos filtros (sem 'page') para os links de paginacao.
-        qs_filtros = urlencode({k: v for k, v in f.items() if v})
+        # ---------- Opcoes da gaveta (contagens globais; 24k linhas, rapido) --
+        cur.execute(
+            """
+            SELECT COALESCE(NULLIF(vendedor_raw, ''), '__sem__') AS v,
+                   COUNT(*) AS n
+            FROM vendas_xml GROUP BY v ORDER BY n DESC
+            """
+        )
+        op_vendedores = cur.fetchall()
+        cur.execute(
+            """
+            SELECT produto_xml AS v, COUNT(*) AS n
+            FROM vendas_xml_itens
+            WHERE produto_xml IS NOT NULL AND produto_xml <> ''
+            GROUP BY produto_xml ORDER BY n DESC LIMIT 40
+            """
+        )
+        op_produtos = cur.fetchall()
+        cur.execute(
+            """
+            SELECT forma_pagamento AS v, COUNT(*) AS n
+            FROM vendas_xml
+            WHERE forma_pagamento IS NOT NULL AND forma_pagamento <> ''
+            GROUP BY forma_pagamento ORDER BY n DESC
+            """
+        )
+        op_formas = cur.fetchall()
+
+        # Grupos de filtro ativos (badge do botao Filtro no topo).
+        n_filtros = ((1 if f_vend else 0) + (1 if f_prod else 0)
+                     + (1 if f_forma else 0)
+                     + (1 if (f['data_ini'] or f['data_fim']) else 0)
+                     + (1 if f['vendedor'] else 0) + (1 if f['produto'] else 0)
+                     + (1 if f['forma_pgto'] else 0))
+
+        # Querystring dos filtros (sem 'page') para os links de paginacao —
+        # inclui as listas, senao mudar de pagina derrubava a gaveta.
+        qs_filtros = urlencode(
+            [(k, v) for k, v in f.items() if v]
+            + [('vend', v) for v in f_vend]
+            + [('prod', v) for v in f_prod]
+            + [('forma', v) for v in f_forma]
+        )
 
         return render_template(
             'vendas/index.html',
@@ -203,6 +270,9 @@ def index():
             totais=totais,
             dias=dias,
             filtros=f,
+            f_vend=f_vend, f_prod=f_prod, f_forma=f_forma,
+            op_vendedores=op_vendedores, op_produtos=op_produtos,
+            op_formas=op_formas, n_filtros=n_filtros,
             data_ini_default=data_ini_default,
             data_fim_default=data_fim_default,
             pagina=pagina,

@@ -34,25 +34,80 @@
   #vendas .n--canc.tem{ background:linear-gradient(135deg,#C2504A,#A32D2D); }
   #vendas .n--tick{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
 
-  /* Filtros (recolhido; a gaveta em passos vem na próxima etapa) */
-  #vendas .venda-filtros{ background:#fff; border:1px solid var(--line-2);
-    border-radius:12px; padding:.7rem 1rem; margin-bottom:.7rem; }
-  #vendas .venda-filtros>summary{ list-style:none; cursor:pointer; display:flex;
-    align-items:center; gap:.5rem; font-weight:700; color:var(--azul-deep); }
-  #vendas .venda-filtros>summary::-webkit-details-marker{ display:none; }
-  #vendas .venda-filtros .selo-f{ font-size:.72rem; font-weight:700;
-    background:var(--azul-claro); color:var(--azul-deep); border-radius:999px;
-    padding:.12rem .55rem; }
-  #vendas .venda-filtros .chev{ margin-left:auto; transition:transform .2s;
-    color:var(--muted); }
-  #vendas .venda-filtros[open] .chev{ transform:rotate(180deg); }
-  #vendas .venda-filtros__body{ margin-top:.8rem; display:grid; gap:.6rem;
-    grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); align-items:end; }
-  #vendas .venda-filtros__body label{ font-size:10.5px; text-transform:uppercase;
-    color:var(--muted); font-weight:700; display:block; margin-bottom:2px; }
-  #vendas .venda-filtros__body input{ width:100%; border:1px solid var(--line-2);
-    border-radius:8px; padding:.35rem .5rem; font-size:.85rem; }
-  #vendas .venda-filtros__btns{ display:flex; gap:.4rem; }
+  /* Filtro em passos (gaveta) — mesmo desenho do Rec Frete */
+  #vendas .escuro{ position:fixed; inset:0; background:rgba(12,25,42,.45);
+    z-index:1050; opacity:0; pointer-events:none; transition:opacity .2s; }
+  #vendas .escuro.on{ opacity:1; pointer-events:auto; }
+  #vendas .gav{ position:fixed; left:0; right:0; bottom:0; z-index:1051;
+    background:#fff; border-radius:18px 18px 0 0; max-height:88vh; display:flex;
+    flex-direction:column; transform:translateY(101%);
+    transition:transform .24s cubic-bezier(.22,.7,.3,1);
+    box-shadow:0 -10px 30px rgba(12,25,42,.3); }
+  #vendas .gav.on{ transform:translateY(0); }
+  @media (min-width:992px){
+    #vendas .gav{ left:50%; right:auto; bottom:auto; top:8vh; width:520px;
+      border-radius:16px; transform:translate(-50%,10px); opacity:0;
+      pointer-events:none; transition:opacity .16s ease, transform .16s ease;
+      max-height:84vh; }
+    #vendas .gav.on{ transform:translate(-50%,0); opacity:1;
+      pointer-events:auto; }
+    #vendas .gav__pega{ display:none; }
+  }
+  #vendas .gav__pega{ width:36px; height:4px; background:var(--line-2);
+    border-radius:9px; margin:.5rem auto .1rem; flex:0 0 auto; }
+  #vendas .passos{ display:flex; gap:.45rem; padding:.5rem .9rem .1rem; }
+  #vendas .passo{ flex:1; display:block; border:0; background:none; padding:0;
+    cursor:pointer; font-family:inherit; text-align:left; min-width:0; }
+  #vendas .passo i{ display:block; height:3px; border-radius:9px;
+    background:var(--line-2); }
+  #vendas .passo span{ display:block; font-size:.68rem; font-weight:800;
+    letter-spacing:.02em; color:var(--muted); margin-top:.28rem; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
+  #vendas .passo.on i{ background:var(--azul); }
+  #vendas .passo.aqui span{ color:var(--azul-deep); }
+  #vendas .pnome{ padding:.35rem .9rem .4rem; font-size:.76rem;
+    color:var(--muted); font-weight:700; }
+  #vendas .pnome b{ color:var(--ink); font-size:.95rem; display:block; }
+  #vendas .gav__b{ overflow-y:auto; padding:0 .9rem .7rem; }
+  #vendas .gav__f{ border-top:1px solid var(--line); padding:.65rem .9rem;
+    display:flex; gap:.5rem; background:#fff;
+    padding-bottom:calc(.65rem + env(safe-area-inset-bottom)); }
+  #vendas .bt-g{ border:0; border-radius:10px; padding:.55rem .8rem;
+    font-size:.87rem; font-weight:800; cursor:pointer; font-family:inherit;
+    text-decoration:none; text-align:center; }
+  #vendas .bt-g--ok{ flex:1; background:var(--azul); color:#fff; }
+  #vendas .bt-g--ca{ background:var(--surface); color:var(--muted);
+    border:1px solid var(--line-2); }
+  #vendas .etapa[hidden]{ display:none; }
+  #vendas .gr{ margin-bottom:.85rem; }
+  #vendas .gr__t{ font-size:.69rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); margin-bottom:.3rem; }
+  #vendas .opcs{ border:1px solid var(--line-2); border-radius:10px;
+    overflow:hidden; max-height:255px; overflow-y:auto; background:#fff; }
+  #vendas .opc{ display:flex; align-items:center; gap:.55rem; padding:.5rem .6rem;
+    border-bottom:1px solid var(--line); font-size:.85rem; cursor:pointer;
+    margin:0; min-width:0; }
+  #vendas .opc:last-child{ border-bottom:0; }
+  #vendas .opc:hover{ background:var(--surface); }
+  #vendas .opc input{ width:19px; height:19px; accent-color:var(--azul);
+    flex:0 0 auto; margin:0; }
+  #vendas .opc > span{ min-width:0; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; }
+  #vendas .opc small{ display:block; font-size:.71rem; color:var(--muted); }
+  #vendas .opc:has(input:checked){ background:var(--azul-claro); }
+  #vendas .opc[hidden]{ display:none; }
+  #vendas .campo{ width:100%; border:1px solid var(--line-2); border-radius:10px;
+    padding:.5rem .65rem; font-size:.85rem; background:#fff; color:var(--ink);
+    font-family:inherit; }
+  #vendas .par{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; }
+  #vendas .chips{ display:flex; flex-wrap:wrap; gap:.35rem; }
+  #vendas .chip{ border:1px solid var(--line-2); background:#fff;
+    color:var(--ink-2); border-radius:99px; padding:.32rem .7rem;
+    font-size:.78rem; font-weight:700; cursor:pointer; font-family:inherit; }
+  #vendas .chip.on{ background:var(--azul); border-color:var(--azul);
+    color:#fff; }
+  #vendas :focus-visible{ outline:2px solid var(--azul); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce){ #vendas *{ transition:none !important; } }
 
   /* Lista agrupada por dia */
   #vendas .lst{ background:#fff; border:1px solid var(--line-2);
@@ -116,16 +171,15 @@
   'PIX APP':'#0d9488','PIX Manual':'#b45309','Débito APP':'#1d4ed8','Débito Manual':'#2563eb',
   'Crédito APP':'#7c3aed','Crédito Manual':'#8b5cf6','Dinheiro':'#059669','Cheque':'#475569',
   'Prazo':'#d97706','Transferência':'#0891b2','Combo':'#64748b','Outros':'#64748b'} %}
-{% set filtros_ativos = [filtros.data_ini, filtros.data_fim, filtros.vendedor, filtros.produto, filtros.forma_pgto]|select|list|length %}
 <div class="container-fluid" id="vendas">
 
   <!-- Topo padrão (mesmo das telas do Banco) -->
   <div id="vendas-topo">
     <div class="topo__l1">
       <h3>Vendas Migradas</h3>
-      <button type="button" class="acao" onclick="vndAbrirFiltros()">
+      <button type="button" class="acao" onclick="vndAbrirGav()">
         <i class="bi bi-sliders"></i> Filtro
-        {% if filtros_ativos %}<span style="background:#fff;color:#0C4C86;border-radius:99px;min-width:17px;height:17px;display:inline-grid;place-items:center;font-size:.66rem;">{{ filtros_ativos }}</span>{% endif %}
+        {% if n_filtros %}<span style="background:#fff;color:#0C4C86;border-radius:99px;min-width:17px;height:17px;display:inline-grid;place-items:center;font-size:.66rem;">{{ n_filtros }}</span>{% endif %}
       </button>
     </div>
     <div class="abas">
@@ -145,38 +199,11 @@
       <div class="v">{{ (totais.ticket or 0) | formatar_moeda }}</div></div>
   </div>
 
-  {# =================== FILTROS (recolhido) =================== #}
-  <details class="venda-filtros" id="vnd-filtros"{% if filtros_ativos %} open{% endif %}>
-    <summary>
-      <i class="bi bi-funnel"></i> Filtros
-      {% if filtros_ativos %}<span class="selo-f">{{ filtros_ativos }} ativo{{ 's' if filtros_ativos > 1 else '' }}</span>{% endif %}
-      <i class="bi bi-chevron-down chev"></i>
-    </summary>
-    <form method="GET" action="/vendas" class="venda-filtros__body">
-      <div><label>Data de</label><input type="date" name="data_ini" value="{{ filtros.data_ini or data_ini_default }}"></div>
-      <div><label>Data até</label><input type="date" name="data_fim" value="{{ filtros.data_fim or data_fim_default }}"></div>
-      <div><label>Vendedor</label><input type="text" name="vendedor" value="{{ filtros.vendedor }}" placeholder="nome no XML"></div>
-      <div><label>Produto</label><input type="text" name="produto" value="{{ filtros.produto }}" placeholder="descrição do item"></div>
-      <div><label>Forma pgto</label><input type="text" name="forma_pgto" value="{{ filtros.forma_pgto }}" placeholder="ex.: Dinheiro"></div>
-      <div class="venda-filtros__btns">
-        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Filtrar</button>
-        <a href="/vendas" class="btn btn-sm btn-outline-secondary">Limpar</a>
-      </div>
-    </form>
-  </details>
-  <script>
-    function vndAbrirFiltros() {
-      var d = document.getElementById('vnd-filtros');
-      d.open = true;
-      d.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  </script>
-
   {# =================== LISTA (agrupada por dia) =================== #}
   <div class="lst">
   {% if not notas %}
     <div class="vazio"><b>Nenhuma venda no período.</b>
-      {% if filtros_ativos %}Nada corresponde ao filtro — tente outro período ou limpe a busca.
+      {% if n_filtros %}Nada corresponde ao filtro — tente outro período ou limpe a busca.
       {% else %}Assim que a captura trouxer uma NF-e/NFC-e, ela aparece aqui.{% endif %}</div>
   {% else %}
     {% set ns = namespace(dia=None) %}
@@ -228,6 +255,151 @@
     <a href="{{ url_for('vendas.classificar') }}"><i class="bi bi-tags"></i> Classificar produtos</a>
   </div>
 
+  {# =================== FILTRO EM PASSOS (gaveta) ===================
+     Vendedor > Produto > Forma > Período. Cada passo tem Pular (limpa o
+     passo e segue); o Filtrar só existe no último. Os passos são um form
+     GET normal — a URL fica igual à de sempre, com vend/prod/forma. #}
+  <div class="escuro" id="vnd-escuro" onclick="vndFecharGav()"></div>
+  <div class="gav" id="vnd-gav" role="dialog" aria-label="Filtro das vendas">
+    <div class="gav__pega"></div>
+
+    <div class="passos">
+      <button type="button" class="passo on aqui" onclick="vndIrPasso(0)"><i></i><span>1 · Vendedor</span></button>
+      <button type="button" class="passo" onclick="vndIrPasso(1)"><i></i><span>2 · Produto</span></button>
+      <button type="button" class="passo" onclick="vndIrPasso(2)"><i></i><span>3 · Forma</span></button>
+      <button type="button" class="passo" onclick="vndIrPasso(3)"><i></i><span>4 · Período</span></button>
+    </div>
+
+    <form method="GET" action="/vendas" id="vnd-form" style="display:contents">
+
+      <div class="etapa" id="vnd-et0">
+        <div class="pnome"><b>Vendedor</b>marque um ou mais — ou pule o passo</div>
+        <div class="gav__b">
+          <input class="campo" type="search" placeholder="Buscar vendedor…"
+                 oninput="vndBusca(this, 'vnd-l-vend')" style="margin-bottom:.4rem">
+          <div class="opcs" id="vnd-l-vend">
+            {% for o in op_vendedores %}
+            <label class="opc"><input type="checkbox" name="vend" value="{{ o.v }}"{% if o.v in f_vend %} checked{% endif %}>
+              <span>{{ 'Sem vendedor' if o.v == '__sem__' else o.v }}<small>{{ o.n }} nota{{ 's' if o.n != 1 }}</small></span></label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="etapa" id="vnd-et1" hidden>
+        <div class="pnome"><b>Produto</b>os mais vendidos — ou pule o passo</div>
+        <div class="gav__b">
+          <input class="campo" type="search" placeholder="Buscar produto…"
+                 oninput="vndBusca(this, 'vnd-l-prod')" style="margin-bottom:.4rem">
+          <div class="opcs" id="vnd-l-prod">
+            {% for o in op_produtos %}
+            <label class="opc"><input type="checkbox" name="prod" value="{{ o.v }}"{% if o.v in f_prod %} checked{% endif %}>
+              <span>{{ o.v }}<small>{{ o.n }} venda{{ 's' if o.n != 1 }}</small></span></label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="etapa" id="vnd-et2" hidden>
+        <div class="pnome"><b>Forma de pagamento</b>como veio no cupom — ou pule o passo</div>
+        <div class="gav__b">
+          <div class="opcs">
+            {% for o in op_formas %}
+            <label class="opc"><input type="checkbox" name="forma" value="{{ o.v }}"{% if o.v in f_forma %} checked{% endif %}>
+              <span>{{ o.v }}<small>{{ o.n }} nota{{ 's' if o.n != 1 }}</small></span></label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="etapa" id="vnd-et3" hidden>
+        <div class="pnome"><b>Período</b>pela data de emissão</div>
+        <div class="gav__b">
+          <div class="gr">
+            <div class="chips">
+              <button type="button" class="chip" onclick="vndPeriodo(this, 'hoje')">Hoje</button>
+              <button type="button" class="chip" onclick="vndPeriodo(this, 'ontem')">Ontem</button>
+              <button type="button" class="chip" onclick="vndPeriodo(this, '7')">7 dias</button>
+              <button type="button" class="chip" onclick="vndPeriodo(this, 'mes')">Mês corrente</button>
+            </div>
+          </div>
+          <div class="gr">
+            <div class="gr__t">Ou escolha as datas</div>
+            <div class="par">
+              <input class="campo" type="date" name="data_ini" id="vnd-d1" value="{{ filtros.data_ini or data_ini_default }}">
+              <input class="campo" type="date" name="data_fim" id="vnd-d2" value="{{ filtros.data_fim or data_fim_default }}">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="gav__f">
+        <a class="bt-g bt-g--ca" href="/vendas" id="vnd-bt-limpar" hidden>Limpar</a>
+        <button type="button" class="bt-g bt-g--ca" id="vnd-bt-pular" onclick="vndPular()">Pular</button>
+        <button type="button" class="bt-g bt-g--ok" id="vnd-bt-ir" onclick="vndAvancar()">Avançar</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+  (function () {
+    var passo = 0, N = 4;
+    var gav = document.getElementById('vnd-gav');
+    var escuro = document.getElementById('vnd-escuro');
+
+    window.vndAbrirGav = function () {
+      gav.classList.add('on'); escuro.classList.add('on');
+    };
+    window.vndFecharGav = function () {
+      gav.classList.remove('on'); escuro.classList.remove('on');
+    };
+    window.vndIrPasso = function (n) {
+      passo = n;
+      var ps = gav.querySelectorAll('.passo');
+      for (var i = 0; i < N; i++) {
+        document.getElementById('vnd-et' + i).hidden = (i !== n);
+        ps[i].classList.toggle('aqui', i === n);
+        ps[i].classList.toggle('on', i <= n);
+      }
+      var ultimo = (n === N - 1);
+      document.getElementById('vnd-bt-limpar').hidden = !ultimo;
+      document.getElementById('vnd-bt-pular').hidden = ultimo;
+      document.getElementById('vnd-bt-ir').textContent = ultimo ? 'Filtrar' : 'Avançar';
+    };
+    /* Pular = limpa o que estiver marcado NESTE passo e segue adiante. */
+    window.vndPular = function () {
+      document.getElementById('vnd-et' + passo)
+        .querySelectorAll('input[type=checkbox]').forEach(function (c) { c.checked = false; });
+      vndIrPasso(passo + 1);
+    };
+    window.vndAvancar = function () {
+      if (passo < N - 1) { vndIrPasso(passo + 1); return; }
+      document.getElementById('vnd-form').submit();
+    };
+    window.vndBusca = function (inp, alvo) {
+      var q = inp.value.trim().toLowerCase();
+      document.getElementById(alvo).querySelectorAll('.opc').forEach(function (op) {
+        op.hidden = q && op.textContent.toLowerCase().indexOf(q) === -1;
+      });
+    };
+    window.vndPeriodo = function (chip, tipo) {
+      chip.parentElement.querySelectorAll('.chip').forEach(function (c) {
+        c.classList.toggle('on', c === chip);
+      });
+      function iso(d) {
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+               + '-' + String(d.getDate()).padStart(2, '0');
+      }
+      var h = new Date(), d1 = new Date(), d2 = new Date();
+      if (tipo === 'ontem') { d1.setDate(h.getDate() - 1); d2 = d1; }
+      else if (tipo === '7') { d1.setDate(h.getDate() - 6); }
+      else if (tipo === 'mes') { d1 = new Date(h.getFullYear(), h.getMonth(), 1); }
+      document.getElementById('vnd-d1').value = iso(d1);
+      document.getElementById('vnd-d2').value = iso(d2);
+    };
+  })();
+  </script>
+
 {# =================== PAGINACAO =================== #}
 {% if total_paginas > 1 %}
 {% set sep = '&' if qs_filtros else '' %}
@@ -251,6 +423,9 @@
   </ul>
   <form method="GET" action="/vendas" class="d-flex justify-content-center align-items-center gap-2 small">
     {% for k, v in filtros.items() %}{% if v %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endif %}{% endfor %}
+    {% for v in f_vend %}<input type="hidden" name="vend" value="{{ v }}">{% endfor %}
+    {% for v in f_prod %}<input type="hidden" name="prod" value="{{ v }}">{% endfor %}
+    {% for v in f_forma %}<input type="hidden" name="forma" value="{{ v }}">{% endfor %}
     <span class="text-muted">Página {{ pagina }} de {{ total_paginas }} · pular para</span>
     <input type="number" name="page" min="1" max="{{ total_paginas }}" value="{{ pagina }}"
            class="form-control form-control-sm" style="width:5rem">
