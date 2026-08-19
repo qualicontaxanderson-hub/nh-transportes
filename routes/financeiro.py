@@ -1114,6 +1114,8 @@ def registrar_pagamento_manual():
         cobranca_id = data.get('cobranca_id')
         data_pagamento = data.get('data_pagamento') or datetime.today().date().isoformat()
         observacao = (data.get('observacao') or '').strip()
+        via = (data.get('via') or '').strip()[:60]
+        cancelar_efi = str(data.get('cancelar_efi') or '') in ('1', 'true', 'on')
 
         try:
             cobranca_id = int(cobranca_id)
@@ -1142,6 +1144,23 @@ def registrar_pagamento_manual():
             flash('Pagamento já registrado pelo provedor EFI. Alteração não permitida.', 'warning')
             return redirect(url_for('financeiro.recebimentos'))
 
+        # Recebido por fora: cancela o boleto na EFI ANTES da baixa, pra não
+        # deixar cobrança viva que o cliente ainda poderia pagar em dobro.
+        # Se o cancelamento falhar, a baixa acontece MESMO ASSIM (o dinheiro
+        # entrou) — só avisa que o boleto continua vivo lá.
+        aviso_efi = None
+        cancelou_efi = False
+        if cancelar_efi and cobr.get('charge_id'):
+            try:
+                credentials = _get_efi_credentials()
+                ok_efi, resp_efi = cancel_charge(credentials, cobr['charge_id'])
+                if ok_efi:
+                    cancelou_efi = True
+                else:
+                    aviso_efi = str(resp_efi)[:200]
+            except Exception as e:
+                aviso_efi = str(e)[:200]
+
         # Atualiza a cobrança como paga manualmente (sem alterar charge_id existente)
         cursor2 = conn.cursor()
         try:
@@ -1150,9 +1169,10 @@ def registrar_pagamento_manual():
                     """UPDATE cobrancas
                        SET status = 'pago',
                            data_pagamento = %s,
+                           recebido_via = COALESCE(NULLIF(%s, ''), recebido_via),
                            observacao = COALESCE(NULLIF(%s, ''), observacao)
                        WHERE id = %s""",
-                    (data_pagamento, observacao, cobranca_id),
+                    (data_pagamento, via, observacao, cobranca_id),
                 )
             except Exception:
                 # Fallback: coluna observacao pode não existir ainda
@@ -1163,7 +1183,13 @@ def registrar_pagamento_manual():
                     ('pago', data_pagamento, cobranca_id),
                 )
             conn.commit()
-            flash('Pagamento registrado com sucesso.', 'success')
+            flash('Pagamento registrado com sucesso'
+                  + (f' (recebido via {via})' if via else '') + '.', 'success')
+            if cancelou_efi:
+                flash('Boleto cancelado na EFI.', 'success')
+            elif aviso_efi:
+                flash('Atenção: o boleto NÃO foi cancelado na EFI — continua '
+                      'vivo lá. Detalhe: ' + aviso_efi, 'warning')
         except Exception as e:
             try:
                 conn.rollback()
@@ -1376,6 +1402,14 @@ def bulk_registrar_pagamento():
         cobranca_ids = payload.get("cobranca_ids") or []
         data_pagamento = payload.get("data_pagamento") or datetime.today().date().isoformat()
         observacao = (payload.get("observacao") or '').strip()
+        via = (payload.get("via") or '').strip()[:60]
+        cancelar_efi = bool(payload.get("cancelar_efi"))
+        credentials_efi = None
+        if cancelar_efi:
+            try:
+                credentials_efi = _get_efi_credentials()
+            except Exception:
+                credentials_efi = None
 
         if not cobranca_ids:
             return jsonify({"success": False, "error": "cobranca_ids ausentes"}), 400
@@ -1384,11 +1418,13 @@ def bulk_registrar_pagamento():
         cur = conn.cursor(dictionary=True)
         saved = []
         failed = []
+        efi_falhas = []
         for cid in cobranca_ids:
             try:
                 cid = int(cid)
                 cur.execute(
-                    "SELECT id, status, pago_via_provedor FROM cobrancas WHERE id = %s LIMIT 1",
+                    "SELECT id, status, charge_id, pago_via_provedor "
+                    "FROM cobrancas WHERE id = %s LIMIT 1",
                     (cid,)
                 )
                 row = cur.fetchone()
@@ -1401,13 +1437,24 @@ def bulk_registrar_pagamento():
                 if int(row.get('pago_via_provedor') or 0):
                     failed.append({"cobranca_id": cid, "error": "já pago via provedor"})
                     continue
+                # Cancela na EFI antes da baixa (mesma regra do individual:
+                # se falhar, a baixa acontece assim mesmo e a falha e listada).
+                if cancelar_efi and row.get('charge_id') and credentials_efi:
+                    try:
+                        ok_efi, resp_efi = cancel_charge(credentials_efi, row['charge_id'])
+                        if not ok_efi:
+                            efi_falhas.append({"cobranca_id": cid,
+                                               "erro": str(resp_efi)[:150]})
+                    except Exception as e:
+                        efi_falhas.append({"cobranca_id": cid, "erro": str(e)[:150]})
                 try:
                     cur.execute(
                         """UPDATE cobrancas
                            SET status = 'pago', data_pagamento = %s,
+                               recebido_via = COALESCE(NULLIF(%s, ''), recebido_via),
                                observacao = COALESCE(NULLIF(%s, ''), observacao)
                            WHERE id = %s""",
-                        (data_pagamento, observacao, cid)
+                        (data_pagamento, via, observacao, cid)
                     )
                 except Exception:
                     cur.execute(
@@ -1425,7 +1472,8 @@ def bulk_registrar_pagamento():
                 failed.append({"cobranca_id": cid, "error": "Falha ao registrar pagamento."})
         cur.close()
         conn.close()
-        return jsonify({"success": True, "saved": saved, "failed": failed}), 200
+        return jsonify({"success": True, "saved": saved, "failed": failed,
+                        "efi_falhas": efi_falhas}), 200
     except Exception as e:
         current_app.logger.exception("Erro em bulk_registrar_pagamento: %s", e)
         return jsonify({"success": False, "error": "Erro interno ao processar ação em lote."}), 500

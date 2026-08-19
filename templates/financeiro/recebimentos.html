@@ -410,6 +410,9 @@
           <span class="venc{{ ' venc--tarde' if ds == 'vencido' }}">
             venc. {{ r.data_vencimento_fmt or '—' }}
           </span>
+          {% if r.recebido_via and ds in ('pago', 'quitado') %}
+          <span class="venc" title="recebido por fora">· via {{ r.recebido_via }}</span>
+          {% endif %}
 
           <span class="c-acao">
             {% if r.charge_id %}
@@ -1051,6 +1054,22 @@ function frtWhatsDaTela(bt) {
         <input type="date" name="data_pagamento" id="modal-reg-data" class="form-control form-control-sm" required>
       </div>
       <div class="mb-3">
+        <label class="form-label fw-semibold" style="font-size:0.78rem;">Por onde recebeu?</label>
+        <select name="via" id="modal-reg-via" class="form-select form-select-sm">
+          <option value="Pix no banco" selected>Pix no banco</option>
+          <option value="Transferência">Transferência</option>
+          <option value="Dinheiro">Dinheiro</option>
+          <option value="Cartão">Cartão</option>
+          <option value="Outro">Outro</option>
+        </select>
+      </div>
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="cancelar_efi" value="1"
+               id="modal-reg-efi" checked>
+        <label class="form-check-label" for="modal-reg-efi" style="font-size:0.8rem;">
+          Cancelar o boleto na EFI (evita pagamento em dobro)</label>
+      </div>
+      <div class="mb-3">
         <label class="form-label fw-semibold" style="font-size:0.78rem;">Observação (opcional)</label>
         <input type="text" name="observacao" id="modal-reg-obs" class="form-control form-control-sm" placeholder="Ex.: pago com desconto, boleto substituído…" maxlength="255">
       </div>
@@ -1064,6 +1083,21 @@ function frtWhatsDaTela(bt) {
       <div class="mb-3">
         <label class="form-label fw-semibold" style="font-size:0.78rem;">Data do Pagamento</label>
         <input type="date" id="modal-reg-data-bulk" class="form-control form-control-sm" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold" style="font-size:0.78rem;">Por onde recebeu?</label>
+        <select id="modal-reg-via-bulk" class="form-select form-select-sm">
+          <option value="Pix no banco" selected>Pix no banco</option>
+          <option value="Transferência">Transferência</option>
+          <option value="Dinheiro">Dinheiro</option>
+          <option value="Cartão">Cartão</option>
+          <option value="Outro">Outro</option>
+        </select>
+      </div>
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" value="1" id="modal-reg-efi-bulk" checked>
+        <label class="form-check-label" for="modal-reg-efi-bulk" style="font-size:0.8rem;">
+          Cancelar o boleto na EFI (evita pagamento em dobro)</label>
       </div>
       <div class="mb-3">
         <label class="form-label fw-semibold" style="font-size:0.78rem;">Observação (opcional)</label>
@@ -1374,13 +1408,20 @@ document.addEventListener('DOMContentLoaded', function () {
         var resp = await fetch('/financeiro/bulk-registrar-pagamento/', {
           method: 'POST',
           headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
-          body: JSON.stringify({cobranca_ids: ids, data_pagamento: dataPag, observacao: obs})
+          body: JSON.stringify({cobranca_ids: ids, data_pagamento: dataPag, observacao: obs,
+                                via: document.getElementById('modal-reg-via-bulk').value,
+                                cancelar_efi: document.getElementById('modal-reg-efi-bulk').checked})
         });
         var j = await resp.json();
         document.getElementById('modal-registrar-pag').style.display = 'none';
         if (j.success) {
           var msg2 = '✅ ' + (j.saved || []).length + ' pagamento(s) registrado(s).';
           if ((j.failed || []).length) msg2 += '\n⚠️ ' + j.failed.length + ' falha(s).';
+          if ((j.efi_falhas || []).length) {
+            msg2 += '\n⚠️ ' + j.efi_falhas.length + ' boleto(s) NÃO cancelado(s) na EFI — continuam vivos lá.';
+          } else if (document.getElementById('modal-reg-efi-bulk').checked && (j.saved || []).length) {
+            msg2 += '\n🧾 Boletos cancelados na EFI.';
+          }
           alert(msg2);
           location.reload();
         } else {

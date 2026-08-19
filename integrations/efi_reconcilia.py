@@ -281,6 +281,12 @@ def reconciliar(begin_date=None, end_date=None, config=None, logger=None):
             if (row.get("status") or "").lower() == "cancelado":
                 ja_corretos.append(charge_id)
                 continue
+            if (row.get("status") or "").lower() == "pago":
+                # Recebido por fora (Pix etc.): baixa manual + boleto
+                # cancelado na EFI de proposito. O cancelamento de la NAO
+                # pode apagar o pago daqui.
+                ja_corretos.append(charge_id)
+                continue
             cur.execute(
                 "UPDATE cobrancas SET status = 'cancelado', data_cancelamento = NOW()"
                 " WHERE charge_id = %s",
