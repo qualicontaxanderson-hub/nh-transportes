@@ -82,6 +82,12 @@
   #vendas .gr{ margin-bottom:.85rem; }
   #vendas .gr__t{ font-size:.69rem; font-weight:800; text-transform:uppercase;
     letter-spacing:.05em; color:var(--muted); margin-bottom:.3rem; }
+  #vendas .gr__c{ display:flex; align-items:baseline; gap:.4rem;
+    margin-bottom:.3rem; }
+  #vendas .gr__c .gr__t{ margin-bottom:0; }
+  #vendas .gr__a{ margin-left:auto; background:none; border:0; padding:0;
+    cursor:pointer; font-size:.74rem; font-weight:800; color:var(--azul);
+    font-family:inherit; }
   #vendas .opcs{ border:1px solid var(--line-2); border-radius:10px;
     overflow:hidden; max-height:255px; overflow-y:auto; background:#fff; }
   #vendas .opc{ display:flex; align-items:center; gap:.55rem; padding:.5rem .6rem;
@@ -275,6 +281,9 @@
       <div class="etapa" id="vnd-et0">
         <div class="pnome"><b>Vendedor</b>marque um ou mais — ou pule o passo</div>
         <div class="gav__b">
+          <div class="gr__c"><span class="gr__t">Vendedores</span>
+            <button type="button" class="gr__a" data-alvo="vnd-l-vend"
+                    onclick="vndTodos('vnd-l-vend')">marcar todos</button></div>
           <input class="campo" type="search" placeholder="Buscar vendedor…"
                  oninput="vndBusca(this, 'vnd-l-vend')" style="margin-bottom:.4rem">
           <div class="opcs" id="vnd-l-vend">
@@ -289,6 +298,9 @@
       <div class="etapa" id="vnd-et1" hidden>
         <div class="pnome"><b>Produto</b>os mais vendidos — ou pule o passo</div>
         <div class="gav__b">
+          <div class="gr__c"><span class="gr__t">Mais vendidos</span>
+            <button type="button" class="gr__a" data-alvo="vnd-l-prod"
+                    onclick="vndTodos('vnd-l-prod')">marcar todos</button></div>
           <input class="campo" type="search" placeholder="Buscar produto…"
                  oninput="vndBusca(this, 'vnd-l-prod')" style="margin-bottom:.4rem">
           <div class="opcs" id="vnd-l-prod">
@@ -303,7 +315,10 @@
       <div class="etapa" id="vnd-et2" hidden>
         <div class="pnome"><b>Forma de pagamento</b>como veio no cupom — ou pule o passo</div>
         <div class="gav__b">
-          <div class="opcs">
+          <div class="gr__c"><span class="gr__t">Formas</span>
+            <button type="button" class="gr__a" data-alvo="vnd-l-forma"
+                    onclick="vndTodos('vnd-l-forma')">marcar todos</button></div>
+          <div class="opcs" id="vnd-l-forma">
             {% for o in op_formas %}
             <label class="opc"><input type="checkbox" name="forma" value="{{ o.v }}"{% if o.v in f_forma %} checked{% endif %}>
               <span>{{ o.v }}<small>{{ o.n }} nota{{ 's' if o.n != 1 }}</small></span></label>
@@ -334,6 +349,9 @@
       </div>
 
       <div class="gav__f">
+        <button type="button" class="bt-g bt-g--ca" id="vnd-bt-voltar" hidden
+                onclick="vndIrPasso(Math.max(0, vndPassoAtual() - 1))">
+          <i class="bi bi-chevron-left"></i> Voltar</button>
         <a class="bt-g bt-g--ca" href="/vendas" id="vnd-bt-limpar" hidden>Limpar</a>
         <button type="button" class="bt-g bt-g--ca" id="vnd-bt-pular" onclick="vndPular()">Pular</button>
         <button type="button" class="bt-g bt-g--ok" id="vnd-bt-ir" onclick="vndAvancar()">Avançar</button>
@@ -353,6 +371,7 @@
     window.vndFecharGav = function () {
       gav.classList.remove('on'); escuro.classList.remove('on');
     };
+    window.vndPassoAtual = function () { return passo; };
     window.vndIrPasso = function (n) {
       passo = n;
       var ps = gav.querySelectorAll('.passo');
@@ -362,10 +381,37 @@
         ps[i].classList.toggle('on', i <= n);
       }
       var ultimo = (n === N - 1);
+      document.getElementById('vnd-bt-voltar').hidden = (n === 0);
       document.getElementById('vnd-bt-limpar').hidden = !ultimo;
       document.getElementById('vnd-bt-pular').hidden = ultimo;
       document.getElementById('vnd-bt-ir').textContent = ultimo ? 'Filtrar' : 'Avançar';
     };
+    /* Marcar todos age so no que a busca deixou visivel; se ja esta tudo
+       marcado, vira desmarcar. O rotulo acompanha. */
+    function vndVisiveis(alvo) {
+      return Array.prototype.filter.call(
+        document.getElementById(alvo).querySelectorAll('.opc'),
+        function (op) { return !op.hidden; });
+    }
+    function vndRotulo(alvo) {
+      var vis = vndVisiveis(alvo);
+      var tudo = vis.length && vis.every(function (op) {
+        return op.querySelector('input').checked; });
+      document.querySelector('.gr__a[data-alvo="' + alvo + '"]')
+        .textContent = tudo ? 'desmarcar todos' : 'marcar todos';
+    }
+    window.vndTodos = function (alvo) {
+      var vis = vndVisiveis(alvo);
+      var tudo = vis.length && vis.every(function (op) {
+        return op.querySelector('input').checked; });
+      vis.forEach(function (op) { op.querySelector('input').checked = !tudo; });
+      vndRotulo(alvo);
+    };
+    ['vnd-l-vend', 'vnd-l-prod', 'vnd-l-forma'].forEach(function (alvo) {
+      document.getElementById(alvo).addEventListener('change', function () {
+        vndRotulo(alvo); });
+      vndRotulo(alvo);
+    });
     /* Pular = limpa o que estiver marcado NESTE passo e segue adiante. */
     window.vndPular = function () {
       document.getElementById('vnd-et' + passo)
@@ -381,6 +427,7 @@
       document.getElementById(alvo).querySelectorAll('.opc').forEach(function (op) {
         op.hidden = q && op.textContent.toLowerCase().indexOf(q) === -1;
       });
+      vndRotulo(alvo);
     };
     window.vndPeriodo = function (chip, tipo) {
       chip.parentElement.querySelectorAll('.chip').forEach(function (c) {
