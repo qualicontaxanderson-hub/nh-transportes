@@ -229,6 +229,24 @@
     #dfec .cls-item__body > .cls-class{ grid-area:e; }
   }
 
+  /* Classificar na WEB: controles compactos, botoes JUNTO dos selects
+     (o margin-left:auto antigo jogava Memorizar/So desta vez pro fim da
+     coluna gigante) e vestidos no padrao — Memorizar azul solido. */
+  #dfec #pane-classificar .cls-btns{ margin-left:0; }
+  #dfec #pane-classificar .btn-mem{ background:var(--azul); color:#fff;
+    font-weight:800; border-radius:9px; }
+  #dfec #pane-classificar .btn-mem:hover:not(:disabled){ background:var(--azul-deep); }
+  #dfec #pane-classificar .btn-once{ background:#fff; color:var(--ink-2);
+    border:1px solid var(--line-2); font-weight:800; border-radius:9px; }
+  #dfec #pane-classificar .btn-once:hover:not(:disabled){ background:var(--surface); }
+  #dfec #pane-classificar .cls-controls .form-select{ border-radius:9px;
+    border-color:var(--line-2); padding:.38rem 1.8rem .38rem .6rem;
+    font-size:.84rem; font-weight:600; }
+  @media (min-width:992px){
+    #dfec .cls-item__body{ gap:.2rem 3rem; }
+    #dfec .cls-item__body > .cls-class{ align-self:center; }
+  }
+
   /* Gaveta de filtro em passos (mesma das outras telas). */
   #dfec .escuro{ position:fixed; inset:0; background:rgba(12,25,42,.45);
     z-index:1050; opacity:0; pointer-events:none; transition:opacity .2s; }
