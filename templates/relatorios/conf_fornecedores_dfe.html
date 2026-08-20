@@ -107,9 +107,11 @@
   #cfd .vinc .d{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;
     white-space:nowrap; color:var(--muted); }
   #cfd .vinc .v{ font-weight:700; font-variant-numeric:tabular-nums; }
-  #cfd .vinc .x{ border:0; background:none; color:#b9c2ce; cursor:pointer; padding:0 .1rem;
-    font-size:10px; }
-  #cfd .vinc .x:hover{ color:var(--danger); }
+  #cfd .vinc .x{ border:0; background:none; color:#8a95a3; cursor:pointer;
+    flex:0 0 auto; min-width:36px; min-height:32px; display:inline-grid;
+    place-items:center; font-size:13px; border-radius:8px;
+    margin:-.2rem -.35rem -.2rem 0; }
+  #cfd .vinc .x:hover, #cfd .vinc .x:active{ color:var(--danger); background:#fbe9e9; }
   #cfd .cob--fp{ background:#e6f1fb; color:var(--blue-deep); }
 
   /* Modal de vínculo */
