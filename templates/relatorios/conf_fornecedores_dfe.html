@@ -1136,22 +1136,18 @@ function cfvAvancar(btn) {
     return;
   }
   if (cfvPassoN === 1) {
-    var itens = cfvColeta();
-    if (!itens.lista.length) { alert('Marque ao menos um item.'); return; }
-    if (itens.estourou) { alert('Um dos valores passa do que aquele item aceita.'); return; }
-    if (itens.soma > cfvTeto + 0.005) {
-      alert('A soma (' + cfdMoeda(itens.soma) + ') passa do disponível (' +
-            cfdMoeda(cfvTeto) + ').');
-      return;
-    }
-    cfvResumo(itens);
+    var marcadas = cfvItens.filter(function (c) { return cfvChk[c.id]; });
+    if (!marcadas.length) { alert('Marque ao menos um item.'); return; }
+    cfvConfirma(marcadas);
     cfvIr(2);
     return;
   }
   cfvSalvar(btn);
 }
 
-/* lista de caixinhas (guarda marcados/valores pra sobreviver ao filtro) */
+/* Passo dos itens: SO marcar — toque em qualquer lugar da linha. O valor
+   fica pro Confirmar (era o campo no meio da lista que atrapalhava o
+   clique). Marcado sobrevive a busca e ao filtro de empresa. */
 function cfvMontaItens() {
   var alvo = document.getElementById('cfv-l-itens');
   var busca = document.getElementById('cfv-busca');
@@ -1167,106 +1163,113 @@ function cfvMontaItens() {
     ? 'Quais notas este pagamento cobre?'
     : 'Quais pagamentos entram nesta nota?';
   alvo.innerHTML = vis.map(function (c) {
-    var marcado = cfvChk[c.id] ? ' checked' : '';
-    var v = cfvVals[c.id] !== undefined ? cfvVals[c.id] : '';
-    return '<label class="opc" data-id="' + c.id + '" data-max="' + c.max + '"' +
-      ' style="align-items:flex-start">' +
-      '<input type="checkbox" class="cfv-chk"' + marcado + ' style="margin-top:.15rem">' +
+    return '<label class="opc" data-id="' + c.id + '" style="align-items:flex-start">' +
+      '<input type="checkbox" class="cfv-chk"' + (cfvChk[c.id] ? ' checked' : '') +
+      ' style="margin-top:.15rem">' +
       '<span style="min-width:0;flex:1">' +
       '<span style="display:block;font-weight:800;font-size:.85rem">' + c.t1 + '</span>' +
       '<span style="display:block;font-size:.72rem;color:#6b7684;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + c.t2 + '</span>' +
       '</span>' +
-      '<span style="text-align:right;flex:0 0 auto">' +
-      '<span style="display:block;font-size:.72rem;font-weight:700;color:#8a5a00">' + c.rot + '</span>' +
-      '<input type="number" step="0.01" min="0.01" class="cfv-val" value="' + v + '"' +
-      (marcado ? '' : ' hidden') +
-      ' style="width:110px;text-align:right;border:1px solid #d9e0e8;border-radius:8px;padding:.25rem .4rem;margin-top:.25rem">' +
-      '</span></label>';
+      '<span style="flex:0 0 auto;font-size:.72rem;font-weight:700;color:#8a5a00">' +
+      c.rot + '</span></label>';
   }).join('');
-  alvo.querySelectorAll('.opc').forEach(function (el) {
-    var chk = el.querySelector('.cfv-chk');
-    var val = el.querySelector('.cfv-val');
+  alvo.querySelectorAll('.cfv-chk').forEach(function (chk) {
     chk.addEventListener('change', function () {
-      cfvChk[el.dataset.id] = chk.checked;
-      val.hidden = !chk.checked;
-      if (chk.checked && !val.value) {
-        var resto = cfvTeto - cfvColeta().soma;
-        val.value = Math.max(0, Math.min(parseFloat(el.dataset.max), resto)).toFixed(2);
-        cfvVals[el.dataset.id] = val.value;
-      }
+      cfvChk[chk.closest('.opc').dataset.id] = chk.checked;
       cfvPinta();
     });
-    val.addEventListener('input', function () {
-      cfvVals[el.dataset.id] = val.value;
-      cfvPinta();
-    });
-    val.addEventListener('click', function (ev) { ev.stopPropagation(); ev.preventDefault(); });
   });
   cfvPinta();
-}
-
-function cfvBusca(inp) {
-  var q = inp.value.trim().toLowerCase();
-  document.querySelectorAll('#cfv-l-itens .opc').forEach(function (op) {
-    op.hidden = !!(q && op.textContent.toLowerCase().indexOf(q) === -1);
-  });
-  cfvPinta();
-}
-
-function cfvColeta() {
-  var lista = [], soma = 0, estourou = false;
-  cfvItens.forEach(function (c) {
-    if (!cfvChk[c.id]) return;
-    var v = parseFloat(cfvVals[c.id]) || 0;
-    if (v <= 0) return;
-    if (v > c.max + 0.005) estourou = true;
-    soma += v;
-    lista.push({ item: c, valor: v });
-  });
-  return { lista: lista, soma: soma, estourou: estourou };
 }
 
 function cfvPinta() {
-  var c = cfvColeta();
-  document.getElementById('cfv-soma').textContent = c.lista.length
-    ? 'Usando ' + cfdMoeda(c.soma) + ' de ' + cfdMoeda(cfvTeto) + ' disponíveis'
-    : 'Nada marcado ainda — o teto é ' + cfdMoeda(cfvTeto) + '.';
+  var marcadas = cfvItens.filter(function (c) { return cfvChk[c.id]; }).length;
   var vis = document.querySelectorAll('#cfv-l-itens .opc:not([hidden])').length;
   document.getElementById('cfv-cont').textContent =
-    c.lista.length + ' de ' + vis + ' marcada' + (c.lista.length === 1 ? '' : 's');
+    marcadas + ' de ' + vis + ' marcada' + (marcadas === 1 ? '' : 's');
+  document.getElementById('cfv-soma').textContent = marcadas
+    ? marcadas + ' item(ns) marcado(s) — os valores você ajusta no Confirmar.'
+    : 'Nada marcado ainda — o teto é ' + cfdMoeda(cfvTeto) + '.';
 }
 
-function cfvResumo(c) {
-  var h = c.lista.map(function (x) {
-    var fecha = Math.abs(x.valor - x.item.max) <= 0.005;
-    return '<div style="display:flex;justify-content:space-between;font-size:.84rem;' +
-      'padding:.35rem 0;border-bottom:1px dashed #e7ebf1"><span>' + x.item.t1 +
-      (fecha ? ' <b style="color:#1c6b34">(fecha)</b>' : ' <b style="color:#8a5a00">(parcial)</b>') +
-      '</span><b>' + cfdMoeda(x.valor) + '</b></div>';
+/* Confirmar: cada item marcado com o valor EDITAVEL (sugestao preenchida
+   na ordem, sem passar do teto) e o total/sobra recalculando ao vivo. */
+function cfvConfirma(marcadas) {
+  var resto = cfvTeto;
+  var h = marcadas.map(function (c) {
+    var sug = cfvVals[c.id] !== undefined && cfvVals[c.id] !== ''
+      ? parseFloat(cfvVals[c.id])
+      : Math.max(0, Math.min(c.max, resto));
+    resto -= sug;
+    return '<div style="display:flex;align-items:center;gap:.6rem;padding:.45rem 0;' +
+      'border-bottom:1px dashed #e7ebf1">' +
+      '<span style="min-width:0;flex:1">' +
+      '<span style="display:block;font-weight:800;font-size:.84rem">' + c.t1 + '</span>' +
+      '<span style="display:block;font-size:.7rem;color:#6b7684">' + c.rot + '</span></span>' +
+      '<input type="number" step="0.01" min="0" class="cfv-cval" data-id="' + c.id +
+      '" data-max="' + c.max + '" value="' + sug.toFixed(2) + '"' +
+      ' style="width:120px;text-align:right;border:1px solid #d9e0e8;border-radius:8px;' +
+      'padding:.35rem .45rem;font-weight:700"></div>';
   }).join('');
-  var sobra = cfvTeto - c.soma;
-  h += '<div style="display:flex;justify-content:space-between;font-size:.84rem;padding:.45rem 0">' +
-    '<span>Total do vínculo</span><b>' + cfdMoeda(c.soma) + '</b></div>';
-  if (sobra > 0.005) {
-    h += '<div style="background:#fdf0d6;color:#8a5a00;border-radius:8px;padding:.45rem .6rem;' +
-      'font-size:.8rem;font-weight:700">Sobram ' + cfdMoeda(sobra) +
-      (cfvModo === 'pag' ? ' no pagamento — ficam pendentes pra próxima nota.'
-                         : ' em aberto nesta nota — seguem como pendência.') + '</div>';
-  } else {
-    h += '<div style="background:#e4f4e8;color:#1c6b34;border-radius:8px;padding:.45rem .6rem;' +
-      'font-size:.8rem;font-weight:700">' +
-      (cfvModo === 'pag' ? 'O pagamento fica todo usado.' : 'A nota fecha por completo.') + '</div>';
-  }
+  h += '<div id="cfv-r-tot" style="display:flex;justify-content:space-between;' +
+    'font-size:.86rem;padding:.5rem 0;font-weight:800"></div>' +
+    '<div id="cfv-r-sobra" style="border-radius:8px;padding:.45rem .6rem;' +
+    'font-size:.8rem;font-weight:700"></div>';
   document.getElementById('cfv-resumo').innerHTML = h;
+  document.querySelectorAll('#cfv-resumo .cfv-cval').forEach(function (inp) {
+    inp.addEventListener('input', function () {
+      cfvVals[inp.dataset.id] = inp.value;
+      cfvRecalc();
+    });
+  });
+  cfvRecalc();
+}
+
+function cfvRecalc() {
+  var soma = 0, estourou = false;
+  document.querySelectorAll('#cfv-resumo .cfv-cval').forEach(function (inp) {
+    var v = parseFloat(inp.value) || 0;
+    var max = parseFloat(inp.dataset.max);
+    var ruim = v > max + 0.005;
+    inp.style.borderColor = ruim ? '#a32d2d' : '#d9e0e8';
+    if (ruim) estourou = true;
+    soma += v;
+  });
+  var tot = document.getElementById('cfv-r-tot');
+  tot.innerHTML = '<span>Total do vínculo</span><b>' + cfdMoeda(soma) + '</b>';
+  var sobra = cfvTeto - soma;
+  var el = document.getElementById('cfv-r-sobra');
+  if (estourou) {
+    el.style.background = '#fbe9e9'; el.style.color = '#a32d2d';
+    el.textContent = 'Tem valor acima do que o item aceita — corrija o campo em vermelho.';
+  } else if (soma > cfvTeto + 0.005) {
+    el.style.background = '#fbe9e9'; el.style.color = '#a32d2d';
+    el.textContent = 'A soma passa do disponível (' + cfdMoeda(cfvTeto) + ') — ajuste os valores.';
+  } else if (sobra > 0.005) {
+    el.style.background = '#fdf0d6'; el.style.color = '#8a5a00';
+    el.textContent = 'Sobram ' + cfdMoeda(sobra) +
+      (cfvModo === 'pag' ? ' no pagamento — ficam pendentes pra próxima nota.'
+                         : ' em aberto — seguem como pendência.');
+  } else {
+    el.style.background = '#e4f4e8'; el.style.color = '#1c6b34';
+    el.textContent = (cfvModo === 'pag')
+      ? 'O pagamento fica todo usado.' : 'A nota fecha por completo.';
+  }
+  var btn = document.getElementById('cfv-bt-ir');
+  btn.disabled = estourou || soma <= 0.005 || soma > cfvTeto + 0.005;
+  btn.style.opacity = btn.disabled ? '.55' : '';
 }
 
 function cfvSalvar(btn) {
-  var c = cfvColeta();
-  var itens = c.lista.map(function (x) {
-    return cfvModo === 'nota'
-      ? { doc_id: cfvAlvo, transacao_id: parseInt(x.item.id, 10), valor: x.valor }
-      : { doc_id: parseInt(x.item.id, 10), transacao_id: cfvAlvo, valor: x.valor };
+  var itens = [];
+  document.querySelectorAll('#cfv-resumo .cfv-cval').forEach(function (inp) {
+    var v = parseFloat(inp.value) || 0;
+    if (v <= 0) return;
+    itens.push(cfvModo === 'nota'
+      ? { doc_id: cfvAlvo, transacao_id: parseInt(inp.dataset.id, 10), valor: v }
+      : { doc_id: parseInt(inp.dataset.id, 10), transacao_id: cfvAlvo, valor: v });
   });
+  if (!itens.length) { alert('Nenhum valor maior que zero.'); return; }
   btn.disabled = true; btn.textContent = 'gravando…';
   fetch('{{ url_for("conf_fornecedores_dfe.vincular_lote") }}', {
     method: 'POST',
@@ -1277,8 +1280,7 @@ function cfvSalvar(btn) {
   .then(function (res) {
     btn.disabled = false; btn.textContent = 'Vincular';
     if (!res.ok || !res.j.ok) { alert((res.j && res.j.erro) || 'não consegui vincular'); return; }
-    // Recarrega mesmo: o vínculo mexe no saldo, na cobertura e na alocação
-    // automática de todas as outras notas do fornecedor.
+    // Recarrega mesmo (no mesmo lugar): o vínculo mexe no saldo e nos selos.
     cfdReload();
   })
   .catch(function (e) {
