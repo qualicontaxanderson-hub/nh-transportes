@@ -285,6 +285,50 @@ def _garante_coluna_pago_antes(conn):
     cur.close()
 
 
+def _garante_tabela_pg_pre_corte(conn):
+    """Cria dfe_pagamento_pre_corte se faltar. Tabela propria de proposito:
+    bank_transactions e do modulo do banco inteiro — esta marca ("liquidou
+    compra anterior ao corte, fora desta conta") e so desta tela."""
+    cur = conn.cursor()
+    cur.execute("""CREATE TABLE IF NOT EXISTS dfe_pagamento_pre_corte (
+                     transacao_id BIGINT NOT NULL PRIMARY KEY,
+                     criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                   )""")
+    conn.commit()
+    cur.close()
+
+
+def _pagamentos_ocultos(conn, empresa_ids, fornecedor_ids):
+    """Os pagamentos que o usuario tirou da conta, por fornecedor (rodape
+    cinza com desfazer)."""
+    where = ["bt.tipo = 'DEBIT'", "bt.fornecedor_id IS NOT NULL",
+             """EXISTS (SELECT 1 FROM dfe_pagamento_pre_corte pc
+                         WHERE pc.transacao_id = bt.id)"""]
+    params = []
+    _em("ba.cliente_id", empresa_ids, where, params)
+    _em("m.forn_id", fornecedor_ids, where, params)
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT m.forn_id AS fornecedor_id, bt.id, bt.data_transacao,
+               COALESCE(bt.valor,0) AS valor, bt.descricao
+          FROM bank_transactions bt
+          JOIN bank_accounts ba ON ba.id = bt.account_id
+          JOIN fornecedores fp  ON fp.id = bt.fornecedor_id
+          JOIN %s ON m.raiz = %s
+         WHERE %s
+         ORDER BY bt.data_transacao
+    """ % (_MAPA, _raiz_de('fp'), " AND ".join(where)), params)
+    rows = cur.fetchall()
+    cur.close()
+    saida = defaultdict(list)
+    for r in rows:
+        saida[r['fornecedor_id']].append({
+            'id': r['id'], 'valor': float(r['valor'] or 0),
+            'descricao': (r['descricao'] or '')[:60],
+            'data': _dia(r['data_transacao'])})
+    return dict(saida)
+
+
 def _notas_ocultas(conn, empresa_ids, fornecedor_ids):
     """As notas que o usuario tirou da conta, por fornecedor (pro rodape
     cinza com o desfazer — sem isso a nota sumiria sem rastro)."""
@@ -498,7 +542,9 @@ def _notas_anteriores(conn, data_ini, empresa_ids, fornecedor_ids):
 
 def _pagamentos_anteriores(conn, data_ini, empresa_ids, fornecedor_ids):
     where = ["bt.tipo = 'DEBIT'", "bt.fornecedor_id IS NOT NULL",
-             "bt.data_transacao >= %s", "bt.data_transacao < %s"]
+             "bt.data_transacao >= %s", "bt.data_transacao < %s",
+             """NOT EXISTS (SELECT 1 FROM dfe_pagamento_pre_corte pc
+                             WHERE pc.transacao_id = bt.id)"""]
     params = [DATA_CORTE_DFE, data_ini]
     _em("ba.cliente_id", empresa_ids, where, params)
     _em("m.forn_id", fornecedor_ids, where, params)
@@ -565,7 +611,9 @@ def _notas_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids):
 
 def _pagamentos_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids):
     where = ["bt.tipo = 'DEBIT'", "bt.fornecedor_id IS NOT NULL",
-             "bt.data_transacao BETWEEN %s AND %s"]
+             "bt.data_transacao BETWEEN %s AND %s",
+             """NOT EXISTS (SELECT 1 FROM dfe_pagamento_pre_corte pc
+                             WHERE pc.transacao_id = bt.id)"""]
     params = [data_ini, data_fim]
     _em("ba.cliente_id", empresa_ids, where, params)
     _em("m.forn_id", fornecedor_ids, where, params)
@@ -1064,6 +1112,7 @@ def conf_fornecedores_dfe():
         _garante_tabela_grupo(conn)
         _garante_coluna_manual(conn)
         _garante_coluna_pago_antes(conn)
+        _garante_tabela_pg_pre_corte(conn)
         empresas = _empresas(conn)
         fornecedores = _fornecedores(conn)
         duplicados = _cnpjs_duplicados(conn)
@@ -1083,6 +1132,7 @@ def conf_fornecedores_dfe():
         pagamentos = _pagamentos_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids)
         orfas = _notas_sem_fornecedor(conn, data_ini, data_fim, empresa_ids)
         ocultas = _notas_ocultas(conn, empresa_ids, fornecedor_ids)
+        pagos_ocultos = _pagamentos_ocultos(conn, empresa_ids, fornecedor_ids)
         pre_corte, pre_corte_ini = _pagamentos_antes_do_corte(
             conn, empresa_ids, fornecedor_ids)
 
@@ -1102,6 +1152,7 @@ def conf_fornecedores_dfe():
                    vinculos, usado, nomes)
     for d in dados:
         d['ocultas'] = ocultas.get(d['fornecedor_id'], [])
+        d['pagos_ocultos'] = pagos_ocultos.get(d['fornecedor_id'], [])
 
     pag_aberto = sum(max(0.0, float(p['valor'] or 0) - usado.get(p['id'], 0.0))
                      for p in pagamentos)
@@ -1534,6 +1585,47 @@ def pago_antes_corte():
 
     if not achou and marcar:
         return jsonify(ok=False, erro='nota não encontrada'), 404
+    return jsonify(ok=True)
+
+
+@bp.route('/conf_fornecedores_dfe/pagamento_pre_corte', methods=['POST'])
+@login_required
+@admin_required
+def pagamento_pre_corte():
+    """Marca (ou desmarca) o pagamento como liquidacao de compra ANTERIOR
+    ao corte — sai da conta inteira (lista, Pago, saldo).
+
+    Caso Biegai: boletos pagos em 13 e 14/07 eram de compras de antes de
+    07/07; a captura nunca vai ter essas notas. Pagamento com vinculo nao
+    pode ser marcado: primeiro desfaz, senao a nota ficaria usando
+    dinheiro invisivel."""
+    dados = request.get_json(silent=True) or {}
+    try:
+        tx_id = int(dados.get('tx_id'))
+    except (TypeError, ValueError):
+        return jsonify(ok=False, erro='pagamento inválido'), 400
+    marcar = 1 if dados.get('marcar') else 0
+
+    conn = get_db_connection()
+    try:
+        _garante_tabela_pg_pre_corte(conn)
+        cur = conn.cursor()
+        if marcar:
+            cur.execute("""SELECT COALESCE(SUM(valor),0) FROM dfe_pagamento_nota
+                            WHERE transacao_id = %s""", (tx_id,))
+            if float(cur.fetchone()[0] or 0) > 0.005:
+                cur.close()
+                return jsonify(ok=False, erro='este pagamento tem vínculo com nota — '
+                                              'desfaça o vínculo antes de ocultar'), 400
+            cur.execute("""INSERT IGNORE INTO dfe_pagamento_pre_corte (transacao_id)
+                            VALUES (%s)""", (tx_id,))
+        else:
+            cur.execute("DELETE FROM dfe_pagamento_pre_corte WHERE transacao_id = %s",
+                        (tx_id,))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
     return jsonify(ok=True)
 
 

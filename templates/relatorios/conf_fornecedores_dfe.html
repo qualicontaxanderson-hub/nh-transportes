@@ -644,6 +644,20 @@
         </div>
         {% endif %}
 
+        {% if d.pagos_ocultos %}
+        <div class="ocultas">
+          {% for o in d.pagos_ocultos %}
+          <div class="ocultas__l"><i class="bi bi-eye-slash"></i>
+            <span class="d">Pagamento {{ o.data.strftime('%d/%m/%Y') if o.data else '—' }}
+              · {{ o.descricao or '—' }} — fora da conta: compra anterior ao corte</span>
+            <span class="v">{{ o.valor | formatar_moeda }}</span>
+            <button type="button" class="x" onclick="cfdPgAntes({{ o.id }}, 0)"
+                    title="trazer o pagamento de volta pra conta">desfazer</button>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
         {% if d.ocultas %}
         <div class="ocultas">
           {% for o in d.ocultas %}
@@ -727,6 +741,12 @@
           {% endif %}
           {% if l.tipo == 'pagamento' and livre_pg > 0.005 %}
           <div class="lin__acoes">
+            {% if (l.usado or 0) <= 0.005 %}
+            <button type="button" class="oc-btn" onclick="cfdPgAntes({{ l.id }}, 1)"
+                    title="liquidação de compra feita antes de {{ corte_br }}? tira o pagamento da conta (dá pra desfazer)">
+              <i class="bi bi-eye-slash"></i> compra anterior ao corte
+            </button>
+            {% endif %}
             <button type="button" class="vinc-btn" onclick="cfuAbrir({{ l.id }})"
                     title="amarrar este pagamento a uma ou mais notas — o que sobrar fica pendente">
               <i class="bi bi-link-45deg"></i> usar em notas
@@ -1370,6 +1390,23 @@ function cfdPagaAntes(docId, marcar) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ doc_id: docId, marcar: marcar })
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  .then(function (res) {
+    if (!res.ok || !res.j.ok) { alert((res.j && res.j.erro) || 'não consegui marcar'); return; }
+    cfdReload();
+  })
+  .catch(function (e) { alert('Erro de rede: ' + e); });
+}
+
+function cfdPgAntes(txId, marcar) {
+  if (!confirm(marcar
+      ? 'Tirar este pagamento da conta? Ele fica registrado como compra anterior ao corte — dá pra desfazer.'
+      : 'Trazer o pagamento de volta pra conta?')) return;
+  fetch('{{ url_for("conf_fornecedores_dfe.pagamento_pre_corte") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tx_id: txId, marcar: marcar })
   })
   .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
   .then(function (res) {
