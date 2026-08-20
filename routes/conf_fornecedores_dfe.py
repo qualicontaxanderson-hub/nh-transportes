@@ -261,21 +261,27 @@ def _garante_coluna_manual(conn):
 
 
 def _garante_coluna_pago_antes(conn):
-    """Cria dfe_documentos.pago_antes_corte se faltar. So adiciona; default 0.
+    """Cria as colunas do "antes do corte" se faltarem. So adiciona.
 
-    1 = o usuario disse "esta nota foi paga por deposito ANTERIOR ao corte":
-    ela sai da conta (lista, saldo, contadores) mas fica registrada e da pra
-    desfazer — nao e apagar, e tirar do jogo.
+    pago_antes_corte = 1: a nota INTEIRA foi paga antes do corte — sai da
+    conta (lista, saldo, contadores) mas fica registrada e da pra desfazer.
+
+    quitado_pre_corte = R$: so uma PARTE (parcelas pagas antes do corte).
+    A nota fica na tela — ela ancora os pagamentos de dentro do periodo —
+    mas esse valor conta como ja resolvido: abate falta, saldo e comprado.
     """
     cur = conn.cursor()
-    cur.execute("""SELECT COUNT(*) FROM information_schema.columns
-                    WHERE table_schema = DATABASE()
-                      AND table_name = 'dfe_documentos'
-                      AND column_name = 'pago_antes_corte'""")
-    if not cur.fetchone()[0]:
-        cur.execute("ALTER TABLE dfe_documentos "
-                    "ADD COLUMN pago_antes_corte TINYINT(1) NOT NULL DEFAULT 0")
-        conn.commit()
+    for coluna, ddl in (
+            ('pago_antes_corte', "TINYINT(1) NOT NULL DEFAULT 0"),
+            ('quitado_pre_corte', "DECIMAL(12,2) NOT NULL DEFAULT 0")):
+        cur.execute("""SELECT COUNT(*) FROM information_schema.columns
+                        WHERE table_schema = DATABASE()
+                          AND table_name = 'dfe_documentos'
+                          AND column_name = %s""", (coluna,))
+        if not cur.fetchone()[0]:
+            cur.execute("ALTER TABLE dfe_documentos ADD COLUMN %s %s"
+                        % (coluna, ddl))
+            conn.commit()
     cur.close()
 
 
@@ -532,6 +538,7 @@ def _notas_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids):
                d.id                                       AS doc_id,
                d.chave, d.numero, d.serie, d.dh_emissao,
                COALESCE(d.valor_total,0)                  AS valor,
+               COALESCE(d.quitado_pre_corte,0)            AS quitado_pre,
                d.resumo, d.conferido, d.entrada_manual,
                COALESCE(emp.nome_fantasia, emp.razao_social) AS empresa_nome,
                -- Vencimento: informação, não regra. Só 1 em cada 5 notas traz
@@ -886,8 +893,10 @@ def _aloca_fifo(linhas, saldo_anterior):
                 caixa -= usa
             abertas = [n for n in abertas if n['falta'] > 0.005]
         else:
-            # A nota já entra abatida do que foi vinculado à mão.
-            l['falta'] = max(l['valor'] - l.get('vinc_total', 0.0), 0.0)
+            # A nota já entra abatida do que foi vinculado à mão e do
+            # que foi quitado antes do corte.
+            l['falta'] = max(l['valor'] - l.get('vinc_total', 0.0)
+                             - l.get('quitado_pre', 0.0), 0.0)
             usa = min(caixa, l['falta'])
             l['falta'] -= usa
             caixa -= usa
@@ -936,6 +945,7 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None,
             'vinc_total': sum(v['valor'] for v in vinculos.get(n['doc_id'], [])),
             'vencimento': n.get('vencimento'),
             'n_parcelas': int(n.get('n_parcelas') or 0),
+            'quitado_pre': float(n.get('quitado_pre') or 0),
         })
 
     for p in pagamentos:
@@ -975,8 +985,11 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None,
                 saldo += ev['valor']
                 pago += ev['valor']
             else:
-                saldo -= ev['valor']
-                comprado += ev['valor']
+                # O que foi quitado antes do corte nao corre NESTA conta —
+                # abate aqui, senao viraria divida falsa pra sempre.
+                efetivo = ev['valor'] - ev.get('quitado_pre', 0.0)
+                saldo -= efetivo
+                comprado += efetivo
             linhas.append(dict(ev, saldo=saldo))
 
         if not linhas and abs(saldo_anterior) < 0.005:
@@ -1011,7 +1024,7 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None,
             'notas_ok': sum(
                 1 for l in notas_lin
                 if sum(v['valor'] for v in (l.get('vinculos') or []))
-                   >= l['valor'] - 0.005),
+                   + l.get('quitado_pre', 0.0) >= l['valor'] - 0.005),
             'sobra': sobra,
             'descoberto': descoberto,
             'notas_abertas': sum(1 for l in notas_lin if not l['coberta']),
@@ -1138,6 +1151,7 @@ def candidatos(doc_id):
         cur.execute("""
             SELECT d.id, d.numero, d.serie, d.dh_emissao, d.emit_cnpj,
                    COALESCE(d.valor_total,0) AS valor,
+                   COALESCE(d.quitado_pre_corte,0) AS quitado_pre,
                    COALESCE((SELECT SUM(v.valor) FROM dfe_pagamento_nota v
                               WHERE v.documento_id = d.id), 0) AS vinculado
               FROM dfe_documentos d WHERE d.id = %s
@@ -1184,7 +1198,8 @@ def candidatos(doc_id):
             'livre': livre,
         })
 
-    falta = float(nota['valor'] or 0) - float(nota['vinculado'] or 0)
+    falta = (float(nota['valor'] or 0) - float(nota['vinculado'] or 0)
+             - float(nota['quitado_pre'] or 0))
     return jsonify(
         ok=True,
         falta=round(max(falta, 0.0), 2),
@@ -1234,6 +1249,7 @@ def notas_candidatas(tx_id):
                    COALESCE(NULLIF(emp.nome_fantasia, ''), emp.razao_social)
                        AS empresa_nome,
                    COALESCE(d.valor_total,0) AS valor,
+                   COALESCE(d.quitado_pre_corte,0) AS quitado_pre,
                    COALESCE((SELECT SUM(v.valor) FROM dfe_pagamento_nota v
                               WHERE v.documento_id = d.id), 0) AS vinculado
               FROM dfe_documentos d
@@ -1253,7 +1269,8 @@ def notas_candidatas(tx_id):
     livre = float(pg['valor'] or 0) - float(pg['usado'] or 0)
     notas = []
     for n in docs:
-        falta = float(n['valor'] or 0) - float(n['vinculado'] or 0)
+        falta = (float(n['valor'] or 0) - float(n['vinculado'] or 0)
+                 - float(n['quitado_pre'] or 0))
         if falta <= 0.005:
             continue
         notas.append({
@@ -1303,7 +1320,9 @@ def vincular_lote():
         cur = conn.cursor(dictionary=True)
         for it in itens:
             cur.execute("""
-                SELECT COALESCE(d.valor_total,0) AS valor, d.emit_cnpj, d.numero,
+                SELECT COALESCE(d.valor_total,0) AS valor,
+                       COALESCE(d.quitado_pre_corte,0) AS quitado_pre,
+                       d.emit_cnpj, d.numero,
                        COALESCE((SELECT SUM(v.valor) FROM dfe_pagamento_nota v
                                   WHERE v.documento_id = d.id
                                     AND v.transacao_id <> %s), 0) AS outros
@@ -1334,6 +1353,7 @@ def vincular_lote():
                 return jsonify(ok=False,
                                erro='pagamento conciliado noutro fornecedor'), 400
             falta = (float(nota['valor']) - float(nota['outros'])
+                     - float(nota['quitado_pre'] or 0)
                      - extra_doc[it['doc_id']])
             livre = (float(pg['valor']) - float(pg['outros'])
                      - extra_tx[it['transacao_id']])
@@ -1390,7 +1410,9 @@ def vincular():
         cur = conn.cursor(dictionary=True)
 
         cur.execute("""
-            SELECT COALESCE(d.valor_total,0) AS valor, d.emit_cnpj,
+            SELECT COALESCE(d.valor_total,0) AS valor,
+                   COALESCE(d.quitado_pre_corte,0) AS quitado_pre,
+                   d.emit_cnpj,
                    COALESCE((SELECT SUM(v.valor) FROM dfe_pagamento_nota v
                               WHERE v.documento_id = d.id AND v.transacao_id <> %s), 0) AS outros
               FROM dfe_documentos d WHERE d.id = %s
@@ -1424,7 +1446,8 @@ def vincular():
             return jsonify(ok=False,
                            erro='esse pagamento está conciliado noutro fornecedor'), 400
 
-        falta = float(nota['valor']) - float(nota['outros'])
+        falta = (float(nota['valor']) - float(nota['outros'])
+                 - float(nota['quitado_pre'] or 0))
         livre = float(pg['valor']) - float(pg['outros'])
         if valor > falta + 0.005:
             cur.close()
@@ -1511,6 +1534,54 @@ def pago_antes_corte():
 
     if not achou and marcar:
         return jsonify(ok=False, erro='nota não encontrada'), 404
+    return jsonify(ok=True)
+
+
+@bp.route('/conf_fornecedores_dfe/quitar_pre_corte', methods=['POST'])
+@login_required
+@admin_required
+def quitar_pre_corte():
+    """Da o RESTO da nota como quitado antes do corte (ou desfaz).
+
+    Caso Supremo: nota de 29/04 em 5 parcelas — 3 pagas antes de 07/07
+    (fora da captura), 2 pagas dentro e ja vinculadas. O resto nao vai
+    aparecer nunca; quitar fecha a nota sem inventar pagamento.
+    O valor gravado e a falta DAQUELE momento (valor - vinculado); se um
+    vinculo for desfeito depois, a diferenca reaparece como falta."""
+    dados = request.get_json(silent=True) or {}
+    try:
+        doc_id = int(dados.get('doc_id'))
+    except (TypeError, ValueError):
+        return jsonify(ok=False, erro='nota inválida'), 400
+    marcar = 1 if dados.get('marcar') else 0
+
+    conn = get_db_connection()
+    try:
+        _garante_coluna_pago_antes(conn)
+        cur = conn.cursor(dictionary=True)
+        if marcar:
+            cur.execute("""
+                SELECT COALESCE(d.valor_total,0) AS valor,
+                       COALESCE((SELECT SUM(v.valor) FROM dfe_pagamento_nota v
+                                  WHERE v.documento_id = d.id), 0) AS vinculado
+                  FROM dfe_documentos d WHERE d.id = %s""", (doc_id,))
+            nota = cur.fetchone()
+            if not nota:
+                cur.close()
+                return jsonify(ok=False, erro='nota não encontrada'), 404
+            falta = float(nota['valor'] or 0) - float(nota['vinculado'] or 0)
+            if falta <= 0.005:
+                cur.close()
+                return jsonify(ok=False, erro='a nota não tem falta nenhuma'), 400
+            cur.execute("""UPDATE dfe_documentos SET quitado_pre_corte = %s
+                            WHERE id = %s""", (round(falta, 2), doc_id))
+        else:
+            cur.execute("""UPDATE dfe_documentos SET quitado_pre_corte = 0
+                            WHERE id = %s""", (doc_id,))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
     return jsonify(ok=True)
 
 

@@ -126,6 +126,8 @@
     place-items:center; font-size:13px; border-radius:8px;
     margin:-.2rem -.35rem -.2rem 0; }
   #cfd .vinc .x:hover, #cfd .vinc .x:active{ color:var(--danger); background:#fbe9e9; }
+  #cfd .vinc--quit{ background:#f4f6f9; }
+  #cfd .vinc--quit .d, #cfd .vinc--quit .v{ color:#6b7684; }
   #cfd .cob--fp{ background:#e6f1fb; color:var(--blue-deep); }
 
   /* Modal de vínculo */
@@ -671,8 +673,10 @@
         {% for l in d.linhas %}
         {% set livre_pg = (l.valor - (l.usado or 0)) if l.tipo == 'pagamento' else 0 %}
         {% set vman = (l.vinculos | sum(attribute='valor')) if l.tipo == 'nota' else 0 %}
+        {% set vquit = (l.quitado_pre or 0) if l.tipo == 'nota' else 0 %}
+        {% set vtot = vman + vquit %}
         <div class="lin lin--{{ 'pg' if l.tipo == 'pagamento' else 'nf' }}"
-             data-conc="{{ '1' if (l.tipo == 'nota' and vman >= l.valor - 0.005)
+             data-conc="{{ '1' if (l.tipo == 'nota' and vtot >= l.valor - 0.005)
                                 or (l.tipo == 'pagamento' and livre_pg <= 0.005)
                            else '0' }}"
              {% if l.tipo == 'nota' %}id="doc-{{ l.id }}"{% endif %}>
@@ -693,8 +697,8 @@
           <div class="lin__v">{{ '+' if l.tipo == 'pagamento' else '−' }}{{ l.valor | formatar_moeda }}</div>
           <div class="lin__s">
             {%- if l.tipo == 'nota' -%}
-              {%- if vman >= l.valor - 0.005 -%}<span class="cob cob--ok">conferida</span>
-              {%- elif vman > 0.005 -%}<span class="cob cob--pa">faltam {{ (l.valor - vman) | formatar_moeda }}</span>
+              {%- if vtot >= l.valor - 0.005 -%}<span class="cob cob--ok">conferida</span>
+              {%- elif vtot > 0.005 -%}<span class="cob cob--pa">faltam {{ (l.valor - vtot) | formatar_moeda }}</span>
               {%- else -%}<span class="cob cob--no">em aberto</span>{%- endif -%}
             {%- else -%}
               saldo {{ l.saldo | formatar_moeda }}
@@ -706,11 +710,18 @@
           </div>
           {# O vinculo parte SEMPRE do pagamento ("usar em notas") — a nota
              so mostra o estado e os vinculos recebidos. #}
-          {% if l.tipo == 'nota' and vman <= 0.005 %}
+          {% if l.tipo == 'nota' and vtot <= 0.005 %}
           <div class="lin__acoes">
             <button type="button" class="oc-btn" onclick="cfdPagaAntes({{ l.id }}, 1)"
                     title="paga por depósito anterior a {{ corte_br }}? tira a nota da conta (dá pra desfazer)">
               <i class="bi bi-eye-slash"></i> paga antes do corte
+            </button>
+          </div>
+          {% elif l.tipo == 'nota' and vtot < l.valor - 0.005 %}
+          <div class="lin__acoes">
+            <button type="button" class="oc-btn" onclick="cfdQuitaAntes({{ l.id }}, 1)"
+                    title="o que falta são parcelas pagas antes de {{ corte_br }}? dá o resto como quitado (dá pra desfazer)">
+              <i class="bi bi-check2-circle"></i> resto pago antes do corte
             </button>
           </div>
           {% endif %}
@@ -742,6 +753,15 @@
                   title="desfazer este vínculo"><i class="bi bi-x-lg"></i></button>
         </div>
         {% endfor %}
+        {% if l.tipo == 'nota' and vquit > 0.005 %}
+        <div class="vinc vinc--quit">
+          <i class="bi bi-check2-circle"></i>
+          <span class="d">quitado antes do corte (parcelas anteriores a {{ corte_br }})</span>
+          <span class="v">{{ vquit | formatar_moeda }}</span>
+          <button type="button" class="x" onclick="cfdQuitaAntes({{ l.id }}, 0)"
+                  title="desfazer — o valor volta como falta da nota"><i class="bi bi-x-lg"></i></button>
+        </div>
+        {% endif %}
         {% endfor %}
 
 
@@ -1354,6 +1374,23 @@ function cfdPagaAntes(docId, marcar) {
   .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
   .then(function (res) {
     if (!res.ok || !res.j.ok) { alert((res.j && res.j.erro) || 'não consegui marcar'); return; }
+    cfdReload();
+  })
+  .catch(function (e) { alert('Erro de rede: ' + e); });
+}
+
+function cfdQuitaAntes(docId, marcar) {
+  if (!confirm(marcar
+      ? 'Dar o resto desta nota como quitado antes do corte? A falta zera — dá pra desfazer.'
+      : 'Desfazer? O valor volta como falta da nota.')) return;
+  fetch('{{ url_for("conf_fornecedores_dfe.quitar_pre_corte") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ doc_id: docId, marcar: marcar })
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  .then(function (res) {
+    if (!res.ok || !res.j.ok) { alert((res.j && res.j.erro) || 'não consegui quitar'); return; }
     cfdReload();
   })
   .catch(function (e) { alert('Erro de rede: ' + e); });
