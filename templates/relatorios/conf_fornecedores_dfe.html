@@ -244,27 +244,40 @@
 {% block content %}
 <div id="cfd">
 
-  <nav aria-label="breadcrumb" class="mb-2">
-    <ol class="breadcrumb small mb-0">
-      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
-      <li class="breadcrumb-item">Relatórios</li>
-      <li class="breadcrumb-item active">Fornecedores × Compras DFe</li>
-    </ol>
-  </nav>
-
-  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-    <div class="hero-icon"><i class="bi bi-file-earmark-check"></i></div>
-    <div class="flex-grow-1" style="min-width:0">
-      <h4 class="mb-0 fw-bold">Fornecedores × Compras DFe</h4>
-      <p class="mb-0 opacity-75 small">A dívida sai da nota que a SEFAZ entregou; o pagamento, do OFX que você concilia</p>
+  {% with esc = '#cfd' %}{% include 'includes/abas_banco_css.html' %}{% endwith %}
+  {% with esc = '#cfd' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
+  <div id="cfd-topo">
+    <div class="topo__l1">
+      <h3>Fornecedores × Compras</h3>
+      <button type="button" class="acao" onclick="cfdAbrirImportar()">
+        <i class="bi bi-filetype-xml"></i> Incluir nota</button>
+      <button type="button" class="acao" onclick="cfgAbrir()">
+        <i class="bi bi-sliders"></i> Filtro
+        {% set n_f = (cliente_ids | length and 1 or 0) + (fornecedor_ids | length and 1 or 0) %}
+        {% if n_f %}<span style="background:#fff;color:#0C4C86;border-radius:99px;min-width:17px;height:17px;display:inline-grid;place-items:center;font-size:.66rem;">{{ n_f }}</span>{% endif %}
+      </button>
     </div>
-    {# Nota anterior ao corte que a SEFAZ nunca entregou, mas cujo pagamento
-       está aqui dentro: sem ela o fornecedor fica adiantado para sempre. #}
-    <button type="button" class="btn btn-light btn-sm fw-semibold"
-            onclick="cfdAbrirImportar()">
-      <i class="bi bi-filetype-xml"></i> Incluir nota
-    </button>
+    <div class="abas">
+      {% with ativa = 'fornecedores' %}{% include 'includes/abas_migracoes.html' %}{% endwith %}
+    </div>
   </div>
+
+  {% if cliente_ids or fornecedor_ids %}
+  <div class="g-eco"><i class="bi bi-funnel-fill"></i>
+    Filtro ativo <a href="{{ url_for('conf_fornecedores_dfe.conf_fornecedores_dfe') }}">Limpar</a></div>
+  {% endif %}
+
+<style>
+  /* saldo negativo nos numeros + grade de 2 cards na web */
+  #cfd .n--verm{ background:linear-gradient(135deg,#C2504A,#A32D2D); }
+  #cfd .g-nums{ grid-template-columns:1fr 1fr; }
+  @media (min-width:768px){ #cfd .g-nums{ grid-template-columns:repeat(5,1fr); } }
+  @media (min-width:992px){
+    #cfd .cfd-grade{ display:grid; grid-template-columns:1fr 1fr; gap:.6rem;
+      align-items:start; }
+    #cfd .cfd-grade .forn{ margin-bottom:0; }
+  }
+</style>
 
   {# ---------- Corte: a explicacao saiu; o alarme fica ---------- #}
   {% set corte_br = corte[8:10] ~ '/' ~ corte[5:7] ~ '/' ~ corte[0:4] %}
@@ -314,68 +327,152 @@
   </div>
   {% endif %}
 
-  {# ---------- Filtros ---------- #}
-  <div class="card shadow-sm mb-3">
-    <div class="card-body py-2 px-3">
-      <form method="get" id="form-filtros">
-        <div class="row g-2 align-items-end">
-          <div class="col-6 col-md-2">
-            <label class="form-label small fw-semibold mb-1">Data início</label>
-            <input type="date" name="data_inicio" value="{{ data_inicio }}" class="form-control form-control-sm">
-          </div>
-          <div class="col-6 col-md-2">
-            <label class="form-label small fw-semibold mb-1">Data fim</label>
-            <input type="date" name="data_fim" value="{{ data_fim }}" class="form-control form-control-sm">
-          </div>
-          <div class="col-12 col-md-3">
-            <label class="form-label small fw-semibold mb-1">Empresa</label>
-            <select name="cliente_ids[]" class="form-select form-select-sm" multiple size="3">
-              {% for e in empresas %}
-              <option value="{{ e.id }}" {% if e.id|string in cliente_ids %}selected{% endif %}>{{ e.nome }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-12 col-md-3">
-            <label class="form-label small fw-semibold mb-1">Fornecedor</label>
-            <select name="fornecedor_ids[]" class="form-select form-select-sm" multiple size="3">
-              {% for f in fornecedores %}
-              <option value="{{ f.id }}" {% if f.id|string in fornecedor_ids %}selected{% endif %}>{{ f.razao_social }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-12 col-md-2 d-flex gap-2">
-            <button type="submit" class="btn btn-primary btn-sm flex-fill">
-              <i class="bi bi-search"></i> Filtrar
-            </button>
-            <a href="{{ url_for('conf_fornecedores_dfe.conf_fornecedores_dfe') }}"
-               class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-circle"></i></a>
-          </div>
-        </div>
-        <div class="mt-2 d-flex gap-1 flex-wrap">
-          <span class="text-muted small me-1 align-self-center">Período:</span>
-          <button type="button" class="btn btn-outline-primary btn-sm periodo-btn" data-p="corte"
-                  data-corte="{{ corte }}">Tudo desde {{ corte_br }}</button>
-          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-p="mes">Mês atual</button>
-          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-p="ant">Mês anterior</button>
-        </div>
-      </form>
+  {# ---------- Filtro em passos (gaveta) ---------- #}
+  <div class="escuro" id="cfg-escuro" onclick="cfgFechar()"></div>
+  <div class="gav" id="cfg-gav" role="dialog" aria-label="Filtro">
+    <div class="gav__pega"></div>
+    <div class="passos">
+      <button type="button" class="passo on aqui" onclick="cfgIr(0)"><i></i><span>1 · Empresa</span></button>
+      <button type="button" class="passo" onclick="cfgIr(1)"><i></i><span>2 · Fornecedor</span></button>
+      <button type="button" class="passo" onclick="cfgIr(2)"><i></i><span>3 · Período</span></button>
     </div>
+    <form method="get" id="cfg-form" style="display:contents">
+      <div class="etapa" id="cfg-et0">
+        <div class="pnome"><b>Empresa</b>quem comprou — ou pule o passo</div>
+        <div class="gav__b"><div class="opcs">
+          {% for e in empresas %}
+          <label class="opc"><input type="checkbox" name="cliente_ids[]" value="{{ e.id }}"{% if e.id|string in cliente_ids %} checked{% endif %}>
+            <span>{{ e.nome }}</span></label>
+          {% endfor %}
+        </div></div>
+      </div>
+      <div class="etapa" id="cfg-et1" hidden>
+        <div class="pnome"><b>Fornecedor</b>marque um ou mais — ou pule</div>
+        <div class="gav__b">
+          <div class="gr__c"><span class="gr__t">Fornecedores</span>
+            <button type="button" class="gr__a" onclick="cfgTodos()">marcar todos</button></div>
+          <input class="campo" type="search" placeholder="Buscar fornecedor…"
+                 oninput="cfgBusca(this)">
+          <div class="opcs" id="cfg-l-forn">
+            {% for f in fornecedores %}
+            <label class="opc"><input type="checkbox" name="fornecedor_ids[]" value="{{ f.id }}"{% if f.id|string in fornecedor_ids %} checked{% endif %}>
+              <span>{{ f.razao_social }}</span></label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="etapa" id="cfg-et2" hidden>
+        <div class="pnome"><b>Período</b>desde o corte de {{ corte_br }} o saldo é acumulado</div>
+        <div class="gav__b">
+          <div class="chips">
+            <button type="button" class="chip" onclick="cfgPeriodo(this, 'corte')">Tudo desde {{ corte_br }}</button>
+            <button type="button" class="chip" onclick="cfgPeriodo(this, 'mes')">Mês atual</button>
+            <button type="button" class="chip" onclick="cfgPeriodo(this, 'ant')">Mês anterior</button>
+          </div>
+          <span class="gr__t" style="display:block;margin-bottom:.3rem">Ou escolha as datas</span>
+          <div class="par">
+            <input class="campo" type="date" name="data_inicio" id="cfg-d1" value="{{ data_inicio }}">
+            <input class="campo" type="date" name="data_fim" id="cfg-d2" value="{{ data_fim }}">
+          </div>
+        </div>
+      </div>
+      <div class="gav__f">
+        <button type="button" class="bt-g bt-g--ca" id="cfg-bt-voltar" hidden
+                onclick="cfgIr(Math.max(0, cfgPasso() - 1))">‹ Voltar</button>
+        <button type="button" class="bt-g bt-g--ca" id="cfg-bt-pular" onclick="cfgPular()">Pular</button>
+        <button type="button" class="bt-g bt-g--ok" id="cfg-bt-ir" onclick="cfgAvancar()">Avançar</button>
+      </div>
+    </form>
   </div>
 
+  <script>
+  (function () {
+    var passo = 0, N = 3;
+    var gav = document.getElementById('cfg-gav');
+    var escuro = document.getElementById('cfg-escuro');
+    window.cfgPasso = function () { return passo; };
+    window.cfgAbrir = function () {
+      gav.classList.add('on'); escuro.classList.add('on');
+    };
+    window.cfgFechar = function () {
+      gav.classList.remove('on'); escuro.classList.remove('on');
+    };
+    window.cfgIr = function (n) {
+      passo = n;
+      var ps = gav.querySelectorAll('.passo');
+      for (var i = 0; i < N; i++) {
+        document.getElementById('cfg-et' + i).hidden = (i !== n);
+        ps[i].classList.toggle('aqui', i === n);
+        ps[i].classList.toggle('on', i <= n);
+      }
+      var fim = (n === N - 1);
+      document.getElementById('cfg-bt-voltar').hidden = (n === 0);
+      document.getElementById('cfg-bt-pular').hidden = fim;
+      document.getElementById('cfg-bt-ir').textContent = fim ? 'Filtrar' : 'Avançar';
+    };
+    window.cfgPular = function () {
+      document.getElementById('cfg-et' + passo)
+        .querySelectorAll('input[type=checkbox]').forEach(function (c) { c.checked = false; });
+      cfgIr(passo + 1);
+    };
+    window.cfgAvancar = function () {
+      if (passo < N - 1) { cfgIr(passo + 1); return; }
+      document.getElementById('cfg-form').submit();
+    };
+    window.cfgTodos = function () {
+      var vis = Array.prototype.filter.call(
+        document.querySelectorAll('#cfg-l-forn .opc'),
+        function (op) { return !op.hidden; });
+      var tudo = vis.length && vis.every(function (op) {
+        return op.querySelector('input').checked; });
+      vis.forEach(function (op) { op.querySelector('input').checked = !tudo; });
+    };
+    window.cfgBusca = function (inp) {
+      var q = inp.value.trim().toLowerCase();
+      document.querySelectorAll('#cfg-l-forn .opc').forEach(function (op) {
+        op.hidden = q && op.textContent.toLowerCase().indexOf(q) === -1;
+      });
+    };
+    /* Mesmos atalhos dos botoes antigos de periodo, agora em chips. */
+    window.cfgPeriodo = function (chip, tipo) {
+      chip.parentElement.querySelectorAll('.chip').forEach(function (c) {
+        c.classList.toggle('on', c === chip);
+      });
+      function iso(d) {
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+               + '-' + String(d.getDate()).padStart(2, '0');
+      }
+      var h = new Date(), d1, d2;
+      if (tipo === 'corte') {
+        document.getElementById('cfg-d1').value = '{{ corte }}';
+        document.getElementById('cfg-d2').value = iso(h);
+        return;
+      }
+      if (tipo === 'mes') {
+        d1 = new Date(h.getFullYear(), h.getMonth(), 1); d2 = h;
+      } else {
+        d1 = new Date(h.getFullYear(), h.getMonth() - 1, 1);
+        d2 = new Date(h.getFullYear(), h.getMonth(), 0);
+      }
+      document.getElementById('cfg-d1').value = iso(d1);
+      document.getElementById('cfg-d2').value = iso(d2);
+    };
+  })();
+  </script>
+
   {# ---------- Totalizadores ---------- #}
-  <div class="stats">
-    <div class="stat"><div class="rot">Comprado (notas)</div>
-      <div class="val blue">{{ totais.comprado | formatar_moeda }}</div></div>
-    <div class="stat"><div class="rot">Pago (OFX)</div>
-      <div class="val green">{{ totais.pago | formatar_moeda }}</div></div>
-    <div class="stat"><div class="rot">Saldo acumulado</div>
-      <div class="val {{ 'green' if totais.saldo >= 0 else 'red' }}">{{ totais.saldo | formatar_moeda }}</div></div>
-    <div class="stat"><div class="rot">Nota sem fornecedor</div>
-      <div class="val {{ 'amber' if totais.orfas else '' }}">{{ totais.orfas | formatar_moeda }}</div></div>
-    <div class="stat"><div class="rot">Compras conferidas</div>
-      <div class="val {{ 'green' if totais.notas and totais.notas_ok == totais.notas else 'amber' }}"
-           id="conf-geral" data-tot="{{ totais.notas }}">
-        {{ totais.notas_ok }}/{{ totais.notas }}</div></div>
+  <div class="g-nums">
+    <div class="n n--azul"><div class="r">Comprado (notas)</div>
+      <div class="v">{{ totais.comprado | formatar_moeda }}</div></div>
+    <div class="n n--verde"><div class="r">Pago (OFX)</div>
+      <div class="v">{{ totais.pago | formatar_moeda }}</div></div>
+    <div class="n {{ 'n--verde' if totais.saldo >= 0 else 'n--verm' }}"><div class="r">Saldo acumulado</div>
+      <div class="v">{{ totais.saldo | formatar_moeda }}</div></div>
+    <div class="n {{ 'n--ambar' if totais.orfas else 'n--cinza' }}"><div class="r">Nota sem fornecedor</div>
+      <div class="v">{{ totais.orfas | formatar_moeda }}</div></div>
+    <div class="n {{ 'n--verde' if totais.notas and totais.notas_ok == totais.notas else 'n--ambar' }}">
+      <div class="r">Compras conferidas</div>
+      <div class="v" id="conf-geral" data-tot="{{ totais.notas }}">{{ totais.notas_ok }}/{{ totais.notas }}</div></div>
   </div>
 
   <p class="small text-muted">
@@ -416,6 +513,7 @@
     <div class="vazio"><i class="bi bi-inbox"></i>
       Nenhum movimento no período — nem nota da SEFAZ, nem pagamento conciliado.</div>
   {% else %}
+    <div class="cfd-grade">
     {% for d in dados %}
     {% set cred = d.saldo_final > 0.005 %}
     {% set deve = d.saldo_final < -0.005 %}
@@ -502,6 +600,7 @@
             <span class="v">{{ p.valor | formatar_moeda }}</span>
           </div>
           {% endfor %}
+    </div>{# /.cfd-grade #}
         </div>
         {% endif %}
 
@@ -968,33 +1067,6 @@ function cfdConferir(btn, docId) {
 }
 
 // Períodos rápidos: preenche as datas e envia.
-document.querySelectorAll('#cfd .periodo-btn').forEach(function (b) {
-  b.addEventListener('click', function () {
-    var hoje = new Date(), ini, fim;
-    var iso = function (d) {
-      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
-             '-' + String(d.getDate()).padStart(2, '0');
-    };
-    var f = document.getElementById('form-filtros');
-
-    if (b.dataset.p === 'corte') {
-      // Nada de calcular: o corte é do servidor, quem manda é ele.
-      f.querySelector('[name=data_inicio]').value = b.dataset.corte;
-      f.querySelector('[name=data_fim]').value = iso(hoje);
-      f.submit();
-      return;
-    }
-    if (b.dataset.p === 'mes') {
-      ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-      fim = hoje;
-    } else {
-      ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
-      fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
-    }
-    f.querySelector('[name=data_inicio]').value = iso(ini);
-    f.querySelector('[name=data_fim]').value = iso(fim);
-    f.submit();
-  });
-});
+// (os atalhos de periodo agora vivem na gaveta do filtro — cfgPeriodo)
 </script>
 {% endblock %}
