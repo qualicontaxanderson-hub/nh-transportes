@@ -271,7 +271,8 @@
   /* saldo negativo nos numeros + grade de 2 cards na web */
   #cfd .n--verm{ background:linear-gradient(135deg,#C2504A,#A32D2D); }
   #cfd .g-nums{ grid-template-columns:1fr 1fr; }
-  @media (min-width:768px){ #cfd .g-nums{ grid-template-columns:repeat(5,1fr); } }
+  @media (min-width:768px){ #cfd .g-nums{ grid-template-columns:repeat(3,1fr); } }
+  @media (min-width:1200px){ #cfd .g-nums{ grid-template-columns:repeat(6,1fr); } }
   @media (min-width:992px){
     #cfd .cfd-grade{ display:grid; grid-template-columns:1fr 1fr; gap:.6rem;
       align-items:start; }
@@ -471,8 +472,11 @@
     <div class="n {{ 'n--ambar' if totais.orfas else 'n--cinza' }}"><div class="r">Nota sem fornecedor</div>
       <div class="v">{{ totais.orfas | formatar_moeda }}</div></div>
     <div class="n {{ 'n--verde' if totais.notas and totais.notas_ok == totais.notas else 'n--ambar' }}">
-      <div class="r">Compras conferidas</div>
+      <div class="r">Notas conferidas (vinculadas)</div>
       <div class="v" id="conf-geral" data-tot="{{ totais.notas }}">{{ totais.notas_ok }}/{{ totais.notas }}</div></div>
+    <div class="n {{ 'n--ambar' if totais.pag_aberto > 0.005 else 'n--verde' }}">
+      <div class="r">Pagamentos em aberto</div>
+      <div class="v">{{ totais.pag_aberto | formatar_moeda }}</div></div>
   </div>
 
   <p class="small text-muted">
@@ -542,10 +546,6 @@
         <span><span class="k">Pago:</span> <b>{{ d.pago | formatar_moeda }}</b></span>
         <span><span class="k">Diferença no período:</span>
           <b>{{ (d.pago - d.comprado) | formatar_moeda }}</b></span>
-        {% if d.notas_abertas %}
-        <span class="conf-cnt" title="notas que a alocação por data não conseguiu cobrir">
-          <i class="bi bi-exclamation-circle"></i> {{ d.notas_abertas }} nota{{ '' if d.notas_abertas == 1 else 's' }} em aberto</span>
-        {% endif %}
         {% if d.antes %}
         <span class="conf-cnt" title="há pagamento anterior ao corte que pode ser destas notas">
           <i class="bi bi-clock-history"></i> talvez pago antes do corte</span>
@@ -554,7 +554,7 @@
         <span class="conf-cnt{{ ' conf-cnt--ok' if d.notas_ok == d.notas_total }}"
               data-forn="{{ d.fornecedor_id }}" data-tot="{{ d.notas_total }}">
           <i class="bi bi-check2-square"></i>
-          <span class="n">{{ d.notas_ok }}</span>/{{ d.notas_total }} conferida{{ '' if d.notas_total == 1 else 's' }}
+          <span class="n">{{ d.notas_ok }}</span>/{{ d.notas_total }} vinculada{{ '' if d.notas_total == 1 else 's' }}
         </span>
         {% endif %}
         {# Matriz e filial a raiz já junta sozinha. Isto é para raiz DIFERENTE:
@@ -618,7 +618,8 @@
 
         {% for l in d.linhas %}
         {% set livre_pg = (l.valor - (l.usado or 0)) if l.tipo == 'pagamento' else 0 %}
-        <div class="lin lin--{{ 'pg' if l.tipo == 'pagamento' else 'nf' }}{{ ' lin--ok' if l.conferido }}"
+        {% set vman = (l.vinculos | sum(attribute='valor')) if l.tipo == 'nota' else 0 %}
+        <div class="lin lin--{{ 'pg' if l.tipo == 'pagamento' else 'nf' }}"
              {% if l.tipo == 'nota' %}id="doc-{{ l.id }}"{% endif %}>
           <span class="lin__ico">
             <i class="bi {{ 'bi-cash-coin' if l.tipo == 'pagamento' else 'bi-receipt' }}"></i></span>
@@ -637,30 +638,22 @@
           <div class="lin__v">{{ '+' if l.tipo == 'pagamento' else '−' }}{{ l.valor | formatar_moeda }}</div>
           <div class="lin__s">
             {%- if l.tipo == 'nota' -%}
-              {%- if l.coberta -%}<span class="cob cob--ok">coberta</span>
-              {%- elif l.parcial -%}<span class="cob cob--pa">falta {{ l.falta | formatar_moeda }}</span>
-              {%- else -%}<span class="cob cob--no">descoberta</span>{%- endif -%}
+              {%- if vman >= l.valor - 0.005 -%}<span class="cob cob--ok">conferida</span>
+              {%- elif vman > 0.005 -%}<span class="cob cob--pa">faltam {{ (l.valor - vman) | formatar_moeda }}</span>
+              {%- else -%}<span class="cob cob--no">em aberto</span>{%- endif -%}
             {%- else -%}
               saldo {{ l.saldo | formatar_moeda }}
-              {%- if l.usado and livre_pg > 0.005 %}<br><span class="cob cob--pa"
-                title="parte deste pagamento ainda não está amarrada a nota nenhuma">livre {{ livre_pg | formatar_moeda }}</span>
-              {%- elif l.usado %}<br><span class="cob cob--ok">todo usado</span>{% endif -%}
+              {%- if livre_pg > 0.005 %}<br><span class="cob cob--pa"
+                title="dinheiro ainda não amarrado a nota nenhuma — vincule quando a nota chegar">em aberto · livre {{ livre_pg | formatar_moeda }}</span>
+              {%- else %}<br><span class="cob cob--ok">todo usado</span>{% endif -%}
               {%- if l.fora_periodo %}<br><span class="cob cob--fp">fora do período, vinculado</span>{% endif -%}
             {%- endif -%}
           </div>
-          {% if l.tipo == 'nota' %}
+          {% if l.tipo == 'nota' and vman < l.valor - 0.005 %}
           <div class="lin__acoes">
-            {% if not l.coberta %}
             <button type="button" class="vinc-btn" onclick="cfdAbrirVinculo({{ l.id }})"
-                    title="amarrar um pagamento a esta nota">
+                    title="amarrar um ou mais pagamentos a esta nota">
               <i class="bi bi-link-45deg"></i> vincular pagamento
-            </button>
-            {% endif %}
-            <button type="button" class="ok-btn{{ ' ok-btn--on' if l.conferido }}"
-                    onclick="cfdConferir(this, {{ l.id }})"
-                    title="visto de quem conferiu esta compra">
-              <i class="bi {{ 'bi-check-circle-fill' if l.conferido else 'bi-circle' }}"></i>
-              <span class="t">{{ 'conferida' if l.conferido else 'dar OK' }}</span>
             </button>
           </div>
           {% endif %}
@@ -694,18 +687,7 @@
         {% endfor %}
         {% endfor %}
 
-        {% if d.sobra > 0.005 or d.descoberto > 0.005 %}
-        <div class="fecho">
-          {% if d.descoberto > 0.005 %}
-          <span class="fecho__i fecho__i--no"><span class="r">Nota descoberta</span>
-            <b>{{ d.descoberto | formatar_moeda }}</b></span>
-          {% endif %}
-          {% if d.sobra > 0.005 %}
-          <span class="fecho__i fecho__i--ok"><span class="r">Sobra do pagamento</span>
-            <b>{{ d.sobra | formatar_moeda }}</b></span>
-          {% endif %}
-        </div>
-        {% endif %}
+
       </div>
     </div>
     {% endfor %}
@@ -1216,52 +1198,6 @@ function cfdToggle(el) {
 // "OK" da compra: grava na hora e ajusta o contador do fornecedor, sem
 // recarregar — quem está conferindo nota a nota não pode perder a posição da
 // lista a cada clique. O base.html injeta o X-CSRFToken no fetch.
-function cfdConferir(btn, docId) {
-  var ligar = !btn.classList.contains('ok-btn--on');
-  btn.disabled = true;
-
-  fetch('{{ url_for("conf_fornecedores_dfe.conferir") }}', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ doc_id: docId, ok: ligar })
-  })
-  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
-  .then(function (res) {
-    btn.disabled = false;
-    if (!res.ok || !res.j.ok) {
-      alert((res.j && res.j.erro) ? res.j.erro : 'não consegui gravar o OK');
-      return;
-    }
-    var on = res.j.conferido;
-    btn.classList.toggle('ok-btn--on', on);
-    btn.querySelector('i').className = 'bi ' + (on ? 'bi-check-circle-fill' : 'bi-circle');
-    btn.querySelector('.t').textContent = on ? 'conferida' : 'dar OK';
-    btn.closest('.lin').classList.toggle('lin--ok', on);
-
-    // Contadores: o do fornecedor e o do topo.
-    var card = btn.closest('.forn');
-    // Tem de ser O contador de conferidas, não o primeiro selo do card: os
-    // selos "notas em aberto", "talvez pago antes do corte" e "juntar" usam a
-    // mesma classe e NÃO têm o .n dentro — pegar o primeiro dava
-    // "null is not an object" e abortava a atualização.
-    var cnt = card.querySelector('.conf-cnt[data-forn]');
-    if (cnt && cnt.querySelector('.n')) {
-      var n = card.querySelectorAll('.lin--ok').length;
-      cnt.querySelector('.n').textContent = n;
-      cnt.classList.toggle('conf-cnt--ok', n === parseInt(cnt.dataset.tot, 10));
-    }
-    var geral = document.querySelectorAll('#cfd .lin--ok').length;
-    var topo = document.getElementById('conf-geral');
-    if (topo) {
-      topo.textContent = geral + '/' + topo.dataset.tot;
-      topo.classList.toggle('green', geral === parseInt(topo.dataset.tot, 10));
-      topo.classList.toggle('amber', geral !== parseInt(topo.dataset.tot, 10));
-    }
-  })
-  .catch(function (e) { btn.disabled = false; alert('Erro de rede: ' + e); });
-}
-
-// Períodos rápidos: preenche as datas e envia.
-// (os atalhos de periodo agora vivem na gaveta do filtro — cfgPeriodo)
+// (o visto manual morreu: conferida agora e a nota 100% vinculada)
 </script>
 {% endblock %}

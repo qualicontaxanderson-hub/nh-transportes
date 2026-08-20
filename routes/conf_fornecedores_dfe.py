@@ -960,7 +960,11 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None,
             'saldo_final': saldo,
             'linhas': linhas,
             'notas_total': len(notas_lin),
-            'notas_ok': sum(1 for l in notas_lin if l['conferido']),
+            # Conferida = 100%% vinculada a pagamento (padrao novo).
+            'notas_ok': sum(
+                1 for l in notas_lin
+                if sum(v['valor'] for v in (l.get('vinculos') or []))
+                   >= l['valor'] - 0.005),
             'sobra': sobra,
             'descoberto': descoberto,
             'notas_abertas': sum(1 for l in notas_lin if not l['coberta']),
@@ -1035,7 +1039,10 @@ def conf_fornecedores_dfe():
     dados = _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte,
                    vinculos, usado, nomes)
 
+    pag_aberto = sum(max(0.0, float(p['valor'] or 0) - usado.get(p['id'], 0.0))
+                     for p in pagamentos)
     totais = {
+        'pag_aberto': pag_aberto,
         'comprado': sum(d['comprado'] for d in dados),
         'pago':     sum(d['pago'] for d in dados),
         'saldo':    sum(d['saldo_final'] for d in dados),
