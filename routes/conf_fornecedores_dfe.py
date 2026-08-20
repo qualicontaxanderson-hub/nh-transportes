@@ -260,6 +260,52 @@ def _garante_coluna_manual(conn):
     cur.close()
 
 
+def _garante_coluna_pago_antes(conn):
+    """Cria dfe_documentos.pago_antes_corte se faltar. So adiciona; default 0.
+
+    1 = o usuario disse "esta nota foi paga por deposito ANTERIOR ao corte":
+    ela sai da conta (lista, saldo, contadores) mas fica registrada e da pra
+    desfazer — nao e apagar, e tirar do jogo.
+    """
+    cur = conn.cursor()
+    cur.execute("""SELECT COUNT(*) FROM information_schema.columns
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'dfe_documentos'
+                      AND column_name = 'pago_antes_corte'""")
+    if not cur.fetchone()[0]:
+        cur.execute("ALTER TABLE dfe_documentos "
+                    "ADD COLUMN pago_antes_corte TINYINT(1) NOT NULL DEFAULT 0")
+        conn.commit()
+    cur.close()
+
+
+def _notas_ocultas(conn, empresa_ids, fornecedor_ids):
+    """As notas que o usuario tirou da conta, por fornecedor (pro rodape
+    cinza com o desfazer — sem isso a nota sumiria sem rastro)."""
+    where = ["d.tipo = 'NFe'", "d.situacao = 'autorizado'",
+             "COALESCE(d.pago_antes_corte, 0) = 1"]
+    params = []
+    _em("d.cliente_id", empresa_ids, where, params)
+    _em("m.forn_id", fornecedor_ids, where, params)
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT m.forn_id AS fornecedor_id, d.id, d.numero, d.serie,
+               COALESCE(d.valor_total,0) AS valor, d.dh_emissao
+          FROM dfe_documentos d
+          JOIN %s ON m.raiz = %s
+         WHERE %s
+         ORDER BY d.dh_emissao
+    """ % (_MAPA, _RAIZ_NOTA, " AND ".join(where)), params)
+    rows = cur.fetchall()
+    cur.close()
+    saida = defaultdict(list)
+    for r in rows:
+        saida[r['fornecedor_id']].append({
+            'id': r['id'], 'numero': r['numero'], 'serie': r['serie'],
+            'valor': float(r['valor'] or 0), 'data': _dia(r['dh_emissao'])})
+    return dict(saida)
+
+
 def _garante_tabela_grupo(conn):
     """Cria fornecedor_grupo_raiz se faltar. Só cria — não altera nem apaga."""
     cur = conn.cursor()
@@ -280,6 +326,7 @@ def _garante_tabela_grupo(conn):
 _FILTRO_NOTA = """
         d.tipo = 'NFe'
     AND d.situacao = 'autorizado'
+    AND COALESCE(d.pago_antes_corte, 0) = 0
     AND NOT EXISTS (
           SELECT 1 FROM dfe_itens i
            WHERE i.documento_id = d.id
@@ -1003,6 +1050,7 @@ def conf_fornecedores_dfe():
     try:
         _garante_tabela_grupo(conn)
         _garante_coluna_manual(conn)
+        _garante_coluna_pago_antes(conn)
         empresas = _empresas(conn)
         fornecedores = _fornecedores(conn)
         duplicados = _cnpjs_duplicados(conn)
@@ -1021,6 +1069,7 @@ def conf_fornecedores_dfe():
         notas = _notas_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids)
         pagamentos = _pagamentos_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids)
         orfas = _notas_sem_fornecedor(conn, data_ini, data_fim, empresa_ids)
+        ocultas = _notas_ocultas(conn, empresa_ids, fornecedor_ids)
         pre_corte, pre_corte_ini = _pagamentos_antes_do_corte(
             conn, empresa_ids, fornecedor_ids)
 
@@ -1038,6 +1087,8 @@ def conf_fornecedores_dfe():
 
     dados = _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte,
                    vinculos, usado, nomes)
+    for d in dados:
+        d['ocultas'] = ocultas.get(d['fornecedor_id'], [])
 
     pag_aberto = sum(max(0.0, float(p['valor'] or 0) - usado.get(p['id'], 0.0))
                      for p in pagamentos)
@@ -1188,7 +1239,8 @@ def notas_candidatas(tx_id):
               FROM dfe_documentos d
               LEFT JOIN clientes emp ON emp.id = d.cliente_id
               JOIN __MAPA__ ON m.raiz = LEFT(LPAD(d.emit_cnpj,14,'0'),8)
-             WHERE d.tipo = 'NFe' AND m.forn_id = %s
+             WHERE d.tipo = 'NFe' AND COALESCE(d.pago_antes_corte,0) = 0
+               AND m.forn_id = %s
              ORDER BY ABS(DATEDIFF(d.dh_emissao, %s)), d.dh_emissao DESC
              LIMIT 80
         """.replace('__MAPA__', _MAPA),
@@ -1418,6 +1470,47 @@ def desvincular():
 
     if not apagou:
         return jsonify(ok=False, erro='vínculo não encontrado'), 404
+    return jsonify(ok=True)
+
+
+@bp.route('/conf_fornecedores_dfe/pago_antes_corte', methods=['POST'])
+@login_required
+@admin_required
+def pago_antes_corte():
+    """Marca (ou desmarca) a nota como paga por deposito ANTERIOR ao corte.
+
+    Marcada, ela sai da conta inteira — lista, saldo, contadores e ate das
+    candidatas do vinculo. Nota com vinculo nao pode ser marcada: primeiro
+    desfaz o vinculo, senao o pagamento ficaria usando dinheiro em nota
+    invisivel."""
+    dados = request.get_json(silent=True) or {}
+    try:
+        doc_id = int(dados.get('doc_id'))
+    except (TypeError, ValueError):
+        return jsonify(ok=False, erro='nota inválida'), 400
+    marcar = 1 if dados.get('marcar') else 0
+
+    conn = get_db_connection()
+    try:
+        _garante_coluna_pago_antes(conn)
+        cur = conn.cursor()
+        if marcar:
+            cur.execute("""SELECT COALESCE(SUM(valor),0) FROM dfe_pagamento_nota
+                            WHERE documento_id = %s""", (doc_id,))
+            if float(cur.fetchone()[0] or 0) > 0.005:
+                cur.close()
+                return jsonify(ok=False, erro='esta nota tem vínculo com pagamento — '
+                                              'desfaça o vínculo antes de ocultar'), 400
+        cur.execute("UPDATE dfe_documentos SET pago_antes_corte = %s WHERE id = %s",
+                    (marcar, doc_id))
+        conn.commit()
+        achou = cur.rowcount
+        cur.close()
+    finally:
+        conn.close()
+
+    if not achou and marcar:
+        return jsonify(ok=False, erro='nota não encontrada'), 404
     return jsonify(ok=True)
 
 
