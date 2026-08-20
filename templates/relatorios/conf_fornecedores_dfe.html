@@ -648,14 +648,8 @@
               {%- if l.fora_periodo %}<br><span class="cob cob--fp">fora do período, vinculado</span>{% endif -%}
             {%- endif -%}
           </div>
-          {% if l.tipo == 'nota' and vman < l.valor - 0.005 %}
-          <div class="lin__acoes">
-            <button type="button" class="vinc-btn" onclick="cfdAbrirVinculo({{ l.id }})"
-                    title="amarrar um ou mais pagamentos a esta nota">
-              <i class="bi bi-link-45deg"></i> vincular pagamento
-            </button>
-          </div>
-          {% endif %}
+          {# O vinculo parte SEMPRE do pagamento ("usar em notas") — a nota
+             so mostra o estado e os vinculos recebidos. #}
           {% if l.tipo == 'pagamento' and livre_pg > 0.005 %}
           <div class="lin__acoes">
             <button type="button" class="vinc-btn" onclick="cfuAbrir({{ l.id }})"
