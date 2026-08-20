@@ -617,6 +617,7 @@
         <pre class="diag-saida" hidden></pre>
 
         {% for l in d.linhas %}
+        {% set livre_pg = (l.valor - (l.usado or 0)) if l.tipo == 'pagamento' else 0 %}
         <div class="lin lin--{{ 'pg' if l.tipo == 'pagamento' else 'nf' }}{{ ' lin--ok' if l.conferido }}"
              {% if l.tipo == 'nota' %}id="doc-{{ l.id }}"{% endif %}>
           <span class="lin__ico">
@@ -641,6 +642,9 @@
               {%- else -%}<span class="cob cob--no">descoberta</span>{%- endif -%}
             {%- else -%}
               saldo {{ l.saldo | formatar_moeda }}
+              {%- if l.usado and livre_pg > 0.005 %}<br><span class="cob cob--pa"
+                title="parte deste pagamento ainda não está amarrada a nota nenhuma">livre {{ livre_pg | formatar_moeda }}</span>
+              {%- elif l.usado %}<br><span class="cob cob--ok">todo usado</span>{% endif -%}
               {%- if l.fora_periodo %}<br><span class="cob cob--fp">fora do período, vinculado</span>{% endif -%}
             {%- endif -%}
           </div>
@@ -660,8 +664,25 @@
             </button>
           </div>
           {% endif %}
+          {% if l.tipo == 'pagamento' and livre_pg > 0.005 %}
+          <div class="lin__acoes">
+            <button type="button" class="vinc-btn" onclick="cfuAbrir({{ l.id }})"
+                    title="amarrar este pagamento a uma ou mais notas — o que sobrar fica pendente">
+              <i class="bi bi-link-45deg"></i> usar em notas
+            </button>
+          </div>
+          {% endif %}
         </div>
 
+        {% if l.tipo == 'pagamento' %}{% for v in vinc_pag.get(l.id, []) %}
+        <div class="vinc">
+          <i class="bi bi-link-45deg"></i>
+          <span class="d">usa {{ v.valor | formatar_moeda }} na NF {{ v.numero }}/{{ v.serie }}</span>
+          <span class="v"></span>
+          <button type="button" class="x" onclick="cfdDesvincular(this, {{ v.id }})"
+                  title="desfazer este vínculo"><i class="bi bi-x-lg"></i></button>
+        </div>
+        {% endfor %}{% endif %}
         {% for v in l.vinculos %}
         <div class="vinc">
           <i class="bi bi-link-45deg"></i>
@@ -700,7 +721,7 @@
       <button type="button" class="fechar" onclick="cfdFecharVinculo()">&times;</button>
     </div>
     <div class="cx__b">
-      <div class="falta">Pode vincular até <b id="cfd-mfalta">—</b>
+      <div class="falta"><span id="cfd-mrot">Pode vincular até</span> <b id="cfd-mfalta">—</b>
         <span class="obs">— é o valor da nota menos o que você já amarrou à mão.
         O rateio automático por data não conta aqui: ao vincular, ele se refaz
         sozinho e o dinheiro dele vai para outra nota.</span></div>
@@ -861,7 +882,7 @@ function cfdSepararGrupo(fid) {
 // ---------- Vínculo manual pagamento -> nota ----------
 // O automático (por data) resolve o caso comum; isto é para o que ele não
 // alcança — em especial pagamento anterior ao corte da captura.
-var cfdDoc = null, cfdSel = null, cfdFalta = 0;
+var cfdModo = 'nota', cfdAlvo = null, cfdTeto = 0;
 
 function cfdMoeda(v) {
   return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2,
@@ -869,8 +890,6 @@ function cfdMoeda(v) {
 }
 
 function cfdAbrirVinculo(docId) {
-  // Se algo aqui estourar, o clique morria em silêncio e a tela parecia
-  // "não fazer nada" — sem pista nenhuma de onde quebrou.
   try {
     cfdAbrirVinculoInterno(docId);
   } catch (e) {
@@ -879,25 +898,13 @@ function cfdAbrirVinculo(docId) {
 }
 
 function cfdAbrirVinculoInterno(docId) {
-  cfdDoc = docId; cfdSel = null;
-  var lista = document.getElementById('cfd-mlista');
-  if (!lista) { alert('A janela de vínculo não foi carregada nesta página.'); return; }
-  lista.innerHTML = '<div class="vazio-c">carregando pagamentos...</div>';
-  document.getElementById('cfd-mcampo').hidden = true;
-  document.getElementById('cfd-mok').disabled = true;
-  document.getElementById('cfd-modal').classList.add('on');
-
+  cfdModo = 'nota'; cfdAlvo = docId;
+  cfdPrepara('carregando pagamentos...', 'Pode vincular até');
   fetch('{{ url_for("conf_fornecedores_dfe.candidatos", doc_id=0) }}'.replace(/0$/, docId))
-    .then(function (r) {
-      // Erro de servidor costuma vir em HTML, não JSON — sem isto o catch
-      // engolia a causa e a tela só dizia "não funciona".
-      return r.json().catch(function () {
-        throw new Error('o servidor respondeu ' + r.status + ' (não foi JSON)');
-      });
-    })
+    .then(cfdJson)
     .then(function (j) {
-      if (!j.ok) { lista.innerHTML = '<div class="vazio-c">' + (j.erro || 'falhou') + '</div>'; return; }
-      cfdFalta = j.falta;
+      if (!j.ok) { cfdVazio(j.erro || 'falhou'); return; }
+      cfdTeto = j.falta;
       document.getElementById('cfd-mtit').textContent = j.nota;
       document.getElementById('cfd-mfalta').textContent = cfdMoeda(j.falta);
       var dg = j.diag || {};
@@ -907,75 +914,147 @@ function cfdAbrirVinculoInterno(docId) {
             'todos já estão inteiramente vinculados a outras notas.'
           : 'Não achei nenhum lançamento de saída conciliado neste fornecedor. ' +
             'Confira no OFX se o pagamento está apontado para ele.';
-        lista.innerHTML = '<div class="vazio-c">' + causa +
-          '<br><br><small>nota #' + dg.doc_id + ' · CNPJ ' + (dg.cnpj_nota || '?') + '</small></div>';
+        cfdVazio(causa + '<br><br><small>nota #' + dg.doc_id + ' · CNPJ ' +
+                 (dg.cnpj_nota || '?') + '</small>');
         return;
       }
-      lista.innerHTML = j.candidatos.map(function (c) {
-        return '<label class="cand" data-id="' + c.id + '" data-livre="' + c.livre + '">' +
-          '<input type="radio" name="cfd-cand">' +
-          '<span class="cand__c"><span class="cand__d">' + c.data + '</span>' +
-          '<span class="cand__m">' + (c.descricao || '—') + '</span></span>' +
-          '<span class="cand__v"><span class="l">' + cfdMoeda(c.livre) + '</span><br>' +
-          '<span class="s">livre de ' + cfdMoeda(c.valor) + '</span></span></label>';
-      }).join('');
-      lista.querySelectorAll('.cand').forEach(function (el) {
-        el.addEventListener('click', function () {
-          lista.querySelectorAll('.cand').forEach(function (o) { o.classList.remove('cand--on'); });
-          el.classList.add('cand--on');
-          el.querySelector('input').checked = true;
-          cfdSel = el;
-          // Sugere o menor entre o que falta e o que o pagamento tem livre —
-          // é o que fecha a conta na maioria dos casos.
-          var v = Math.min(cfdFalta, parseFloat(el.dataset.livre));
-          document.getElementById('cfd-mcampo').hidden = false;
-          document.getElementById('cfd-mvalor').value = v.toFixed(2);
-          document.getElementById('cfd-mok').disabled = false;
-        });
-      });
+      cfdLista(j.candidatos.map(function (c) {
+        return { id: c.id, t1: c.data, t2: c.descricao || '—',
+                 max: c.livre, rot: 'livre de ' + cfdMoeda(c.valor) };
+      }));
     })
-    .catch(function (e) {
-      lista.innerHTML = '<div class="vazio-c">Não consegui carregar: ' + e.message +
-        '<br><br>Mostre esta mensagem pra quem cuida do sistema.</div>';
-    });
+    .catch(function (e) { cfdVazio('Não consegui carregar: ' + e.message); });
 }
 
-function cfdFecharVinculo() { document.getElementById('cfd-modal').classList.remove('on'); }
+// ---- Pelo outro lado: usar UM pagamento em VÁRIAS notas ----
+function cfuAbrir(txId) {
+  try {
+    cfuInterno(txId);
+  } catch (e) {
+    alert('Falhou: ' + (e && e.message ? e.message : e));
+  }
+}
 
-// Chama o mesmo endereço do modal e joga a resposta CRUA na página. Sem modal,
-// sem JSON.parse, sem nada no meio: separa "o servidor respondeu errado" de
-// "a tela não mostrou". O texto daqui é o que diz onde está o problema.
-function cfdDiagnostico(link, docId) {
-  var saida = link.closest('.fifo-h').parentNode.querySelector('.diag-saida');
-  saida.hidden = false;
-  saida.textContent = 'consultando nota #' + docId + '...';
-
-  var url = '{{ url_for("conf_fornecedores_dfe.candidatos", doc_id=0) }}'.replace(/0$/, docId);
-  fetch(url)
-    .then(function (r) {
-      return r.text().then(function (t) {
-        saida.textContent = 'GET ' + url + '\nHTTP ' + r.status + ' ' + r.statusText +
-          '\ncontent-type: ' + (r.headers.get('content-type') || '?') +
-          '\n\n' + t.slice(0, 1500);
-      });
+function cfuInterno(txId) {
+  cfdModo = 'pag'; cfdAlvo = txId;
+  cfdPrepara('carregando notas...', 'Livre neste pagamento:');
+  fetch('{{ url_for("conf_fornecedores_dfe.notas_candidatas", tx_id=0) }}'.replace(/0$/, txId))
+    .then(cfdJson)
+    .then(function (j) {
+      if (!j.ok) { cfdVazio(j.erro || 'falhou'); return; }
+      cfdTeto = j.pagamento.livre;
+      document.getElementById('cfd-mtit').textContent =
+        'Usar o pagamento de ' + j.pagamento.data + ' (' + cfdMoeda(j.pagamento.valor) + ')';
+      document.getElementById('cfd-mfalta').textContent = cfdMoeda(cfdTeto);
+      if (!j.notas.length) {
+        cfdVazio('Nenhuma nota deste fornecedor com valor em aberto.');
+        return;
+      }
+      cfdLista(j.notas.map(function (n) {
+        return { id: n.doc_id, t1: n.rotulo + ' · ' + n.data,
+                 t2: 'nota de ' + cfdMoeda(n.valor),
+                 max: n.falta, rot: 'faltam ' + cfdMoeda(n.falta) };
+      }));
     })
-    .catch(function (e) {
-      saida.textContent = 'GET ' + url + '\nNÃO CHEGOU AO SERVIDOR\n' + e;
+    .catch(function (e) { cfdVazio('Não consegui carregar: ' + e.message); });
+}
+
+function cfdJson(r) {
+  return r.json().catch(function () {
+    throw new Error('o servidor respondeu ' + r.status + ' (não foi JSON)');
+  });
+}
+
+function cfdPrepara(msg, rotulo) {
+  var lista = document.getElementById('cfd-mlista');
+  if (!lista) { alert('A janela de vínculo não foi carregada nesta página.'); return; }
+  lista.innerHTML = '<div class="vazio-c">' + msg + '</div>';
+  document.getElementById('cfd-mrot').textContent = rotulo;
+  document.getElementById('cfd-mcampo').hidden = true;
+  document.getElementById('cfd-mok').disabled = true;
+  document.getElementById('cfd-mok').textContent = 'Vincular';
+  document.getElementById('cfd-modal').classList.add('on');
+}
+
+function cfdVazio(msg) {
+  document.getElementById('cfd-mlista').innerHTML = '<div class="vazio-c">' + msg + '</div>';
+}
+
+/* Lista com CAIXINHAS: marca várias, cada uma com valor editável — é o
+   parcial do estoque no dinheiro: 1 pagamento cobre N notas, N pagamentos
+   completam 1 nota, e o que não fechar fica pendurado como pendência. */
+function cfdLista(itens) {
+  var lista = document.getElementById('cfd-mlista');
+  lista.innerHTML = itens.map(function (c) {
+    return '<label class="cand" data-id="' + c.id + '" data-max="' + c.max + '">' +
+      '<input type="checkbox" class="cand-chk">' +
+      '<span class="cand__c"><span class="cand__d">' + c.t1 + '</span>' +
+      '<span class="cand__m">' + c.t2 + '</span></span>' +
+      '<span class="cand__v"><input type="number" step="0.01" min="0.01" class="cand-val" hidden ' +
+      'style="width:112px;text-align:right;border:1px solid #d9e0e8;border-radius:8px;padding:.25rem .4rem"><br>' +
+      '<span class="s">' + c.rot + '</span></span></label>';
+  }).join('');
+  lista.querySelectorAll('.cand').forEach(function (el) {
+    var chk = el.querySelector('.cand-chk');
+    var val = el.querySelector('.cand-val');
+    chk.addEventListener('change', function () {
+      el.classList.toggle('cand--on', chk.checked);
+      val.hidden = !chk.checked;
+      if (chk.checked && !val.value) {
+        // sugere o menor entre o que este item aceita e o que ainda resta do teto
+        var resto = cfdTeto - cfdSoma(el);
+        val.value = Math.max(0, Math.min(parseFloat(el.dataset.max), resto)).toFixed(2);
+      }
+      cfdAtualiza();
     });
+    val.addEventListener('input', cfdAtualiza);
+    val.addEventListener('click', function (ev) { ev.stopPropagation(); });
+  });
+  cfdAtualiza();
+}
+
+function cfdSoma(fora) {
+  var s = 0;
+  document.querySelectorAll('#cfd-mlista .cand').forEach(function (el) {
+    if (el === fora) return;
+    if (el.querySelector('.cand-chk').checked) {
+      s += parseFloat(el.querySelector('.cand-val').value) || 0;
+    }
+  });
+  return s;
+}
+
+function cfdAtualiza() {
+  var s = cfdSoma(null);
+  var ok = document.getElementById('cfd-mok');
+  ok.disabled = !(s > 0.005 && s <= cfdTeto + 0.005);
+  ok.textContent = s > 0.005 ? 'Vincular ' + cfdMoeda(s) : 'Vincular';
 }
 
 function cfdSalvarVinculo() {
-  if (!cfdSel) return;
+  var itens = [], estourou = false;
+  document.querySelectorAll('#cfd-mlista .cand').forEach(function (el) {
+    if (!el.querySelector('.cand-chk').checked) return;
+    var v = parseFloat(el.querySelector('.cand-val').value) || 0;
+    if (v <= 0) return;
+    if (v > parseFloat(el.dataset.max) + 0.005) estourou = true;
+    itens.push(cfdModo === 'nota'
+      ? { doc_id: cfdAlvo, transacao_id: parseInt(el.dataset.id, 10), valor: v }
+      : { doc_id: parseInt(el.dataset.id, 10), transacao_id: cfdAlvo, valor: v });
+  });
+  if (!itens.length) { alert('Marque ao menos um item.'); return; }
+  if (estourou) { alert('Um dos valores passa do que aquele item aceita.'); return; }
+  var soma = itens.reduce(function (a, b) { return a + b.valor; }, 0);
+  if (soma > cfdTeto + 0.005) {
+    alert('A soma (' + cfdMoeda(soma) + ') passa do disponível (' + cfdMoeda(cfdTeto) + ').');
+    return;
+  }
   var btn = document.getElementById('cfd-mok');
-  var valor = parseFloat(document.getElementById('cfd-mvalor').value);
-  if (!(valor > 0)) { alert('Informe um valor maior que zero.'); return; }
   btn.disabled = true; btn.textContent = 'gravando...';
-
-  fetch('{{ url_for("conf_fornecedores_dfe.vincular") }}', {
+  fetch('{{ url_for("conf_fornecedores_dfe.vincular_lote") }}', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ doc_id: cfdDoc, transacao_id: parseInt(cfdSel.dataset.id, 10),
-                           valor: valor })
+    body: JSON.stringify({ itens: itens })
   })
   .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
   .then(function (res) {

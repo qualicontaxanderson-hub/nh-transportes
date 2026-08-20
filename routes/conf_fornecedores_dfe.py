@@ -637,6 +637,28 @@ def _vinculos(conn, doc_ids):
     return dict(por_doc), usado
 
 
+def _vinculos_por_pagamento(conn, tx_ids):
+    """transacao_id -> vinculos [{id, valor, numero, serie}] (linha do extrato)."""
+    if not tx_ids:
+        return {}
+    ph = ','.join(['%s'] * len(tx_ids))
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT v.id, v.transacao_id, v.valor, d.numero, d.serie
+          FROM dfe_pagamento_nota v
+          JOIN dfe_documentos d ON d.id = v.documento_id
+         WHERE v.transacao_id IN (__IDS__)
+         ORDER BY v.id
+    """.replace('__IDS__', ph), list(tx_ids))
+    saida = defaultdict(list)
+    for r in cur.fetchall():
+        saida[r['transacao_id']].append({
+            'id': r['id'], 'valor': float(r['valor'] or 0),
+            'numero': r['numero'], 'serie': r['serie']})
+    cur.close()
+    return dict(saida)
+
+
 def _pagamentos_vinculados_fora(conn, doc_ids, data_ini, data_fim):
     """Pagamentos amarrados a estas notas mas com data FORA do período.
 
@@ -1006,6 +1028,7 @@ def conf_fornecedores_dfe():
             # Pagamento amarrado a uma destas notas mas de outra data entra na
             # conta assim mesmo — é o que fecha o caso "paguei antes do corte".
             pagamentos += _pagamentos_vinculados_fora(conn, doc_ids, data_ini, data_fim)
+        vinc_pag = _vinculos_por_pagamento(conn, [p['id'] for p in pagamentos])
     finally:
         conn.close()
 
@@ -1034,6 +1057,7 @@ def conf_fornecedores_dfe():
         data_inicio=data_ini, data_fim=data_fim,
         cliente_ids=empresa_ids, fornecedor_ids=fornecedor_ids,
         corte=DATA_CORTE_DFE, puxou_pro_corte=puxou_pro_corte, janela=janela,
+        vinc_pag=vinc_pag,
         pre_corte_ini=pre_corte_ini, vinculo_pronto=vinculo_pronto,
     )
 
@@ -1117,6 +1141,163 @@ def candidatos(doc_id):
             'pagamentos_do_fornecedor': len(pagos),
             'com_valor_livre': len(livres),
         })
+
+
+@bp.route('/conf_fornecedores_dfe/notas_candidatas/<int:tx_id>')
+@login_required
+@admin_required
+def notas_candidatas(tx_id):
+    """Notas em aberto do fornecedor DESTE pagamento — pra usar o dinheiro
+    livre nelas (1 pagamento cobrindo varias notas). Espelho do candidatos."""
+    conn = get_db_connection()
+    try:
+        _garante_tabela_vinculo(conn)
+        _garante_tabela_grupo(conn)
+        cur = conn.cursor(dictionary=True)
+        cur.execute("""
+            SELECT bt.id, bt.data_transacao, bt.descricao,
+                   COALESCE(bt.valor,0) AS valor,
+                   COALESCE((SELECT SUM(v.valor) FROM dfe_pagamento_nota v
+                              WHERE v.transacao_id = bt.id), 0) AS usado,
+                   m.forn_id AS canonico
+              FROM bank_transactions bt
+              JOIN fornecedores fp ON fp.id = bt.fornecedor_id
+              JOIN __MAPA__ ON m.raiz = __RAIZ_FP__
+             WHERE bt.id = %s AND bt.tipo = 'DEBIT'
+        """.replace('__MAPA__', _MAPA).replace('__RAIZ_FP__', _raiz_de('fp')),
+            (tx_id,))
+        pg = cur.fetchone()
+        if not pg:
+            cur.close()
+            return jsonify(ok=False, erro='pagamento não encontrado (ou sem fornecedor conciliado)'), 404
+
+        cur.execute("""
+            SELECT d.id, d.numero, d.serie, d.dh_emissao,
+                   COALESCE(d.valor_total,0) AS valor,
+                   COALESCE((SELECT SUM(v.valor) FROM dfe_pagamento_nota v
+                              WHERE v.documento_id = d.id), 0) AS vinculado
+              FROM dfe_documentos d
+              JOIN __MAPA__ ON m.raiz = LEFT(LPAD(d.emit_cnpj,14,'0'),8)
+             WHERE d.tipo = 'NFe' AND m.forn_id = %s
+             ORDER BY ABS(DATEDIFF(d.dh_emissao, %s)), d.dh_emissao DESC
+             LIMIT 80
+        """.replace('__MAPA__', _MAPA),
+            (pg['canonico'], pg['data_transacao']))
+        docs = cur.fetchall()
+        cur.close()
+    finally:
+        conn.close()
+
+    livre = float(pg['valor'] or 0) - float(pg['usado'] or 0)
+    notas = []
+    for n in docs:
+        falta = float(n['valor'] or 0) - float(n['vinculado'] or 0)
+        if falta <= 0.005:
+            continue
+        notas.append({
+            'doc_id': n['id'],
+            'rotulo': 'NF %s/%s' % (n['numero'] or '?', n['serie'] or '?'),
+            'data': _dia(n['dh_emissao']).strftime('%d/%m/%Y') if n['dh_emissao'] else '—',
+            'valor': float(n['valor'] or 0),
+            'falta': falta,
+        })
+    return jsonify(ok=True, pagamento={
+        'id': pg['id'],
+        'data': _dia(pg['data_transacao']).strftime('%d/%m/%Y'),
+        'descricao': (pg['descricao'] or '')[:60],
+        'valor': float(pg['valor'] or 0),
+        'livre': livre,
+    }, notas=notas)
+
+
+@bp.route('/conf_fornecedores_dfe/vincular_lote', methods=['POST'])
+@login_required
+@admin_required
+def vincular_lote():
+    """Varios vinculos numa acao so (1 pagamento -> N notas, N pagamentos ->
+    1 nota). Valida TUDO antes de gravar — contando o que o proprio lote ja
+    reservou de cada pagamento e de cada nota — e grava de uma vez."""
+    dados = request.get_json(silent=True) or {}
+    itens = dados.get('itens') or []
+    if not itens or len(itens) > 40:
+        return jsonify(ok=False, erro='lote vazio ou grande demais'), 400
+    try:
+        itens = [{'doc_id': int(i.get('doc_id')),
+                  'transacao_id': int(i.get('transacao_id')),
+                  'valor': round(float(i.get('valor')), 2)} for i in itens]
+    except (TypeError, ValueError):
+        return jsonify(ok=False, erro='dados inválidos'), 400
+    if any(i['valor'] <= 0 for i in itens):
+        return jsonify(ok=False, erro='todo valor tem de ser maior que zero'), 400
+
+    extra_doc = defaultdict(float)
+    extra_tx = defaultdict(float)
+    conn = get_db_connection()
+    try:
+        _garante_tabela_vinculo(conn)
+        _garante_tabela_grupo(conn)
+        cur = conn.cursor(dictionary=True)
+        for it in itens:
+            cur.execute("""
+                SELECT COALESCE(d.valor_total,0) AS valor, d.emit_cnpj, d.numero,
+                       COALESCE((SELECT SUM(v.valor) FROM dfe_pagamento_nota v
+                                  WHERE v.documento_id = d.id
+                                    AND v.transacao_id <> %s), 0) AS outros
+                  FROM dfe_documentos d WHERE d.id = %s
+            """, (it['transacao_id'], it['doc_id']))
+            nota = cur.fetchone()
+            if not nota:
+                cur.close()
+                return jsonify(ok=False, erro='nota não encontrada'), 404
+            cur.execute("""
+                SELECT COALESCE(bt.valor,0) AS valor,
+                       COALESCE((SELECT SUM(v.valor) FROM dfe_pagamento_nota v
+                                  WHERE v.transacao_id = bt.id
+                                    AND v.documento_id <> %s), 0) AS outros,
+                       m.forn_id AS canonico
+                  FROM bank_transactions bt
+                  JOIN fornecedores fp ON fp.id = bt.fornecedor_id
+                  JOIN __MAPA__ ON m.raiz = __RAIZ_FP__
+                 WHERE bt.id = %s AND bt.tipo = 'DEBIT'
+            """.replace('__MAPA__', _MAPA).replace('__RAIZ_FP__', _raiz_de('fp')),
+                (it['doc_id'], it['transacao_id']))
+            pg = cur.fetchone()
+            if not pg:
+                cur.close()
+                return jsonify(ok=False, erro='pagamento não encontrado'), 404
+            if pg['canonico'] != _canonico_do_cnpj(conn, nota['emit_cnpj'] or ''):
+                cur.close()
+                return jsonify(ok=False,
+                               erro='pagamento conciliado noutro fornecedor'), 400
+            falta = (float(nota['valor']) - float(nota['outros'])
+                     - extra_doc[it['doc_id']])
+            livre = (float(pg['valor']) - float(pg['outros'])
+                     - extra_tx[it['transacao_id']])
+            if it['valor'] > falta + 0.005:
+                cur.close()
+                return jsonify(ok=False, erro='a NF %s só tem R$ %.2f em aberto'
+                               % (nota['numero'], max(falta, 0))), 400
+            if it['valor'] > livre + 0.005:
+                cur.close()
+                return jsonify(ok=False, erro='o pagamento só tem R$ %.2f livre'
+                               % max(livre, 0)), 400
+            extra_doc[it['doc_id']] += it['valor']
+            extra_tx[it['transacao_id']] += it['valor']
+        cur.close()
+
+        cur = conn.cursor()
+        for it in itens:
+            cur.execute("""
+                INSERT INTO dfe_pagamento_nota (documento_id, transacao_id, valor, criado_por)
+                     VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE valor = VALUES(valor), criado_por = VALUES(criado_por)
+            """, (it['doc_id'], it['transacao_id'], it['valor'],
+                  getattr(current_user, 'id', None)))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+    return jsonify(ok=True, gravados=len(itens))
 
 
 @bp.route('/conf_fornecedores_dfe/vincular', methods=['POST'])
