@@ -1172,11 +1172,14 @@ def notas_candidatas(tx_id):
             return jsonify(ok=False, erro='pagamento não encontrado (ou sem fornecedor conciliado)'), 404
 
         cur.execute("""
-            SELECT d.id, d.numero, d.serie, d.dh_emissao,
+            SELECT d.id, d.numero, d.serie, d.dh_emissao, d.cliente_id,
+                   COALESCE(NULLIF(emp.nome_fantasia, ''), emp.razao_social)
+                       AS empresa_nome,
                    COALESCE(d.valor_total,0) AS valor,
                    COALESCE((SELECT SUM(v.valor) FROM dfe_pagamento_nota v
                               WHERE v.documento_id = d.id), 0) AS vinculado
               FROM dfe_documentos d
+              LEFT JOIN clientes emp ON emp.id = d.cliente_id
               JOIN __MAPA__ ON m.raiz = LEFT(LPAD(d.emit_cnpj,14,'0'),8)
              WHERE d.tipo = 'NFe' AND m.forn_id = %s
              ORDER BY ABS(DATEDIFF(d.dh_emissao, %s)), d.dh_emissao DESC
@@ -1200,6 +1203,8 @@ def notas_candidatas(tx_id):
             'data': _dia(n['dh_emissao']).strftime('%d/%m/%Y') if n['dh_emissao'] else '—',
             'valor': float(n['valor'] or 0),
             'falta': falta,
+            'empresa_id': n['cliente_id'],
+            'empresa': n['empresa_nome'] or '—',
         })
     return jsonify(ok=True, pagamento={
         'id': pg['id'],

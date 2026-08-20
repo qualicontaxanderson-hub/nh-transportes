@@ -712,30 +712,45 @@
   {% endif %}
 </div>
 
-{# ---------- Modal: escolher o pagamento que cobre a nota ---------- #}
-<div id="cfd-modal" class="cfd-modal" onclick="if (event.target === this) cfdFecharVinculo()">
-  <div class="cx">
-    <div class="cx__h">
-      <i class="bi bi-link-45deg" style="color:#1D63A5"></i>
-      <b id="cfd-mtit">Vincular pagamento</b>
-      <button type="button" class="fechar" onclick="cfdFecharVinculo()">&times;</button>
+{# ---------- Gaveta do vínculo (padrão das outras telas) ----------
+   Dois modos, mesmo componente:
+   - pagamento -> notas: 1 Empresa · 2 Notas · 3 Confirmar
+   - nota -> pagamentos: 1 Pagamentos · 2 Confirmar #}
+<div class="escuro" id="cfv-escuro" onclick="cfvFechar()"></div>
+<div class="gav" id="cfv-gav" role="dialog" aria-label="Vincular">
+  <div class="gav__pega"></div>
+  <div class="passos" id="cfv-passos">
+    <button type="button" class="passo"><i></i><span></span></button>
+    <button type="button" class="passo"><i></i><span></span></button>
+    <button type="button" class="passo"><i></i><span></span></button>
+  </div>
+  <div class="pnome"><b id="cfv-tit">Vincular</b><span id="cfv-sub"></span></div>
+
+  <div class="etapa" id="cfv-et0" hidden>
+    <div class="gav__b">
+      <span class="gr__t">De qual empresa são as notas?</span>
+      <div class="opcs" id="cfv-l-emp"></div>
     </div>
-    <div class="cx__b">
-      <div class="falta"><span id="cfd-mrot">Pode vincular até</span> <b id="cfd-mfalta">—</b>
-        <span class="obs">— é o valor da nota menos o que você já amarrou à mão.
-        O rateio automático por data não conta aqui: ao vincular, ele se refaz
-        sozinho e o dinheiro dele vai para outra nota.</span></div>
-      <div id="cfd-mlista"></div>
-      <div class="campo" id="cfd-mcampo" hidden>
-        <label>Quanto deste pagamento entra nesta nota</label>
-        <input type="number" id="cfd-mvalor" step="0.01" min="0.01" inputmode="decimal">
-      </div>
+  </div>
+
+  <div class="etapa" id="cfv-et1" hidden>
+    <div class="gav__b">
+      <span class="gr__t" id="cfv-rot-itens">Marque e ajuste os valores</span>
+      <div class="opcs" id="cfv-l-itens"></div>
+      <div class="sit-eco" id="cfv-soma" style="margin-top:.6rem;background:#eaf1f9;color:#0C4C86;border-radius:8px;padding:.45rem .6rem;font-size:.8rem;font-weight:700"></div>
     </div>
-    <div class="cx__f">
-      <button type="button" onclick="cfdFecharVinculo()">Cancelar</button>
-      <button type="button" class="ok" id="cfd-mok" disabled onclick="cfdSalvarVinculo()">
-        Vincular</button>
-    </div>
+  </div>
+
+  <div class="etapa" id="cfv-et2" hidden>
+    <div class="gav__b" id="cfv-resumo"></div>
+  </div>
+
+  <div class="gav__f">
+    <button type="button" class="bt-g bt-g--ca" id="cfv-bt-voltar" hidden
+            onclick="cfvVoltar()">‹ Voltar</button>
+    <button type="button" class="bt-g bt-g--ca" onclick="cfvFechar()">Cancelar</button>
+    <button type="button" class="bt-g bt-g--ok" id="cfv-bt-ir"
+            onclick="cfvAvancar(this)">Avançar</button>
   </div>
 </div>
 
@@ -882,81 +897,13 @@ function cfdSepararGrupo(fid) {
 // ---------- Vínculo manual pagamento -> nota ----------
 // O automático (por data) resolve o caso comum; isto é para o que ele não
 // alcança — em especial pagamento anterior ao corte da captura.
-var cfdModo = 'nota', cfdAlvo = null, cfdTeto = 0;
+// ---------- Vínculo em PASSOS (gaveta padrão) ----------
+var cfvModo = 'nota', cfvAlvo = null, cfvTeto = 0, cfvPassoN = 0;
+var cfvItens = [], cfvVals = {}, cfvChk = {}, cfvEmp = '';
 
 function cfdMoeda(v) {
   return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2,
                                                      maximumFractionDigits: 2 });
-}
-
-function cfdAbrirVinculo(docId) {
-  try {
-    cfdAbrirVinculoInterno(docId);
-  } catch (e) {
-    alert('Falhou ao abrir o vínculo: ' + (e && e.message ? e.message : e));
-  }
-}
-
-function cfdAbrirVinculoInterno(docId) {
-  cfdModo = 'nota'; cfdAlvo = docId;
-  cfdPrepara('carregando pagamentos...', 'Pode vincular até');
-  fetch('{{ url_for("conf_fornecedores_dfe.candidatos", doc_id=0) }}'.replace(/0$/, docId))
-    .then(cfdJson)
-    .then(function (j) {
-      if (!j.ok) { cfdVazio(j.erro || 'falhou'); return; }
-      cfdTeto = j.falta;
-      document.getElementById('cfd-mtit').textContent = j.nota;
-      document.getElementById('cfd-mfalta').textContent = cfdMoeda(j.falta);
-      var dg = j.diag || {};
-      if (!j.candidatos.length) {
-        var causa = dg.pagamentos_do_fornecedor
-          ? 'Achei ' + dg.pagamentos_do_fornecedor + ' pagamento(s) deste fornecedor, mas ' +
-            'todos já estão inteiramente vinculados a outras notas.'
-          : 'Não achei nenhum lançamento de saída conciliado neste fornecedor. ' +
-            'Confira no OFX se o pagamento está apontado para ele.';
-        cfdVazio(causa + '<br><br><small>nota #' + dg.doc_id + ' · CNPJ ' +
-                 (dg.cnpj_nota || '?') + '</small>');
-        return;
-      }
-      cfdLista(j.candidatos.map(function (c) {
-        return { id: c.id, t1: c.data, t2: c.descricao || '—',
-                 max: c.livre, rot: 'livre de ' + cfdMoeda(c.valor) };
-      }));
-    })
-    .catch(function (e) { cfdVazio('Não consegui carregar: ' + e.message); });
-}
-
-// ---- Pelo outro lado: usar UM pagamento em VÁRIAS notas ----
-function cfuAbrir(txId) {
-  try {
-    cfuInterno(txId);
-  } catch (e) {
-    alert('Falhou: ' + (e && e.message ? e.message : e));
-  }
-}
-
-function cfuInterno(txId) {
-  cfdModo = 'pag'; cfdAlvo = txId;
-  cfdPrepara('carregando notas...', 'Livre neste pagamento:');
-  fetch('{{ url_for("conf_fornecedores_dfe.notas_candidatas", tx_id=0) }}'.replace(/0$/, txId))
-    .then(cfdJson)
-    .then(function (j) {
-      if (!j.ok) { cfdVazio(j.erro || 'falhou'); return; }
-      cfdTeto = j.pagamento.livre;
-      document.getElementById('cfd-mtit').textContent =
-        'Usar o pagamento de ' + j.pagamento.data + ' (' + cfdMoeda(j.pagamento.valor) + ')';
-      document.getElementById('cfd-mfalta').textContent = cfdMoeda(cfdTeto);
-      if (!j.notas.length) {
-        cfdVazio('Nenhuma nota deste fornecedor com valor em aberto.');
-        return;
-      }
-      cfdLista(j.notas.map(function (n) {
-        return { id: n.doc_id, t1: n.rotulo + ' · ' + n.data,
-                 t2: 'nota de ' + cfdMoeda(n.valor),
-                 max: n.falta, rot: 'faltam ' + cfdMoeda(n.falta) };
-      }));
-    })
-    .catch(function (e) { cfdVazio('Não consegui carregar: ' + e.message); });
 }
 
 function cfdJson(r) {
@@ -965,92 +912,260 @@ function cfdJson(r) {
   });
 }
 
-function cfdPrepara(msg, rotulo) {
-  var lista = document.getElementById('cfd-mlista');
-  if (!lista) { alert('A janela de vínculo não foi carregada nesta página.'); return; }
-  lista.innerHTML = '<div class="vazio-c">' + msg + '</div>';
-  document.getElementById('cfd-mrot').textContent = rotulo;
-  document.getElementById('cfd-mcampo').hidden = true;
-  document.getElementById('cfd-mok').disabled = true;
-  document.getElementById('cfd-mok').textContent = 'Vincular';
-  document.getElementById('cfd-modal').classList.add('on');
+function cfdAbrirVinculo(docId) {
+  try { cfvNota(docId); } catch (e) { alert('Falhou: ' + (e.message || e)); }
+}
+function cfuAbrir(txId) {
+  try { cfvPag(txId); } catch (e) { alert('Falhou: ' + (e.message || e)); }
 }
 
-function cfdVazio(msg) {
-  document.getElementById('cfd-mlista').innerHTML = '<div class="vazio-c">' + msg + '</div>';
+function cfvFechar() {
+  document.getElementById('cfv-gav').classList.remove('on');
+  document.getElementById('cfv-escuro').classList.remove('on');
+}
+function cfvMostrar() {
+  document.getElementById('cfv-gav').classList.add('on');
+  document.getElementById('cfv-escuro').classList.add('on');
+}
+function cfvRotulos(lista) {
+  var ps = document.querySelectorAll('#cfv-passos .passo');
+  ps.forEach(function (p, i) {
+    p.hidden = i >= lista.length;
+    p.querySelector('span').textContent = lista[i] || '';
+  });
 }
 
-/* Lista com CAIXINHAS: marca várias, cada uma com valor editável — é o
-   parcial do estoque no dinheiro: 1 pagamento cobre N notas, N pagamentos
-   completam 1 nota, e o que não fechar fica pendurado como pendência. */
-function cfdLista(itens) {
-  var lista = document.getElementById('cfd-mlista');
-  lista.innerHTML = itens.map(function (c) {
-    return '<label class="cand" data-id="' + c.id + '" data-max="' + c.max + '">' +
-      '<input type="checkbox" class="cand-chk">' +
-      '<span class="cand__c"><span class="cand__d">' + c.t1 + '</span>' +
-      '<span class="cand__m">' + c.t2 + '</span></span>' +
-      '<span class="cand__v"><input type="number" step="0.01" min="0.01" class="cand-val" hidden ' +
-      'style="width:112px;text-align:right;border:1px solid #d9e0e8;border-radius:8px;padding:.25rem .4rem"><br>' +
-      '<span class="s">' + c.rot + '</span></span></label>';
-  }).join('');
-  lista.querySelectorAll('.cand').forEach(function (el) {
-    var chk = el.querySelector('.cand-chk');
-    var val = el.querySelector('.cand-val');
-    chk.addEventListener('change', function () {
-      el.classList.toggle('cand--on', chk.checked);
-      val.hidden = !chk.checked;
-      if (chk.checked && !val.value) {
-        // sugere o menor entre o que este item aceita e o que ainda resta do teto
-        var resto = cfdTeto - cfdSoma(el);
-        val.value = Math.max(0, Math.min(parseFloat(el.dataset.max), resto)).toFixed(2);
+/* ---- modo PAGAMENTO: usar em notas (1 Empresa · 2 Notas · 3 Confirmar) ---- */
+function cfvPag(txId) {
+  cfvModo = 'pag'; cfvAlvo = txId; cfvVals = {}; cfvChk = {}; cfvEmp = '';
+  cfvRotulos(['1 · Empresa', '2 · Notas', '3 · Confirmar']);
+  document.getElementById('cfv-tit').textContent = 'Carregando…';
+  document.getElementById('cfv-sub').textContent = '';
+  document.getElementById('cfv-l-emp').innerHTML =
+    '<div style="padding:.8rem;font-size:.82rem;color:#6b7684">carregando notas…</div>';
+  cfvIr(0);
+  cfvMostrar();
+  fetch('{{ url_for("conf_fornecedores_dfe.notas_candidatas", tx_id=0) }}'.replace(/0$/, txId))
+    .then(cfdJson)
+    .then(function (j) {
+      if (!j.ok) { cfvErro(j.erro || 'falhou'); return; }
+      cfvTeto = j.pagamento.livre;
+      document.getElementById('cfv-tit').textContent =
+        'Pagamento de ' + j.pagamento.data + ' · ' + cfdMoeda(j.pagamento.valor);
+      document.getElementById('cfv-sub').textContent =
+        'livre pra usar: ' + cfdMoeda(cfvTeto);
+      cfvItens = j.notas.map(function (n) {
+        return { id: n.doc_id, emp: String(n.empresa_id || ''),
+                 t1: n.rotulo + ' · ' + n.data,
+                 t2: n.empresa + ' · nota de ' + cfdMoeda(n.valor),
+                 max: n.falta, rot: 'faltam ' + cfdMoeda(n.falta) };
+      });
+      if (!cfvItens.length) { cfvErro('Nenhuma nota deste fornecedor com valor em aberto.'); return; }
+      // Empresas distintas das notas (o sistema é multi-empresa)
+      var emps = {}, ordem = [];
+      j.notas.forEach(function (n) {
+        var k = String(n.empresa_id || '');
+        if (!(k in emps)) { emps[k] = { nome: n.empresa, n: 0 }; ordem.push(k); }
+        emps[k].n++;
+      });
+      var htmlE = '<label class="opc"><input type="radio" name="cfv-emp" value="" checked>' +
+        '<span>Todas as empresas</span></label>';
+      ordem.forEach(function (k) {
+        htmlE += '<label class="opc"><input type="radio" name="cfv-emp" value="' + k + '">' +
+          '<span>' + emps[k].nome + '<small>' + emps[k].n +
+          ' nota(s) em aberto</small></span></label>';
+      });
+      document.getElementById('cfv-l-emp').innerHTML = htmlE;
+    })
+    .catch(function (e) { cfvErro('Não consegui carregar: ' + e.message); });
+}
+
+/* ---- modo NOTA: vincular pagamentos (1 Pagamentos · 2 Confirmar) ---- */
+function cfvNota(docId) {
+  cfvModo = 'nota'; cfvAlvo = docId; cfvVals = {}; cfvChk = {}; cfvEmp = '';
+  cfvRotulos(['1 · Pagamentos', '2 · Confirmar']);
+  document.getElementById('cfv-tit').textContent = 'Carregando…';
+  document.getElementById('cfv-sub').textContent = '';
+  document.getElementById('cfv-l-itens').innerHTML =
+    '<div style="padding:.8rem;font-size:.82rem;color:#6b7684">carregando pagamentos…</div>';
+  cfvIr(1);
+  cfvMostrar();
+  fetch('{{ url_for("conf_fornecedores_dfe.candidatos", doc_id=0) }}'.replace(/0$/, docId))
+    .then(cfdJson)
+    .then(function (j) {
+      if (!j.ok) { cfvErro(j.erro || 'falhou'); return; }
+      cfvTeto = j.falta;
+      document.getElementById('cfv-tit').textContent = j.nota;
+      document.getElementById('cfv-sub').textContent = 'faltam: ' + cfdMoeda(j.falta);
+      var dg = j.diag || {};
+      if (!j.candidatos.length) {
+        var causa = dg.pagamentos_do_fornecedor
+          ? 'Achei ' + dg.pagamentos_do_fornecedor + ' pagamento(s) deste fornecedor, mas ' +
+            'todos já estão inteiramente vinculados a outras notas.'
+          : 'Não achei nenhum lançamento de saída conciliado neste fornecedor. ' +
+            'Confira no OFX se o pagamento está apontado para ele.';
+        cfvErro(causa);
+        return;
       }
-      cfdAtualiza();
-    });
-    val.addEventListener('input', cfdAtualiza);
-    val.addEventListener('click', function (ev) { ev.stopPropagation(); });
-  });
-  cfdAtualiza();
+      cfvItens = j.candidatos.map(function (c) {
+        return { id: c.id, emp: '', t1: 'Pagamento de ' + c.data,
+                 t2: (c.descricao || '—'),
+                 max: c.livre, rot: 'livre ' + cfdMoeda(c.livre) };
+      });
+      cfvMontaItens();
+    })
+    .catch(function (e) { cfvErro('Não consegui carregar: ' + e.message); });
 }
 
-function cfdSoma(fora) {
-  var s = 0;
-  document.querySelectorAll('#cfd-mlista .cand').forEach(function (el) {
-    if (el === fora) return;
-    if (el.querySelector('.cand-chk').checked) {
-      s += parseFloat(el.querySelector('.cand-val').value) || 0;
-    }
-  });
-  return s;
+function cfvErro(msg) {
+  var alvo = (cfvModo === 'pag' && cfvPassoN === 0) ? 'cfv-l-emp' : 'cfv-l-itens';
+  document.getElementById(alvo).innerHTML =
+    '<div style="padding:.8rem;font-size:.82rem;color:#6b7684">' + msg + '</div>';
 }
 
-function cfdAtualiza() {
-  var s = cfdSoma(null);
-  var ok = document.getElementById('cfd-mok');
-  ok.disabled = !(s > 0.005 && s <= cfdTeto + 0.005);
-  ok.textContent = s > 0.005 ? 'Vincular ' + cfdMoeda(s) : 'Vincular';
+/* passos: no modo pagamento sao 0-1-2; no modo nota, 1-2 (sem empresa) */
+function cfvIr(n) {
+  cfvPassoN = n;
+  var ps = document.querySelectorAll('#cfv-passos .passo');
+  var vis = (cfvModo === 'pag') ? [0, 1, 2] : [1, 2];
+  for (var i = 0; i < 3; i++) {
+    document.getElementById('cfv-et' + i).hidden = (i !== n);
+  }
+  ps.forEach(function (p, i) {
+    var idx = (cfvModo === 'pag') ? i : i + 1;   // rotulo i cobre a etapa idx
+    p.classList.toggle('aqui', idx === n);
+    p.classList.toggle('on', idx <= n);
+  });
+  var primeiro = (cfvModo === 'pag') ? 0 : 1;
+  document.getElementById('cfv-bt-voltar').hidden = (n === primeiro);
+  document.getElementById('cfv-bt-ir').textContent = (n === 2) ? 'Vincular' : 'Avançar';
 }
 
-function cfdSalvarVinculo() {
-  var itens = [], estourou = false;
-  document.querySelectorAll('#cfd-mlista .cand').forEach(function (el) {
-    if (!el.querySelector('.cand-chk').checked) return;
-    var v = parseFloat(el.querySelector('.cand-val').value) || 0;
-    if (v <= 0) return;
-    if (v > parseFloat(el.dataset.max) + 0.005) estourou = true;
-    itens.push(cfdModo === 'nota'
-      ? { doc_id: cfdAlvo, transacao_id: parseInt(el.dataset.id, 10), valor: v }
-      : { doc_id: parseInt(el.dataset.id, 10), transacao_id: cfdAlvo, valor: v });
-  });
-  if (!itens.length) { alert('Marque ao menos um item.'); return; }
-  if (estourou) { alert('Um dos valores passa do que aquele item aceita.'); return; }
-  var soma = itens.reduce(function (a, b) { return a + b.valor; }, 0);
-  if (soma > cfdTeto + 0.005) {
-    alert('A soma (' + cfdMoeda(soma) + ') passa do disponível (' + cfdMoeda(cfdTeto) + ').');
+function cfvVoltar() {
+  if (cfvPassoN === 2) { cfvIr(1); return; }
+  if (cfvPassoN === 1 && cfvModo === 'pag') { cfvIr(0); return; }
+}
+
+function cfvAvancar(btn) {
+  if (cfvPassoN === 0) {
+    var m = document.querySelector('input[name="cfv-emp"]:checked');
+    cfvEmp = m ? m.value : '';
+    cfvMontaItens();
+    cfvIr(1);
     return;
   }
-  var btn = document.getElementById('cfd-mok');
-  btn.disabled = true; btn.textContent = 'gravando...';
+  if (cfvPassoN === 1) {
+    var itens = cfvColeta();
+    if (!itens.lista.length) { alert('Marque ao menos um item.'); return; }
+    if (itens.estourou) { alert('Um dos valores passa do que aquele item aceita.'); return; }
+    if (itens.soma > cfvTeto + 0.005) {
+      alert('A soma (' + cfdMoeda(itens.soma) + ') passa do disponível (' +
+            cfdMoeda(cfvTeto) + ').');
+      return;
+    }
+    cfvResumo(itens);
+    cfvIr(2);
+    return;
+  }
+  cfvSalvar(btn);
+}
+
+/* lista de caixinhas (guarda marcados/valores pra sobreviver ao filtro) */
+function cfvMontaItens() {
+  var alvo = document.getElementById('cfv-l-itens');
+  var vis = cfvItens.filter(function (c) {
+    return !cfvEmp || c.emp === cfvEmp;
+  });
+  document.getElementById('cfv-rot-itens').textContent = (cfvModo === 'pag')
+    ? 'Quais notas este pagamento cobre?'
+    : 'Quais pagamentos entram nesta nota?';
+  alvo.innerHTML = vis.map(function (c) {
+    var marcado = cfvChk[c.id] ? ' checked' : '';
+    var v = cfvVals[c.id] !== undefined ? cfvVals[c.id] : '';
+    return '<label class="opc" data-id="' + c.id + '" data-max="' + c.max + '">' +
+      '<input type="checkbox" class="cfv-chk"' + marcado + '>' +
+      '<span style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+      c.t1 + '<small>' + c.t2 + '</small></span>' +
+      '<span style="text-align:right;flex:0 0 auto">' +
+      '<input type="number" step="0.01" min="0.01" class="cfv-val" value="' + v + '"' +
+      (marcado ? '' : ' hidden') +
+      ' style="width:110px;text-align:right;border:1px solid #d9e0e8;border-radius:8px;padding:.25rem .4rem"><br>' +
+      '<small style="color:#6b7684">' + c.rot + '</small></span></label>';
+  }).join('');
+  alvo.querySelectorAll('.opc').forEach(function (el) {
+    var chk = el.querySelector('.cfv-chk');
+    var val = el.querySelector('.cfv-val');
+    chk.addEventListener('change', function () {
+      cfvChk[el.dataset.id] = chk.checked;
+      val.hidden = !chk.checked;
+      if (chk.checked && !val.value) {
+        var resto = cfvTeto - cfvColeta().soma;
+        val.value = Math.max(0, Math.min(parseFloat(el.dataset.max), resto)).toFixed(2);
+        cfvVals[el.dataset.id] = val.value;
+      }
+      cfvPinta();
+    });
+    val.addEventListener('input', function () {
+      cfvVals[el.dataset.id] = val.value;
+      cfvPinta();
+    });
+    val.addEventListener('click', function (ev) { ev.stopPropagation(); ev.preventDefault(); });
+  });
+  cfvPinta();
+}
+
+function cfvColeta() {
+  var lista = [], soma = 0, estourou = false;
+  cfvItens.forEach(function (c) {
+    if (!cfvChk[c.id]) return;
+    var v = parseFloat(cfvVals[c.id]) || 0;
+    if (v <= 0) return;
+    if (v > c.max + 0.005) estourou = true;
+    soma += v;
+    lista.push({ item: c, valor: v });
+  });
+  return { lista: lista, soma: soma, estourou: estourou };
+}
+
+function cfvPinta() {
+  var c = cfvColeta();
+  document.getElementById('cfv-soma').textContent = c.lista.length
+    ? 'Usando ' + cfdMoeda(c.soma) + ' de ' + cfdMoeda(cfvTeto) + ' disponíveis'
+    : 'Nada marcado ainda — o teto é ' + cfdMoeda(cfvTeto) + '.';
+}
+
+function cfvResumo(c) {
+  var h = c.lista.map(function (x) {
+    var fecha = Math.abs(x.valor - x.item.max) <= 0.005;
+    return '<div style="display:flex;justify-content:space-between;font-size:.84rem;' +
+      'padding:.35rem 0;border-bottom:1px dashed #e7ebf1"><span>' + x.item.t1 +
+      (fecha ? ' <b style="color:#1c6b34">(fecha)</b>' : ' <b style="color:#8a5a00">(parcial)</b>') +
+      '</span><b>' + cfdMoeda(x.valor) + '</b></div>';
+  }).join('');
+  var sobra = cfvTeto - c.soma;
+  h += '<div style="display:flex;justify-content:space-between;font-size:.84rem;padding:.45rem 0">' +
+    '<span>Total do vínculo</span><b>' + cfdMoeda(c.soma) + '</b></div>';
+  if (sobra > 0.005) {
+    h += '<div style="background:#fdf0d6;color:#8a5a00;border-radius:8px;padding:.45rem .6rem;' +
+      'font-size:.8rem;font-weight:700">Sobram ' + cfdMoeda(sobra) +
+      (cfvModo === 'pag' ? ' no pagamento — ficam pendentes pra próxima nota.'
+                         : ' em aberto nesta nota — seguem como pendência.') + '</div>';
+  } else {
+    h += '<div style="background:#e4f4e8;color:#1c6b34;border-radius:8px;padding:.45rem .6rem;' +
+      'font-size:.8rem;font-weight:700">' +
+      (cfvModo === 'pag' ? 'O pagamento fica todo usado.' : 'A nota fecha por completo.') + '</div>';
+  }
+  document.getElementById('cfv-resumo').innerHTML = h;
+}
+
+function cfvSalvar(btn) {
+  var c = cfvColeta();
+  var itens = c.lista.map(function (x) {
+    return cfvModo === 'nota'
+      ? { doc_id: cfvAlvo, transacao_id: parseInt(x.item.id, 10), valor: x.valor }
+      : { doc_id: parseInt(x.item.id, 10), transacao_id: cfvAlvo, valor: x.valor };
+  });
+  btn.disabled = true; btn.textContent = 'gravando…';
   fetch('{{ url_for("conf_fornecedores_dfe.vincular_lote") }}', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
