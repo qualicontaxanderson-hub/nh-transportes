@@ -485,6 +485,29 @@
     como <i>saldo anterior</i>, então adiantamento não vira diferença falsa a cada período.
   </p>
 
+  {# ---------- Abinhas: o que ainda pede acao x o que ja fechou ---------- #}
+  <div class="conc-abas">
+    <button type="button" class="conc-tab" data-m="nao" onclick="cfdConc('nao')">
+      Não conciliados <span class="b" id="conc-n-nao">0</span></button>
+    <button type="button" class="conc-tab" data-m="sim" onclick="cfdConc('sim')">
+      Conciliados <span class="b" id="conc-n-sim">0</span></button>
+    <button type="button" class="conc-tab" data-m="todos" onclick="cfdConc('todos')">
+      Tudo junto</button>
+  </div>
+<style>
+  #cfd .conc-abas{ display:flex; gap:.35rem; margin-bottom:.7rem;
+    overflow-x:auto; }
+  #cfd .conc-tab{ flex:0 0 auto; border:1px solid #d9e0e8; background:#fff;
+    color:#3a4655; border-radius:99px; padding:.38rem .8rem; font-size:.8rem;
+    font-weight:800; cursor:pointer; font-family:inherit; display:inline-flex;
+    align-items:center; gap:.35rem; }
+  #cfd .conc-tab.on{ background:#1D63A5; border-color:#1D63A5; color:#fff; }
+  #cfd .conc-tab .b{ background:#eaf1f9; color:#0C4C86; border-radius:99px;
+    min-width:17px; height:17px; display:inline-grid; place-items:center;
+    font-size:.64rem; padding:0 .3rem; }
+  #cfd .conc-tab.on .b{ background:#fff; }
+</style>
+
   {# ---------- Notas sem fornecedor cadastrado ---------- #}
   {% if orfas %}
   <div class="bloco">
@@ -619,6 +642,9 @@
         {% set livre_pg = (l.valor - (l.usado or 0)) if l.tipo == 'pagamento' else 0 %}
         {% set vman = (l.vinculos | sum(attribute='valor')) if l.tipo == 'nota' else 0 %}
         <div class="lin lin--{{ 'pg' if l.tipo == 'pagamento' else 'nf' }}"
+             data-conc="{{ '1' if (l.tipo == 'nota' and vman >= l.valor - 0.005)
+                                or (l.tipo == 'pagamento' and livre_pg <= 0.005)
+                           else '0' }}"
              {% if l.tipo == 'nota' %}id="doc-{{ l.id }}"{% endif %}>
           <span class="lin__ico">
             <i class="bi {{ 'bi-cash-coin' if l.tipo == 'pagamento' else 'bi-receipt' }}"></i></span>
@@ -879,6 +905,59 @@ function cfdSepararGrupo(fid) {
 // ---------- Vínculo manual pagamento -> nota ----------
 // O automático (por data) resolve o caso comum; isto é para o que ele não
 // alcança — em especial pagamento anterior ao corte da captura.
+// ---------- Abinhas conciliado x nao conciliado ----------
+// A linha ja nasce com data-conc (nota 100% vinculada / pagamento todo
+// usado). O filtro e por CIMA do DOM: nada recarrega ao trocar de aba.
+function cfdConc(m) {
+  sessionStorage.setItem('cfd-conc', m);
+  document.querySelectorAll('#cfd .conc-tab').forEach(function (b) {
+    b.classList.toggle('on', b.dataset.m === m);
+  });
+  document.querySelectorAll('#cfd .forn').forEach(function (card) {
+    var visiveis = 0;
+    var mostraUltima = false;
+    // percorre na ordem: cada .vinc segue a sorte da linha acima dela
+    card.querySelectorAll('.lin, .vinc').forEach(function (el) {
+      if (el.classList.contains('lin')) {
+        var conc = el.dataset.conc === '1';
+        mostraUltima = (m === 'todos') || (m === 'sim' ? conc : !conc);
+        el.style.display = mostraUltima ? '' : 'none';
+        if (mostraUltima) visiveis++;
+      } else {
+        el.style.display = mostraUltima ? '' : 'none';
+      }
+    });
+    card.style.display = visiveis ? '' : 'none';
+  });
+  // orfas so fazem sentido no lado "nao conciliado"
+  document.querySelectorAll('#cfd .bloco').forEach(function (bl) {
+    if (bl.textContent.indexOf('sem fornecedor') >= 0) {
+      bl.style.display = (m === 'sim') ? 'none' : '';
+    }
+  });
+}
+(function () {
+  var nN = document.querySelectorAll('#cfd .lin[data-conc="0"]').length;
+  var nS = document.querySelectorAll('#cfd .lin[data-conc="1"]').length;
+  var eN = document.getElementById('conc-n-nao');
+  var eS = document.getElementById('conc-n-sim');
+  if (eN) eN.textContent = nN;
+  if (eS) eS.textContent = nS;
+  cfdConc(sessionStorage.getItem('cfd-conc') || 'nao');
+  // volta pro ponto onde a pessoa estava trabalhando (vinculo recarrega)
+  var y = sessionStorage.getItem('cfd-scroll');
+  if (y !== null) {
+    sessionStorage.removeItem('cfd-scroll');
+    window.scrollTo(0, parseInt(y, 10) || 0);
+  }
+})();
+
+// Recarrega SEM perder o lugar: guarda o scroll antes.
+function cfdReload() {
+  sessionStorage.setItem('cfd-scroll', String(window.scrollY || 0));
+  window.location.reload();
+}
+
 // ---------- Vínculo em PASSOS (gaveta padrão) ----------
 var cfvModo = 'nota', cfvAlvo = null, cfvTeto = 0, cfvPassoN = 0;
 var cfvItens = [], cfvVals = {}, cfvChk = {}, cfvEmp = '';
@@ -1175,7 +1254,7 @@ function cfvSalvar(btn) {
     if (!res.ok || !res.j.ok) { alert((res.j && res.j.erro) || 'não consegui vincular'); return; }
     // Recarrega mesmo: o vínculo mexe no saldo, na cobertura e na alocação
     // automática de todas as outras notas do fornecedor.
-    window.location.reload();
+    cfdReload();
   })
   .catch(function (e) {
     btn.disabled = false; btn.textContent = 'Vincular'; alert('Erro de rede: ' + e);
@@ -1195,7 +1274,7 @@ function cfdDesvincular(btn, vincId) {
     if (!res.ok || !res.j.ok) {
       btn.disabled = false; alert((res.j && res.j.erro) || 'não consegui desfazer'); return;
     }
-    window.location.reload();
+    cfdReload();
   })
   .catch(function (e) { btn.disabled = false; alert('Erro de rede: ' + e); });
 }
