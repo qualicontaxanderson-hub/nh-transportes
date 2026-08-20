@@ -639,6 +639,61 @@ def _pagamentos_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids):
     return rows
 
 
+def _devolucoes_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids):
+    """Creditos conciliados como devolucao do fornecedor: dinheiro que VOLTOU
+    (estorno, deposito em duplicidade). Entram como pagamento negativo."""
+    where = ["bt.tipo = 'CREDIT'",
+             "bt.tipo_conciliacao = 'devolucao_fornecedor'",
+             "bt.fornecedor_id IS NOT NULL",
+             "bt.data_transacao BETWEEN %s AND %s"]
+    params = [data_ini, data_fim]
+    _em("ba.cliente_id", empresa_ids, where, params)
+    _em("m.forn_id", fornecedor_ids, where, params)
+
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT bt.id, m.forn_id AS fornecedor_id, bt.data_transacao, bt.descricao,
+               COALESCE(bt.valor,0)                       AS valor,
+               f.razao_social                             AS fornecedor_nome,
+               f.cnpj                                     AS fornecedor_cnpj
+          FROM bank_transactions bt
+          JOIN bank_accounts ba ON ba.id = bt.account_id
+          JOIN fornecedores fp  ON fp.id = bt.fornecedor_id
+          JOIN %s ON m.raiz = %s
+          %s
+         WHERE %s
+         ORDER BY bt.data_transacao, bt.id
+    """ % (_MAPA, _raiz_de('fp'), _JOIN_TITULAR, " AND ".join(where)), params)
+    rows = cur.fetchall()
+    cur.close()
+    return rows
+
+
+def _devolucoes_anteriores(conn, data_ini, empresa_ids, fornecedor_ids):
+    """Devolucao entre o corte e o inicio do periodo abate o pago de tras."""
+    where = ["bt.tipo = 'CREDIT'",
+             "bt.tipo_conciliacao = 'devolucao_fornecedor'",
+             "bt.fornecedor_id IS NOT NULL",
+             "bt.data_transacao >= %s", "bt.data_transacao < %s"]
+    params = [DATA_CORTE_DFE, data_ini]
+    _em("ba.cliente_id", empresa_ids, where, params)
+    _em("m.forn_id", fornecedor_ids, where, params)
+
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT m.forn_id AS fornecedor_id, COALESCE(SUM(bt.valor),0) AS total
+          FROM bank_transactions bt
+          JOIN bank_accounts ba ON ba.id = bt.account_id
+          JOIN fornecedores fp  ON fp.id = bt.fornecedor_id
+          JOIN %s ON m.raiz = %s
+         WHERE %s
+         GROUP BY m.forn_id
+    """ % (_MAPA, _raiz_de('fp'), " AND ".join(where)), params)
+    rows = cur.fetchall()
+    cur.close()
+    return {r['fornecedor_id']: float(r['total'] or 0) for r in rows}
+
+
 _DDL_VINCULO = """
 CREATE TABLE IF NOT EXISTS dfe_pagamento_nota (
     id            INT AUTO_INCREMENT PRIMARY KEY,
@@ -925,10 +980,20 @@ def _aloca_fifo(linhas, saldo_anterior):
 
     abertas = []
     for l in linhas:
+        if l['tipo'] == 'devolucao':
+            # Dinheiro que voltou. Se casou com um pagamento (valor exato), o
+            # livre daquele pagamento já foi zerado — aqui não faz nada. Sem
+            # par, sai do caixa; o que o caixa não cobrir vira descoberto.
+            if not l.get('abatida_de'):
+                tira = min(caixa, l['valor'])
+                caixa -= tira
+                descoberto_antigo += l['valor'] - tira
+            continue
         if l['tipo'] == 'pagamento':
             # Só a parte LIVRE do pagamento entra no rateio automático: o que
-            # já foi amarrado à mão tem dono.
-            caixa += max(l['valor'] - l.get('usado', 0.0), 0.0)
+            # já foi amarrado à mão tem dono — e o que foi devolvido, também.
+            caixa += max(l['valor'] - l.get('usado', 0.0)
+                         - l.get('dev_abatido', 0.0), 0.0)
             # Primeiro tapa o buraco velho, depois as notas em aberto.
             usa = min(caixa, descoberto_antigo)
             caixa -= usa
@@ -961,7 +1026,7 @@ def _aloca_fifo(linhas, saldo_anterior):
 
 
 def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None,
-           vinculos=None, usado=None, nomes=None):
+           vinculos=None, usado=None, nomes=None, devolucoes=None):
     """Uma linha do tempo por fornecedor, com saldo corrente.
 
     Ordem: por data; empatou, pagamento antes da nota — é a sequência real
@@ -1015,6 +1080,23 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None,
             'fora_periodo': bool(p.get('fora_periodo')),
         })
 
+    for dv in (devolucoes or []):
+        f = por_forn[dv['fornecedor_id']]
+        f['nome'] = f['nome'] or dv['fornecedor_nome']
+        f['cnpj'] = f['cnpj'] or dv['fornecedor_cnpj']
+        f['eventos'].append({
+            'tipo': 'devolucao',
+            'data': _dia(dv['data_transacao']),
+            'ordem': 0,
+            'id': dv['id'],
+            'valor': float(dv['valor'] or 0),
+            'rotulo': 'Devolução',
+            'detalhe': (dv['descricao'] or '')[:60],
+            'resumo': False,
+            'conferido': None,
+            'chave': None,
+        })
+
     # Fornecedor que só tem saldo de trás (nenhum movimento no período) também
     # precisa aparecer — é justamente onde mora pendência esquecida.
     for fid in set(list(notas_ant.keys()) + list(pagos_ant.keys())):
@@ -1032,6 +1114,10 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None,
             if ev['tipo'] == 'pagamento':
                 saldo += ev['valor']
                 pago += ev['valor']
+            elif ev['tipo'] == 'devolucao':
+                # Dinheiro que voltou: abate o pago — nao e compra nem receita.
+                saldo -= ev['valor']
+                pago -= ev['valor']
             else:
                 # O que foi quitado antes do corte nao corre NESTA conta —
                 # abate aqui, senao viraria divida falsa pra sempre.
@@ -1042,6 +1128,24 @@ def _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte=None,
 
         if not linhas and abs(saldo_anterior) < 0.005:
             continue                      # zerado e parado: não polui a tela
+
+        # Devolução casa com o pagamento de LIVRE igual (valor exato, mesmo
+        # fornecedor): o par se fecha sozinho. Igual leitura, nada gravado —
+        # sem par exato, a devolução fica "em aberto" e só abate o total.
+        pags_l = [l for l in linhas if l['tipo'] == 'pagamento']
+        for dv in linhas:
+            if dv['tipo'] != 'devolucao':
+                continue
+            alvo = next(
+                (p for p in pags_l
+                 if not p.get('devolucao')
+                 and abs((p['valor'] - p.get('usado', 0.0)) - dv['valor']) <= 0.005),
+                None)
+            if alvo:
+                alvo['devolucao'] = {'data': dv['data'], 'descricao': dv['detalhe'],
+                                     'valor': dv['valor'], 'tx_id': dv['id']}
+                alvo['dev_abatido'] = dv['valor']
+                dv['abatida_de'] = alvo['data']
 
         sobra, descoberto = _aloca_fifo(linhas, saldo_anterior)
         notas_lin = [l for l in linhas if l['tipo'] == 'nota']
@@ -1128,8 +1232,12 @@ def conf_fornecedores_dfe():
 
         notas_ant = _notas_anteriores(conn, data_ini, empresa_ids, fornecedor_ids)
         pagos_ant = _pagamentos_anteriores(conn, data_ini, empresa_ids, fornecedor_ids)
+        for fid, v in _devolucoes_anteriores(conn, data_ini, empresa_ids,
+                                             fornecedor_ids).items():
+            pagos_ant[fid] = pagos_ant.get(fid, 0.0) - v
         notas = _notas_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids)
         pagamentos = _pagamentos_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids)
+        devolucoes = _devolucoes_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids)
         orfas = _notas_sem_fornecedor(conn, data_ini, data_fim, empresa_ids)
         ocultas = _notas_ocultas(conn, empresa_ids, fornecedor_ids)
         pagos_ocultos = _pagamentos_ocultos(conn, empresa_ids, fornecedor_ids)
@@ -1149,13 +1257,14 @@ def conf_fornecedores_dfe():
         conn.close()
 
     dados = _monta(notas, pagamentos, notas_ant, pagos_ant, pre_corte,
-                   vinculos, usado, nomes)
+                   vinculos, usado, nomes, devolucoes)
     for d in dados:
         d['ocultas'] = ocultas.get(d['fornecedor_id'], [])
         d['pagos_ocultos'] = pagos_ocultos.get(d['fornecedor_id'], [])
 
-    pag_aberto = sum(max(0.0, float(p['valor'] or 0) - usado.get(p['id'], 0.0))
-                     for p in pagamentos)
+    pag_aberto = sum(
+        max(0.0, l['valor'] - l.get('usado', 0.0) - l.get('dev_abatido', 0.0))
+        for d in dados for l in d['linhas'] if l['tipo'] == 'pagamento')
     totais = {
         'pag_aberto': pag_aberto,
         'comprado': sum(d['comprado'] for d in dados),
@@ -1585,6 +1694,41 @@ def pago_antes_corte():
 
     if not achou and marcar:
         return jsonify(ok=False, erro='nota não encontrada'), 404
+    return jsonify(ok=True)
+
+
+@bp.route('/conf_fornecedores_dfe/desfazer_devolucao', methods=['POST'])
+@login_required
+@admin_required
+def desfazer_devolucao():
+    """Desconcilia a devolucao: o credito volta a "pendente" no conciliador
+    do banco e o pagamento recupera o livre. So mexe em transacao que esteja
+    conciliada exatamente como devolucao_fornecedor."""
+    dados = request.get_json(silent=True) or {}
+    try:
+        tx_id = int(dados.get('tx_id'))
+    except (TypeError, ValueError):
+        return jsonify(ok=False, erro='transação inválida'), 400
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("""UPDATE bank_transactions
+                       SET status='pendente', fornecedor_id=NULL,
+                           tipo_conciliacao=NULL,
+                           conciliado_em=NULL, conciliado_por=NULL
+                     WHERE id = %s
+                       AND tipo_conciliacao = 'devolucao_fornecedor'""",
+                    (tx_id,))
+        conn.commit()
+        achou = cur.rowcount
+        cur.close()
+    finally:
+        conn.close()
+
+    if not achou:
+        return jsonify(ok=False, erro='essa transação não está conciliada '
+                                      'como devolução'), 404
     return jsonify(ok=True)
 
 

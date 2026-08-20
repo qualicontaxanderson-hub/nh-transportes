@@ -899,6 +899,15 @@ body > .container-fluid:has(#cnc){
                       receita nova, só mudou de lugar.</span>
                   </span>
                 </button>
+                <button type="button" class="destino" id="tab_cr_dev_btn"
+                        onclick="alternarAbaCredito('devolucao')">
+                  <span class="destino__i"><i class="bi bi-arrow-counterclockwise"></i></span>
+                  <span class="destino__t">
+                    <span class="destino__n">Devolução de fornecedor</span>
+                    <span class="destino__d">Estorno, depósito em duplicidade, acerto —
+                      o fornecedor devolveu dinheiro. Não é receita.</span>
+                  </span>
+                </button>
               </div>
             </div>
 
@@ -913,6 +922,24 @@ body > .container-fluid:has(#cnc){
               <select name="forma_recebimento_id" id="selectForma" class="form-select" size="7">
                 {% for f in formas_recebimento %}
                 <option value="{{ f.id }}" data-nome="{{ f.nome|lower }}">{{ f.nome }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <!-- Aba Devolucao de fornecedor -->
+            <div id="aba_cr_devolucao" style="display:none;">
+              <div class="alert alert-warning py-2 px-3 small mb-2">
+                <i class="bi bi-arrow-counterclockwise"></i>
+                <strong>Devolução de fornecedor</strong> — não vira receita.
+                Cai direto na conta do fornecedor (Migrações → Fornecedores) e
+                abate o pagamento que voltou.
+              </div>
+              <input type="text" id="buscaFornDev" class="form-control form-control-sm mb-1"
+                     placeholder="Buscar fornecedor..." oninput="filtrarFornDev()">
+              <select name="devolucao_fornecedor_id" id="selectFornDev" class="form-select" size="7">
+                {% for f in fornecedores %}
+                <option value="{{ f.id }}" data-nome="{{ (f.razao_social or '')|lower }}"
+                        data-cnpj="{{ (f.cnpj or '')|replace('.','')|replace('/','')|replace('-','')|replace(' ','') }}">
+                  {{ f.razao_social }}</option>
                 {% endfor %}
               </select>
             </div>
@@ -1666,6 +1693,9 @@ document.querySelectorAll('.btn-conciliar').forEach(btn => {
       modalEl.dataset.txValorRaw = this.dataset.txValor || '0';
       /* De onde o dinheiro saiu — pra nao oferecer como destino. */
       modalEl.dataset.txConta = this.dataset.txConta || '';
+      /* Pra sugestao da devolucao: o CNPJ do extrato aponta o fornecedor. */
+      modalEl.dataset.txCnpj = this.dataset.txCnpj || '';
+      modalEl.dataset.txDesc = this.dataset.txDesc || '';
     }
     if (tipo === 'CREDIT') {
       if (this.dataset.sugestaoTransfRecebida === '1') {
@@ -2176,15 +2206,48 @@ function mpcIr(n) {
   document.getElementById('mpct').textContent = n === 1
     ? 'De onde veio esta entrada?'
     : (document.getElementById('tab_cr_transf_btn').classList.contains('active')
-       ? 'De qual conta?' : 'Qual forma de recebimento?');
+       ? 'De qual conta?'
+       : (document.getElementById('tab_cr_dev_btn').classList.contains('active')
+          ? 'Qual fornecedor devolveu?' : 'Qual forma de recebimento?'));
   mpRodape(n);
 }
 
+function filtrarFornDev() {
+  var q = (document.getElementById('buscaFornDev').value || '').toLowerCase();
+  var sel = document.getElementById('selectFornDev');
+  for (var i = 0; i < sel.options.length; i++) {
+    var o = sel.options[i];
+    o.hidden = q && (o.dataset.nome || '').indexOf(q) < 0;
+  }
+}
+
+/* Sugestao ao vivo: o CNPJ que aparece no proprio extrato aponta o
+   fornecedor. Nada gravado — so pre-seleciona. */
+function devSugerirPorCnpj() {
+  var m = document.getElementById('modalConciliar');
+  var bruto = ((m && m.dataset.txCnpj) || '') + ' ' + ((m && m.dataset.txDesc) || '');
+  var achado = (bruto.replace(/[.\/\-]/g, '').match(/\d{14}/) || [])[0];
+  if (!achado) return;
+  var sel = document.getElementById('selectFornDev');
+  if (!sel) return;
+  for (var i = 0; i < sel.options.length; i++) {
+    if ((sel.options[i].dataset.cnpj || '') === achado) {
+      sel.value = sel.options[i].value;
+      return;
+    }
+  }
+}
+
 function alternarAbaCredito(aba) {
-  document.getElementById('modal_tipo_debito').value = aba === 'transferencia' ? 'transferencia' : '';
+  document.getElementById('modal_tipo_debito').value =
+    aba === 'transferencia' ? 'transferencia'
+      : (aba === 'devolucao' ? 'devolucao_fornecedor' : '');
   document.getElementById('aba_cr_forma').style.display        = aba === 'forma'        ? '' : 'none';
   document.getElementById('aba_cr_transferencia').style.display = aba === 'transferencia' ? '' : 'none';
-  [['tab_cr_forma_btn', 'forma'], ['tab_cr_transf_btn', 'transferencia']].forEach(function (par) {
+  document.getElementById('aba_cr_devolucao').style.display     = aba === 'devolucao'     ? '' : 'none';
+  if (aba === 'devolucao') devSugerirPorCnpj();
+  [['tab_cr_forma_btn', 'forma'], ['tab_cr_transf_btn', 'transferencia'],
+   ['tab_cr_dev_btn', 'devolucao']].forEach(function (par) {
     var b = document.getElementById(par[0]);
     var eu = (par[1] === aba);
     b.classList.toggle('active', eu);

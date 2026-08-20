@@ -126,6 +126,9 @@
     place-items:center; font-size:13px; border-radius:8px;
     margin:-.2rem -.35rem -.2rem 0; }
   #cfd .vinc .x:hover, #cfd .vinc .x:active{ color:var(--danger); background:#fbe9e9; }
+  #cfd .vinc--dev{ background:#eef6fc; }
+  #cfd .vinc--dev .d, #cfd .vinc--dev .v{ color:#0C4C86; }
+  #cfd .lin--dv .lin__ico{ background:#fdf0d6; color:#8a5a00; }
   #cfd .vinc--quit{ background:#f4f6f9; }
   #cfd .vinc--quit .d, #cfd .vinc--quit .v{ color:#6b7684; }
   #cfd .cob--fp{ background:#e6f1fb; color:var(--blue-deep); }
@@ -685,17 +688,18 @@
         <pre class="diag-saida" hidden></pre>
 
         {% for l in d.linhas %}
-        {% set livre_pg = (l.valor - (l.usado or 0)) if l.tipo == 'pagamento' else 0 %}
+        {% set livre_pg = (l.valor - (l.usado or 0) - (l.dev_abatido or 0)) if l.tipo == 'pagamento' else 0 %}
         {% set vman = (l.vinculos | sum(attribute='valor')) if l.tipo == 'nota' else 0 %}
         {% set vquit = (l.quitado_pre or 0) if l.tipo == 'nota' else 0 %}
         {% set vtot = vman + vquit %}
-        <div class="lin lin--{{ 'pg' if l.tipo == 'pagamento' else 'nf' }}"
+        <div class="lin lin--{{ 'pg' if l.tipo == 'pagamento' else ('dv' if l.tipo == 'devolucao' else 'nf') }}"
              data-conc="{{ '1' if (l.tipo == 'nota' and vtot >= l.valor - 0.005)
                                 or (l.tipo == 'pagamento' and livre_pg <= 0.005)
+                                or (l.tipo == 'devolucao' and l.abatida_de)
                            else '0' }}"
              {% if l.tipo == 'nota' %}id="doc-{{ l.id }}"{% endif %}>
           <span class="lin__ico">
-            <i class="bi {{ 'bi-cash-coin' if l.tipo == 'pagamento' else 'bi-receipt' }}"></i></span>
+            <i class="bi {{ 'bi-cash-coin' if l.tipo == 'pagamento' else ('bi-arrow-counterclockwise' if l.tipo == 'devolucao' else 'bi-receipt') }}"></i></span>
           <div class="lin__t">
             <span class="data">{{ l.data.strftime('%d/%m') }}</span>
             {{ l.rotulo }}
@@ -709,14 +713,23 @@
           </div>
           <div class="lin__m">{{ l.detalhe or '—' }}</div>
           <div class="lin__v">{{ '+' if l.tipo == 'pagamento' else '−' }}{{ l.valor | formatar_moeda }}</div>
+          {%- if false %}{# sinal: devolucao tambem e '−' — o if acima ja resolve #}{% endif -%}
           <div class="lin__s">
             {%- if l.tipo == 'nota' -%}
               {%- if vtot >= l.valor - 0.005 -%}<span class="cob cob--ok">conferida</span>
               {%- elif vtot > 0.005 -%}<span class="cob cob--pa">faltam {{ (l.valor - vtot) | formatar_moeda }}</span>
               {%- else -%}<span class="cob cob--no">em aberto</span>{%- endif -%}
+            {%- elif l.tipo == 'devolucao' -%}
+              saldo {{ l.saldo | formatar_moeda }}
+              {%- if l.abatida_de %}<br><span class="cob cob--fp"
+                title="casou com o pagamento de mesmo valor — o par se anula">abatida do pagamento de {{ l.abatida_de.strftime('%d/%m') }}</span>
+              {%- else %}<br><span class="cob cob--pa"
+                title="nenhum pagamento em aberto com esse valor exato — mesmo assim já abate o total pago">em aberto</span>{% endif -%}
             {%- else -%}
               saldo {{ l.saldo | formatar_moeda }}
-              {%- if livre_pg > 0.005 %}<br><span class="cob cob--pa"
+              {%- if l.devolucao %}<br><span class="cob cob--ok"
+                title="o fornecedor devolveu este dinheiro — o par se anula">devolvido</span>
+              {%- elif livre_pg > 0.005 %}<br><span class="cob cob--pa"
                 title="dinheiro ainda não amarrado a nota nenhuma — vincule quando a nota chegar">em aberto · livre {{ livre_pg | formatar_moeda }}</span>
               {%- else %}<br><span class="cob cob--ok">todo usado</span>{% endif -%}
               {%- if l.fora_periodo %}<br><span class="cob cob--fp">fora do período, vinculado</span>{% endif -%}
@@ -739,7 +752,7 @@
             </button>
           </div>
           {% endif %}
-          {% if l.tipo == 'pagamento' and livre_pg > 0.005 %}
+          {% if l.tipo == 'pagamento' and livre_pg > 0.005 and not l.devolucao %}
           <div class="lin__acoes">
             {% if (l.usado or 0) <= 0.005 %}
             <button type="button" class="oc-btn" onclick="cfdPgAntes({{ l.id }}, 1)"
@@ -755,6 +768,15 @@
           {% endif %}
         </div>
 
+        {% if l.tipo == 'pagamento' and l.devolucao %}
+        <div class="vinc vinc--dev">
+          <i class="bi bi-arrow-counterclockwise"></i>
+          <span class="d">devolvido em {{ l.devolucao.data.strftime('%d/%m/%Y') }} · {{ l.devolucao.descricao or 'estorno' }}</span>
+          <span class="v">{{ l.devolucao.valor | formatar_moeda }}</span>
+          <button type="button" class="x" onclick="cfdDevDesfaz({{ l.devolucao.tx_id }})"
+                  title="desfazer — o crédito volta pra conciliação do banco"><i class="bi bi-x-lg"></i></button>
+        </div>
+        {% endif %}
         {% if l.tipo == 'pagamento' %}{% for v in vinc_pag.get(l.id, []) %}
         <div class="vinc">
           <i class="bi bi-link-45deg"></i>
@@ -1394,6 +1416,21 @@ function cfdPagaAntes(docId, marcar) {
   .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
   .then(function (res) {
     if (!res.ok || !res.j.ok) { alert((res.j && res.j.erro) || 'não consegui marcar'); return; }
+    cfdReload();
+  })
+  .catch(function (e) { alert('Erro de rede: ' + e); });
+}
+
+function cfdDevDesfaz(txId) {
+  if (!confirm('Desfazer a devolução? O crédito volta pra conciliação do banco e o pagamento fica em aberto de novo.')) return;
+  fetch('{{ url_for("conf_fornecedores_dfe.desfazer_devolucao") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tx_id: txId })
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  .then(function (res) {
+    if (!res.ok || !res.j.ok) { alert((res.j && res.j.erro) || 'não consegui desfazer'); return; }
     cfdReload();
   })
   .catch(function (e) { alert('Erro de rede: ' + e); });

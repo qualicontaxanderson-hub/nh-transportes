@@ -1706,6 +1706,24 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                 except mysql.connector.errors.ProgrammingError:
                     # Coluna pode não existir ainda (migration pendente) — ignora
                     logger.debug("conta_origem_id column not yet available; skipping")
+        elif tipo_debito == 'devolucao_fornecedor':
+            # Crédito → Devolução de fornecedor (estorno, depósito em
+            # duplicidade). NÃO é receita: nada de forma de recebimento —
+            # o crédito fica amarrado ao fornecedor e a tela Migrações →
+            # Fornecedores o lê como estorno (pagamento negativo).
+            if not fornecedor_id:
+                raise ValueError("Escolha o fornecedor que devolveu o dinheiro.")
+            cursor.execute(
+                """UPDATE bank_transactions
+                   SET status='conciliado', fornecedor_id=%s,
+                       forma_recebimento_id=NULL,
+                       tipo_conciliacao='devolucao_fornecedor',
+                       conciliado_em=%s, conciliado_por=%s
+                   WHERE id=%s""",
+                (fornecedor_id, agora, usuario, tx_id),
+            )
+            # Sem auto-aprendizado aqui, de propósito: gravar texto→fornecedor
+            # no mapping contaminaria a sugestão dos DÉBITOS do mesmo CNPJ.
         else:
             # Crédito → Forma de Recebimento
             if not forma_recebimento_id:
@@ -1983,7 +2001,11 @@ def conciliar():
         fornecedor_id        = request.form.get('fornecedor_id') or None
         forma_recebimento_id = request.form.get('forma_recebimento_id') or None
         tipo_tx              = request.form.get('tipo_tx', 'DEBIT')
-        tipo_debito          = request.form.get('tipo_debito', 'fornecedor')  # 'fornecedor' | 'despesa' | 'transferencia'
+        tipo_debito          = request.form.get('tipo_debito', 'fornecedor')  # 'fornecedor' | 'despesa' | 'transferencia' | 'devolucao_fornecedor'
+        if tipo_debito == 'devolucao_fornecedor':
+            # Campo proprio: name="fornecedor_id" ja existe no painel de
+            # DEBITO deste mesmo form e os dois iriam juntos no POST.
+            fornecedor_id = request.form.get('devolucao_fornecedor_id') or None
 
         # Despesas: quantas vierem. Era range(1, 4) — teto de 3 — e a tela
         # tinha o mesmo teto. Agora quem manda é o formulário: lemos os
