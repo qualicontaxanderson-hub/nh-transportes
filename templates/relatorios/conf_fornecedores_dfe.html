@@ -741,6 +741,8 @@
         <span class="gr__t" id="cfv-rot-itens" style="margin:0">Marque e ajuste os valores</span>
         <span id="cfv-cont" style="margin-left:auto;font-size:.72rem;font-weight:800;color:#1D63A5"></span>
       </div>
+      <input class="campo" type="search" id="cfv-busca" placeholder="Buscar…"
+             oninput="cfvBusca(this)" style="margin-bottom:.4rem">
       <div class="opcs" id="cfv-l-itens"></div>
       <div class="sit-eco" id="cfv-soma" style="margin-top:.6rem;background:#eaf1f9;color:#0C4C86;border-radius:8px;padding:.45rem .6rem;font-size:.8rem;font-weight:700"></div>
     </div>
@@ -1152,6 +1154,12 @@ function cfvAvancar(btn) {
 /* lista de caixinhas (guarda marcados/valores pra sobreviver ao filtro) */
 function cfvMontaItens() {
   var alvo = document.getElementById('cfv-l-itens');
+  var busca = document.getElementById('cfv-busca');
+  if (busca) {
+    busca.value = '';
+    busca.placeholder = (cfvModo === 'pag')
+      ? 'Buscar nota (nº, data, valor)…' : 'Buscar pagamento…';
+  }
   var vis = cfvItens.filter(function (c) {
     return !cfvEmp || c.emp === cfvEmp;
   });
@@ -1197,6 +1205,14 @@ function cfvMontaItens() {
   cfvPinta();
 }
 
+function cfvBusca(inp) {
+  var q = inp.value.trim().toLowerCase();
+  document.querySelectorAll('#cfv-l-itens .opc').forEach(function (op) {
+    op.hidden = !!(q && op.textContent.toLowerCase().indexOf(q) === -1);
+  });
+  cfvPinta();
+}
+
 function cfvColeta() {
   var lista = [], soma = 0, estourou = false;
   cfvItens.forEach(function (c) {
@@ -1215,7 +1231,7 @@ function cfvPinta() {
   document.getElementById('cfv-soma').textContent = c.lista.length
     ? 'Usando ' + cfdMoeda(c.soma) + ' de ' + cfdMoeda(cfvTeto) + ' disponíveis'
     : 'Nada marcado ainda — o teto é ' + cfdMoeda(cfvTeto) + '.';
-  var vis = document.querySelectorAll('#cfv-l-itens .opc').length;
+  var vis = document.querySelectorAll('#cfv-l-itens .opc:not([hidden])').length;
   document.getElementById('cfv-cont').textContent =
     c.lista.length + ' de ' + vis + ' marcada' + (c.lista.length === 1 ? '' : 's');
 }
