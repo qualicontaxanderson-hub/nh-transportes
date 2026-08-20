@@ -908,8 +908,17 @@ function cfdSepararGrupo(fid) {
 // ---------- Abinhas conciliado x nao conciliado ----------
 // A linha ja nasce com data-conc (nota 100% vinculada / pagamento todo
 // usado). O filtro e por CIMA do DOM: nada recarrega ao trocar de aba.
+function cfdMem(k, v) {
+  try {
+    if (v === undefined) return window.sessionStorage.getItem(k);
+    if (v === null) window.sessionStorage.removeItem(k);
+    else window.sessionStorage.setItem(k, v);
+  } catch (e) { /* sem storage, segue sem memoria */ }
+  return null;
+}
+
 function cfdConc(m) {
-  sessionStorage.setItem('cfd-conc', m);
+  cfdMem('cfd-conc', m);
   document.querySelectorAll('#cfd .conc-tab').forEach(function (b) {
     b.classList.toggle('on', b.dataset.m === m);
   });
@@ -943,18 +952,18 @@ function cfdConc(m) {
   var eS = document.getElementById('conc-n-sim');
   if (eN) eN.textContent = nN;
   if (eS) eS.textContent = nS;
-  cfdConc(sessionStorage.getItem('cfd-conc') || 'nao');
+  cfdConc(cfdMem('cfd-conc') || 'nao');
   // volta pro ponto onde a pessoa estava trabalhando (vinculo recarrega)
-  var y = sessionStorage.getItem('cfd-scroll');
-  if (y !== null) {
-    sessionStorage.removeItem('cfd-scroll');
+  var y = cfdMem('cfd-scroll');
+  if (y !== null && y !== undefined) {
+    cfdMem('cfd-scroll', null);
     window.scrollTo(0, parseInt(y, 10) || 0);
   }
 })();
 
 // Recarrega SEM perder o lugar: guarda o scroll antes.
 function cfdReload() {
-  sessionStorage.setItem('cfd-scroll', String(window.scrollY || 0));
+  cfdMem('cfd-scroll', String(window.scrollY || 0));
   window.location.reload();
 }
 
