@@ -1183,13 +1183,29 @@ function cfvMontaItens() {
 }
 
 function cfvPinta() {
-  var marcadas = cfvItens.filter(function (c) { return cfvChk[c.id]; }).length;
+  var sel = cfvItens.filter(function (c) { return cfvChk[c.id]; });
   var vis = document.querySelectorAll('#cfv-l-itens .opc:not([hidden])').length;
   document.getElementById('cfv-cont').textContent =
-    marcadas + ' de ' + vis + ' marcada' + (marcadas === 1 ? '' : 's');
-  document.getElementById('cfv-soma').textContent = marcadas
-    ? marcadas + ' item(ns) marcado(s) — os valores você ajusta no Confirmar.'
-    : 'Nada marcado ainda — o teto é ' + cfdMoeda(cfvTeto) + '.';
+    sel.length + ' de ' + vis + ' marcada' + (sel.length === 1 ? '' : 's');
+  // Soma ao vivo: as faltas das marcadas contra o livre do pagamento —
+  // pra saber na hora se o valor bateu, antes mesmo do Confirmar.
+  var soma = sel.reduce(function (a, c) { return a + c.max; }, 0);
+  var el = document.getElementById('cfv-soma');
+  if (!sel.length) {
+    el.style.background = '#eaf1f9'; el.style.color = '#0C4C86';
+    el.textContent = 'Nada marcado ainda — livre: ' + cfdMoeda(cfvTeto) + '.';
+  } else if (Math.abs(soma - cfvTeto) <= 0.005) {
+    el.style.background = '#e4f4e8'; el.style.color = '#1c6b34';
+    el.textContent = 'Marcadas somam ' + cfdMoeda(soma) + ' — BATE com o livre.';
+  } else if (soma < cfvTeto) {
+    el.style.background = '#e4f4e8'; el.style.color = '#1c6b34';
+    el.textContent = 'Marcadas somam ' + cfdMoeda(soma) + ' de ' +
+      cfdMoeda(cfvTeto) + ' livres — sobra ' + cfdMoeda(cfvTeto - soma) + '.';
+  } else {
+    el.style.background = '#fdf0d6'; el.style.color = '#8a5a00';
+    el.textContent = 'Marcadas pedem ' + cfdMoeda(soma) + ' — passa do livre (' +
+      cfdMoeda(cfvTeto) + '); o Confirmar ajusta os valores pra caber.';
+  }
 }
 
 /* Confirmar: cada item marcado com o valor EDITAVEL (sugestao preenchida
