@@ -1,3 +1,4 @@
+from datetime import date
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 from utils.db import get_db_connection
@@ -79,6 +80,69 @@ def _load_grupos(conn):
         cursor.close()
 
 
+def _movimento_produtos(cursor):
+    """O que cada produto move: frete (o que faturamos) e compra (a DFe).
+
+    Era o que faltava nesta tela — ela listava nome e conta contabil sem
+    dizer que o ETANOL responde por 672 fretes e o ARLA por um so, de
+    dezembro de 2025.
+    """
+    frete, compra = {}, {}
+    try:
+        cursor.execute("""
+            SELECT f.produto_id AS pid, COUNT(*) AS n,
+                   COALESCE(SUM(f.valor_cte),0) AS total,
+                   COUNT(DISTINCT f.clientes_id) AS clientes,
+                   MAX(DATE(f.data_frete)) AS ultimo
+              FROM fretes f WHERE f.produto_id IS NOT NULL
+             GROUP BY f.produto_id
+        """)
+        frete = {r['pid']: {'n': int(r['n']), 'total': float(r['total'] or 0),
+                            'clientes': int(r['clientes']),
+                            'ultimo': r['ultimo']} for r in cursor.fetchall()}
+    except Exception:
+        pass
+    try:
+        cursor.execute("""
+            SELECT i.produto_id AS pid, COUNT(*) AS n,
+                   COALESCE(SUM(i.quantidade),0) AS litros,
+                   COALESCE(SUM(i.valor_total),0) AS valor
+              FROM dfe_itens i WHERE i.produto_id IS NOT NULL
+             GROUP BY i.produto_id
+        """)
+        compra = {r['pid']: {'n': int(r['n']), 'litros': float(r['litros'] or 0),
+                             'valor': float(r['valor'] or 0)}
+                  for r in cursor.fetchall()}
+    except Exception:
+        pass
+    return frete, compra
+
+
+def _empresas_por_produto(cursor):
+    """Quais empresas usam cada produto.
+
+    Vem de `cliente_produtos` — o vinculo que EXISTE (13 linhas). A tela
+    antiga filtrava por `produto_empresas`, que esta vazia, entao escolher
+    uma empresa no filtro devolvia zero produtos, sempre.
+    """
+    try:
+        cursor.execute("""
+            SELECT cp.produto_id AS pid, cp.cliente_id AS cid,
+                   COALESCE(c.nome_fantasia, c.razao_social) AS nome
+              FROM cliente_produtos cp
+              JOIN clientes c ON c.id = cp.cliente_id
+             WHERE cp.ativo = 1
+             ORDER BY nome
+        """)
+        saida = {}
+        for r in cursor.fetchall():
+            saida.setdefault(r['pid'], []).append(
+                {'id': r['cid'], 'nome': r['nome']})
+        return saida
+    except Exception:
+        return {}
+
+
 @bp.route('/')
 @login_required
 def lista():
@@ -89,35 +153,58 @@ def lista():
     grupo_id = request.args.get('grupo_id', '').strip()
     cliente_id = request.args.get('cliente_id', '').strip()
 
-    query = """
-        SELECT DISTINCT p.*,
-               pcc.codigo AS conta_codigo,
-               pcc.nome   AS conta_nome,
-               g.codigo   AS grupo_codigo,
-               g.nome     AS grupo_nome,
-               cl.id      AS empresa_id,
-               COALESCE(cl.nome_fantasia, cl.razao_social) AS empresa_nome
-        FROM produto p
-        LEFT JOIN produto_empresas pe ON pe.produto_id = p.id
-        LEFT JOIN clientes cl ON cl.id = pe.cliente_id
-        LEFT JOIN plano_contas_contas pcc ON pcc.id = pe.conta_contabil_id
-        LEFT JOIN plano_contas_grupos g ON g.id = pcc.grupo_id
-    """
-    params = []
-    conditions = []
-    if grupo_id:
-        conditions.append("g.id = %s")
-        params.append(int(grupo_id))
-    if cliente_id:
-        conditions.append("pe.cliente_id = %s")
-        params.append(int(cliente_id))
-    if conditions:
-        query += " WHERE " + " AND ".join(conditions)
-    query += " ORDER BY p.nome"
-
-    cursor.execute(query, params)
+    # A conta contabil por empresa entra como AGREGADO: o LEFT JOIN antigo
+    # multiplicava a linha do produto por empresa vinculada (e, com a tabela
+    # vazia, ainda zerava o resultado quando alguem filtrava por empresa).
+    cursor.execute("""
+        SELECT p.*,
+               (SELECT GROUP_CONCAT(CONCAT(pcc.codigo, ' ', pcc.nome)
+                        ORDER BY pcc.codigo SEPARATOR ' | ')
+                  FROM produto_empresas pe
+                  JOIN plano_contas_contas pcc ON pcc.id = pe.conta_contabil_id
+                 WHERE pe.produto_id = p.id) AS contas,
+               (SELECT COUNT(*) FROM produto_empresas pe
+                 WHERE pe.produto_id = p.id AND pe.conta_contabil_id IS NOT NULL)
+                 AS n_contas
+          FROM produto p
+         ORDER BY p.nome
+    """)
     produtos = cursor.fetchall()
+
+    frete, compra = _movimento_produtos(cursor)
+    empresas_prod = _empresas_por_produto(cursor)
     cursor.close()
+
+    maior = max([m['total'] for m in frete.values()] or [0]) or 1
+    for p in produtos:
+        fr = frete.get(p['id']) or {'n': 0, 'total': 0.0, 'clientes': 0,
+                                    'ultimo': None}
+        cp = compra.get(p['id']) or {'n': 0, 'litros': 0.0, 'valor': 0.0}
+        p['fre_n'] = fr['n']
+        p['fre_total'] = fr['total']
+        p['fre_clientes'] = fr['clientes']
+        p['fre_ultimo'] = fr['ultimo']
+        p['cmp_n'] = cp['n']
+        p['cmp_litros'] = cp['litros']
+        p['cmp_valor'] = cp['valor']
+        p['cmp_medio'] = (cp['valor'] / cp['litros']) if cp['litros'] else 0.0
+        p['peso'] = round(100.0 * fr['total'] / maior, 1)
+        p['empresas'] = empresas_prod.get(p['id'], [])
+        p['sem_conta'] = not p.get('n_contas')
+        # Parado e por TEMPO, nao por zero: o ARLA tem 1 frete — de dezembro de
+        # 2025. Contar so quem tem zero deixava ele passar como ativo.
+        p['parado'] = (not fr['ultimo']) or (
+            (date.today() - fr['ultimo']).days > 90)
+        p['dias_parado'] = ((date.today() - fr['ultimo']).days
+                            if fr['ultimo'] else None)
+
+    totais = {
+        'produtos': len(produtos),
+        'faturado': sum(p['fre_total'] for p in produtos),
+        'parados': sum(1 for p in produtos if p['parado']),
+        'sem_conta': sum(1 for p in produtos if p['sem_conta']),
+        'litros': sum(p['cmp_litros'] for p in produtos),
+    }
 
     grupos = _load_grupos(conn)
 
@@ -135,7 +222,7 @@ def lista():
 
     conn.close()
     return render_template('produtos/lista.html', produtos=produtos,
-                           grupos=grupos, grupo_id=grupo_id,
+                           totais=totais, grupos=grupos, grupo_id=grupo_id,
                            empresas=empresas, cliente_id=cliente_id)
 
 

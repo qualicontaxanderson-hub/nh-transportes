@@ -2,282 +2,541 @@
 
 {% block title %}Produtos - NH Transportes{% endblock %}
 
+{#- Lista no padrao do Banco. A pergunta aqui e "quanto cada produto move":
+    o ETANOL responde por 672 fretes e o ARLA por um so, de dezembro de 2025 —
+    a tela antiga listava so nome e conta contabil e nao dizia isso.
+
+    Sobre empresas: o vinculo que EXISTE e `cliente_produtos` (quais produtos
+    a empresa usa). `produto_empresas` guarda a conta contabil por empresa e
+    esta vazia — era ela que o filtro antigo consultava, por isso escolher uma
+    empresa devolvia zero produtos. -#}
+
 {% block styles %}
 <style>
-  .page-hero {
-    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
-    border-radius: .75rem;
-    padding: 1.5rem 2rem;
-    margin-bottom: 1.5rem;
-    color: #fff;
-  }
-  .page-hero .hero-icon {
-    width: 3rem; height: 3rem;
-    background: rgba(255,255,255,.15);
-    border-radius: .6rem;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.5rem;
-    flex-shrink: 0;
-  }
-  .stat-card-prod {
-    border: 0;
-    border-radius: .65rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,.07);
-    transition: box-shadow .2s;
-  }
-  .stat-card-prod:hover { box-shadow: 0 4px 16px rgba(0,0,0,.13); }
-  .stat-card-prod .stat-icon {
-    width: 2.6rem; height: 2.6rem;
-    border-radius: .5rem;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.2rem;
-    flex-shrink: 0;
-  }
-  #tbl-lista { font-size: 0.72rem; }
-  #tbl-lista thead th {
-    background: #1D63A5; color: #fff;
-    font-size: 0.68rem; font-weight: 700;
-    text-transform: uppercase; letter-spacing: .04em;
-    padding: 0.45rem 0.5rem; border: none; white-space: nowrap;
-  }
-  #tbl-lista tbody td { padding: 0.35rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; }
-  #tbl-lista tbody tr.row-prod { cursor: pointer; transition: background .1s; }
-  #tbl-lista tbody tr.row-prod:hover td { background: #eef4ff; }
-  .badge-conta {
-    display: inline-block;
-    background: #e8f0fe;
-    color: #1a56db;
-    border-radius: 3px;
-    padding: 0.1rem 0.35rem;
-    font-size: 0.7rem;
-    font-weight: 700;
-    margin-right: 0.3rem;
-    letter-spacing: 0.02em;
-  }
-  .btn-acao {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 1.6rem; height: 1.6rem;
-    border-radius: 4px; font-size: 0.75rem;
-    border: none; cursor: pointer;
-    text-decoration: none; transition: opacity 0.15s;
-  }
-  .btn-acao:hover { opacity: 0.8; }
-  .btn-editar  { background: #fff3cd; color: #856404; }
-  .btn-excluir { background: #f8d7da; color: #842029; }
-  @media (max-width: 768px) {
-    #tbl-lista { font-size: 0.70rem; }
-  }
+/* O layout base pinta todo body > .container-fluid de branco com 2rem de
+   padding; no celular vira moldura e a tela nao enche. */
+body > .container-fluid:has(#prd){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#prd){ padding:.7rem 1rem 0; }
+}
+#prd.container-fluid{ padding-left:0; padding-right:0; }
+</style>
+{% with esc = '#prd' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
+<style>
+  #prd{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#6b7684; --ink:#151d27; --borda:#d9e0e8;
+        color:var(--ink); max-width:100%; }
+
+  #prd .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .65rem;
+    margin-bottom:.7rem; }
+  #prd .topo__l{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  #prd .topo__t{ font-weight:800; font-size:1.02rem; flex:1; min-width:0; }
+  #prd .bt-t{ border:1px solid rgba(255,255,255,.35);
+    background:rgba(255,255,255,.14); color:#fff; border-radius:9px;
+    padding:.34rem .7rem; font-size:.78rem; font-weight:800; font-family:inherit;
+    cursor:pointer; text-decoration:none; white-space:nowrap;
+    display:inline-flex; gap:.3rem; align-items:center; }
+  #prd .bt-t:hover{ background:rgba(255,255,255,.26); color:#fff; }
+  #prd .fam{ display:flex; gap:.4rem; margin-top:.6rem; overflow-x:auto;
+    padding-bottom:.15rem; }
+  #prd .fam a{ flex:0 0 auto; border-radius:99px; padding:.35rem .8rem;
+    font-size:.78rem; font-weight:800; background:rgba(255,255,255,.18);
+    color:#fff; text-decoration:none; white-space:nowrap; }
+  #prd .fam a.on{ background:#fff; color:var(--blue-deep); }
+
+  #prd .busca{ display:flex; gap:.4rem; margin-bottom:.6rem; }
+  #prd .busca input{ flex:1; min-width:0; border:1px solid var(--borda);
+    border-radius:10px; padding:.5rem .65rem; font-size:.86rem;
+    font-family:inherit; }
+  #prd .bt-fil{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
+    color:#3a4655; border-radius:10px; padding:.5rem .8rem; font-size:.83rem;
+    font-weight:800; font-family:inherit; cursor:pointer; display:inline-flex;
+    gap:.35rem; align-items:center; }
+  #prd .bt-fil__n{ background:var(--blue); color:#fff; border-radius:99px;
+    min-width:18px; height:18px; display:inline-grid; place-items:center;
+    font-size:.66rem; padding:0 .3rem; }
+  #prd .ordem{ display:flex; gap:.35rem; align-items:center; margin-bottom:.6rem;
+    overflow-x:auto; padding-bottom:.15rem; }
+  #prd .ordem__t{ font-size:.72rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.05em; flex:0 0 auto; }
+  #prd .ord{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
+    color:#3a4655; border-radius:99px; padding:.32rem .7rem; font-size:.78rem;
+    font-weight:800; font-family:inherit; cursor:pointer; display:inline-flex;
+    gap:.3rem; align-items:center; }
+  #prd .ord.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #prd .conta{ font-size:.76rem; color:var(--muted); margin-bottom:.5rem;
+    font-weight:700; }
+  #prd .gr__c{ display:flex; align-items:center; gap:.5rem; margin-bottom:.3rem; }
+  #prd .gr__a{ margin-left:auto; border:0; background:none; color:var(--blue);
+    font-size:.74rem; font-weight:800; cursor:pointer; font-family:inherit; }
+  #prd .dica{ font-size:.72rem; color:var(--muted); margin-top:.35rem; }
+
+  #prd .lista{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #prd .p{ border-bottom:1px solid #eef1f5; }
+  #prd .p:last-child{ border-bottom:0; }
+  #prd .p__h{ display:flex; gap:.6rem; padding:.6rem .8rem; align-items:flex-start;
+    cursor:pointer; min-width:0; }
+  #prd .p__h:hover{ background:#fafbfd; }
+  #prd .p__ic{ flex:0 0 36px; height:36px; border-radius:10px; display:grid;
+    place-items:center; font-size:1rem; background:#eaf1f9; }
+  #prd .p__t{ flex:1; min-width:0; }
+  #prd .p__n{ font-weight:800; font-size:.9rem; overflow-wrap:anywhere; }
+  #prd .p__d{ display:flex; gap:.4rem .9rem; flex-wrap:wrap; margin-top:.25rem;
+    font-size:.75rem; color:#3a4655; min-width:0; overflow-wrap:anywhere; }
+  #prd .p__d .k{ color:var(--muted); }
+  #prd .p__d b{ font-weight:700; font-variant-numeric:tabular-nums; }
+  #prd .mov{ text-align:right; flex:0 0 auto; }
+  #prd .mov__v{ font-weight:800; font-size:.86rem; color:var(--blue-deep);
+    font-variant-numeric:tabular-nums; white-space:nowrap; }
+  #prd .mov__r{ font-size:.66rem; color:var(--muted); white-space:nowrap; }
+  #prd .barra{ height:5px; border-radius:9px; background:#eef2f7;
+    overflow:hidden; margin-top:.35rem; }
+  #prd .barra i{ display:block; height:100%;
+    background:linear-gradient(90deg,#2E6FB0,#1D63A5); }
+  #prd .selo{ display:inline-block; border-radius:99px; padding:.14rem .5rem;
+    font-size:.64rem; font-weight:800; white-space:nowrap; }
+  #prd .selo--par{ background:#f4f6f9; color:var(--muted); }
+  #prd .selo--fal{ background:#fdf0d6; color:var(--ambar); }
+
+  #prd .p__c{ background:#f7f9fc; border-top:1px solid #eef1f5;
+    padding:.65rem .8rem .75rem; }
+  #prd .grade{ display:grid; gap:.5rem; grid-template-columns:1fr; }
+  @media (min-width:992px){ #prd .grade{ grid-template-columns:1fr 1fr 1fr; } }
+  #prd .bloco{ background:#fff; border:1px solid var(--borda);
+    border-radius:11px; padding:.55rem .7rem; min-width:0; }
+  #prd .bloco--av{ border-color:#f0d8a8; background:#fffdf7; }
+  #prd .bloco__t{ font-size:.64rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); margin-bottom:.3rem; }
+  #prd .bloco--av .bloco__t{ color:var(--ambar); }
+  #prd .li{ display:flex; gap:.5rem; font-size:.79rem; padding:.16rem 0; }
+  #prd .li .k{ color:var(--muted); flex:0 0 84px; }
+  #prd .li .v{ flex:1; min-width:0; font-weight:600; overflow-wrap:anywhere; }
+  #prd .vazio{ color:var(--ambar); font-weight:700; }
+  #prd .emp{ display:flex; gap:.3rem; flex-wrap:wrap; margin-top:.25rem; }
+  #prd .emp span{ background:#eaf1f9; color:var(--blue-deep); border-radius:7px;
+    padding:.12rem .45rem; font-size:.68rem; font-weight:700; }
+  #prd .acoes{ display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.55rem; }
+  #prd .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:9px; padding:.36rem .7rem; font-size:.77rem; font-weight:700;
+    font-family:inherit; cursor:pointer; text-decoration:none;
+    display:inline-flex; gap:.3rem; align-items:center; }
+  #prd .bt:hover{ background:#dfeaf8; color:var(--blue-deep); }
+  #prd .bt--del{ background:#fbe9e9; border-color:#f0c8c8; color:var(--danger); }
+  #prd .nada{ padding:1.4rem .8rem; text-align:center; color:var(--muted); }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
+<div id="prd">
 
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb" class="mb-3">
-      <ol class="breadcrumb small">
-        <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Dashboard</a></li>
-        <li class="breadcrumb-item active">Produtos</li>
-      </ol>
-    </nav>
-
-    <!-- Hero header -->
-    <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-      <div class="hero-icon"><i class="bi bi-fuel-pump-fill"></i></div>
-      <div class="flex-grow-1">
-        <h4 class="mb-0 fw-bold">Produtos</h4>
-        <p class="mb-0 opacity-75 small">Cadastro e gestão de produtos com vínculos contábeis.</p>
-      </div>
-      <a href="{{ url_for('produtos.novo') }}"
-         class="btn btn-light fw-semibold btn-sm px-3">
-        <i class="bi bi-plus-circle me-1"></i> Novo Produto
-      </a>
+  <div class="topo">
+    <div class="topo__l">
+      <span class="topo__t"><i class="bi bi-box-seam"></i> Produtos</span>
+      <a class="bt-t" href="{{ url_for('produtos.novo') }}">
+        <i class="bi bi-plus-circle"></i> Novo produto</a>
     </div>
+    {% with aba_cad = 'produtos' %}{% include 'includes/abas_cadastros.html' %}{% endwith %}
+  </div>
 
-    <!-- Flash messages -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% for cat, msg in messages %}
-      <div class="alert alert-{{ cat }} alert-dismissible fade show py-2" role="alert">
-        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-      </div>
-      {% endfor %}
-    {% endwith %}
+  <div class="g-nums">
+    <div class="n n--azul"><div class="r">Produtos</div>
+      <div class="v">{{ totais.produtos }}</div></div>
+    <div class="n n--verde"><div class="r">Faturado em fretes</div>
+      <div class="v">{{ totais.faturado | formatar_moeda }}</div></div>
+    <div class="n n--cinza"><div class="r">Parados</div>
+      <div class="v">{{ totais.parados }}</div></div>
+    <div class="n {{ 'n--ambar' if totais.sem_conta else 'n--verde' }}">
+      <div class="r">Sem conta contábil</div>
+      <div class="v">{{ totais.sem_conta }}</div></div>
+  </div>
 
-    <!-- Stat cards -->
-    {% set total_prod = produtos | length %}
-    {% set com_conta  = produtos | selectattr('conta_codigo') | list | length %}
-    {% set sem_conta  = total_prod - com_conta %}
-    <div class="row g-3 mb-4">
-      <div class="col-6 col-md-4">
-        <div class="card stat-card-prod h-100">
-          <div class="card-body d-flex align-items-center gap-3 py-3">
-            <div class="stat-icon" style="background:#e8f0fb;">
-              <i class="bi bi-fuel-pump" style="color:#1D63A5;"></i>
-            </div>
-            <div>
-              <div class="fs-4 fw-bold" style="color:#1D63A5;">{{ total_prod }}</div>
-              <div class="text-muted small">Produtos</div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-6 col-md-4">
-        <div class="card stat-card-prod h-100">
-          <div class="card-body d-flex align-items-center gap-3 py-3">
-            <div class="stat-icon" style="background:#e6f9ee;">
-              <i class="bi bi-journal-bookmark" style="color:#198754;"></i>
-            </div>
-            <div>
-              <div class="fs-4 fw-bold" style="color:#198754;">{{ com_conta }}</div>
-              <div class="text-muted small">Com Conta Contábil</div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-md-4">
-        <div class="card stat-card-prod h-100">
-          <div class="card-body d-flex align-items-center gap-3 py-3">
-            <div class="stat-icon" style="background:#fff3cd;">
-              <i class="bi bi-journal" style="color:#856404;"></i>
-            </div>
-            <div>
-              <div class="fs-4 fw-bold" style="color:#856404;">{{ sem_conta }}</div>
-              <div class="text-muted small">Sem Conta Contábil</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+  <div class="busca">
+    <input type="text" id="prd-busca" placeholder="Buscar produto…"
+           oninput="prdBusca(this)">
+    <button type="button" class="bt-fil" onclick="prdAbrirFiltro()">
+      <i class="bi bi-sliders"></i> Filtro
+      <span class="bt-fil__n" id="prd-fil-n" hidden>0</span></button>
+  </div>
 
-    <!-- Filtro por Conta Contábil / Empresa -->
-    <div class="card shadow-sm mb-4">
-      <div class="card-header d-flex align-items-center py-2"
-           style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-        <i class="bi bi-funnel me-1"></i> Filtrar
-      </div>
-      <div class="card-body py-2">
-        <form method="GET" class="row g-2 align-items-end">
-          <div class="col-md-4">
-            <label class="form-label form-label-sm mb-0">Empresa</label>
-            <select name="cliente_id" class="form-select form-select-sm">
-              <option value="">— Todas as empresas —</option>
-              {% for e in empresas %}
-              <option value="{{ e.id }}" {% if cliente_id == e.id|string %}selected{% endif %}>
-                {{ e.nome }}
-              </option>
-              {% endfor %}
-            </select>
+  <div class="ordem">
+    <span class="ordem__t">Ordenar:</span>
+    <button type="button" class="ord on" data-o="fretes" onclick="prdOrdem('fretes')">
+      <i class="bi bi-truck"></i> Mais fretes</button>
+    <button type="button" class="ord" data-o="fat" onclick="prdOrdem('fat')">
+      <i class="bi bi-cash-stack"></i> Maior faturamento</button>
+    <button type="button" class="ord" data-o="nome" onclick="prdOrdem('nome')">
+      <i class="bi bi-sort-alpha-down"></i> Nome A–Z</button>
+  </div>
+
+  <div class="g-eco" id="prd-eco" hidden>
+    <i class="bi bi-funnel-fill"></i>
+    <span id="prd-eco-txt"></span>
+    <a href="#" onclick="prdLimpar(); return false;">Limpar</a>
+  </div>
+
+  <div class="conta" id="prd-conta"></div>
+
+  <div class="lista">
+    {% for p in produtos %}
+    <div class="p" data-mov="{{ '0' if p.parado else '1' }}"
+         data-conta="{{ '0' if p.sem_conta else '1' }}"
+         data-cmp="{{ '1' if p.cmp_n else '0' }}"
+         data-emp="{{ p.empresas | map(attribute='id') | join(',') }}"
+         data-fat="{{ '%.2f' | format(p.fre_total or 0) }}"
+         data-fretes="{{ p.fre_n }}"
+         data-nome="{{ (p.nome or '') | lower }}"
+         data-busca="{{ ((p.nome or '') ~ ' ' ~ (p.descricao or '')) | lower }}">
+      <div class="p__h" onclick="prdAbre(this)">
+        <span class="p__ic">
+          <i class="bi {{ 'bi-droplet-fill' if 'ARLA' in (p.nome or '') else 'bi-fuel-pump-fill' }}"></i></span>
+        <div class="p__t">
+          <div class="p__n">{{ p.nome }}
+            {%- if p.parado %} <span class="selo selo--par"
+              title="{{ ('sem frete há %d dias' % p.dias_parado) if p.dias_parado else 'nunca teve frete' }}">parado</span>{% endif -%}
+            {%- if p.sem_conta %} <span class="selo selo--fal"
+              title="sem conta contábil vinculada a nenhuma empresa">sem conta contábil</span>{% endif -%}
           </div>
-          <div class="col-md-4">
-            <label class="form-label form-label-sm mb-0">Grupo do Plano de Contas</label>
-            <select name="grupo_id" class="form-select form-select-sm">
-              <option value="">— Todos os grupos —</option>
-              {% for g in grupos %}
-              <option value="{{ g.id }}" {% if grupo_id == g.id|string %}selected{% endif %}>
-                {{ g.codigo }} — {{ g.nome }}
-              </option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-auto">
-            <button type="submit" class="btn btn-primary btn-sm">
-              <i class="bi bi-search"></i> Filtrar
-            </button>
-            {% if grupo_id or cliente_id %}
-            <a href="{{ url_for('produtos.lista') }}" class="btn btn-secondary btn-sm ms-1">
-              <i class="bi bi-x-circle"></i> Limpar
-            </a>
+          <div class="p__d">
+            {% if p.descricao %}<span>{{ p.descricao }}</span>{% endif %}
+            {% if p.fre_clientes %}<span><span class="k">{{ p.fre_clientes }} clientes</span></span>{% endif %}
+            {% if p.cmp_litros %}
+            <span><span class="k">compras</span>
+              <b>{{ '{:,.0f}'.format(p.cmp_litros).replace(',', '.') }} L</b></span>
+            {% else %}
+            <span class="vazio">sem compra registrada na DFe</span>
             {% endif %}
           </div>
-        </form>
+          {% if p.peso %}<div class="barra"><i style="width:{{ p.peso }}%"></i></div>{% endif %}
+        </div>
+        <div class="mov">
+          {% if p.fre_n %}
+          <div class="mov__v">{{ p.fre_total | formatar_moeda }}</div>
+          <div class="mov__r">{{ p.fre_n }} frete{{ '' if p.fre_n == 1 else 's' }}
+            {%- if p.fre_ultimo %} · {{ p.fre_ultimo.strftime('%d/%m') }}{% endif %}</div>
+          {% else %}
+          <div class="mov__v" style="color:#6b7684">—</div>
+          <div class="mov__r">sem frete</div>
+          {% endif %}
+        </div>
       </div>
-    </div>
 
-    <!-- Tabela de Produtos -->
-    <div class="card shadow-sm">
-      <div class="card-header d-flex justify-content-between align-items-center py-2"
-           style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-        <span><i class="bi bi-list me-1"></i> Lista de Produtos</span>
-        {% if produtos %}
-        <span class="badge bg-white text-secondary" style="font-size:0.7rem;font-weight:600;">{{ produtos|length }}</span>
-        {% endif %}
-      </div>
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table mb-0" id="tbl-lista">
-            <thead>
-              <tr>
-                <th style="width:4%">ID</th>
-                <th>Nome</th>
-                <th>Empresa</th>
-                <th>Conta Contábil</th>
-                <th class="text-center" style="width:8%">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% if produtos %}
-                {% for produto in produtos %}
-                <tr class="row-prod" data-url="{{ url_for('produtos.editar', id=produto.id) }}"
-                    title="Clique para editar">
-                  <td class="text-muted">{{ produto.id }}</td>
-                  <td class="fw-semibold">{{ produto.nome }}</td>
-                  <td style="font-size:0.8rem;">
-                    {% if produto.empresa_nome %}
-                    <span>{{ produto.empresa_nome }}</span>
-                    {% else %}
-                    <span class="text-muted fst-italic" style="font-size:0.72rem;">—</span>
-                    {% endif %}
-                  </td>
-                  <td>
-                    {% if produto.conta_codigo %}
-                    <span class="badge-conta"><strong>{{ produto.conta_codigo }}</strong></span>
-                    <span style="color:#374151;font-size:0.75rem;">{{ produto.conta_nome }}</span>
-                    {% else %}
-                    <span class="text-muted fst-italic" style="font-size:0.72rem;">—</span>
-                    {% endif %}
-                  </td>
-                  <td class="text-center actions-cell" onclick="event.stopPropagation()">
-                    <a href="{{ url_for('produtos.editar', id=produto.id) }}" class="btn-acao btn-editar" title="Editar">
-                      <i class="bi bi-pencil"></i>
-                    </a>
-                    {% if current_user.nivel == 'admin' %}
-                    <a href="{{ url_for('produtos.excluir', id=produto.id) }}"
-                       class="btn-acao btn-excluir"
-                       title="Excluir"
-                       onclick="return confirm('Deseja realmente excluir este produto?')">
-                      <i class="bi bi-trash"></i>
-                    </a>
-                    {% endif %}
-                  </td>
-                </tr>
-                {% endfor %}
-              {% else %}
-                <tr>
-                  <td colspan="5" class="text-center text-muted py-4">
-                    <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
-                    <div class="mt-2" style="font-size:0.82rem;">
-                      {% if grupo_id or cliente_id %}Nenhum produto neste filtro.{% else %}Nenhum produto cadastrado.{% endif %}
-                    </div>
-                  </td>
-                </tr>
-              {% endif %}
-            </tbody>
-          </table>
+      <div class="p__c" style="display:none">
+        <div class="grade">
+          <div class="bloco">
+            <div class="bloco__t"><i class="bi bi-truck"></i> Movimento em frete</div>
+            <div class="li"><span class="k">Fretes</span>
+              <span class="v">{{ p.fre_n }}</span></div>
+            <div class="li"><span class="k">Faturado</span>
+              <span class="v">{{ p.fre_total | formatar_moeda }}</span></div>
+            <div class="li"><span class="k">Clientes</span>
+              <span class="v">{{ p.fre_clientes }} diferente{{ '' if p.fre_clientes == 1 else 's' }}</span></div>
+            <div class="li"><span class="k">Último</span>
+              <span class="v">{% if p.fre_ultimo %}{{ p.fre_ultimo.strftime('%d/%m/%Y') }}
+                {%- else %}<span class="vazio">nunca</span>{% endif %}</span></div>
+          </div>
+
+          <div class="bloco">
+            <div class="bloco__t"><i class="bi bi-receipt"></i> Compras (DFe)</div>
+            {% if p.cmp_n %}
+            <div class="li"><span class="k">Itens</span>
+              <span class="v">{{ p.cmp_n }}</span></div>
+            <div class="li"><span class="k">Litros</span>
+              <span class="v">{{ '{:,.0f}'.format(p.cmp_litros).replace(',', '.') }} L</span></div>
+            <div class="li"><span class="k">Valor</span>
+              <span class="v">{{ p.cmp_valor | formatar_moeda }}</span></div>
+            <div class="li"><span class="k">Preço médio</span>
+              <span class="v">{{ p.cmp_medio | formatar_moeda }}/L</span></div>
+            {% else %}
+            <div class="li"><span class="v vazio">Nenhuma compra classificada
+              neste produto desde o corte da DFe.</span></div>
+            {% endif %}
+          </div>
+
+          <div class="bloco {{ 'bloco--av' if p.sem_conta }}">
+            <div class="bloco__t"><i class="bi bi-building"></i> Empresas e contabilidade</div>
+            {% if p.empresas %}
+            <div style="font-size:.75rem;color:var(--muted)">Empresas que usam:</div>
+            <div class="emp">
+              {% for e in p.empresas %}<span>{{ e.nome }}</span>{% endfor %}
+            </div>
+            {% else %}
+            <div class="li"><span class="v vazio">Nenhuma empresa vinculada.</span></div>
+            {% endif %}
+            <div class="li" style="margin-top:.35rem"><span class="k">Conta contábil</span>
+              <span class="v">{% if p.contas %}{{ p.contas }}
+                {%- else %}<span class="vazio">— não definida</span>{% endif %}</span></div>
+          </div>
+        </div>
+
+        <div class="acoes">
+          <a class="bt" href="{{ url_for('produtos.editar', id=p.id) }}">
+            <i class="bi bi-pencil"></i> editar</a>
+          <a class="bt" href="/dfe/compras">
+            <i class="bi bi-receipt"></i> ver nas Compras DFe</a>
+          <a class="bt bt--del" href="{{ url_for('produtos.excluir', id=p.id) }}"
+             onclick="return confirm('Excluir este produto?');">
+            <i class="bi bi-trash"></i></a>
         </div>
       </div>
     </div>
+    {% else %}
+    <div class="nada"><i class="bi bi-inbox" style="font-size:1.8rem;opacity:.4"></i>
+      <div class="mt-2">Nenhum produto cadastrado</div></div>
+    {% endfor %}
+  </div>
 
+  {# ---------- Filtro em passos (padrao do Recebimento) ---------- #}
+  <div class="escuro" id="prd-escuro" onclick="prdFecharFiltro()"></div>
+  <div class="gav" id="prd-gav" role="dialog" aria-modal="true">
+    <div class="gav__pega"></div>
+    <div class="passos">
+      <button type="button" class="passo on aqui" id="prd-p1" onclick="prdIr(1)">
+        <i></i><span>Situação</span></button>
+      <button type="button" class="passo" id="prd-p2" onclick="prdIr(2)">
+        <i></i><span>Empresa</span></button>
+      <button type="button" class="passo" id="prd-p3" onclick="prdIr(3)">
+        <i></i><span>Movimento</span></button>
+    </div>
+    <div class="pnome">Passo <span id="prd-pn">1</span> de 3 ·
+      <b id="prd-pt">Situação</b></div>
+
+    <div class="gav__b">
+      <div class="etapa" id="prd-e1">
+        <div class="gr__c">
+          <span class="gr__t">Como está o produto</span>
+          <button type="button" class="gr__a" onclick="prdMarcarTodas('prd-sit', false)">
+            limpar</button>
+        </div>
+        <div class="opcs" id="prd-sit">
+          <label class="opc"><input type="checkbox" value="mov">
+            <span>Com frete recente<small>{{ totais.produtos - totais.parados }} rodando nos últimos 90 dias</small></span></label>
+          <label class="opc"><input type="checkbox" value="par">
+            <span>Parados<small>{{ totais.parados }} sem frete há mais de 90 dias</small></span></label>
+          <label class="opc"><input type="checkbox" value="sconta">
+            <span>Sem conta contábil<small>{{ totais.sem_conta }} sem vínculo no plano de contas</small></span></label>
+          <label class="opc"><input type="checkbox" value="scmp">
+            <span>Sem compra na DFe<small>não aparece em nota de compra classificada</small></span></label>
+        </div>
+        <div class="dica">Sem marcar nada, vêm todos.</div>
+      </div>
+
+      <div class="etapa" id="prd-e2" hidden>
+        <div class="gr__c">
+          <span class="gr__t">Empresa que usa o produto</span>
+          <button type="button" class="gr__a" onclick="prdMarcarTodas('prd-emp', true)">
+            marcar todas</button>
+        </div>
+        <input type="text" class="campo" id="prd-emp-busca"
+               placeholder="Procurar empresa…" oninput="prdFiltraEmp(this)">
+        <div class="opcs" id="prd-emp">
+          {% for e in empresas %}
+          <label class="opc" data-nome="{{ e.nome | lower }}">
+            <input type="checkbox" value="{{ e.id }}">
+            <span>{{ e.nome }}</span></label>
+          {% else %}
+          <div class="dica" style="padding:.5rem">Nenhuma empresa com produto vinculado.</div>
+          {% endfor %}
+        </div>
+        <div class="dica">Vem do vínculo real (cliente × produto). Sem marcar
+          nenhuma, vêm todos.</div>
+      </div>
+
+      <div class="etapa" id="prd-e3" hidden>
+        <div class="gr__t">Faturamento em frete</div>
+        <div class="chips" id="prd-faixa">
+          <button type="button" class="chip on" data-v="0" onclick="prdChip(this,'prd-faixa')">Qualquer valor</button>
+          <button type="button" class="chip" data-v="50000" onclick="prdChip(this,'prd-faixa')">Acima de R$ 50 mil</button>
+          <button type="button" class="chip" data-v="200000" onclick="prdChip(this,'prd-faixa')">Acima de R$ 200 mil</button>
+        </div>
+        <div class="dica">Serve pra separar o que sustenta a operação do que
+          está no cadastro por herança.</div>
+      </div>
+    </div>
+
+    <div class="gav__f">
+      <button type="button" class="bt-g bt-g--ca" id="prd-bt-voltar"
+              onclick="prdIr(prdPasso - 1)" hidden>Voltar</button>
+      <button type="button" class="bt-g bt-g--ca" onclick="prdFecharFiltro()">Cancelar</button>
+      <button type="button" class="bt-g bt-g--ok" id="prd-bt-ir"
+              onclick="prdAvancar()">Avançar</button>
+    </div>
+  </div>
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-  document.querySelectorAll('tr.row-prod[data-url]').forEach(function (row) {
-    row.addEventListener('click', function (e) {
-      if (e.target.closest('.actions-cell') || e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) return;
-      window.location.href = row.getAttribute('data-url');
-    });
+var prdPasso = 1;
+var prdFiltro = { sit: [], emp: [], faixa: 0 };
+
+function prdCards() {
+  return [].slice.call(document.querySelectorAll('#prd .lista > .p'));
+}
+
+function prdAbre(el) {
+  var card = el.closest('.p');
+  var corpo = card.querySelector('.p__c');
+  var aberto = corpo.style.display !== 'none';
+  corpo.style.display = aberto ? 'none' : 'block';
+  card.classList.toggle('aberto', !aberto);
+}
+
+/* ---------- Gaveta ---------- */
+function prdAbrirFiltro() {
+  prdIr(1);
+  document.getElementById('prd-escuro').classList.add('on');
+  document.getElementById('prd-gav').classList.add('on');
+}
+
+function prdFecharFiltro() {
+  document.getElementById('prd-escuro').classList.remove('on');
+  document.getElementById('prd-gav').classList.remove('on');
+}
+
+function prdIr(n) {
+  if (n < 1) { n = 1; }
+  if (n > 3) { n = 3; }
+  prdPasso = n;
+  [1, 2, 3].forEach(function (i) {
+    document.getElementById('prd-e' + i).hidden = (i !== n);
+    var p = document.getElementById('prd-p' + i);
+    p.classList.toggle('on', i <= n);
+    p.classList.toggle('aqui', i === n);
   });
+  var nomes = ['Situação', 'Empresa', 'Movimento'];
+  document.getElementById('prd-pn').textContent = n;
+  document.getElementById('prd-pt').textContent = nomes[n - 1];
+  document.getElementById('prd-bt-voltar').hidden = (n === 1);
+  document.getElementById('prd-bt-ir').textContent = (n === 3) ? 'Filtrar' : 'Avançar';
+}
+
+function prdAvancar() {
+  if (prdPasso < 3) { prdIr(prdPasso + 1); return; }
+  prdAplicar();
+  prdFecharFiltro();
+}
+
+function prdFiltraEmp(inp) {
+  var q = (inp.value || '').toLowerCase().trim();
+  document.querySelectorAll('#prd-emp .opc').forEach(function (o) {
+    o.hidden = q && (o.dataset.nome || '').indexOf(q) < 0;
+  });
+}
+
+function prdMarcarTodas(id, valor) {
+  document.querySelectorAll('#' + id + ' input[type=checkbox]').forEach(function (c) {
+    if (!c.closest('.opc').hidden) { c.checked = valor; }
+  });
+}
+
+function prdChip(btn, grupo) {
+  document.querySelectorAll('#' + grupo + ' .chip').forEach(function (c) {
+    c.classList.toggle('on', c === btn);
+  });
+}
+
+function prdAplicar() {
+  var marc = function (id) {
+    return [].slice.call(
+      document.querySelectorAll('#' + id + ' input[type=checkbox]:checked'))
+      .map(function (c) { return c.value; });
+  };
+  var on = document.querySelector('#prd-faixa .chip.on');
+  prdFiltro = { sit: marc('prd-sit'), emp: marc('prd-emp'),
+                faixa: on ? parseFloat(on.dataset.v || 0) : 0 };
+  prdPinta();
+  prdEco();
+}
+
+function prdLimpar() {
+  prdFiltro = { sit: [], emp: [], faixa: 0 };
+  prdMarcarTodas('prd-sit', false);
+  prdMarcarTodas('prd-emp', false);
+  var chips = document.querySelectorAll('#prd-faixa .chip');
+  chips.forEach(function (c, i) { c.classList.toggle('on', i === 0); });
+  var b = document.getElementById('prd-busca');
+  if (b) { b.value = ''; prdBusca(b); }
+  prdPinta();
+  prdEco();
+}
+
+function prdEco() {
+  var p = [];
+  if (prdFiltro.sit.length) { p.push(prdFiltro.sit.length + ' situação(ões)'); }
+  if (prdFiltro.emp.length) { p.push(prdFiltro.emp.length + ' empresa(s)'); }
+  if (prdFiltro.faixa) { p.push('acima de R$ ' + (prdFiltro.faixa / 1000) + ' mil'); }
+  var n = p.length;
+  document.getElementById('prd-eco').hidden = !n;
+  if (n) { document.getElementById('prd-eco-txt').textContent = 'Filtrando por ' + p.join(' · '); }
+  var chip = document.getElementById('prd-fil-n');
+  chip.hidden = !n;
+  chip.textContent = n;
+}
+
+function prdBusca(inp) {
+  var q = (inp.value || '').toLowerCase().trim();
+  prdCards().forEach(function (c) {
+    c.dataset.busca_ok = (!q || (c.dataset.busca || '').indexOf(q) >= 0) ? '1' : '0';
+  });
+  prdPinta();
+}
+
+/* Um lugar so decide o que aparece: filtro E busca precisam passar. */
+function prdPinta() {
+  var vis = 0, soma = 0;
+  prdCards().forEach(function (c) {
+    var ok = (c.dataset.busca_ok !== '0');
+    if (ok && prdFiltro.sit.length) {
+      ok = prdFiltro.sit.some(function (s) {
+        if (s === 'mov')    { return c.dataset.mov === '1'; }
+        if (s === 'par')    { return c.dataset.mov === '0'; }
+        if (s === 'sconta') { return c.dataset.conta === '0'; }
+        if (s === 'scmp')   { return c.dataset.cmp === '0'; }
+        return false;
+      });
+    }
+    if (ok && prdFiltro.emp.length) {
+      var meus = (c.dataset.emp || '').split(',').filter(Boolean);
+      ok = prdFiltro.emp.some(function (e) { return meus.indexOf(e) >= 0; });
+    }
+    if (ok && prdFiltro.faixa) {
+      ok = parseFloat(c.dataset.fat || 0) >= prdFiltro.faixa;
+    }
+    c.style.display = ok ? '' : 'none';
+    if (ok) { vis++; soma += parseFloat(c.dataset.fat || 0); }
+  });
+  var el = document.getElementById('prd-conta');
+  if (el) {
+    el.textContent = vis + ' de ' + prdCards().length + ' produtos' +
+      (soma ? ' · R$ ' + soma.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) +
+              ' faturados' : '');
+  }
+}
+
+function prdOrdem(o) {
+  document.querySelectorAll('#prd .ord').forEach(function (b) {
+    b.classList.toggle('on', b.dataset.o === o);
+  });
+  var lista = document.querySelector('#prd .lista');
+  var cards = prdCards();
+  cards.sort(function (a, b) {
+    if (o === 'nome') {
+      return (a.dataset.nome || '').localeCompare(b.dataset.nome || '');
+    }
+    if (o === 'fat') {
+      return parseFloat(b.dataset.fat || 0) - parseFloat(a.dataset.fat || 0);
+    }
+    return parseInt(b.dataset.fretes || 0, 10) - parseInt(a.dataset.fretes || 0, 10);
+  });
+  cards.forEach(function (c) { lista.appendChild(c); });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  prdOrdem('fretes');
+  prdPinta();
 });
 </script>
-
 {% endblock %}
