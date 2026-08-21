@@ -285,6 +285,32 @@ def _garante_coluna_pago_antes(conn):
     cur.close()
 
 
+_DDL_NOTA_LANC = """
+CREATE TABLE IF NOT EXISTS dfe_nota_lancamento (
+  id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+  documento_id  BIGINT NOT NULL,
+  lancamento_id BIGINT NOT NULL,
+  criado_em     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  criado_por    VARCHAR(120) NULL,
+  UNIQUE KEY uq_nota_lanc (documento_id, lancamento_id),
+  KEY ix_lanc (lancamento_id)
+)
+"""
+
+
+def _garante_tabela_nota_lanc(conn):
+    """Cria dfe_nota_lancamento se faltar.
+
+    E a ponte pra conciliacao: lancamentos_despesas.bank_transaction_id ja
+    aponta pro extrato, entao nota -> lancamento -> transacao bancaria fecha
+    o caminho inteiro sem tabela nova nenhuma no futuro.
+    """
+    cur = conn.cursor()
+    cur.execute(_DDL_NOTA_LANC)
+    conn.commit()
+    cur.close()
+
+
 def _garante_tabela_pg_pre_corte(conn):
     """Cria dfe_pagamento_pre_corte se faltar. Tabela propria de proposito:
     bank_transactions e do modulo do banco inteiro — esta marca ("liquidou
@@ -327,6 +353,129 @@ def _pagamentos_ocultos(conn, empresa_ids, fornecedor_ids):
             'descricao': (r['descricao'] or '')[:60],
             'data': _dia(r['data_transacao'])})
     return dict(saida)
+
+
+def _notas_despesa(conn, data_ini, data_fim, empresa_ids):
+    """Notas cujos itens sao TODOS despesa (nenhum item de compra).
+
+    Agrupadas por raiz de CNPJ, como os cards de fornecedor — as duas ZILLI
+    viram um card so. Traz o resumo do que foi comprado (descricao dos itens)
+    e os vinculos com lancamento de despesa ja feitos.
+    """
+    where = ["d.tipo = 'NFe'", "d.situacao = 'autorizado'",
+             "d.dh_emissao BETWEEN %s AND %s",
+             """EXISTS (SELECT 1 FROM dfe_itens i
+                         WHERE i.documento_id = d.id AND i.categoria = 'despesa')""",
+             _SEM_ITEM_DE_COMPRA.strip()]
+    params = [data_ini + " 00:00:00", data_fim + " 23:59:59"]
+    _em("d.cliente_id", empresa_ids, where, params)
+
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT d.id, d.numero, d.serie, d.dh_emissao, d.emit_nome, d.emit_cnpj,
+               COALESCE(d.valor_total,0) AS valor,
+               LEFT(LPAD(d.emit_cnpj,14,'0'),8) AS raiz,
+               (SELECT GROUP_CONCAT(i.produto_xml ORDER BY i.valor_total DESC
+                                    SEPARATOR ' · ')
+                  FROM dfe_itens i WHERE i.documento_id = d.id) AS itens
+          FROM dfe_documentos d
+         WHERE %s
+         ORDER BY d.dh_emissao, d.id
+    """ % " AND ".join(where), params)
+    rows = cur.fetchall()
+    cur.close()
+    return rows
+
+
+def _lancamentos_por_raiz(conn, data_ini, data_fim):
+    """O que foi lancado em Despesas, por raiz de CNPJ do extrato.
+
+    O campo `fornecedor` do lancamento e texto livre (as vezes traz a
+    descricao do banco), entao ele NAO serve pra casar. Quem casa e o
+    caminho lancamento -> bank_transaction -> cnpj_cpf, que e o mesmo CNPJ
+    que veio na nota.
+    """
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT LEFT(LPAD(REPLACE(REPLACE(REPLACE(bt.cnpj_cpf,'.',''),'/',''),
+                                 '-',''),14,'0'),8) AS raiz,
+               COUNT(*) AS n, COALESCE(SUM(ld.valor),0) AS total
+          FROM lancamentos_despesas ld
+          JOIN bank_transactions bt ON bt.id = ld.bank_transaction_id
+         WHERE ld.data BETWEEN %s AND %s
+           AND bt.cnpj_cpf IS NOT NULL AND bt.cnpj_cpf <> ''
+         GROUP BY 1
+    """, (data_ini, data_fim))
+    rows = cur.fetchall()
+    cur.close()
+    return {r['raiz']: {'n': int(r['n']), 'total': float(r['total'] or 0)}
+            for r in rows}
+
+
+def _vinculos_despesa(conn, doc_ids):
+    """Lancamentos ja amarrados a cada nota de despesa."""
+    if not doc_ids:
+        return {}
+    ph = ','.join(['%s'] * len(doc_ids))
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT v.id, v.documento_id, ld.id AS lanc_id, ld.data, ld.valor,
+               ld.fornecedor, ld.bank_transaction_id,
+               t.nome AS titulo
+          FROM dfe_nota_lancamento v
+          JOIN lancamentos_despesas ld ON ld.id = v.lancamento_id
+          LEFT JOIN titulos_despesas t ON t.id = ld.titulo_id
+         WHERE v.documento_id IN (%s)
+         ORDER BY ld.data
+    """ % ph, doc_ids)
+    saida = defaultdict(list)
+    for r in cur.fetchall():
+        saida[r['documento_id']].append({
+            'id': r['id'], 'lanc_id': r['lanc_id'], 'data': _dia(r['data']),
+            'valor': float(r['valor'] or 0), 'titulo': r['titulo'] or 'despesa',
+            'fornecedor': (r['fornecedor'] or '')[:40],
+            'tx_id': r['bank_transaction_id']})
+    cur.close()
+    return dict(saida)
+
+
+def _monta_despesas(notas, lancado, vinculos):
+    """Um card por raiz de CNPJ: notas da SEFAZ x lancado em Despesas."""
+    por_raiz = defaultdict(lambda: {'nome': '', 'cnpjs': set(), 'notas': []})
+    for n in notas:
+        g = por_raiz[n['raiz']]
+        g['nome'] = g['nome'] or (n['emit_nome'] or '').strip()
+        g['cnpjs'].add(n['emit_cnpj'] or '')
+        vs = vinculos.get(n['id'], [])
+        g['notas'].append({
+            'id': n['id'],
+            'rotulo': 'NF %s%s' % (n['numero'] or '—',
+                                   ('/%s' % n['serie']) if n['serie'] else ''),
+            'data': _dia(n['dh_emissao']),
+            'valor': float(n['valor'] or 0),
+            'itens': (n['itens'] or '')[:90],
+            'vinculos': vs,
+            'lancada': bool(vs),
+        })
+
+    saida = []
+    for raiz, g in por_raiz.items():
+        v_notas = sum(x['valor'] for x in g['notas'])
+        lc = lancado.get(raiz) or {'n': 0, 'total': 0.0}
+        saida.append({
+            'raiz': raiz,
+            'nome': g['nome'] or '(CNPJ %s)' % raiz,
+            'cnpjs': sorted(c for c in g['cnpjs'] if c),
+            'notas': sorted(g['notas'], key=lambda x: (x['data'], x['id'])),
+            'n_notas': len(g['notas']),
+            'v_notas': v_notas,
+            'n_lanc': lc['n'],
+            'v_lanc': lc['total'],
+            # Positivo = comprou e ainda nao lancou. Negativo nao vira "sobra":
+            # lancamento sem nota e outro assunto (nem toda despesa tem NF-e).
+            'a_lancar': max(0.0, v_notas - lc['total']),
+        })
+    return sorted(saida, key=lambda x: (-x['a_lancar'], -x['v_notas']))
 
 
 def _notas_ocultas(conn, empresa_ids, fornecedor_ids):
@@ -373,16 +522,29 @@ def _garante_tabela_grupo(conn):
 #   - não pode ser 100% "ignorar" (a marcação de "esta nota não é nossa").
 # Resumo (resNFe) não tem item nenhum e PASSA de propósito: ele já traz o valor
 # total e portanto já é dívida, mesmo antes do XML completo chegar.
+# Nota sem NENHUM item de compra nao entra na conferencia de fornecedor:
+# 100% ignorada (lixo) ou 100% despesa (pneu, solda, filtro — o dinheiro dela
+# sai pelo fluxo de Despesas, nao por pagamento de fornecedor). A nota MISTA
+# (despesa + combustivel) continua aqui, que e onde ela pesa.
+# Verdadeiro quando a nota NAO tem nenhum item de compra (tudo ignorar
+# e/ou despesa). Guardado na forma positiva de proposito: quem le usa
+# "NOT " na frente pro lado das compras e ele puro na aba Despesas — foi
+# guardar isso ja negado que me fez esconder as 19 notas da propria aba.
+_SEM_ITEM_DE_COMPRA = """
+        EXISTS (
+          SELECT 1 FROM dfe_itens i
+           WHERE i.documento_id = d.id
+          HAVING SUM(CASE WHEN i.categoria IN ('ignorar', 'despesa')
+                          THEN 0 ELSE 1 END) = 0
+        )
+"""
+
 _FILTRO_NOTA = """
         d.tipo = 'NFe'
     AND d.situacao = 'autorizado'
     AND COALESCE(d.pago_antes_corte, 0) = 0
-    AND NOT EXISTS (
-          SELECT 1 FROM dfe_itens i
-           WHERE i.documento_id = d.id
-          HAVING SUM(CASE WHEN i.categoria = 'ignorar' THEN 0 ELSE 1 END) = 0
-        )
-"""
+    AND NOT __SEM_ITEM_DE_COMPRA__
+""".replace('__SEM_ITEM_DE_COMPRA__', _SEM_ITEM_DE_COMPRA.strip())
 
 # ─── CORTE ────────────────────────────────────────────────────────────────────
 # A captura DFe só tem nota desta data em diante; o OFX tem pagamento de muito
@@ -1240,6 +1402,12 @@ def conf_fornecedores_dfe():
         devolucoes = _devolucoes_periodo(conn, data_ini, data_fim, empresa_ids, fornecedor_ids)
         orfas = _notas_sem_fornecedor(conn, data_ini, data_fim, empresa_ids)
         ocultas = _notas_ocultas(conn, empresa_ids, fornecedor_ids)
+        _garante_tabela_nota_lanc(conn)
+        n_desp = _notas_despesa(conn, data_ini, data_fim, empresa_ids)
+        despesas = _monta_despesas(
+            n_desp,
+            _lancamentos_por_raiz(conn, data_ini, data_fim),
+            _vinculos_despesa(conn, [n['id'] for n in n_desp]))
         pagos_ocultos = _pagamentos_ocultos(conn, empresa_ids, fornecedor_ids)
         pre_corte, pre_corte_ini = _pagamentos_antes_do_corte(
             conn, empresa_ids, fornecedor_ids)
@@ -1267,6 +1435,8 @@ def conf_fornecedores_dfe():
         for d in dados for l in d['linhas'] if l['tipo'] == 'pagamento')
     totais = {
         'pag_aberto': pag_aberto,
+        'desp_a_lancar': sum(d['a_lancar'] for d in despesas),
+        'desp_notas': sum(d['n_notas'] for d in despesas),
         'comprado': sum(d['comprado'] for d in dados),
         'pago':     sum(d['pago'] for d in dados),
         'saldo':    sum(d['saldo_final'] for d in dados),
@@ -1282,7 +1452,7 @@ def conf_fornecedores_dfe():
 
     return render_template(
         'relatorios/conf_fornecedores_dfe.html',
-        dados=dados, totais=totais, orfas=orfas,
+        dados=dados, totais=totais, orfas=orfas, despesas=despesas,
         duplicados=duplicados, sem_cnpj=sem_cnpj,
         empresas=empresas, fornecedores=fornecedores,
         data_inicio=data_ini, data_fim=data_fim,
@@ -1694,6 +1864,130 @@ def pago_antes_corte():
 
     if not achou and marcar:
         return jsonify(ok=False, erro='nota não encontrada'), 404
+    return jsonify(ok=True)
+
+
+@bp.route('/conf_fornecedores_dfe/lancamentos_candidatos/<int:doc_id>')
+@login_required
+@admin_required
+def lancamentos_candidatos(doc_id):
+    """Lancamentos de despesa que podem ter pago esta nota.
+
+    Medi a base antes de escrever: so 1 em 19 notas bate por valor exato
+    (boleto junta compras). Entao NAO ha casamento automatico — a lista vem
+    ordenada por probabilidade (mesmo CNPJ no extrato primeiro, depois data
+    proxima) e quem decide e o usuario.
+    """
+    conn = get_db_connection()
+    try:
+        _garante_tabela_nota_lanc(conn)
+        cur = conn.cursor(dictionary=True)
+        cur.execute("""SELECT d.id, d.numero, d.serie, d.dh_emissao, d.emit_nome,
+                              d.emit_cnpj, COALESCE(d.valor_total,0) AS valor,
+                              LEFT(LPAD(d.emit_cnpj,14,'0'),8) AS raiz
+                         FROM dfe_documentos d WHERE d.id = %s""", (doc_id,))
+        nota = cur.fetchone()
+        if not nota:
+            cur.close()
+            return jsonify(ok=False, erro='nota não encontrada'), 404
+
+        cur.execute("""
+            SELECT ld.id, ld.data, ld.valor, ld.fornecedor, ld.observacao,
+                   ld.bank_transaction_id, t.nome AS titulo, bt.descricao AS extrato,
+                   (LEFT(LPAD(REPLACE(REPLACE(REPLACE(bt.cnpj_cpf,'.',''),'/',''),
+                              '-',''),14,'0'),8) = %s) AS mesmo_cnpj
+              FROM lancamentos_despesas ld
+              LEFT JOIN titulos_despesas t ON t.id = ld.titulo_id
+              LEFT JOIN bank_transactions bt ON bt.id = ld.bank_transaction_id
+             WHERE ld.data BETWEEN DATE_SUB(%s, INTERVAL 45 DAY)
+                               AND DATE_ADD(%s, INTERVAL 90 DAY)
+               AND NOT EXISTS (SELECT 1 FROM dfe_nota_lancamento v
+                                WHERE v.lancamento_id = ld.id
+                                  AND v.documento_id = %s)
+             ORDER BY mesmo_cnpj DESC, ABS(DATEDIFF(ld.data, %s)), ld.id DESC
+             LIMIT 60
+        """, (nota['raiz'], _dia(nota['dh_emissao']), _dia(nota['dh_emissao']),
+              doc_id, _dia(nota['dh_emissao'])))
+        cands = cur.fetchall()
+        cur.close()
+    finally:
+        conn.close()
+
+    return jsonify(ok=True, nota={
+        'id': nota['id'],
+        'rotulo': 'NF %s%s' % (nota['numero'] or '—',
+                               ('/%s' % nota['serie']) if nota['serie'] else ''),
+        'data': _dia(nota['dh_emissao']).strftime('%d/%m/%Y'),
+        'valor': float(nota['valor'] or 0),
+        'emitente': (nota['emit_nome'] or '')[:40],
+        'cnpj': nota['emit_cnpj'] or '',
+    }, candidatos=[{
+        'id': c['id'],
+        'data': _dia(c['data']).strftime('%d/%m/%Y'),
+        'valor': float(c['valor'] or 0),
+        'titulo': c['titulo'] or 'despesa',
+        'detalhe': (c['extrato'] or c['fornecedor'] or '—')[:52],
+        'mesmo_cnpj': bool(c['mesmo_cnpj']),
+    } for c in cands])
+
+
+@bp.route('/conf_fornecedores_dfe/vincular_despesa', methods=['POST'])
+@login_required
+@admin_required
+def vincular_despesa():
+    """Amarra a nota de despesa a um ou mais lancamentos.
+
+    Sem trava de valor de proposito: um boleto junta varias notas e uma nota
+    pode ser paga em parcelas — aqui o vinculo diz "essa compra foi lancada
+    ali", nao rateia dinheiro (isso e o mundo das compras).
+    """
+    dados = request.get_json(silent=True) or {}
+    try:
+        doc_id = int(dados.get('doc_id'))
+        lancs = [int(x) for x in (dados.get('lancamentos') or [])][:20]
+    except (TypeError, ValueError):
+        return jsonify(ok=False, erro='dados inválidos'), 400
+    if not lancs:
+        return jsonify(ok=False, erro='marque ao menos um lançamento'), 400
+
+    usuario = getattr(current_user, 'email', None) or 'manual'
+    conn = get_db_connection()
+    try:
+        _garante_tabela_nota_lanc(conn)
+        cur = conn.cursor()
+        for lid in lancs:
+            cur.execute("""INSERT INTO dfe_nota_lancamento
+                               (documento_id, lancamento_id, criado_por)
+                           VALUES (%s, %s, %s)
+                           ON DUPLICATE KEY UPDATE criado_em = criado_em""",
+                        (doc_id, lid, usuario))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+    return jsonify(ok=True, gravados=len(lancs))
+
+
+@bp.route('/conf_fornecedores_dfe/desvincular_despesa', methods=['POST'])
+@login_required
+@admin_required
+def desvincular_despesa():
+    dados = request.get_json(silent=True) or {}
+    try:
+        vinc_id = int(dados.get('vinculo_id'))
+    except (TypeError, ValueError):
+        return jsonify(ok=False, erro='vínculo inválido'), 400
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM dfe_nota_lancamento WHERE id = %s", (vinc_id,))
+        conn.commit()
+        achou = cur.rowcount
+        cur.close()
+    finally:
+        conn.close()
+    if not achou:
+        return jsonify(ok=False, erro='vínculo não encontrado'), 404
     return jsonify(ok=True)
 
 

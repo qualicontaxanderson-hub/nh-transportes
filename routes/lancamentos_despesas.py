@@ -373,10 +373,15 @@ def novo():
         # Get today's date
         data_hoje = datetime.now().strftime('%Y-%m-%d')
         
-        return render_template('lancamentos_despesas/novo.html', 
+        # Pre-preenchimento por querystring: quem chega da nota de
+        # despesa (Fornecedores x Compras) ja traz data, valor e a chave
+        # da NF-e na observacao — some a digitacao e o numero vem certo.
+        return render_template('lancamentos_despesas/novo.html',
                              clientes=clientes,
                              titulos=titulos,
-                             data_hoje=data_hoje)
+                             data_hoje=(request.args.get('data') or data_hoje),
+                             pre_valor=request.args.get('valor', ''),
+                             pre_observacao=request.args.get('observacao', ''))
     except Exception as e:
         flash(f'Erro ao carregar formulário: {str(e)}', 'danger')
         return redirect(url_for('lancamentos_despesas.lista'))

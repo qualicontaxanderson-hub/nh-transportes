@@ -490,8 +490,10 @@
       <div class="v">{{ totais.pago | formatar_moeda }}</div></div>
     <div class="n {{ 'n--verde' if totais.saldo >= 0 else 'n--verm' }}"><div class="r">Saldo acumulado</div>
       <div class="v">{{ totais.saldo | formatar_moeda }}</div></div>
-    <div class="n {{ 'n--ambar' if totais.orfas else 'n--cinza' }}"><div class="r">Nota sem fornecedor</div>
-      <div class="v">{{ totais.orfas | formatar_moeda }}</div></div>
+    <div class="n {{ 'n--ambar' if totais.desp_a_lancar > 0.005 else 'n--cinza' }}"
+         title="notas de despesa que a SEFAZ entregou e que ainda não têm lançamento em Despesas">
+      <div class="r">Despesa a lançar</div>
+      <div class="v">{{ totais.desp_a_lancar | formatar_moeda }}</div></div>
     <div class="n {{ 'n--verde' if totais.notas and totais.notas_ok == totais.notas else 'n--ambar' }}">
       <div class="r">Notas conferidas (vinculadas)</div>
       <div class="v" id="conf-geral" data-tot="{{ totais.notas }}">{{ totais.notas_ok }}/{{ totais.notas }}</div></div>
@@ -514,8 +516,107 @@
       Conciliados <span class="b" id="conc-n-sim">0</span></button>
     <button type="button" class="conc-tab" data-m="todos" onclick="cfdConc('todos')">
       Tudo junto</button>
+    {% if despesas %}
+    <button type="button" class="conc-tab" data-m="desp" onclick="cfdConc('desp')">
+      Despesas <span class="b">{{ despesas|length }}</span></button>
+    {% endif %}
   </div>
+<div id="cfd-desp" hidden>
+  {% for g in despesas %}
+  <div class="forn desp-card">
+    <div class="forn__head">
+      <div style="min-width:0">
+        <div class="forn__nome"><span class="un">{{ g.nome }}</span></div>
+        <div class="forn__cnpj">CNPJ {{ g.cnpjs[0] }}
+          {%- if g.cnpjs|length > 1 %} <span class="grp-selo">{{ g.cnpjs|length }} filiais</span>{% endif -%}
+        </div>
+      </div>
+      <div class="selo {{ 'selo--deve' if g.a_lancar > 0.005 else 'selo--zero' }}">
+        <div class="v">{{ g.a_lancar | formatar_moeda }}</div>
+        <div class="r">{{ 'a lançar' if g.a_lancar > 0.005 else 'em dia' }}</div>
+      </div>
+    </div>
+    <div class="forn__nums">
+      <span><span class="k">Notas (SEFAZ):</span> <b>{{ g.v_notas | formatar_moeda }}</b></span>
+      <span><span class="k">Lançado em Despesas:</span> <b>{{ g.v_lanc | formatar_moeda }}</b></span>
+      <span><span class="k">{{ g.n_notas }} nota{{ '' if g.n_notas == 1 else 's' }}</span>{% if g.n_lanc %}
+        <span class="k"> · {{ g.n_lanc }} lançamento{{ '' if g.n_lanc == 1 else 's' }}</span>{% endif %}</span>
+    </div>
+
+    {% for n in g.notas %}
+    <div class="lin lin--nf">
+      <span class="lin__ico"><i class="bi bi-receipt"></i></span>
+      <div class="lin__t"><span class="data">{{ n.data.strftime('%d/%m') }}</span>
+        {{ n.rotulo }}</div>
+      <div class="lin__m">{{ n.itens or '—' }}</div>
+      <div class="lin__v">{{ n.valor | formatar_moeda }}</div>
+      <div class="lin__s">
+        {%- if n.lancada -%}<span class="cob cob--ok">lançada</span>
+        {%- else -%}<span class="cob cob--no">falta lançar</span>{%- endif -%}
+      </div>
+      {% if not n.lancada %}
+      <div class="lin__acoes">
+        <button type="button" class="vinc-btn"
+                onclick="cfdlAbrir({{ n.id }})"
+                title="dizer qual lançamento de despesa pagou esta nota">
+          <i class="bi bi-link-45deg"></i> amarrar a um lançamento
+        </button>
+      </div>
+      {% endif %}
+    </div>
+    {% for v in n.vinculos %}
+    <div class="vinc">
+      <i class="bi bi-link-45deg"></i>
+      <span class="d">{{ v.data.strftime('%d/%m/%Y') }} · {{ v.titulo }}
+        {%- if v.fornecedor %} — {{ v.fornecedor }}{% endif %}
+        {%- if v.tx_id %} <span class="tag" title="este lançamento veio de um lançamento conciliado no banco — a nota fica ligada à transação bancária">no extrato</span>{% endif %}</span>
+      <span class="v">{{ v.valor | formatar_moeda }}</span>
+      <button type="button" class="x" onclick="cfdlDesfaz({{ v.id }})"
+              title="desfazer este vínculo"><i class="bi bi-x-lg"></i></button>
+    </div>
+    {% endfor %}
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+
+{# ---------- Gaveta: amarrar a nota de despesa a um lancamento ---------- #}
+<div class="escuro" id="cfdl-escuro" onclick="cfdlFechar()"></div>
+<div class="gav" id="cfdl-gav" role="dialog" aria-modal="true">
+  <div class="gav__pega"></div>
+  <div class="pnome">
+    <span style="display:block;font-size:.68rem;font-weight:800;color:#6b7684;
+      text-transform:uppercase;letter-spacing:.05em">Passo 1 de 1 · Lançamentos</span>
+    <b id="cfdl-tit">Qual lançamento pagou esta nota?</b>
+    <span id="cfdl-sub"></span>
+  </div>
+  <div class="gav__b">
+    <div id="cfdl-eco" class="g-eco" style="margin-bottom:.5rem"></div>
+    <input type="text" class="campo" id="cfdl-busca" placeholder="Buscar lançamento…"
+           oninput="cfdlBusca(this)">
+    <div class="opcs" id="cfdl-lista"></div>
+    <div id="cfdl-vazio" hidden style="text-align:center;padding:1rem .4rem">
+      <div style="font-size:1.4rem">🔍</div>
+      <div style="font-weight:800;font-size:.86rem;margin-top:.2rem">
+        Nenhum lançamento desse CNPJ</div>
+      <div style="color:#6b7684;font-size:.78rem;margin-top:.15rem;line-height:1.45">
+        Ou o boleto ainda não venceu, ou essa despesa nunca foi registrada.
+        Dá pra lançar agora, já com os dados da nota preenchidos.</div>
+      <a id="cfdl-lancar" class="bt-g bt-g--ok" style="display:inline-block;
+         margin-top:.7rem;text-decoration:none;flex:none">
+        <i class="bi bi-plus-circle"></i> Lançar esta despesa</a>
+    </div>
+  </div>
+  <div class="gav__f">
+    <button type="button" class="bt-g bt-g--ca" onclick="cfdlFechar()">Cancelar</button>
+    <button type="button" class="bt-g bt-g--ok" id="cfdl-ok"
+            onclick="cfdlSalvar(this)">Amarrar</button>
+  </div>
+</div>
+
 <style>
+  #cfd .desp-card{ margin-bottom:.7rem; }
+  #cfd .desp-card .lin{ grid-template-columns:34px 1fr auto; }
   #cfd .conc-abas{ display:flex; gap:.35rem; margin-bottom:.7rem;
     overflow-x:auto; }
   #cfd .conc-tab{ flex:0 0 auto; border:1px solid #d9e0e8; background:#fff;
@@ -1024,6 +1125,15 @@ function cfdConc(m) {
   document.querySelectorAll('#cfd .conc-tab').forEach(function (b) {
     b.classList.toggle('on', b.dataset.m === m);
   });
+  // A aba Despesas troca o corpo inteiro: outro confronto (nota x lancamento),
+  // nao um filtro do mesmo. Os cards de compra somem enquanto ela esta aberta.
+  var boxDesp = document.getElementById('cfd-desp');
+  if (boxDesp) boxDesp.hidden = (m !== 'desp');
+  if (m === 'desp') {
+    document.querySelectorAll('#cfd .forn:not(.desp-card), #cfd .bloco')
+      .forEach(function (el) { el.style.display = 'none'; });
+    return;
+  }
   document.querySelectorAll('#cfd .forn').forEach(function (card) {
     var visiveis = 0;
     var mostraUltima = false;
@@ -1416,6 +1526,122 @@ function cfdPagaAntes(docId, marcar) {
   .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
   .then(function (res) {
     if (!res.ok || !res.j.ok) { alert((res.j && res.j.erro) || 'não consegui marcar'); return; }
+    cfdReload();
+  })
+  .catch(function (e) { alert('Erro de rede: ' + e); });
+}
+
+// ---------- Aba Despesas: amarrar nota a lancamento ----------
+// Nao ha casamento automatico aqui de proposito: medi a base e so 1 em 19
+// notas bate por valor exato (boleto junta compras). A lista chega ordenada
+// por probabilidade e quem decide e a pessoa.
+var cfdlDoc = null, cfdlSel = {}, cfdlCands = [];
+
+function cfdlAbrir(docId) {
+  cfdlDoc = docId; cfdlSel = {}; cfdlCands = [];
+  document.getElementById('cfdl-lista').innerHTML =
+    '<div style="padding:.7rem;color:#6b7684;font-size:.82rem">carregando…</div>';
+  document.getElementById('cfdl-vazio').hidden = true;
+  document.getElementById('cfdl-escuro').classList.add('on');
+  document.getElementById('cfdl-gav').classList.add('on');
+  fetch('{{ url_for("conf_fornecedores_dfe.lancamentos_candidatos", doc_id=0) }}'
+        .replace(/0$/, docId))
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j.ok) { alert(j.erro || 'não consegui carregar'); cfdlFechar(); return; }
+      document.getElementById('cfdl-sub').textContent =
+        j.nota.rotulo + ' · ' + j.nota.data + ' · ' + j.nota.emitente +
+        ' · ' + cfdMoeda(j.nota.valor);
+      cfdlCands = j.candidatos || [];
+      // "Lancar esta despesa" ja preenchido com o que a nota sabe.
+      var lk = document.getElementById('cfdl-lancar');
+      if (lk) {
+        lk.href = '{{ url_for("lancamentos_despesas.novo") }}?data=' +
+          encodeURIComponent(j.nota.data.split('/').reverse().join('-')) +
+          '&valor=' + encodeURIComponent(j.nota.valor.toFixed(2).replace('.', ',')) +
+          '&observacao=' + encodeURIComponent(
+            j.nota.rotulo + ' — ' + j.nota.emitente + ' (CNPJ ' + j.nota.cnpj + ')');
+      }
+      cfdlMonta();
+    })
+    .catch(function (e) { alert('Erro de rede: ' + e); cfdlFechar(); });
+}
+
+function cfdlMonta() {
+  var alvo = document.getElementById('cfdl-lista');
+  var temCnpj = cfdlCands.filter(function (c) { return c.mesmo_cnpj; }).length;
+  document.getElementById('cfdl-vazio').hidden = !!temCnpj;
+  alvo.innerHTML = cfdlCands.map(function (c) {
+    return '<label class="opc" data-id="' + c.id + '" style="align-items:flex-start"' +
+      (c.mesmo_cnpj ? ' data-sug="1"' : '') + '>' +
+      '<input type="checkbox" class="cfdl-chk" style="margin-top:.15rem">' +
+      '<span style="min-width:0;flex:1">' +
+      '<span style="display:block;font-weight:800;font-size:.84rem">' +
+      c.data + ' · ' + c.titulo + '</span>' +
+      '<span style="display:block;font-size:.72rem;color:#6b7684;overflow:hidden;' +
+      'text-overflow:ellipsis;white-space:nowrap">' + c.detalhe +
+      (c.mesmo_cnpj ? ' · mesmo CNPJ' : '') + '</span></span>' +
+      '<span style="flex:0 0 auto;font-size:.72rem;font-weight:700;color:#8a5a00">' +
+      cfdMoeda(c.valor) + '</span></label>';
+  }).join('');
+  alvo.querySelectorAll('.cfdl-chk').forEach(function (chk) {
+    chk.addEventListener('change', function () {
+      cfdlSel[chk.closest('.opc').dataset.id] = chk.checked;
+      cfdlEco();
+    });
+  });
+  cfdlEco();
+}
+
+function cfdlEco() {
+  var ids = Object.keys(cfdlSel).filter(function (k) { return cfdlSel[k]; });
+  var soma = cfdlCands.filter(function (c) { return cfdlSel[c.id]; })
+    .reduce(function (a, c) { return a + c.valor; }, 0);
+  document.getElementById('cfdl-eco').textContent = ids.length
+    ? ids.length + ' lançamento(s) marcado(s) — somam ' + cfdMoeda(soma)
+    : 'Marque o lançamento que pagou esta nota.';
+}
+
+function cfdlBusca(inp) {
+  var q = (inp.value || '').toLowerCase();
+  document.querySelectorAll('#cfdl-lista .opc').forEach(function (o) {
+    o.hidden = q && o.textContent.toLowerCase().indexOf(q) < 0;
+  });
+}
+
+function cfdlFechar() {
+  document.getElementById('cfdl-escuro').classList.remove('on');
+  document.getElementById('cfdl-gav').classList.remove('on');
+}
+
+function cfdlSalvar(btn) {
+  var ids = Object.keys(cfdlSel).filter(function (k) { return cfdlSel[k]; });
+  if (!ids.length) { alert('Marque ao menos um lançamento.'); return; }
+  btn.disabled = true; btn.textContent = 'gravando…';
+  fetch('{{ url_for("conf_fornecedores_dfe.vincular_despesa") }}', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ doc_id: cfdlDoc, lancamentos: ids })
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  .then(function (res) {
+    btn.disabled = false; btn.textContent = 'Amarrar';
+    if (!res.ok || !res.j.ok) { alert((res.j && res.j.erro) || 'não consegui amarrar'); return; }
+    cfdReload();
+  })
+  .catch(function (e) {
+    btn.disabled = false; btn.textContent = 'Amarrar'; alert('Erro de rede: ' + e);
+  });
+}
+
+function cfdlDesfaz(vincId) {
+  if (!confirm('Desfazer este vínculo?')) return;
+  fetch('{{ url_for("conf_fornecedores_dfe.desvincular_despesa") }}', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vinculo_id: vincId })
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  .then(function (res) {
+    if (!res.ok || !res.j.ok) { alert((res.j && res.j.erro) || 'não consegui desfazer'); return; }
     cfdReload();
   })
   .catch(function (e) { alert('Erro de rede: ' + e); });
