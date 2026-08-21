@@ -1,167 +1,517 @@
 {% extends "base.html" %}
-{% block title %}Bases - {{ app_name }}{% endblock %}
+
+{% block title %}Bases - NH Transportes{% endblock %}
+
+{#- Lista no padrao do Banco. A base entra no ITEM do pedido
+    (pedidos_itens.base_id) — e ali que se decide onde carregar. Entao a
+    pergunta desta tela e "quanto sai de cada base": a DTC responde por
+    4,4 milhoes de litros e a ALE nunca foi usada. -#}
 
 {% block styles %}
 <style>
-  .page-hero {
-    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
-    border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
-  }
-  .page-hero .hero-icon {
-    width: 3rem; height: 3rem; background: rgba(255,255,255,.15); border-radius: .6rem;
-    display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0;
-  }
-  .stat-card { border: 0; border-radius: .65rem; box-shadow: 0 2px 8px rgba(0,0,0,.07); transition: box-shadow .2s; }
-  .stat-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.13); }
-  .stat-card .stat-icon {
-    width: 2.6rem; height: 2.6rem; border-radius: .5rem;
-    display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0;
-  }
-  #tbl-lista { font-size: 0.76rem; border-collapse: separate; border-spacing: 0; }
-  #tbl-lista thead tr th {
-    background: #f0f4f8; color: #2c3e50; font-weight: 700; font-size: 0.72rem;
-    text-transform: uppercase; letter-spacing: 0.04em; padding: 0.45rem 0.65rem;
-    border-bottom: 2px solid #c5d5e8; white-space: nowrap;
-  }
-  #tbl-lista tbody tr td {
-    padding: 0.38rem 0.65rem; border-bottom: 1px solid #eef1f4;
-    vertical-align: middle; color: #374151;
-  }
-  #tbl-lista tbody tr:last-child td { border-bottom: none; }
-  #tbl-lista tbody tr.row-item { cursor: pointer; transition: background .1s; }
-  #tbl-lista tbody tr.row-item:hover td { background: #f0f7ff; }
-  .btn-acao {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 1.8rem; height: 1.8rem; border-radius: .4rem; border: 1px solid;
-    font-size: .82rem; transition: background .15s, color .15s; text-decoration: none;
-  }
-  .btn-editar  { color:#1D63A5; border-color:#bee0f5; background:#f0f7ff; }
-  .btn-editar:hover  { background:#1D63A5; color:#fff; }
-  .btn-excluir { color:#dc3545; border-color:#f5c6cb; background:#fff5f5; }
-  .btn-excluir:hover { background:#dc3545; color:#fff; }
-  .actions-cell { white-space: nowrap; }
+/* O layout base pinta todo body > .container-fluid de branco com 2rem de
+   padding; no celular vira moldura e a tela nao enche. */
+body > .container-fluid:has(#bas){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#bas){ padding:.7rem 1rem 0; }
+}
+#bas.container-fluid{ padding-left:0; padding-right:0; }
+</style>
+{% with esc = '#bas' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
+<style>
+  #bas{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#6b7684; --ink:#151d27; --borda:#d9e0e8;
+        color:var(--ink); max-width:100%; }
+
+  #bas .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .65rem;
+    margin-bottom:.7rem; }
+  #bas .topo__l{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  #bas .topo__t{ font-weight:800; font-size:1.02rem; flex:1; min-width:0; }
+  #bas .bt-t{ border:1px solid rgba(255,255,255,.35);
+    background:rgba(255,255,255,.14); color:#fff; border-radius:9px;
+    padding:.34rem .7rem; font-size:.78rem; font-weight:800; font-family:inherit;
+    cursor:pointer; text-decoration:none; white-space:nowrap;
+    display:inline-flex; gap:.3rem; align-items:center; }
+  #bas .bt-t:hover{ background:rgba(255,255,255,.26); color:#fff; }
+  #bas .fam{ display:flex; gap:.4rem; margin-top:.6rem; overflow-x:auto;
+    padding-bottom:.15rem; }
+  #bas .fam a{ flex:0 0 auto; border-radius:99px; padding:.35rem .8rem;
+    font-size:.78rem; font-weight:800; background:rgba(255,255,255,.18);
+    color:#fff; text-decoration:none; white-space:nowrap; }
+  #bas .fam a.on{ background:#fff; color:var(--blue-deep); }
+
+  #bas .busca{ display:flex; gap:.4rem; margin-bottom:.6rem; }
+  #bas .busca input{ flex:1; min-width:0; border:1px solid var(--borda);
+    border-radius:10px; padding:.5rem .65rem; font-size:.86rem;
+    font-family:inherit; }
+  #bas .bt-fil{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
+    color:#3a4655; border-radius:10px; padding:.5rem .8rem; font-size:.83rem;
+    font-weight:800; font-family:inherit; cursor:pointer; display:inline-flex;
+    gap:.35rem; align-items:center; }
+  #bas .bt-fil__n{ background:var(--blue); color:#fff; border-radius:99px;
+    min-width:18px; height:18px; display:inline-grid; place-items:center;
+    font-size:.66rem; padding:0 .3rem; }
+  #bas .ordem{ display:flex; gap:.35rem; align-items:center; margin-bottom:.6rem;
+    overflow-x:auto; padding-bottom:.15rem; }
+  #bas .ordem__t{ font-size:.72rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.05em; flex:0 0 auto; }
+  #bas .ord{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
+    color:#3a4655; border-radius:99px; padding:.32rem .7rem; font-size:.78rem;
+    font-weight:800; font-family:inherit; cursor:pointer; display:inline-flex;
+    gap:.3rem; align-items:center; }
+  #bas .ord.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #bas .conta{ font-size:.76rem; color:var(--muted); margin-bottom:.5rem;
+    font-weight:700; }
+  #bas .gr__c{ display:flex; align-items:center; gap:.5rem; margin-bottom:.3rem; }
+  #bas .gr__a{ margin-left:auto; border:0; background:none; color:var(--blue);
+    font-size:.74rem; font-weight:800; cursor:pointer; font-family:inherit; }
+  #bas .dica{ font-size:.72rem; color:var(--muted); margin-top:.35rem; }
+
+  #bas .aviso{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;
+    background:#fdf0d6; color:var(--ambar); border-radius:11px;
+    padding:.55rem .7rem; font-size:.82rem; font-weight:700;
+    margin-bottom:.7rem; }
+
+  #bas .lista{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #bas .b{ border-bottom:1px solid #eef1f5; }
+  #bas .b:last-child{ border-bottom:0; }
+  #bas .b__h{ display:flex; gap:.6rem; padding:.6rem .8rem; align-items:flex-start;
+    cursor:pointer; min-width:0; }
+  #bas .b__h:hover{ background:#fafbfd; }
+  #bas .b__ic{ flex:0 0 36px; height:36px; border-radius:10px; display:grid;
+    place-items:center; font-size:1rem; background:#eaf1f9;
+    color:var(--blue-deep); }
+  #bas .b__ic--off{ background:#f4f6f9; color:var(--muted); }
+  #bas .b__t{ flex:1; min-width:0; }
+  #bas .b__n{ font-weight:800; font-size:.9rem; overflow-wrap:anywhere; }
+  #bas .b__d{ display:flex; gap:.4rem .9rem; flex-wrap:wrap; margin-top:.25rem;
+    font-size:.75rem; color:#3a4655; min-width:0; overflow-wrap:anywhere; }
+  #bas .b__d .k{ color:var(--muted); }
+  #bas .b__d b{ font-weight:700; font-variant-numeric:tabular-nums; }
+  #bas .mov{ text-align:right; flex:0 0 auto; }
+  #bas .mov__v{ font-weight:800; font-size:.86rem; color:var(--blue-deep);
+    font-variant-numeric:tabular-nums; white-space:nowrap; }
+  #bas .mov__r{ font-size:.66rem; color:var(--muted); white-space:nowrap; }
+  #bas .barra{ height:5px; border-radius:9px; background:#eef2f7;
+    overflow:hidden; margin-top:.35rem; }
+  #bas .barra i{ display:block; height:100%;
+    background:linear-gradient(90deg,#2E6FB0,#1D63A5); }
+  #bas .selo{ display:inline-block; border-radius:99px; padding:.14rem .5rem;
+    font-size:.64rem; font-weight:800; white-space:nowrap; }
+  #bas .selo--par{ background:#f4f6f9; color:var(--muted); }
+  #bas .selo--off{ background:#fbe9e9; color:var(--danger); }
+
+  #bas .b__c{ background:#f7f9fc; border-top:1px solid #eef1f5;
+    padding:.65rem .8rem .75rem; }
+  #bas .grade{ display:grid; gap:.5rem; grid-template-columns:1fr; }
+  @media (min-width:768px){ #bas .grade{ grid-template-columns:1fr 1fr; } }
+  #bas .bloco{ background:#fff; border:1px solid var(--borda);
+    border-radius:11px; padding:.55rem .7rem; min-width:0; }
+  #bas .bloco__t{ font-size:.64rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); margin-bottom:.3rem; }
+  #bas .li{ display:flex; gap:.5rem; font-size:.79rem; padding:.16rem 0; }
+  #bas .li .k{ color:var(--muted); flex:0 0 92px; }
+  #bas .li .v{ flex:1; min-width:0; font-weight:600; overflow-wrap:anywhere; }
+  #bas .vazio{ color:var(--ambar); font-weight:700; }
+  #bas .acoes{ display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.55rem; }
+  #bas .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:9px; padding:.36rem .7rem; font-size:.77rem; font-weight:700;
+    font-family:inherit; cursor:pointer; text-decoration:none;
+    display:inline-flex; gap:.3rem; align-items:center; }
+  #bas .bt:hover{ background:#dfeaf8; color:var(--blue-deep); }
+  #bas .bt--del{ background:#fbe9e9; border-color:#f0c8c8; color:var(--danger); }
+  #bas .nada{ padding:1.4rem .8rem; text-align:center; color:var(--muted); }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
+<div id="bas">
 
-  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-    <div class="hero-icon"><i class="bi bi-geo-alt-fill"></i></div>
-    <div class="flex-grow-1">
-      <h4 class="mb-0 fw-bold">Bases</h4>
-      <p class="mb-0 opacity-75 small">Gerencie as bases operacionais cadastradas no sistema.</p>
+  <div class="topo">
+    <div class="topo__l">
+      <span class="topo__t"><i class="bi bi-building"></i> Bases de carregamento</span>
+      <a class="bt-t" href="{{ url_for('bases.nova') }}">
+        <i class="bi bi-plus-circle"></i> Nova base</a>
     </div>
-    {% if current_user.nivel == 'admin' %}
-    <a href="{{ url_for('bases.nova') }}"
-       class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
-      <i class="bi bi-plus-circle me-1"></i> Nova Base
-    </a>
-    {% endif %}
+    {% with aba_cad = 'bases' %}{% include 'includes/abas_cadastros.html' %}{% endwith %}
   </div>
 
-  {% set total = bases | length %}
-  {% set ativas = bases | selectattr('ativo') | list | length %}
-  <div class="row g-3 mb-4">
-    <div class="col-12 col-md-4">
-      <div class="card stat-card h-100">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div class="stat-icon" style="background:#e8f0fb;">
-            <i class="bi bi-geo-alt-fill" style="color:#1D63A5;"></i>
-          </div>
-          <div>
-            <div class="fs-4 fw-bold" style="color:#1D63A5;">{{ total }}</div>
-            <div class="text-muted small">Total de Bases</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-12 col-md-4">
-      <div class="card stat-card h-100">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div class="stat-icon" style="background:#e6f9f0;">
-            <i class="bi bi-check-circle-fill" style="color:#198754;"></i>
-          </div>
-          <div>
-            <div class="fs-4 fw-bold" style="color:#198754;">{{ ativas }}</div>
-            <div class="text-muted small">Bases Ativas</div>
-          </div>
-        </div>
-      </div>
-    </div>
+  <div class="g-nums">
+    <div class="n n--azul"><div class="r">Bases</div>
+      <div class="v">{{ totais.bases }}</div></div>
+    <div class="n n--verde"><div class="r">Litros carregados</div>
+      <div class="v">{{ '{:,.0f}'.format(totais.litros).replace(',', '.') }} L</div></div>
+    <div class="n {{ 'n--cinza' if totais.sem_uso else 'n--verde' }}">
+      <div class="r">Nunca usadas</div>
+      <div class="v">{{ totais.sem_uso }}</div></div>
+    <div class="n {{ 'n--ambar' if totais.sem_base else 'n--verde' }}">
+      <div class="r">Itens sem base</div>
+      <div class="v">{{ totais.sem_base }}</div></div>
   </div>
 
-  <div class="card shadow-sm">
-    <div class="card-header d-flex justify-content-between align-items-center py-2"
-         style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-      <span><i class="bi bi-list me-1"></i> Lista de Bases</span>
-      <span class="badge bg-white text-secondary" style="font-size:0.7rem;font-weight:600;">{{ total }}</span>
-    </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table mb-0" id="tbl-lista">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Nome</th>
-              <th>Cidade</th>
-              <th>Observação</th>
-              <th>Status</th>
-              <th class="text-center" style="width:8%">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% if bases %}
-              {% for b in bases %}
-              <tr class="row-item"
-                  {% if current_user.nivel == 'admin' %}
-                  data-url="{{ url_for('bases.editar', id=b.id) }}"
-                  title="Clique para editar"
-                  {% endif %}>
-                <td><strong>{{ b.id }}</strong></td>
-                <td>{{ b.nome }}</td>
-                <td>{{ b.cidade or '-' }}</td>
-                <td>{{ b.observacao or '-' }}</td>
-                <td>
-                  {% if b.ativo %}
-                    <span class="badge bg-success" style="font-size:0.68rem;">Ativa</span>
-                  {% else %}
-                    <span class="badge bg-secondary" style="font-size:0.68rem;">Inativa</span>
-                  {% endif %}
-                </td>
-                <td class="text-center actions-cell" onclick="event.stopPropagation()">
-                  {% if current_user.nivel == 'admin' %}
-                  <a href="{{ url_for('bases.editar', id=b.id) }}" class="btn-acao btn-editar" title="Editar">
-                    <i class="bi bi-pencil"></i>
-                  </a>
-                  <a href="{{ url_for('bases.excluir', id=b.id) }}" class="btn-acao btn-excluir"
-                     onclick="return confirm('Deseja realmente excluir esta base?')" title="Excluir">
-                    <i class="bi bi-trash"></i>
-                  </a>
-                  {% endif %}
-                </td>
-              </tr>
-              {% endfor %}
-            {% else %}
-              <tr>
-                <td colspan="6" class="text-center text-muted py-4">
-                  <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
-                  <div class="mt-2" style="font-size:0.82rem;">Nenhuma base cadastrada.</div>
-                </td>
-              </tr>
+  {% if totais.sem_base %}
+  <div class="aviso">
+    <i class="bi bi-info-circle"></i>
+    <b>{{ totais.sem_base }} itens de pedido</b> foram lançados sem base — não dá
+    pra saber onde carregaram. Escolher a base no item do pedido resolve daqui
+    pra frente.
+  </div>
+  {% endif %}
+
+  <div class="busca">
+    <input type="text" id="bas-busca" placeholder="Buscar por nome ou cidade…"
+           oninput="basBusca(this)">
+    <button type="button" class="bt-fil" onclick="basAbrirFiltro()">
+      <i class="bi bi-sliders"></i> Filtro
+      <span class="bt-fil__n" id="bas-fil-n" hidden>0</span></button>
+  </div>
+
+  <div class="ordem">
+    <span class="ordem__t">Ordenar:</span>
+    <button type="button" class="ord on" data-o="litros" onclick="basOrdem('litros')">
+      <i class="bi bi-fuel-pump"></i> Mais carregada</button>
+    <button type="button" class="ord" data-o="recente" onclick="basOrdem('recente')">
+      <i class="bi bi-clock-history"></i> Usada recentemente</button>
+    <button type="button" class="ord" data-o="nome" onclick="basOrdem('nome')">
+      <i class="bi bi-sort-alpha-down"></i> Nome A–Z</button>
+  </div>
+
+  <div class="g-eco" id="bas-eco" hidden>
+    <i class="bi bi-funnel-fill"></i>
+    <span id="bas-eco-txt"></span>
+    <a href="#" onclick="basLimpar(); return false;">Limpar</a>
+  </div>
+
+  <div class="conta" id="bas-conta"></div>
+
+  <div class="lista">
+    {% for b in bases %}
+    <div class="b" data-uso="{{ '1' if b.itens else '0' }}"
+         data-mov="{{ '0' if b.parada else '1' }}"
+         data-ativo="{{ '1' if b.ativo else '0' }}"
+         data-cidade="{{ b.cidade or '—' }}"
+         data-litros="{{ '%.0f' | format(b.litros or 0) }}"
+         data-ultimo="{{ b.ultimo.isoformat() if b.ultimo else '' }}"
+         data-nome="{{ (b.nome or '') | lower }}"
+         data-busca="{{ ((b.nome or '') ~ ' ' ~ (b.cidade or '') ~ ' ' ~ (b.observacao or '')) | lower }}">
+      <div class="b__h" onclick="basAbre(this)">
+        <span class="b__ic {{ 'b__ic--off' if not b.ativo }}">
+          <i class="bi bi-building-fill"></i></span>
+        <div class="b__t">
+          <div class="b__n">{{ b.nome }}
+            {%- if not b.ativo %} <span class="selo selo--off">inativa</span>{% endif -%}
+            {%- if b.ativo and not b.itens %} <span class="selo selo--par">nunca usada</span>
+            {%- elif b.ativo and b.parada %} <span class="selo selo--par">parada</span>{% endif -%}
+          </div>
+          <div class="b__d">
+            <span><span class="k">{{ b.cidade or 'sem cidade' }}</span></span>
+            {% if b.pedidos %}
+            <span><span class="k">Pedidos</span> <b>{{ b.pedidos }}</b></span>
             {% endif %}
-          </tbody>
-        </table>
+            {% if b.observacao %}<span>{{ b.observacao }}</span>{% endif %}
+          </div>
+          {% if b.peso %}<div class="barra"><i style="width:{{ b.peso }}%"></i></div>{% endif %}
+        </div>
+        <div class="mov">
+          {% if b.litros %}
+          <div class="mov__v">{{ '{:,.0f}'.format(b.litros).replace(',', '.') }} L</div>
+          <div class="mov__r">{{ b.itens }} carregamento{{ '' if b.itens == 1 else 's' }}
+            {%- if b.ultimo %} · {{ b.ultimo.strftime('%d/%m') }}{% endif %}</div>
+          {% else %}
+          <div class="mov__v" style="color:#6b7684">—</div>
+          <div class="mov__r">nunca usada</div>
+          {% endif %}
+        </div>
       </div>
+
+      <div class="b__c" style="display:none">
+        <div class="grade">
+          <div class="bloco">
+            <div class="bloco__t"><i class="bi bi-fuel-pump"></i> Carregamentos</div>
+            <div class="li"><span class="k">Litros</span>
+              <span class="v">{{ '{:,.0f}'.format(b.litros).replace(',', '.') }} L</span></div>
+            <div class="li"><span class="k">Itens</span>
+              <span class="v">{{ b.itens }}</span></div>
+            <div class="li"><span class="k">Pedidos</span>
+              <span class="v">{{ b.pedidos }}</span></div>
+            <div class="li"><span class="k">Último</span>
+              <span class="v">{% if b.ultimo %}{{ b.ultimo.strftime('%d/%m/%Y') }}
+                {%- else %}<span class="vazio">nunca usada</span>{% endif %}</span></div>
+          </div>
+
+          <div class="bloco">
+            <div class="bloco__t"><i class="bi bi-info-circle"></i> Cadastro</div>
+            <div class="li"><span class="k">Nome</span>
+              <span class="v">{{ b.nome }}</span></div>
+            <div class="li"><span class="k">Cidade</span>
+              <span class="v">{% if b.cidade %}{{ b.cidade }}
+                {%- else %}<span class="vazio">—</span>{% endif %}</span></div>
+            <div class="li"><span class="k">Situação</span>
+              <span class="v">{{ 'ativa' if b.ativo else 'inativa' }}</span></div>
+            <div class="li"><span class="k">Observação</span>
+              <span class="v">{{ b.observacao or '—' }}</span></div>
+          </div>
+        </div>
+
+        <div class="acoes">
+          <a class="bt" href="{{ url_for('bases.editar', id=b.id) }}">
+            <i class="bi bi-pencil"></i> editar</a>
+          <a class="bt bt--del" href="{{ url_for('bases.excluir', id=b.id) }}"
+             onclick="return confirm('Excluir esta base?');">
+            <i class="bi bi-trash"></i></a>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="nada"><i class="bi bi-inbox" style="font-size:1.8rem;opacity:.4"></i>
+      <div class="mt-2">Nenhuma base cadastrada</div></div>
+    {% endfor %}
+  </div>
+
+  {# ---------- Filtro em passos (padrao do Recebimento) ---------- #}
+  <div class="escuro" id="bas-escuro" onclick="basFecharFiltro()"></div>
+  <div class="gav" id="bas-gav" role="dialog" aria-modal="true">
+    <div class="gav__pega"></div>
+    <div class="passos">
+      <button type="button" class="passo on aqui" id="bas-p1" onclick="basIr(1)">
+        <i></i><span>Situação</span></button>
+      <button type="button" class="passo" id="bas-p2" onclick="basIr(2)">
+        <i></i><span>Cidade</span></button>
+      <button type="button" class="passo" id="bas-p3" onclick="basIr(3)">
+        <i></i><span>Volume</span></button>
+    </div>
+    <div class="pnome">Passo <span id="bas-pn">1</span> de 3 ·
+      <b id="bas-pt">Situação</b></div>
+
+    <div class="gav__b">
+      <div class="etapa" id="bas-e1">
+        <div class="gr__c">
+          <span class="gr__t">Como está a base</span>
+          <button type="button" class="gr__a" onclick="basMarcarTodas('bas-sit', false)">
+            limpar</button>
+        </div>
+        <div class="opcs" id="bas-sit">
+          <label class="opc"><input type="checkbox" value="mov">
+            <span>Em uso<small>carregou nos últimos 90 dias</small></span></label>
+          <label class="opc"><input type="checkbox" value="par">
+            <span>Paradas<small>{{ totais.paradas }} sem carregamento recente</small></span></label>
+          <label class="opc"><input type="checkbox" value="nunca">
+            <span>Nunca usadas<small>{{ totais.sem_uso }} sem nenhum carregamento</small></span></label>
+          <label class="opc"><input type="checkbox" value="inativa">
+            <span>Inativas<small>{{ totais.inativas }} desligadas no cadastro</small></span></label>
+        </div>
+        <div class="dica">Sem marcar nada, vêm todas.</div>
+      </div>
+
+      <div class="etapa" id="bas-e2" hidden>
+        <div class="gr__c">
+          <span class="gr__t">Cidade</span>
+          <button type="button" class="gr__a" onclick="basMarcarTodas('bas-cid', true)">
+            marcar todas</button>
+        </div>
+        <div class="opcs" id="bas-cid">
+          {% for cid in totais.cidades %}
+          <label class="opc" data-nome="{{ cid | lower }}">
+            <input type="checkbox" value="{{ cid }}"><span>{{ cid }}</span></label>
+          {% endfor %}
+        </div>
+        <div class="dica">Sem marcar nenhuma, vêm todas.</div>
+      </div>
+
+      <div class="etapa" id="bas-e3" hidden>
+        <div class="gr__t">Volume carregado</div>
+        <div class="chips" id="bas-faixa">
+          <button type="button" class="chip on" data-v="0" onclick="basChip(this,'bas-faixa')">Qualquer volume</button>
+          <button type="button" class="chip" data-v="500000" onclick="basChip(this,'bas-faixa')">Acima de 500 mil L</button>
+          <button type="button" class="chip" data-v="2000000" onclick="basChip(this,'bas-faixa')">Acima de 2 milhões L</button>
+        </div>
+        <div class="dica">Separa a base que sustenta a operação das
+          eventuais.</div>
+      </div>
+    </div>
+
+    <div class="gav__f">
+      <button type="button" class="bt-g bt-g--ca" id="bas-bt-voltar"
+              onclick="basIr(basPasso - 1)" hidden>Voltar</button>
+      <button type="button" class="bt-g bt-g--ca" onclick="basFecharFiltro()">Cancelar</button>
+      <button type="button" class="bt-g bt-g--ok" id="bas-bt-ir"
+              onclick="basAvancar()">Avançar</button>
     </div>
   </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
 <script>
-document.querySelectorAll('.row-item[data-url]').forEach(function(row) {
-  row.addEventListener('click', function() { window.location = this.dataset.url; });
+var basPasso = 1;
+var basFiltro = { sit: [], cid: [], faixa: 0 };
+
+function basCards() {
+  return [].slice.call(document.querySelectorAll('#bas .lista > .b'));
+}
+
+function basAbre(el) {
+  var card = el.closest('.b');
+  var corpo = card.querySelector('.b__c');
+  var aberto = corpo.style.display !== 'none';
+  corpo.style.display = aberto ? 'none' : 'block';
+  card.classList.toggle('aberto', !aberto);
+}
+
+/* ---------- Gaveta ---------- */
+function basAbrirFiltro() {
+  basIr(1);
+  document.getElementById('bas-escuro').classList.add('on');
+  document.getElementById('bas-gav').classList.add('on');
+}
+
+function basFecharFiltro() {
+  document.getElementById('bas-escuro').classList.remove('on');
+  document.getElementById('bas-gav').classList.remove('on');
+}
+
+function basIr(n) {
+  if (n < 1) { n = 1; }
+  if (n > 3) { n = 3; }
+  basPasso = n;
+  [1, 2, 3].forEach(function (i) {
+    document.getElementById('bas-e' + i).hidden = (i !== n);
+    var p = document.getElementById('bas-p' + i);
+    p.classList.toggle('on', i <= n);
+    p.classList.toggle('aqui', i === n);
+  });
+  var nomes = ['Situação', 'Cidade', 'Volume'];
+  document.getElementById('bas-pn').textContent = n;
+  document.getElementById('bas-pt').textContent = nomes[n - 1];
+  document.getElementById('bas-bt-voltar').hidden = (n === 1);
+  document.getElementById('bas-bt-ir').textContent = (n === 3) ? 'Filtrar' : 'Avançar';
+}
+
+function basAvancar() {
+  if (basPasso < 3) { basIr(basPasso + 1); return; }
+  basAplicar();
+  basFecharFiltro();
+}
+
+function basMarcarTodas(id, valor) {
+  document.querySelectorAll('#' + id + ' input[type=checkbox]').forEach(function (c) {
+    if (!c.closest('.opc').hidden) { c.checked = valor; }
+  });
+}
+
+function basChip(btn, grupo) {
+  document.querySelectorAll('#' + grupo + ' .chip').forEach(function (c) {
+    c.classList.toggle('on', c === btn);
+  });
+}
+
+function basAplicar() {
+  var marc = function (id) {
+    return [].slice.call(
+      document.querySelectorAll('#' + id + ' input[type=checkbox]:checked'))
+      .map(function (c) { return c.value; });
+  };
+  var on = document.querySelector('#bas-faixa .chip.on');
+  basFiltro = { sit: marc('bas-sit'), cid: marc('bas-cid'),
+                faixa: on ? parseFloat(on.dataset.v || 0) : 0 };
+  basPinta();
+  basEco();
+}
+
+function basLimpar() {
+  basFiltro = { sit: [], cid: [], faixa: 0 };
+  basMarcarTodas('bas-sit', false);
+  basMarcarTodas('bas-cid', false);
+  var chips = document.querySelectorAll('#bas-faixa .chip');
+  chips.forEach(function (c, i) { c.classList.toggle('on', i === 0); });
+  var b = document.getElementById('bas-busca');
+  if (b) { b.value = ''; basBusca(b); }
+  basPinta();
+  basEco();
+}
+
+function basEco() {
+  var p = [];
+  if (basFiltro.sit.length) { p.push(basFiltro.sit.length + ' situação(ões)'); }
+  if (basFiltro.cid.length) { p.push(basFiltro.cid.length + ' cidade(s)'); }
+  if (basFiltro.faixa) {
+    p.push('acima de ' + (basFiltro.faixa / 1000).toLocaleString('pt-BR') + ' mil L');
+  }
+  var n = p.length;
+  document.getElementById('bas-eco').hidden = !n;
+  if (n) { document.getElementById('bas-eco-txt').textContent = 'Filtrando por ' + p.join(' · '); }
+  var chip = document.getElementById('bas-fil-n');
+  chip.hidden = !n;
+  chip.textContent = n;
+}
+
+function basBusca(inp) {
+  var q = (inp.value || '').toLowerCase().trim();
+  basCards().forEach(function (c) {
+    c.dataset.busca_ok = (!q || (c.dataset.busca || '').indexOf(q) >= 0) ? '1' : '0';
+  });
+  basPinta();
+}
+
+/* Um lugar so decide o que aparece: filtro E busca precisam passar. */
+function basPinta() {
+  var vis = 0, litros = 0;
+  basCards().forEach(function (c) {
+    var ok = (c.dataset.busca_ok !== '0');
+    if (ok && basFiltro.sit.length) {
+      ok = basFiltro.sit.some(function (s) {
+        if (s === 'mov')     { return c.dataset.mov === '1'; }
+        if (s === 'par')     { return c.dataset.mov === '0' && c.dataset.uso === '1'; }
+        if (s === 'nunca')   { return c.dataset.uso === '0'; }
+        if (s === 'inativa') { return c.dataset.ativo === '0'; }
+        return false;
+      });
+    }
+    if (ok && basFiltro.cid.length) {
+      ok = basFiltro.cid.indexOf(c.dataset.cidade || '') >= 0;
+    }
+    if (ok && basFiltro.faixa) {
+      ok = parseFloat(c.dataset.litros || 0) >= basFiltro.faixa;
+    }
+    c.style.display = ok ? '' : 'none';
+    if (ok) { vis++; litros += parseFloat(c.dataset.litros || 0); }
+  });
+  var el = document.getElementById('bas-conta');
+  if (el) {
+    el.textContent = vis + ' de ' + basCards().length + ' bases' +
+      (litros ? ' · ' + litros.toLocaleString('pt-BR') + ' L carregados' : '');
+  }
+}
+
+function basOrdem(o) {
+  document.querySelectorAll('#bas .ord').forEach(function (b) {
+    b.classList.toggle('on', b.dataset.o === o);
+  });
+  var lista = document.querySelector('#bas .lista');
+  var cards = basCards();
+  cards.sort(function (a, b) {
+    if (o === 'nome') {
+      return (a.dataset.nome || '').localeCompare(b.dataset.nome || '');
+    }
+    if (o === 'recente') {
+      /* Base sem uso vai pro fim, nao pro topo. */
+      var ua = a.dataset.ultimo || '', ub = b.dataset.ultimo || '';
+      if (!ua && !ub) { return 0; }
+      if (!ua) { return 1; }
+      if (!ub) { return -1; }
+      return ub.localeCompare(ua);
+    }
+    return parseFloat(b.dataset.litros || 0) - parseFloat(a.dataset.litros || 0);
+  });
+  cards.forEach(function (c) { lista.appendChild(c); });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  basOrdem('litros');
+  basPinta();
 });
 </script>
 {% endblock %}

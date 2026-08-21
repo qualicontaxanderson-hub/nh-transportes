@@ -3,6 +3,32 @@
 
 {% block styles %}
 <style>
+/* O layout base pinta todo body > .container-fluid de branco com 2rem de
+   padding; no celular vira moldura e a tela nao enche. */
+body > .container-fluid:has(#bfi){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#bfi){ padding:.7rem 1rem 0; }
+}
+#bfi.container-fluid{ padding-left:0; padding-right:0; }
+
+#bfi .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+  color:#fff; border-radius:14px; padding:.7rem .85rem; margin-bottom:.7rem;
+  display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; }
+#bfi .topo__t{ flex:1; min-width:0; }
+#bfi .topo__n{ font-weight:800; font-size:1rem; line-height:1.3; }
+#bfi .topo__s{ font-size:.75rem; opacity:.9; }
+#bfi .bt-t{ border:1px solid rgba(255,255,255,.35);
+  background:rgba(255,255,255,.14); color:#fff; border-radius:9px;
+  padding:.34rem .7rem; font-size:.77rem; font-weight:800; font-family:inherit;
+  cursor:pointer; white-space:nowrap; text-decoration:none;
+  display:inline-flex; gap:.3rem; align-items:center; }
+#bfi .bt-t:hover{ background:rgba(255,255,255,.26); color:#fff; }
+</style>
+
+<style>
   .page-hero {
     background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
     border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
@@ -21,27 +47,16 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-  <nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb small">
-      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
-      <li class="breadcrumb-item"><a href="{{ url_for('bases.lista') }}" class="text-decoration-none">Bases</a></li>
-      <li class="breadcrumb-item active">Editar Base</li>
-    </ol>
-  </nav>
-
-  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-    <div class="hero-icon"><i class="bi bi-pencil-fill"></i></div>
-    <div class="flex-grow-1">
-      <h4 class="mb-0 fw-bold">Editar Base</h4>
-      <p class="mb-0 opacity-75 small">Atualize os dados da base operacional.</p>
+<div class="container-fluid" id="bfi">
+  <div class="topo">
+    <div class="topo__t">
+      <div class="topo__n">{{ base.nome }}</div>
+      <div class="topo__s">base #{{ base.id }} · editando</div>
     </div>
-    <a href="{{ url_for('bases.lista') }}"
-       class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
-      <i class="bi bi-arrow-left me-1"></i> Voltar
-    </a>
+    
+    <a class="bt-t" href="{{ url_for('bases.lista') }}">
+      <i class="bi bi-arrow-left"></i> Voltar</a>
   </div>
-
   <div class="card shadow-sm">
     <div class="card-header d-flex align-items-center py-2"
          style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">

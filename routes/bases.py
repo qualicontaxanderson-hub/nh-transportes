@@ -894,8 +894,31 @@ def lista():
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT id, nome, cidade, observacao, ativo FROM bases ORDER BY nome")
         bases = cursor.fetchall()
+
+        # Quanto ja foi carregado em cada base. A base entra no ITEM do
+        # pedido (pedidos_itens.base_id) — e ali que se decide onde carregar.
+        cursor.execute("""
+            SELECT pi.base_id AS bid, COUNT(*) AS itens,
+                   COUNT(DISTINCT pi.pedido_id) AS pedidos,
+                   COALESCE(SUM(pi.quantidade),0) AS litros,
+                   MAX(DATE(p.data_pedido)) AS ultimo
+              FROM pedidos_itens pi
+              LEFT JOIN pedidos p ON p.id = pi.pedido_id
+             WHERE pi.base_id IS NOT NULL
+             GROUP BY pi.base_id
+        """)
+        uso = {r['bid']: {'itens': int(r['itens']), 'pedidos': int(r['pedidos']),
+                          'litros': float(r['litros'] or 0),
+                          'ultimo': r['ultimo']} for r in cursor.fetchall()}
+
+        # Item de pedido sem base: nao da pra saber onde carregou.
+        cursor.execute("""SELECT COUNT(*) AS n FROM pedidos_itens
+                           WHERE base_id IS NULL""")
+        sem_base = int((cursor.fetchone() or {}).get('n') or 0)
     except Exception:
         bases = []
+        uso = {}
+        sem_base = 0
     finally:
         if cursor:
             try:
@@ -907,7 +930,30 @@ def lista():
                 conn.close()
             except Exception:
                 pass
-    return render_template('bases/index.html', bases=bases)
+    maior = max([u['litros'] for u in uso.values()] or [0]) or 1
+    for b in bases:
+        u = uso.get(b['id']) or {'itens': 0, 'pedidos': 0, 'litros': 0.0,
+                                 'ultimo': None}
+        b['itens'] = u['itens']
+        b['pedidos'] = u['pedidos']
+        b['litros'] = u['litros']
+        b['ultimo'] = u['ultimo']
+        b['peso'] = round(100.0 * u['litros'] / maior, 1)
+        # hoje_brasilia(): o servidor roda em UTC e date.today() viraria o
+        # dia seguinte de madrugada, marcando base como parada cedo demais.
+        b['parada'] = (not u['ultimo']) or (
+            (hoje_brasilia() - u['ultimo']).days > 90)
+
+    totais = {
+        'bases': len(bases),
+        'litros': sum(b['litros'] for b in bases),
+        'sem_uso': sum(1 for b in bases if not b['itens']),
+        'paradas': sum(1 for b in bases if b['parada']),
+        'inativas': sum(1 for b in bases if not b['ativo']),
+        'sem_base': sem_base,
+        'cidades': sorted({(b.get('cidade') or '—') for b in bases}),
+    }
+    return render_template('bases/index.html', bases=bases, totais=totais)
 
 
 @bp.route('/bases/nova', methods=['GET', 'POST'])
