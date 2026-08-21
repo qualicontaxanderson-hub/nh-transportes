@@ -1,74 +1,57 @@
 {% extends 'base.html' %}
 {% block title %}Editar Fornecedor - {{ app_name }}{% endblock %}
 
-{% block styles %}
+{% block styles %}{% with esc = '#ffi' %}{% include 'includes/ficha_css.html' %}{% endwith %}
 <style>
-  .page-hero {
-    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
-    border-radius: .75rem;
-    padding: 1.5rem 2rem;
-    margin-bottom: 1.5rem;
-    color: #fff;
-  }
-  .page-hero .hero-icon {
-    width: 3rem; height: 3rem;
-    background: rgba(255,255,255,.15);
-    border-radius: .6rem;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.5rem;
-    flex-shrink: 0;
-  }
-  .form-section-title {
-    font-size: 0.78rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #1D63A5;
-    padding-bottom: 0.4rem;
-    border-bottom: 2px solid #e0eaf5;
-    margin-bottom: 1rem;
-    margin-top: 1.25rem;
-  }
-  .form-label { font-size: 0.83rem; font-weight: 600; color: #374151; }
-  .form-control-sm, .form-select-sm { font-size: 0.84rem; }
+  /* o bloco de vinculos contabeis segue em Bootstrap — so encaixa */
+  #ffi #vinculosContainer .form-select,
+  #ffi #vinculosContainer .form-control{ border-radius:9px;
+    border-color:#d9e0e8; font-size:.84rem; }
+  #ffi .form-text{ font-size:.72rem; color:#6b7684; }
+  #ffi .sec--pg{ background:#fffdf7; }
+  #ffi .sec--pg .sec__t{ color:#8a5a00; }
+  #ffi .sec--pg .sec__t::before{ background:#B8791C; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb" class="mb-3">
-        <ol class="breadcrumb small">
-            <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="{{ url_for('fornecedores.lista') }}" class="text-decoration-none">Fornecedores</a></li>
-            <li class="breadcrumb-item active">Editar Fornecedor</li>
-        </ol>
-    </nav>
-
-    <!-- Hero header -->
-    <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-        <div class="hero-icon"><i class="bi bi-pencil-fill"></i></div>
-        <div class="flex-grow-1">
-            <h4 class="mb-0 fw-bold">Editar Fornecedor</h4>
-            <p class="mb-0 opacity-75 small">Editando: <strong>{{ fornecedor.razao_social }}</strong> #{{ fornecedor.id }}</p>
-        </div>
-        <a href="{{ url_for('fornecedores.lista') }}"
-           class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
-            <i class="bi bi-arrow-left me-1"></i> Voltar
-        </a>
+<div id="ffi">
+  <div class="cartao">
+    <div class="topo">
+      <div class="topo__t">
+        <div class="topo__n">{{ fornecedor.razao_social }}</div>
+        <div class="topo__s">fornecedor #{{ fornecedor.id }} · editando</div>
+      </div>
+      <a class="bt-t" href="/relatorios/conf_fornecedores_dfe?fornecedor_ids[]={{ fornecedor.id }}"><i class="bi bi-bar-chart"></i> Compras</a>
+      <a class="bt-t" href="{{ url_for('fornecedores.lista') }}">
+        <i class="bi bi-arrow-left"></i> Voltar</a>
     </div>
-
-    <div class="card shadow-sm">
-        <div class="card-header d-flex align-items-center py-2"
-             style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-            <i class="bi bi-building-fill me-2"></i> Dados do Fornecedor
-        </div>
-        <div class="card-body">
-            <form method="POST">
+    {% set falta = [] %}
+    {% for campo, rot in [('email','e-mail'), ('telefone','telefone'),
+                          ('municipio','município'),
+                          ('tipo_pagamento_padrao','forma de pagamento'),
+                          ('chave_pix','PIX')] %}
+      {% if not (fornecedor[campo] or '') %}{% set _ = falta.append(rot) %}{% endif %}
+    {% endfor %}
+    {% if falta %}
+    <div class="estado">
+      &#9888; Falta preencher:
+      {% for f in falta %}<span class="chip">{{ f }}</span>{% endfor %}
+      {% if fornecedor.cnpj %}
+      <button type="button" class="bt-rf"
+              onclick="document.getElementById('btnConsultarCNPJ').click()">
+        <i class="bi bi-bank"></i> Completar pela Receita</button>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="estado estado--ok">
+      &#10003; Cadastro completo — inclusive a forma de pagamento.
+    </div>
+    {% endif %}
+    <form method="POST">
 
                 <!-- Identificação fiscal -->
-                <div class="form-section-title"><i class="bi bi-file-earmark-text me-1"></i>Identificação Fiscal</div>
+                <div class="sec"><div class="sec__t"><i class="bi bi-file-earmark-text"></i>Identificação Fiscal</div>
                 <div class="row">
                     <div class="col-md-4 mb-2">
                         <label class="form-label">CNPJ</label>
@@ -93,7 +76,8 @@
                 </div>
 
                 <!-- Dados Principais -->
-                <div class="form-section-title"><i class="bi bi-person-badge me-1"></i>Dados Principais</div>
+                </div>
+<div class="sec"><div class="sec__t"><i class="bi bi-person-badge"></i>Dados Principais</div>
                 <div class="row">
                     <div class="col-md-6 mb-2">
                         <label class="form-label">Razão Social <span class="text-danger">*</span></label>
@@ -114,7 +98,8 @@
                 </div>
 
                 <!-- Endereço -->
-                <div class="form-section-title"><i class="bi bi-geo-alt me-1"></i>Endereço</div>
+                </div>
+<div class="sec"><div class="sec__t"><i class="bi bi-geo-alt"></i>Endereço</div>
                 <div class="row">
                     <div class="col-md-8 mb-2">
                         <label class="form-label">Logradouro</label>
@@ -155,7 +140,8 @@
                 </div>
 
                 <!-- Pagamento -->
-                <div class="form-section-title"><i class="bi bi-cash-coin me-1"></i>Pagamento ao Fornecedor</div>
+                </div>
+<div class="sec sec--pg"><div class="sec__t"><i class="bi bi-cash-coin"></i>Como pagamos este fornecedor</div>
                 <div class="row">
                     <div class="col-md-4 mb-2">
                         <label class="form-label">Forma de Pagamento Padrão</label>
@@ -180,7 +166,8 @@
                 </div>
 
                 <!-- Conta Contábil por Empresa -->
-                <div class="form-section-title"><i class="bi bi-journal-bookmark me-1"></i>Empresas e Contas Contábeis</div>
+                </div>
+<div class="sec"><div class="sec__t"><i class="bi bi-journal-bookmark"></i>Empresas e Contas Contábeis</div>
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <span class="form-text mb-0">Selecione a empresa e a conta contábil vinculada a ela.</span>
                     <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarLinha()">
@@ -189,18 +176,14 @@
                 </div>
                 <div id="vinculosContainer"></div>
 
-                <!-- Botões -->
-                <div class="d-flex justify-content-between mt-4 pt-2 border-top">
-                    <a href="{{ url_for('fornecedores.lista') }}" class="btn btn-secondary btn-sm">
-                        <i class="bi bi-arrow-left me-1"></i> Voltar
-                    </a>
-                    <button type="submit" class="btn btn-primary btn-sm px-4">
-                        <i class="bi bi-check-circle me-1"></i> Atualizar
-                    </button>
                 </div>
-            </form>
-        </div>
-    </div>
+      <div class="rodape">
+        <a class="bt-ca" href="{{ url_for('fornecedores.lista') }}">Cancelar</a>
+        <button type="submit" class="bt-ok">
+          <i class="bi bi-check-lg"></i> Salvar fornecedor</button>
+      </div>
+    </form>
+  </div>
 </div>
 {% endblock %}
 {% block scripts %}

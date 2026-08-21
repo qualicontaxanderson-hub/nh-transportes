@@ -1,0 +1,104 @@
+{#- Visual da ficha de cadastro (cliente/fornecedor), padrao do Banco.
+    Uso:  {% with esc = '#cfi' %}{% include 'includes/ficha_css.html' %}{% endwith %}
+    Mesma ideia do gaveta_css: um so lugar decide como a ficha se parece. -#}
+<style>
+  {{ esc }}{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#6b7684; --ink:#151d27; --borda:#d9e0e8;
+        color:var(--ink); }
+
+  {{ esc }} .cartao{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+
+  {{ esc }} .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; padding:.7rem .85rem; display:flex; gap:.6rem; align-items:center;
+    flex-wrap:wrap; }
+  {{ esc }} .topo__t{ flex:1; min-width:0; }
+  {{ esc }} .topo__n{ font-weight:800; font-size:1rem; line-height:1.3; }
+  {{ esc }} .topo__s{ font-size:.75rem; opacity:.9; }
+  {{ esc }} .bt-t{ border:1px solid rgba(255,255,255,.35);
+    background:rgba(255,255,255,.14); color:#fff; border-radius:9px;
+    padding:.34rem .7rem; font-size:.77rem; font-weight:800; font-family:inherit;
+    cursor:pointer; white-space:nowrap; text-decoration:none;
+    display:inline-flex; gap:.3rem; align-items:center; }
+  {{ esc }} .bt-t:hover{ background:rgba(255,255,255,.26); color:#fff; }
+
+  {{ esc }} .estado{ display:flex; gap:.45rem; align-items:center; flex-wrap:wrap;
+    background:#fdf0d6; color:var(--ambar); padding:.55rem .8rem;
+    font-size:.8rem; font-weight:700; border-bottom:1px solid #f0d8a8; }
+  {{ esc }} .estado--ok{ background:#e4f4e8; color:#1c6b34; border-bottom-color:#a9dfc2; }
+  {{ esc }} .chip{ background:rgba(255,255,255,.75); border-radius:99px;
+    padding:.14rem .55rem; font-size:.72rem; font-weight:800; }
+  {{ esc }} .estado .bt-rf{ margin-left:auto; background:#B8791C; color:#fff;
+    border:0; border-radius:8px; padding:.32rem .7rem; font-size:.76rem;
+    font-weight:800; cursor:pointer; font-family:inherit; white-space:nowrap; }
+
+  {{ esc }} .sec{ padding:.7rem .8rem; border-bottom:1px solid #eef1f5; }
+  {{ esc }} .sec:last-of-type{ border-bottom:0; }
+  {{ esc }} .sec__t{ display:flex; align-items:center; gap:.4rem; font-size:.68rem;
+    font-weight:800; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--blue-deep); margin-bottom:.5rem; }
+  {{ esc }} .sec__t::before{ content:''; width:3px; height:13px; background:var(--blue);
+    border-radius:2px; flex:0 0 auto; }
+
+  {{ esc }} .lin{ display:grid; gap:.5rem; grid-template-columns:1fr;
+    margin-bottom:.5rem; }
+  @media (min-width:768px){
+    {{ esc }} .lin.duas{ grid-template-columns:1fr 1fr; }
+    {{ esc }} .lin.tres{ grid-template-columns:2fr 1fr 1fr; }
+  }
+  {{ esc }} .cmp label{ display:block; font-size:.73rem; font-weight:700;
+    color:var(--muted); margin-bottom:.2rem; }
+  {{ esc }} .cmp .ob{ color:var(--danger); }
+  {{ esc }} .cmp input, {{ esc }} .cmp select{ width:100%; border:1px solid var(--borda);
+    border-radius:9px; padding:.48rem .6rem; font-size:.86rem;
+    font-family:inherit; background:#fff; color:var(--ink); }
+  {{ esc }} .cmp input:focus, {{ esc }} .cmp select:focus{ outline:2px solid #bcd3ea;
+    outline-offset:1px; border-color:var(--blue); }
+  {{ esc }} .cmp .aj{ font-size:.7rem; color:var(--muted); margin-top:.22rem;
+    line-height:1.4; display:block; }
+  {{ esc }} .cmp .aj b{ color:var(--ambar); }
+  {{ esc }} .vazio-aviso input, {{ esc }} .vazio-aviso select{ border-color:#f0d8a8;
+    background:#fffdf7; }
+  {{ esc }} .rf-ok input{ background:#f0fdf4; border-color:#a9dfc2; }
+
+  {{ esc }} .grupo-cnpj{ display:flex; gap:.4rem; }
+  {{ esc }} .grupo-cnpj input{ flex:1; min-width:0; }
+  {{ esc }} .bt-rf2{ border:1px solid #f0d8a8; background:#fdf0d6; color:var(--ambar);
+    border-radius:9px; padding:.45rem .7rem; font-size:.78rem; font-weight:800;
+    font-family:inherit; cursor:pointer; white-space:nowrap; }
+  {{ esc }} .bt-rf2:hover{ background:#f8e4bd; }
+
+  {{ esc }} .rota{ background:#eaf1f9; border:1px solid #cddff0; border-radius:10px;
+    padding:.5rem .65rem; }
+  {{ esc }} .rota__t{ font-size:.72rem; font-weight:800; color:var(--blue-deep);
+    margin-bottom:.3rem; }
+  {{ esc }} .rota__l{ display:flex; gap:.35rem; flex-wrap:wrap; }
+  {{ esc }} .rota__i{ background:#fff; border:1px solid #cddff0; border-radius:7px;
+    padding:.15rem .45rem; font-size:.7rem; font-weight:700; color:#3a4655;
+    font-variant-numeric:tabular-nums; }
+  {{ esc }} .rota__i b{ color:var(--blue-deep); }
+  {{ esc }} .rota--vazia{ background:#fdf0d6; border-color:#f0d8a8; }
+  {{ esc }} .rota--vazia .rota__t{ color:var(--ambar); }
+
+  {{ esc }} .chave{ display:flex; align-items:flex-start; gap:.55rem;
+    padding:.5rem .6rem; border:1px solid var(--borda); border-radius:10px;
+    margin:0; cursor:pointer; }
+  {{ esc }} .chave:has(input:checked){ background:#eaf1f9; border-color:#bcd3ea; }
+  {{ esc }} .chave input{ width:19px; height:19px; accent-color:var(--blue);
+    margin-top:.1rem; flex:0 0 auto; }
+  {{ esc }} .chave__n{ display:block; font-weight:800; font-size:.83rem; }
+  {{ esc }} .chave__d{ display:block; color:var(--muted); font-size:.72rem;
+    line-height:1.4; }
+
+  {{ esc }} .rodape{ display:flex; gap:.5rem; padding:.65rem .8rem; background:#fff;
+    border-top:1px solid var(--borda); position:sticky; bottom:0; z-index:5;
+    box-shadow:0 -4px 14px rgba(20,35,60,.08); }
+  {{ esc }} .bt-ok{ flex:1; border:0; background:var(--blue); color:#fff;
+    border-radius:10px; padding:.55rem .9rem; font-size:.88rem; font-weight:800;
+    font-family:inherit; cursor:pointer; }
+  {{ esc }} .bt-ok:hover{ background:var(--blue-deep); }
+  {{ esc }} .bt-ca{ border:1px solid var(--borda); background:#f7f9fc;
+    color:var(--muted); border-radius:10px; padding:.55rem .9rem;
+    font-size:.88rem; font-weight:800; font-family:inherit; cursor:pointer;
+    text-decoration:none; display:inline-flex; align-items:center; }
+</style>

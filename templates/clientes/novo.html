@@ -2,7 +2,7 @@
 
 {% block title %}Novo Cliente - NH Transportes{% endblock %}
 
-{% block styles %}{% include 'clientes/_ficha_css.html' %}{% endblock %}
+{% block styles %}{% with esc = '#cfi' %}{% include 'includes/ficha_css.html' %}{% endwith %}{% endblock %}
 
 {% block content %}
 <div id="cfi">
