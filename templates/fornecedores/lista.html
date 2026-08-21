@@ -50,6 +50,38 @@
     font-size:.64rem; padding:0 .3rem; }
   #for .aba.on .b{ background:#fff; }
 
+  #for .bt-fil{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
+    color:#3a4655; border-radius:10px; padding:.5rem .8rem; font-size:.83rem;
+    font-weight:800; font-family:inherit; cursor:pointer; display:inline-flex;
+    gap:.35rem; align-items:center; }
+  #for .bt-fil__n{ background:var(--blue); color:#fff; border-radius:99px;
+    min-width:18px; height:18px; display:inline-grid; place-items:center;
+    font-size:.66rem; padding:0 .3rem; }
+  #for .ordem{ display:flex; gap:.35rem; align-items:center; margin-bottom:.6rem;
+    overflow-x:auto; padding-bottom:.15rem; }
+  #for .ordem__t{ font-size:.72rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.05em; flex:0 0 auto; }
+  #for .ord{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
+    color:#3a4655; border-radius:99px; padding:.32rem .7rem; font-size:.78rem;
+    font-weight:800; font-family:inherit; cursor:pointer; display:inline-flex;
+    gap:.3rem; align-items:center; }
+  #for .ord.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #for .conta{ font-size:.76rem; color:var(--muted); margin-bottom:.5rem;
+    font-weight:700; }
+  #for .gr__c{ display:flex; align-items:center; gap:.5rem; margin-bottom:.3rem; }
+  #for .gr__a{ margin-left:auto; border:0; background:none; color:var(--blue);
+    font-size:.74rem; font-weight:800; cursor:pointer; font-family:inherit; }
+  #for .dica{ font-size:.72rem; color:var(--muted); margin-top:.35rem; }
+  /* Guarda de largura (mesma das telas de Migracao): sem isto um e-mail
+     longo estica a linha, a pagina passa da tela e o celular afasta o zoom —
+     e o fundo, que so pinta a viewport, deixa faixa branca na lateral. */
+  #for{ max-width:100%; }
+  #for .f__h{ min-width:0; }
+  #for .f__d{ min-width:0; overflow-wrap:anywhere; }
+  #for .f__n{ overflow-wrap:anywhere; }
+  #for .busca input{ min-width:0; }
+  #for .li .v{ overflow-wrap:anywhere; }
+  #for .bloco{ min-width:0; }
   #for .lista{ background:#fff; border:1px solid var(--borda);
     border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(20,35,60,.06); }
   #for .f{ border-bottom:1px solid #eef1f5; }
@@ -158,22 +190,31 @@
     <input type="text" id="for-busca"
            placeholder="Buscar por razão social, fantasia, CNPJ ou cidade…"
            oninput="forBusca(this)">
+    <button type="button" class="bt-fil" onclick="forAbrirFiltro()">
+      <i class="bi bi-sliders"></i> Filtro
+      <span class="bt-fil__n" id="for-fil-n" hidden>0</span></button>
   </div>
 
-  <div class="abas">
-    <button type="button" class="aba on" data-m="todos" onclick="forAba('todos')">
-      Todos <span class="b">{{ totais.fornecedores }}</span></button>
-    <button type="button" class="aba" data-m="mov" onclick="forAba('mov')">
-      Com movimento <span class="b">{{ totais.com_movimento }}</span></button>
-    <button type="button" class="aba" data-m="par" onclick="forAba('par')">
-      Parados <span class="b">{{ totais.parados }}</span></button>
-    <button type="button" class="aba" data-m="spix" onclick="forAba('spix')">
-      Sem PIX <span class="b">{{ totais.sem_pix }}</span></button>
-    {% if totais.agrupados %}
-    <button type="button" class="aba" data-m="grp" onclick="forAba('grp')">
-      Agrupados <span class="b">{{ totais.agrupados }}</span></button>
-    {% endif %}
+  {# Ordenar e escolha explicita: por nome pra procurar, por movimento pra
+     ver quem pesa no caixa. #}
+  <div class="ordem">
+    <span class="ordem__t">Ordenar:</span>
+    <button type="button" class="ord on" data-o="mov" onclick="forOrdem('mov')">
+      <i class="bi bi-cash-stack"></i> Mais compras</button>
+    <button type="button" class="ord" data-o="nome" onclick="forOrdem('nome')">
+      <i class="bi bi-sort-alpha-down"></i> Nome A–Z</button>
+    <button type="button" class="ord" data-o="recente" onclick="forOrdem('recente')">
+      <i class="bi bi-clock-history"></i> Pagos recentemente</button>
   </div>
+
+  {# A faixa do filtro ativo mora AQUI, na tela — nunca dentro da gaveta. #}
+  <div class="g-eco" id="for-eco" hidden>
+    <i class="bi bi-funnel-fill"></i>
+    <span id="for-eco-txt"></span>
+    <a href="#" onclick="forLimpar(); return false;">Limpar</a>
+  </div>
+
+  <div class="conta" id="for-conta"></div>
 
   <div class="lista">
     {% for f in fornecedores %}
@@ -181,6 +222,12 @@
     <div class="f" data-mov="{{ '1' if f.pag_n else '0' }}"
          data-pix="{{ '1' if f.chave_pix else '0' }}"
          data-grp="{{ '1' if f.raizes else '0' }}"
+         data-cnpj="{{ '1' if f.cnpj else '0' }}"
+         data-spgto="{{ '1' if f.falta_pgto else '0' }}"
+         data-cidade="{{ f.municipio or '' }}{% if f.uf %} / {{ f.uf }}{% endif %}"
+         data-total="{{ '%.2f' | format(f.pag_total or 0) }}"
+         data-ultimo="{{ f.pag_ultimo.isoformat() if f.pag_ultimo else '' }}"
+         data-nome="{{ nome | lower }}"
          data-busca="{{ (nome ~ ' ' ~ (f.nome_fantasia or '') ~ ' ' ~ (f.cnpj or '') ~ ' ' ~ (f.municipio or '')) | lower }}">
       <div class="f__h" onclick="forAbre(this)">
         <span class="f__ic">{{ nome[:2] | upper }}</span>
@@ -329,6 +376,87 @@
       {% endif %}
     {% endif %}
   </div>
+
+  {# ---------- Filtro em passos (padrao do Recebimento) ---------- #}
+  <div class="escuro" id="for-escuro" onclick="forFecharFiltro()"></div>
+  <div class="gav" id="for-gav" role="dialog" aria-modal="true">
+    <div class="gav__pega"></div>
+    <div class="passos">
+      <button type="button" class="passo on aqui" id="for-p1" onclick="forIr(1)">
+        <i></i><span>Situação</span></button>
+      <button type="button" class="passo" id="for-p2" onclick="forIr(2)">
+        <i></i><span>Cidade</span></button>
+      <button type="button" class="passo" id="for-p3" onclick="forIr(3)">
+        <i></i><span>Movimento</span></button>
+    </div>
+    <div class="pnome">Passo <span id="for-pn">1</span> de 3 ·
+      <b id="for-pt">Situação</b></div>
+
+    <div class="gav__b">
+      <div class="etapa" id="for-e1">
+        <div class="gr__c">
+          <span class="gr__t">Como está o cadastro</span>
+          <button type="button" class="gr__a" onclick="forMarcarTodas('for-sit', false)">
+            limpar</button>
+        </div>
+        <div class="opcs" id="for-sit">
+          <label class="opc"><input type="checkbox" value="mov">
+            <span>Com movimento<small>{{ totais.com_movimento }} fornecedores já pagos</small></span></label>
+          <label class="opc"><input type="checkbox" value="par">
+            <span>Parados<small>{{ totais.parados }} sem nenhum pagamento</small></span></label>
+          <label class="opc"><input type="checkbox" value="spix">
+            <span>Sem PIX<small>{{ totais.sem_pix }} sem chave cadastrada</small></span></label>
+          <label class="opc"><input type="checkbox" value="spgto">
+            <span>Sem forma de pagamento<small>{{ totais.sem_pgto }} sem PIX, banco ou forma padrão</small></span></label>
+          <label class="opc"><input type="checkbox" value="scnpj">
+            <span>Sem CNPJ<small>{{ totais.sem_cnpj }} — não casam com nota nenhuma</small></span></label>
+          {% if totais.agrupados %}
+          <label class="opc"><input type="checkbox" value="grp">
+            <span>Agrupados<small>{{ totais.agrupados }} com mais de um CNPJ</small></span></label>
+          {% endif %}
+        </div>
+        <div class="dica">Sem marcar nada, vêm todos. Marcando mais de uma,
+          vem quem atender a qualquer uma delas.</div>
+      </div>
+
+      <div class="etapa" id="for-e2" hidden>
+        <div class="gr__c">
+          <span class="gr__t">Cidade</span>
+          <button type="button" class="gr__a" onclick="forMarcarTodas('for-cid', true)">
+            marcar todas</button>
+        </div>
+        <input type="text" class="campo" id="for-cid-busca"
+               placeholder="Procurar cidade…" oninput="forFiltraCidade(this)">
+        <div class="opcs" id="for-cid"></div>
+        <div class="dica">Pode marcar mais de uma. Sem marcar nenhuma, vêm todas.</div>
+      </div>
+
+      <div class="etapa" id="for-e3" hidden>
+        <div class="gr__t">Quanto já foi pago</div>
+        <div class="chips" id="for-faixa">
+          <button type="button" class="chip on" data-v="0" onclick="forChip(this,'for-faixa')">Qualquer valor</button>
+          <button type="button" class="chip" data-v="100000" onclick="forChip(this,'for-faixa')">Acima de R$ 100 mil</button>
+          <button type="button" class="chip" data-v="1000000" onclick="forChip(this,'for-faixa')">Acima de R$ 1 milhão</button>
+        </div>
+        <div class="gr__t" style="margin-top:.7rem">Último pagamento</div>
+        <div class="chips" id="for-quando">
+          <button type="button" class="chip on" data-d="0" onclick="forChip(this,'for-quando')">Qualquer data</button>
+          <button type="button" class="chip" data-d="30" onclick="forChip(this,'for-quando')">Últimos 30 dias</button>
+          <button type="button" class="chip" data-d="90" onclick="forChip(this,'for-quando')">Últimos 90 dias</button>
+        </div>
+        <div class="dica">Serve pra achar quem sumiu: marque “acima de R$ 100 mil”
+          com “qualquer data” e ordene por pagos recentemente.</div>
+      </div>
+    </div>
+
+    <div class="gav__f">
+      <button type="button" class="bt-g bt-g--ca" id="for-bt-voltar"
+              onclick="forIr(forPasso - 1)" hidden>Voltar</button>
+      <button type="button" class="bt-g bt-g--ca" onclick="forFecharFiltro()">Cancelar</button>
+      <button type="button" class="bt-g bt-g--ok" id="for-bt-ir"
+              onclick="forAvancar()">Avançar</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -341,35 +469,210 @@ function forAbre(el) {
   card.classList.toggle('aberto', !aberto);
 }
 
-function forAba(m) {
-  document.querySelectorAll('#for .aba').forEach(function (b) {
-    b.classList.toggle('on', b.dataset.m === m);
-  });
-  document.querySelectorAll('#for .f').forEach(function (f) {
-    var passa = (m === 'todos')
-      || (m === 'mov' && f.dataset.mov === '1')
-      || (m === 'par' && f.dataset.mov === '0')
-      || (m === 'spix' && f.dataset.pix === '0')
-      || (m === 'grp' && f.dataset.grp === '1');
-    f.dataset.aba = passa ? '1' : '0';
-  });
-  forPinta();
+var forPasso = 1;
+var forFiltro = { sit: [], cid: [], faixa: 0, dias: 0 };
+
+function forCards() {
+  return [].slice.call(document.querySelectorAll('#for .lista > .f'));
 }
 
+/* ---------- Gaveta ---------- */
+function forAbrirFiltro() {
+  forMontaCidades();
+  forIr(1);
+  document.getElementById('for-escuro').classList.add('on');
+  document.getElementById('for-gav').classList.add('on');
+}
+
+function forFecharFiltro() {
+  document.getElementById('for-escuro').classList.remove('on');
+  document.getElementById('for-gav').classList.remove('on');
+}
+
+function forIr(n) {
+  if (n < 1) { n = 1; }
+  if (n > 3) { n = 3; }
+  forPasso = n;
+  [1, 2, 3].forEach(function (i) {
+    document.getElementById('for-e' + i).hidden = (i !== n);
+    var p = document.getElementById('for-p' + i);
+    p.classList.toggle('on', i <= n);
+    p.classList.toggle('aqui', i === n);
+  });
+  var nomes = ['Situação', 'Cidade', 'Movimento'];
+  document.getElementById('for-pn').textContent = n;
+  document.getElementById('for-pt').textContent = nomes[n - 1];
+  document.getElementById('for-bt-voltar').hidden = (n === 1);
+  document.getElementById('for-bt-ir').textContent = (n === 3) ? 'Filtrar' : 'Avançar';
+}
+
+function forAvancar() {
+  if (forPasso < 3) { forIr(forPasso + 1); return; }
+  forAplicar();
+  forFecharFiltro();
+}
+
+/* A lista de cidades sai dos proprios cards — nao ha cadastro de cidade. */
+function forMontaCidades() {
+  var alvo = document.getElementById('for-cid');
+  if (alvo.dataset.pronto === '1') { return; }
+  var conta = {};
+  forCards().forEach(function (f) {
+    var c = (f.dataset.cidade || '').trim();
+    if (!c) { return; }
+    conta[c] = (conta[c] || 0) + 1;
+  });
+  var nomes = Object.keys(conta).sort();
+  alvo.innerHTML = nomes.map(function (c) {
+    return '<label class="opc" data-nome="' + c.toLowerCase() + '">' +
+      '<input type="checkbox" value="' + c.replace(/"/g, '') + '">' +
+      '<span>' + c + '<small>' + conta[c] + ' fornecedor(es)</small></span></label>';
+  }).join('') || '<div class="dica" style="padding:.5rem">Nenhuma cidade preenchida.</div>';
+  alvo.dataset.pronto = '1';
+}
+
+function forFiltraCidade(inp) {
+  var q = (inp.value || '').toLowerCase().trim();
+  document.querySelectorAll('#for-cid .opc').forEach(function (o) {
+    o.hidden = q && (o.dataset.nome || '').indexOf(q) < 0;
+  });
+}
+
+function forMarcarTodas(id, valor) {
+  document.querySelectorAll('#' + id + ' input[type=checkbox]').forEach(function (c) {
+    if (!c.closest('.opc').hidden) { c.checked = valor; }
+  });
+}
+
+function forChip(btn, grupo) {
+  document.querySelectorAll('#' + grupo + ' .chip').forEach(function (c) {
+    c.classList.toggle('on', c === btn);
+  });
+}
+
+function forAplicar() {
+  var marc = function (id) {
+    return [].slice.call(
+      document.querySelectorAll('#' + id + ' input[type=checkbox]:checked'))
+      .map(function (c) { return c.value; });
+  };
+  var chip = function (grupo, attr) {
+    var on = document.querySelector('#' + grupo + ' .chip.on');
+    return on ? parseFloat(on.dataset[attr] || 0) : 0;
+  };
+  forFiltro = { sit: marc('for-sit'), cid: marc('for-cid'),
+                faixa: chip('for-faixa', 'v'), dias: chip('for-quando', 'd') };
+  forPinta();
+  forEco();
+}
+
+function forLimpar() {
+  forFiltro = { sit: [], cid: [], faixa: 0, dias: 0 };
+  forMarcarTodas('for-sit', false);
+  forMarcarTodas('for-cid', false);
+  ['for-faixa', 'for-quando'].forEach(function (g) {
+    var chips = document.querySelectorAll('#' + g + ' .chip');
+    chips.forEach(function (c, i) { c.classList.toggle('on', i === 0); });
+  });
+  var b = document.getElementById('for-busca');
+  if (b) {
+    b.value = '';
+    /* Zerar o campo nao basta: cada card guarda se passou na busca, e sem
+       recalcular eles continuam escondidos depois do Limpar. */
+    forBusca(b);
+  }
+  forPinta();
+  forEco();
+}
+
+function forEco() {
+  var p = [];
+  if (forFiltro.sit.length) { p.push(forFiltro.sit.length + ' situação(ões)'); }
+  if (forFiltro.cid.length) { p.push(forFiltro.cid.length + ' cidade(s)'); }
+  if (forFiltro.faixa) { p.push('acima de R$ ' + (forFiltro.faixa / 1000) + ' mil'); }
+  if (forFiltro.dias) { p.push('últimos ' + forFiltro.dias + ' dias'); }
+  var n = p.length;
+  var eco = document.getElementById('for-eco');
+  eco.hidden = !n;
+  if (n) { document.getElementById('for-eco-txt').textContent = 'Filtrando por ' + p.join(' · '); }
+  var chip = document.getElementById('for-fil-n');
+  chip.hidden = !n;
+  chip.textContent = n;
+}
+
+/* ---------- Busca, filtro e ordenacao ---------- */
 function forBusca(inp) {
   var q = (inp.value || '').toLowerCase().trim();
-  document.querySelectorAll('#for .f').forEach(function (f) {
+  forCards().forEach(function (f) {
     f.dataset.busca_ok = (!q || (f.dataset.busca || '').indexOf(q) >= 0) ? '1' : '0';
   });
   forPinta();
 }
 
-/* Um lugar so decide o que aparece: aba E busca precisam passar. */
+/* Um lugar so decide o que aparece: filtro E busca precisam passar. */
 function forPinta() {
-  document.querySelectorAll('#for .f').forEach(function (f) {
-    var ok = (f.dataset.aba !== '0') && (f.dataset.busca_ok !== '0');
+  var hoje = new Date();
+  var vis = 0, soma = 0;
+  forCards().forEach(function (f) {
+    var ok = (f.dataset.busca_ok !== '0');
+    if (ok && forFiltro.sit.length) {
+      ok = forFiltro.sit.some(function (s) {
+        if (s === 'mov')   { return f.dataset.mov === '1'; }
+        if (s === 'par')   { return f.dataset.mov === '0'; }
+        if (s === 'spix')  { return f.dataset.pix === '0'; }
+        if (s === 'spgto') { return f.dataset.spgto === '1'; }
+        if (s === 'scnpj') { return f.dataset.cnpj === '0'; }
+        if (s === 'grp')   { return f.dataset.grp === '1'; }
+        return false;
+      });
+    }
+    if (ok && forFiltro.cid.length) {
+      ok = forFiltro.cid.indexOf((f.dataset.cidade || '').trim()) >= 0;
+    }
+    if (ok && forFiltro.faixa) {
+      ok = parseFloat(f.dataset.total || 0) >= forFiltro.faixa;
+    }
+    if (ok && forFiltro.dias) {
+      var u = f.dataset.ultimo;
+      ok = !!u && ((hoje - new Date(u)) / 86400000) <= forFiltro.dias;
+    }
     f.style.display = ok ? '' : 'none';
+    if (ok) { vis++; soma += parseFloat(f.dataset.total || 0); }
   });
+  var c = document.getElementById('for-conta');
+  if (c) {
+    c.textContent = vis + ' de ' + forCards().length + ' fornecedores' +
+      (soma ? ' · R$ ' + soma.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) +
+              ' em pagamentos' : '');
+  }
 }
+
+function forOrdem(o) {
+  document.querySelectorAll('#for .ord').forEach(function (b) {
+    b.classList.toggle('on', b.dataset.o === o);
+  });
+  var lista = document.querySelector('#for .lista');
+  var cards = forCards();
+  cards.sort(function (a, b) {
+    if (o === 'nome') {
+      return (a.dataset.nome || '').localeCompare(b.dataset.nome || '');
+    }
+    if (o === 'recente') {
+      /* Sem pagamento vai pro fim, nao pro topo. */
+      var ua = a.dataset.ultimo || '', ub = b.dataset.ultimo || '';
+      if (!ua && !ub) { return 0; }
+      if (!ua) { return 1; }
+      if (!ub) { return -1; }
+      return ub.localeCompare(ua);
+    }
+    return parseFloat(b.dataset.total || 0) - parseFloat(a.dataset.total || 0);
+  });
+  cards.forEach(function (c) { lista.appendChild(c); });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  forOrdem('mov');
+  forPinta();
+});
 </script>
 {% endblock %}

@@ -60,6 +60,38 @@
     font-size:.64rem; padding:0 .3rem; }
   #cli .aba.on .b{ background:#fff; }
 
+  #cli .bt-fil{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
+    color:#3a4655; border-radius:10px; padding:.5rem .8rem; font-size:.83rem;
+    font-weight:800; font-family:inherit; cursor:pointer; display:inline-flex;
+    gap:.35rem; align-items:center; }
+  #cli .bt-fil__n{ background:var(--blue); color:#fff; border-radius:99px;
+    min-width:18px; height:18px; display:inline-grid; place-items:center;
+    font-size:.66rem; padding:0 .3rem; }
+  #cli .ordem{ display:flex; gap:.35rem; align-items:center; margin-bottom:.6rem;
+    overflow-x:auto; padding-bottom:.15rem; }
+  #cli .ordem__t{ font-size:.72rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.05em; flex:0 0 auto; }
+  #cli .ord{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
+    color:#3a4655; border-radius:99px; padding:.32rem .7rem; font-size:.78rem;
+    font-weight:800; font-family:inherit; cursor:pointer; display:inline-flex;
+    gap:.3rem; align-items:center; }
+  #cli .ord.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #cli .conta{ font-size:.76rem; color:var(--muted); margin-bottom:.5rem;
+    font-weight:700; }
+  #cli .gr__c{ display:flex; align-items:center; gap:.5rem; margin-bottom:.3rem; }
+  #cli .gr__a{ margin-left:auto; border:0; background:none; color:var(--blue);
+    font-size:.74rem; font-weight:800; cursor:pointer; font-family:inherit; }
+  #cli .dica{ font-size:.72rem; color:var(--muted); margin-top:.35rem; }
+  /* Guarda de largura (mesma das telas de Migracao): sem isto um e-mail
+     longo estica a linha, a pagina passa da tela e o celular afasta o zoom —
+     e o fundo, que so pinta a viewport, deixa faixa branca na lateral. */
+  #cli{ max-width:100%; }
+  #cli .c__h{ min-width:0; }
+  #cli .c__d{ min-width:0; overflow-wrap:anywhere; }
+  #cli .c__n{ overflow-wrap:anywhere; }
+  #cli .busca input{ min-width:0; }
+  #cli .li .v{ overflow-wrap:anywhere; }
+  #cli .bloco{ min-width:0; }
   #cli .lista{ background:#fff; border:1px solid var(--borda);
     border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(20,35,60,.06); }
   #cli .c{ border-bottom:1px solid #eef1f5; }
@@ -155,20 +187,32 @@
   {% endif %}
 
   <div class="busca">
-    <input type="text" id="cli-busca" placeholder="Buscar por razão social, fantasia, CNPJ ou cidade…"
+    <input type="text" id="cli-busca"
+           placeholder="Buscar por razão social, fantasia, CNPJ ou cidade…"
            oninput="cliBusca(this)">
+    <button type="button" class="bt-fil" onclick="cliAbrirFiltro()">
+      <i class="bi bi-sliders"></i> Filtro
+      <span class="bt-fil__n" id="cli-fil-n" hidden>0</span></button>
   </div>
 
-  <div class="abas">
-    <button type="button" class="aba on" data-m="todos" onclick="cliAba('todos')">
-      Todos <span class="b">{{ totais.clientes }}</span></button>
-    <button type="button" class="aba" data-m="inc" onclick="cliAba('inc')">
-      Incompletos <span class="b">{{ totais.incompletos }}</span></button>
-    <button type="button" class="aba" data-m="scnpj" onclick="cliAba('scnpj')">
-      Sem CNPJ <span class="b">{{ totais.clientes - totais.com_cnpj }}</span></button>
-    <button type="button" class="aba" data-m="sdest" onclick="cliAba('sdest')">
-      Sem destino de frete <span class="b">{{ totais.sem_destino }}</span></button>
+  <div class="ordem">
+    <span class="ordem__t">Ordenar:</span>
+    <button type="button" class="ord on" data-o="nome" onclick="cliOrdem('nome')">
+      <i class="bi bi-sort-alpha-down"></i> Nome A–Z</button>
+    <button type="button" class="ord" data-o="falta" onclick="cliOrdem('falta')">
+      <i class="bi bi-exclamation-circle"></i> Mais incompletos</button>
+    <button type="button" class="ord" data-o="cidade" onclick="cliOrdem('cidade')">
+      <i class="bi bi-geo-alt"></i> Cidade</button>
   </div>
+
+  {# A faixa do filtro ativo mora na tela — nunca dentro da gaveta. #}
+  <div class="g-eco" id="cli-eco" hidden>
+    <i class="bi bi-funnel-fill"></i>
+    <span id="cli-eco-txt"></span>
+    <a href="#" onclick="cliLimpar(); return false;">Limpar</a>
+  </div>
+
+  <div class="conta" id="cli-conta"></div>
 
   <div class="lista" id="cli-lista">
     {% for c in clientes %}
@@ -176,6 +220,13 @@
     <div class="c" data-inc="{{ '1' if c.faltando else '0' }}"
          data-cnpj="{{ '1' if c.cnpj else '0' }}"
          data-dest="{{ '1' if c.destino_id else '0' }}"
+         data-mun="{{ '1' if c.municipio else '0' }}"
+         data-grupo="{{ '1' if c.grupo_contabil_id else '0' }}"
+         data-comissao="{{ '1' if c.paga_comissao else '0' }}"
+         data-cte="{{ '1' if c.cte_integral else '0' }}"
+         data-destino="{{ c.destino_nome or '' }}{% if c.destino_estado %} / {{ c.destino_estado }}{% endif %}"
+         data-nfalta="{{ c.faltando | length }}"
+         data-nome="{{ nome | lower }}"
          data-busca="{{ (nome ~ ' ' ~ (c.nome_fantasia or '') ~ ' ' ~ (c.cnpj or '') ~ ' ' ~ (c.municipio or '') ~ ' ' ~ (c.destino_nome or '')) | lower }}">
       <div class="c__h" onclick="cliAbre(this)">
         <span class="c__ic">{{ nome[:2] | upper }}</span>
@@ -265,6 +316,79 @@
       <div class="mt-2">Nenhum cliente cadastrado</div></div>
     {% endfor %}
   </div>
+
+  {# ---------- Filtro em passos (padrao do Recebimento) ---------- #}
+  <div class="escuro" id="cli-escuro" onclick="cliFecharFiltro()"></div>
+  <div class="gav" id="cli-gav" role="dialog" aria-modal="true">
+    <div class="gav__pega"></div>
+    <div class="passos">
+      <button type="button" class="passo on aqui" id="cli-p1" onclick="cliIr(1)">
+        <i></i><span>Cadastro</span></button>
+      <button type="button" class="passo" id="cli-p2" onclick="cliIr(2)">
+        <i></i><span>Destino</span></button>
+      <button type="button" class="passo" id="cli-p3" onclick="cliIr(3)">
+        <i></i><span>Frete</span></button>
+    </div>
+    <div class="pnome">Passo <span id="cli-pn">1</span> de 3 ·
+      <b id="cli-pt">Cadastro</b></div>
+
+    <div class="gav__b">
+      <div class="etapa" id="cli-e1">
+        <div class="gr__c">
+          <span class="gr__t">Como está o cadastro</span>
+          <button type="button" class="gr__a" onclick="cliMarcarTodas('cli-sit', false)">
+            limpar</button>
+        </div>
+        <div class="opcs" id="cli-sit">
+          <label class="opc"><input type="checkbox" value="inc">
+            <span>Incompletos<small>{{ totais.incompletos }} com campo em branco</small></span></label>
+          <label class="opc"><input type="checkbox" value="ok">
+            <span>Completos<small>{{ totais.clientes - totais.incompletos }} sem nada faltando</small></span></label>
+          <label class="opc"><input type="checkbox" value="scnpj">
+            <span>Sem CNPJ<small>{{ totais.clientes - totais.com_cnpj }} — a Receita não completa esses</small></span></label>
+          <label class="opc"><input type="checkbox" value="smun">
+            <span>Sem município<small>o endereço do boleto fica incompleto</small></span></label>
+          <label class="opc"><input type="checkbox" value="sgrupo">
+            <span>Sem grupo contábil<small>{{ totais.clientes - totais.com_grupo }} sem vínculo no plano de contas</small></span></label>
+        </div>
+        <div class="dica">Sem marcar nada, vêm todos. Marcando mais de uma,
+          vem quem atender a qualquer uma delas.</div>
+      </div>
+
+      <div class="etapa" id="cli-e2" hidden>
+        <div class="gr__c">
+          <span class="gr__t">Destino de frete</span>
+          <button type="button" class="gr__a" onclick="cliMarcarTodas('cli-dest', true)">
+            marcar todos</button>
+        </div>
+        <input type="text" class="campo" id="cli-dest-busca"
+               placeholder="Procurar destino…" oninput="cliFiltraDestino(this)">
+        <div class="opcs" id="cli-dest"></div>
+        <div class="dica">É o destino que define a rota do CT-e. Sem marcar
+          nenhum, vêm todos.</div>
+      </div>
+
+      <div class="etapa" id="cli-e3" hidden>
+        <div class="gr__t">Configuração de frete</div>
+        <div class="chips" id="cli-frete">
+          <button type="button" class="chip on" data-f="" onclick="cliChip(this,'cli-frete')">Tanto faz</button>
+          <button type="button" class="chip" data-f="com" onclick="cliChip(this,'cli-frete')">Paga comissão</button>
+          <button type="button" class="chip" data-f="sem" onclick="cliChip(this,'cli-frete')">Não paga comissão</button>
+          <button type="button" class="chip" data-f="cte" onclick="cliChip(this,'cli-frete')">CT-e integral</button>
+        </div>
+        <div class="dica">A comissão é R$ 0,01 por litro transportado; o CT-e
+          integral faz o valor do CT-e ser o total do frete.</div>
+      </div>
+    </div>
+
+    <div class="gav__f">
+      <button type="button" class="bt-g bt-g--ca" id="cli-bt-voltar"
+              onclick="cliIr(cliPasso - 1)" hidden>Voltar</button>
+      <button type="button" class="bt-g bt-g--ca" onclick="cliFecharFiltro()">Cancelar</button>
+      <button type="button" class="bt-g bt-g--ok" id="cli-bt-ir"
+              onclick="cliAvancar()">Avançar</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -279,36 +403,192 @@ function cliAbre(el) {
   card.classList.toggle('aberto', !aberto);
 }
 
-/* Filtro das pilulas: por cima do DOM, nada recarrega. */
-function cliAba(m) {
-  document.querySelectorAll('#cli .aba').forEach(function (b) {
-    b.classList.toggle('on', b.dataset.m === m);
-  });
-  document.querySelectorAll('#cli .c').forEach(function (c) {
-    var passa = (m === 'todos')
-      || (m === 'inc' && c.dataset.inc === '1')
-      || (m === 'scnpj' && c.dataset.cnpj === '0')
-      || (m === 'sdest' && c.dataset.dest === '0');
-    c.dataset.aba = passa ? '1' : '0';
-  });
-  cliPinta();
+var cliPasso = 1;
+var cliFiltro = { sit: [], dest: [], frete: '' };
+
+function cliCards() {
+  return [].slice.call(document.querySelectorAll('#cli .lista > .c'));
 }
 
+/* ---------- Gaveta ---------- */
+function cliAbrirFiltro() {
+  cliMontaDestinos();
+  cliIr(1);
+  document.getElementById('cli-escuro').classList.add('on');
+  document.getElementById('cli-gav').classList.add('on');
+}
+
+function cliFecharFiltro() {
+  document.getElementById('cli-escuro').classList.remove('on');
+  document.getElementById('cli-gav').classList.remove('on');
+}
+
+function cliIr(n) {
+  if (n < 1) { n = 1; }
+  if (n > 3) { n = 3; }
+  cliPasso = n;
+  [1, 2, 3].forEach(function (i) {
+    document.getElementById('cli-e' + i).hidden = (i !== n);
+    var p = document.getElementById('cli-p' + i);
+    p.classList.toggle('on', i <= n);
+    p.classList.toggle('aqui', i === n);
+  });
+  var nomes = ['Cadastro', 'Destino', 'Frete'];
+  document.getElementById('cli-pn').textContent = n;
+  document.getElementById('cli-pt').textContent = nomes[n - 1];
+  document.getElementById('cli-bt-voltar').hidden = (n === 1);
+  document.getElementById('cli-bt-ir').textContent = (n === 3) ? 'Filtrar' : 'Avançar';
+}
+
+function cliAvancar() {
+  if (cliPasso < 3) { cliIr(cliPasso + 1); return; }
+  cliAplicar();
+  cliFecharFiltro();
+}
+
+/* Os destinos saem dos proprios cards. */
+function cliMontaDestinos() {
+  var alvo = document.getElementById('cli-dest');
+  if (alvo.dataset.pronto === '1') { return; }
+  var conta = {};
+  cliCards().forEach(function (c) {
+    var d = (c.dataset.destino || '').trim() || '(sem destino)';
+    conta[d] = (conta[d] || 0) + 1;
+  });
+  var nomes = Object.keys(conta).sort();
+  alvo.innerHTML = nomes.map(function (d) {
+    return '<label class="opc" data-nome="' + d.toLowerCase() + '">' +
+      '<input type="checkbox" value="' + d.replace(/"/g, '') + '">' +
+      '<span>' + d + '<small>' + conta[d] + ' cliente(s)</small></span></label>';
+  }).join('');
+  alvo.dataset.pronto = '1';
+}
+
+function cliFiltraDestino(inp) {
+  var q = (inp.value || '').toLowerCase().trim();
+  document.querySelectorAll('#cli-dest .opc').forEach(function (o) {
+    o.hidden = q && (o.dataset.nome || '').indexOf(q) < 0;
+  });
+}
+
+function cliMarcarTodas(id, valor) {
+  document.querySelectorAll('#' + id + ' input[type=checkbox]').forEach(function (c) {
+    if (!c.closest('.opc').hidden) { c.checked = valor; }
+  });
+}
+
+function cliChip(btn, grupo) {
+  document.querySelectorAll('#' + grupo + ' .chip').forEach(function (c) {
+    c.classList.toggle('on', c === btn);
+  });
+}
+
+function cliAplicar() {
+  var marc = function (id) {
+    return [].slice.call(
+      document.querySelectorAll('#' + id + ' input[type=checkbox]:checked'))
+      .map(function (c) { return c.value; });
+  };
+  var on = document.querySelector('#cli-frete .chip.on');
+  cliFiltro = { sit: marc('cli-sit'), dest: marc('cli-dest'),
+                frete: on ? (on.dataset.f || '') : '' };
+  cliPinta();
+  cliEco();
+}
+
+function cliLimpar() {
+  cliFiltro = { sit: [], dest: [], frete: '' };
+  cliMarcarTodas('cli-sit', false);
+  cliMarcarTodas('cli-dest', false);
+  var chips = document.querySelectorAll('#cli-frete .chip');
+  chips.forEach(function (c, i) { c.classList.toggle('on', i === 0); });
+  var b = document.getElementById('cli-busca');
+  if (b) {
+    b.value = '';
+    /* Zerar o campo nao basta: cada card guarda se passou na busca. */
+    cliBusca(b);
+  }
+  cliPinta();
+  cliEco();
+}
+
+function cliEco() {
+  var p = [];
+  if (cliFiltro.sit.length) { p.push(cliFiltro.sit.length + ' situação(ões)'); }
+  if (cliFiltro.dest.length) { p.push(cliFiltro.dest.length + ' destino(s)'); }
+  if (cliFiltro.frete) {
+    p.push({ com: 'paga comissão', sem: 'não paga comissão',
+             cte: 'CT-e integral' }[cliFiltro.frete]);
+  }
+  var n = p.length;
+  var eco = document.getElementById('cli-eco');
+  eco.hidden = !n;
+  if (n) { document.getElementById('cli-eco-txt').textContent = 'Filtrando por ' + p.join(' · '); }
+  var chip = document.getElementById('cli-fil-n');
+  chip.hidden = !n;
+  chip.textContent = n;
+}
+
+/* ---------- Busca, filtro e ordenacao ---------- */
 function cliBusca(inp) {
   var q = (inp.value || '').toLowerCase().trim();
-  document.querySelectorAll('#cli .c').forEach(function (c) {
+  cliCards().forEach(function (c) {
     c.dataset.busca_ok = (!q || (c.dataset.busca || '').indexOf(q) >= 0) ? '1' : '0';
   });
   cliPinta();
 }
 
-/* Um lugar so decide o que aparece: aba E busca precisam passar. */
+/* Um lugar so decide o que aparece: filtro E busca precisam passar. */
 function cliPinta() {
-  document.querySelectorAll('#cli .c').forEach(function (c) {
-    var ok = (c.dataset.aba !== '0') && (c.dataset.busca_ok !== '0');
+  var vis = 0;
+  cliCards().forEach(function (c) {
+    var ok = (c.dataset.busca_ok !== '0');
+    if (ok && cliFiltro.sit.length) {
+      ok = cliFiltro.sit.some(function (s) {
+        if (s === 'inc')    { return c.dataset.inc === '1'; }
+        if (s === 'ok')     { return c.dataset.inc === '0'; }
+        if (s === 'scnpj')  { return c.dataset.cnpj === '0'; }
+        if (s === 'smun')   { return c.dataset.mun === '0'; }
+        if (s === 'sgrupo') { return c.dataset.grupo === '0'; }
+        return false;
+      });
+    }
+    if (ok && cliFiltro.dest.length) {
+      var d = (c.dataset.destino || '').trim() || '(sem destino)';
+      ok = cliFiltro.dest.indexOf(d) >= 0;
+    }
+    if (ok && cliFiltro.frete === 'com') { ok = c.dataset.comissao === '1'; }
+    if (ok && cliFiltro.frete === 'sem') { ok = c.dataset.comissao === '0'; }
+    if (ok && cliFiltro.frete === 'cte') { ok = c.dataset.cte === '1'; }
     c.style.display = ok ? '' : 'none';
+    if (ok) { vis++; }
   });
+  var el = document.getElementById('cli-conta');
+  if (el) { el.textContent = vis + ' de ' + cliCards().length + ' clientes'; }
 }
+
+function cliOrdem(o) {
+  document.querySelectorAll('#cli .ord').forEach(function (b) {
+    b.classList.toggle('on', b.dataset.o === o);
+  });
+  var lista = document.querySelector('#cli .lista');
+  var cards = cliCards();
+  cards.sort(function (a, b) {
+    if (o === 'falta') {
+      /* Mais buracos primeiro; empatou, ordem alfabetica. */
+      var d = parseInt(b.dataset.nfalta || 0, 10) - parseInt(a.dataset.nfalta || 0, 10);
+      return d || (a.dataset.nome || '').localeCompare(b.dataset.nome || '');
+    }
+    if (o === 'cidade') {
+      var ca = (a.dataset.destino || 'zzz'), cb = (b.dataset.destino || 'zzz');
+      return ca.localeCompare(cb) || (a.dataset.nome || '').localeCompare(b.dataset.nome || '');
+    }
+    return (a.dataset.nome || '').localeCompare(b.dataset.nome || '');
+  });
+  cards.forEach(function (c) { lista.appendChild(c); });
+}
+
+document.addEventListener('DOMContentLoaded', cliPinta);
 
 function copiarTextoClipboard(texto){
   if (navigator.clipboard && navigator.clipboard.writeText) {
