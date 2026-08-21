@@ -125,6 +125,14 @@ body > .container-fluid:has(#cli){
     font-size:.75rem; color:#3a4655; }
   #cli .c__d .k{ color:var(--muted); }
   #cli .c__d b{ font-weight:700; font-variant-numeric:tabular-nums; }
+  #cli .fat{ text-align:right; flex:0 0 auto; }
+  #cli .fat__v{ font-weight:800; font-size:.86rem; color:var(--blue-deep);
+    font-variant-numeric:tabular-nums; white-space:nowrap; }
+  #cli .fat__r{ font-size:.66rem; color:var(--muted); white-space:nowrap; }
+  #cli .barra{ height:5px; border-radius:9px; background:#eef2f7;
+    overflow:hidden; margin-top:.35rem; }
+  #cli .barra i{ display:block; height:100%;
+    background:linear-gradient(90deg,#2E6FB0,#1D63A5); }
   #cli .chev{ color:var(--muted); font-size:.8rem; align-self:center;
     transition:transform .2s; }
   #cli .c.aberto .chev{ transform:rotate(180deg); }
@@ -188,8 +196,8 @@ body > .container-fluid:has(#cli){
     <div class="n {{ 'n--ambar' if totais.incompletos else 'n--verde' }}">
       <div class="r">Cadastro incompleto</div>
       <div class="v">{{ totais.incompletos }}</div></div>
-    <div class="n n--cinza"><div class="r">Com grupo contábil</div>
-      <div class="v">{{ totais.com_grupo }}</div></div>
+    <div class="n n--verde"><div class="r">Faturado em fretes</div>
+      <div class="v">{{ totais.faturado | formatar_moeda }}</div></div>
   </div>
 
   {% if totais.completaveis %}
@@ -217,6 +225,8 @@ body > .container-fluid:has(#cli){
       <i class="bi bi-sort-alpha-down"></i> Nome A–Z</button>
     <button type="button" class="ord" data-o="falta" onclick="cliOrdem('falta')">
       <i class="bi bi-exclamation-circle"></i> Mais incompletos</button>
+    <button type="button" class="ord" data-o="fat" onclick="cliOrdem('fat')">
+      <i class="bi bi-cash-stack"></i> Maior faturamento</button>
     <button type="button" class="ord" data-o="cidade" onclick="cliOrdem('cidade')">
       <i class="bi bi-geo-alt"></i> Cidade</button>
   </div>
@@ -242,6 +252,7 @@ body > .container-fluid:has(#cli){
          data-cte="{{ '1' if c.cte_integral else '0' }}"
          data-destino="{{ c.destino_nome or '' }}{% if c.destino_estado %} / {{ c.destino_estado }}{% endif %}"
          data-nfalta="{{ c.faltando | length }}"
+         data-fat="{{ '%.2f' | format(c.fre_total or 0) }}"
          data-nome="{{ nome | lower }}"
          data-busca="{{ (nome ~ ' ' ~ (c.nome_fantasia or '') ~ ' ' ~ (c.cnpj or '') ~ ' ' ~ (c.municipio or '') ~ ' ' ~ (c.destino_nome or '')) | lower }}">
       <div class="c__h" onclick="cliAbre(this)">
@@ -263,6 +274,17 @@ body > .container-fluid:has(#cli){
               {% if c.municipio %}<b>{{ c.municipio }}{% if c.uf %} / {{ c.uf }}{% endif %}</b>
               {% else %}<b class="vazio">—</b>{% endif %}</span>
           </div>
+          {% if c.peso %}<div class="barra"><i style="width:{{ c.peso }}%"></i></div>{% endif %}
+        </div>
+        <div class="fat">
+          {% if c.fre_n %}
+          <div class="fat__v">{{ c.fre_total | formatar_moeda }}</div>
+          <div class="fat__r">{{ c.fre_n }} frete{{ '' if c.fre_n == 1 else 's' }}
+            {%- if c.fre_ultimo %} · {{ c.fre_ultimo.strftime('%d/%m') }}{% endif %}</div>
+          {% else %}
+          <div class="fat__v" style="color:#6b7684">—</div>
+          <div class="fat__r">nenhum frete</div>
+          {% endif %}
         </div>
         <span class="chev"><i class="bi bi-chevron-down"></i></span>
       </div>
@@ -305,6 +327,12 @@ body > .container-fluid:has(#cli){
             <div class="li"><span class="k">Comissão</span>
               <span class="v">{{ 'paga ao motorista' if c.paga_comissao else 'não paga' }}
                 {%- if c.cte_integral %} · CT-e integral{% endif %}</span></div>
+            <div class="li"><span class="k">Fretes</span>
+              <span class="v">{{ c.fre_n }}{% if c.fre_ultimo %} · último em
+                {{ c.fre_ultimo.strftime('%d/%m/%Y') }}{% endif %}</span></div>
+            <div class="li"><span class="k">Faturado</span>
+              <span class="v">{{ c.fre_total | formatar_moeda }}
+                <small style="color:#6b7684">(CT-e)</small></span></div>
           </div>
         </div>
 
@@ -580,7 +608,15 @@ function cliPinta() {
     if (ok) { vis++; }
   });
   var el = document.getElementById('cli-conta');
-  if (el) { el.textContent = vis + ' de ' + cliCards().length + ' clientes'; }
+  if (el) {
+    var soma = 0;
+    cliCards().forEach(function (c) {
+      if (c.style.display !== 'none') { soma += parseFloat(c.dataset.fat || 0); }
+    });
+    el.textContent = vis + ' de ' + cliCards().length + ' clientes' +
+      (soma ? ' · R$ ' + soma.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) +
+              ' faturados' : '');
+  }
 }
 
 function cliOrdem(o) {
@@ -594,6 +630,9 @@ function cliOrdem(o) {
       /* Mais buracos primeiro; empatou, ordem alfabetica. */
       var d = parseInt(b.dataset.nfalta || 0, 10) - parseInt(a.dataset.nfalta || 0, 10);
       return d || (a.dataset.nome || '').localeCompare(b.dataset.nome || '');
+    }
+    if (o === 'fat') {
+      return parseFloat(b.dataset.fat || 0) - parseFloat(a.dataset.fat || 0);
     }
     if (o === 'cidade') {
       var ca = (a.dataset.destino || 'zzz'), cb = (b.dataset.destino || 'zzz');

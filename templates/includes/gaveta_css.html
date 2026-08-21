@@ -81,6 +81,16 @@
   cursor:pointer; margin:0; min-width:0; }
 {{ esc }} .opc:last-child{ border-bottom:0; }
 {{ esc }} .opc:hover{ background:#f7f9fc; }
+/* O conteudo da opcao em duas alturas: titulo e, embaixo, a contagem. Sem o
+   `small` em bloco os dois colam ("GOIATUBA12 fornecedor(es)"). */
+{{ esc }} .opc > span{ min-width:0; flex:1; }
+{{ esc }} .opc small{ display:block; font-size:.71rem; color:#6b7684;
+  font-weight:600; margin-top:.05rem; }
+/* SEM ISTO A BUSCA DA GAVETA NAO ESCONDE NADA: display:flex acima vence o
+   atributo hidden, que so vale contra o display inicial do elemento. */
+{{ esc }} .opc[hidden]{ display:none; }
+/* Respiro entre grupos dentro de um passo. */
+{{ esc }} .gr{ margin-bottom:.85rem; }
 {{ esc }} .opc input{ width:19px; height:19px; accent-color:#1D63A5;
   flex:0 0 auto; margin:0; }
 {{ esc }} .opc:has(input:checked){ background:#eaf1f9; }

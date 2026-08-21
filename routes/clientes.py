@@ -125,8 +125,17 @@ def lista():
         ORDER BY c.razao_social
     """)
     clientes = cursor.fetchall()
+    fatur = _faturamento_clientes(cursor)
     cursor.close()
     conn.close()
+
+    maior = max([m['total'] for m in fatur.values()] or [0]) or 1
+    for c in clientes:
+        fx = fatur.get(c['id']) or {'n': 0, 'total': 0.0, 'ultimo': None}
+        c['fre_n'] = fx['n']
+        c['fre_total'] = fx['total']
+        c['fre_ultimo'] = fx['ultimo']
+        c['peso'] = round(100.0 * fx['total'] / maior, 1)
 
     # O que falta em cada cadastro. Serve pra duas coisas: o selo da linha e
     # o contador do topo. `municipio` entra aqui porque e o endereco que vai
@@ -145,9 +154,32 @@ def lista():
         'incompletos': sum(1 for c in clientes if c['faltando']),
         'com_grupo': sum(1 for c in clientes if c.get('grupo_contabil_id')),
         'completaveis': sum(1 for c in clientes if c['completavel']),
+        'com_frete': sum(1 for c in clientes if c['fre_n']),
+        'faturado': sum(c['fre_total'] for c in clientes),
         'sem_destino': sum(1 for c in clientes if not c.get('destino_id')),
     }
     return render_template('clientes/lista.html', clientes=clientes, totais=totais)
+
+
+def _faturamento_clientes(cursor):
+    """Quanto cada cliente rendeu em frete, e quando foi o ultimo.
+
+    O valor e o do CT-e (`fretes.valor_cte`) — e o que a transportadora
+    fatura pelo servico, nao o valor do produto que o cliente comprou.
+    """
+    try:
+        cursor.execute("""
+            SELECT f.clientes_id AS cid, COUNT(*) AS n,
+                   COALESCE(SUM(f.valor_cte),0) AS total,
+                   MAX(DATE(f.data_frete)) AS ultimo
+              FROM fretes f
+             WHERE f.clientes_id IS NOT NULL
+             GROUP BY f.clientes_id
+        """)
+        return {r['cid']: {'n': int(r['n']), 'total': float(r['total'] or 0),
+                           'ultimo': r['ultimo']} for r in cursor.fetchall()}
+    except Exception:
+        return {}
 
 
 def _rotas_por_destino(cursor):
