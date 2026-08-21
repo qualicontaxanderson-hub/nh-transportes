@@ -524,7 +524,7 @@
 <div id="cfd-desp" hidden>
   {% for g in despesas %}
   <div class="forn desp-card">
-    <div class="forn__head">
+    <div class="forn__head" onclick="cfdToggle(this)">
       <div style="min-width:0">
         <div class="forn__nome"><span class="un">{{ g.nome }}</span></div>
         <div class="forn__cnpj">CNPJ {{ g.cnpjs[0] }}
@@ -533,7 +533,8 @@
       </div>
       <div class="selo {{ 'selo--deve' if g.a_lancar > 0.005 else 'selo--zero' }}">
         <div class="v">{{ g.a_lancar | formatar_moeda }}</div>
-        <div class="r">{{ 'a lançar' if g.a_lancar > 0.005 else 'em dia' }}</div>
+        <div class="r">{{ 'a lançar' if g.a_lancar > 0.005 else 'em dia' }}
+          <i class="bi bi-chevron-down chev"></i></div>
       </div>
     </div>
     <div class="forn__nums">
@@ -541,8 +542,17 @@
       <span><span class="k">Lançado em Despesas:</span> <b>{{ g.v_lanc | formatar_moeda }}</b></span>
       <span><span class="k">{{ g.n_notas }} nota{{ '' if g.n_notas == 1 else 's' }}</span>{% if g.n_lanc %}
         <span class="k"> · {{ g.n_lanc }} lançamento{{ '' if g.n_lanc == 1 else 's' }}</span>{% endif %}</span>
+      {% set _falta = g.notas | rejectattr('lancada') | list | length %}
+      {% if _falta %}<span class="conf-cnt"
+        title="notas desta empresa que ainda não têm lançamento em Despesas">
+        <i class="bi bi-exclamation-circle"></i> {{ _falta }} falta{{ '' if _falta == 1 else 'm' }} lançar</span>
+      {% else %}<span class="conf-cnt conf-cnt--ok">
+        <i class="bi bi-check-circle"></i> todas lançadas</span>{% endif %}
     </div>
 
+    {# As notas moram no corpo que abre/fecha: 7 notas de R$ 4,00 empurravam
+       o resto da tela pra baixo. Fechado mostra o que decide (a lançar). #}
+    <div class="forn__corpo" style="display:none">
     {% for n in g.notas %}
     <div class="lin lin--nf">
       <span class="lin__ico"><i class="bi bi-receipt"></i></span>
@@ -576,6 +586,7 @@
     </div>
     {% endfor %}
     {% endfor %}
+    </div>
   </div>
   {% endfor %}
 </div>
