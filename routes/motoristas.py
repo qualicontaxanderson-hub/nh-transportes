@@ -1,3 +1,4 @@
+from datetime import date
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 from utils.db import get_db_connection
@@ -26,6 +27,31 @@ def _ensure_veiculo_id(conn):
     cur.close()
 
 
+def _movimento_motoristas(cursor):
+    """Quanto cada motorista rodou: fretes, valor e comissao.
+
+    E a pergunta desta tela — o MARCOS ANTONIO responde por 1.211 fretes e
+    R$ 32 mil de comissao, e ha cadastros que nunca rodaram. A lista antiga
+    so mostrava nome, CPF e CNH.
+    """
+    try:
+        cursor.execute("""
+            SELECT f.motoristas_id AS mid, COUNT(*) AS n,
+                   COALESCE(SUM(f.valor_total_frete),0) AS valor,
+                   COALESCE(SUM(f.comissao_motorista),0) AS comissao,
+                   COUNT(DISTINCT f.veiculos_id) AS veiculos,
+                   MAX(DATE(f.data_frete)) AS ultimo
+              FROM fretes f WHERE f.motoristas_id IS NOT NULL
+             GROUP BY f.motoristas_id
+        """)
+        return {r['mid']: {'n': int(r['n']), 'valor': float(r['valor'] or 0),
+                           'comissao': float(r['comissao'] or 0),
+                           'veiculos': int(r['veiculos']),
+                           'ultimo': r['ultimo']} for r in cursor.fetchall()}
+    except Exception:
+        return {}
+
+
 @bp.route('/')
 @login_required
 def lista():
@@ -40,9 +66,49 @@ def lista():
         ORDER BY m.nome
     """)
     motoristas = cursor.fetchall()
+    movimento = _movimento_motoristas(cursor)
+
+    # Os veiculos entram no filtro (e no cadastro): quem dirige o que.
+    try:
+        cursor.execute("""SELECT id, caminhao, placa FROM veiculos
+                           ORDER BY caminhao, placa""")
+        veiculos = cursor.fetchall()
+    except Exception:
+        veiculos = []
     cursor.close()
     conn.close()
-    return render_template('motoristas/lista.html', motoristas=motoristas)
+
+    maior = max([m['valor'] for m in movimento.values()] or [0]) or 1
+    for m in motoristas:
+        mv = movimento.get(m['id']) or {'n': 0, 'valor': 0.0, 'comissao': 0.0,
+                                        'veiculos': 0, 'ultimo': None}
+        m['fre_n'] = mv['n']
+        m['fre_valor'] = mv['valor']
+        m['fre_comissao'] = mv['comissao']
+        m['fre_veiculos'] = mv['veiculos']
+        m['fre_ultimo'] = mv['ultimo']
+        m['peso'] = round(100.0 * mv['valor'] / maior, 1)
+        # Parado e por TEMPO: ha motorista com fretes antigos que nao roda ha
+        # meses — contar so quem tem zero esconderia esse caso.
+        m['parado'] = (not mv['ultimo']) or (
+            (date.today() - mv['ultimo']).days > 90)
+        m['dias_parado'] = ((date.today() - mv['ultimo']).days
+                            if mv['ultimo'] else None)
+        m['faltando'] = [rot for campo, rot in (
+            ('cpf', 'CPF'), ('cnh', 'CNH'), ('telefone', 'telefone'))
+            if not ((m.get(campo) or '').strip())]
+
+    totais = {
+        'motoristas': len(motoristas),
+        'rodando': sum(1 for m in motoristas if not m['parado']),
+        'parados': sum(1 for m in motoristas if m['parado']),
+        'comissao': sum(m['fre_comissao'] for m in motoristas),
+        'incompletos': sum(1 for m in motoristas if m['faltando']),
+        'sem_veiculo': sum(1 for m in motoristas if not m.get('veiculo_id')),
+        'com_comissao': sum(1 for m in motoristas if m.get('paga_comissao')),
+    }
+    return render_template('motoristas/lista.html', motoristas=motoristas,
+                           totais=totais, veiculos=veiculos)
 
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required

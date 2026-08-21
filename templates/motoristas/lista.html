@@ -1,236 +1,564 @@
 {% extends "base.html" %}
-{% block title %}Motoristas - {{ app_name }}{% endblock %}
+
+{% block title %}Motoristas - NH Transportes{% endblock %}
+
+{#- Lista no padrao do Banco. A pergunta aqui e "quem roda e quanto ganha":
+    o MARCOS ANTONIO responde por 1.211 fretes e R$ 32 mil de comissao,
+    enquanto ha cadastros que nunca rodaram — a tela antiga so mostrava
+    nome, CPF e CNH.
+
+    Parte da lista sao transportadoras parceiras (FVE, REM, GASOL), que
+    rodam frete mas nao recebem comissao. Por isso "sem comissao" nao e
+    defeito de cadastro e nao entra como pendencia. -#}
 
 {% block styles %}
 <style>
-  .page-hero {
-    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
-    border-radius: .75rem;
-    padding: 1.5rem 2rem;
-    margin-bottom: 1.5rem;
-    color: #fff;
-  }
-  .page-hero .hero-icon {
-    width: 3rem; height: 3rem;
-    background: rgba(255,255,255,.15);
-    border-radius: .6rem;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.5rem;
-    flex-shrink: 0;
-  }
-  .stat-card {
-    border: 0;
-    border-radius: .65rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,.07);
-    transition: box-shadow .2s;
-  }
-  .stat-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.13); }
-  .stat-card .stat-icon {
-    width: 2.6rem; height: 2.6rem;
-    border-radius: .5rem;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.2rem;
-    flex-shrink: 0;
-  }
-  #tbl-lista {
-    font-size: 0.76rem;
-    border-collapse: separate;
-    border-spacing: 0;
-  }
-  #tbl-lista thead tr th {
-    background: #f0f4f8;
-    color: #2c3e50;
-    font-weight: 700;
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 0.45rem 0.65rem;
-    border-bottom: 2px solid #c5d5e8;
-    white-space: nowrap;
-  }
-  #tbl-lista tbody tr td {
-    padding: 0.38rem 0.65rem;
-    border-bottom: 1px solid #eef1f4;
-    vertical-align: middle;
-    color: #374151;
-  }
-  #tbl-lista tbody tr:last-child td { border-bottom: none; }
-  #tbl-lista tbody tr.row-mot { cursor: pointer; transition: background .1s; }
-  #tbl-lista tbody tr.row-mot:hover td { background: #f0f7ff; }
-  .btn-acao {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 1.8rem; height: 1.8rem;
-    border-radius: .4rem;
-    border: 1px solid;
-    font-size: .82rem;
-    transition: background .15s, color .15s;
-    text-decoration: none;
-  }
-  .btn-editar  { color:#1D63A5; border-color:#bee0f5; background:#f0f7ff; }
-  .btn-editar:hover  { background:#1D63A5; color:#fff; }
-  .btn-excluir { color:#dc3545; border-color:#f5c6cb; background:#fff5f5; }
-  .btn-excluir:hover { background:#dc3545; color:#fff; }
-  .actions-cell { white-space: nowrap; }
+/* O layout base pinta todo body > .container-fluid de branco com 2rem de
+   padding; no celular vira moldura e a tela nao enche. */
+body > .container-fluid:has(#mot){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#mot){ padding:.7rem 1rem 0; }
+}
+#mot.container-fluid{ padding-left:0; padding-right:0; }
+</style>
+{% with esc = '#mot' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
+<style>
+  #mot{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#6b7684; --ink:#151d27; --borda:#d9e0e8;
+        color:var(--ink); max-width:100%; }
+
+  #mot .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .65rem;
+    margin-bottom:.7rem; }
+  #mot .topo__l{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  #mot .topo__t{ font-weight:800; font-size:1.02rem; flex:1; min-width:0; }
+  #mot .bt-t{ border:1px solid rgba(255,255,255,.35);
+    background:rgba(255,255,255,.14); color:#fff; border-radius:9px;
+    padding:.34rem .7rem; font-size:.78rem; font-weight:800; font-family:inherit;
+    cursor:pointer; text-decoration:none; white-space:nowrap;
+    display:inline-flex; gap:.3rem; align-items:center; }
+  #mot .bt-t:hover{ background:rgba(255,255,255,.26); color:#fff; }
+  #mot .fam{ display:flex; gap:.4rem; margin-top:.6rem; overflow-x:auto;
+    padding-bottom:.15rem; }
+  #mot .fam a{ flex:0 0 auto; border-radius:99px; padding:.35rem .8rem;
+    font-size:.78rem; font-weight:800; background:rgba(255,255,255,.18);
+    color:#fff; text-decoration:none; white-space:nowrap; }
+  #mot .fam a.on{ background:#fff; color:var(--blue-deep); }
+
+  #mot .busca{ display:flex; gap:.4rem; margin-bottom:.6rem; }
+  #mot .busca input{ flex:1; min-width:0; border:1px solid var(--borda);
+    border-radius:10px; padding:.5rem .65rem; font-size:.86rem;
+    font-family:inherit; }
+  #mot .bt-fil{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
+    color:#3a4655; border-radius:10px; padding:.5rem .8rem; font-size:.83rem;
+    font-weight:800; font-family:inherit; cursor:pointer; display:inline-flex;
+    gap:.35rem; align-items:center; }
+  #mot .bt-fil__n{ background:var(--blue); color:#fff; border-radius:99px;
+    min-width:18px; height:18px; display:inline-grid; place-items:center;
+    font-size:.66rem; padding:0 .3rem; }
+  #mot .ordem{ display:flex; gap:.35rem; align-items:center; margin-bottom:.6rem;
+    overflow-x:auto; padding-bottom:.15rem; }
+  #mot .ordem__t{ font-size:.72rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.05em; flex:0 0 auto; }
+  #mot .ord{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
+    color:#3a4655; border-radius:99px; padding:.32rem .7rem; font-size:.78rem;
+    font-weight:800; font-family:inherit; cursor:pointer; display:inline-flex;
+    gap:.3rem; align-items:center; }
+  #mot .ord.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #mot .conta{ font-size:.76rem; color:var(--muted); margin-bottom:.5rem;
+    font-weight:700; }
+  #mot .gr__c{ display:flex; align-items:center; gap:.5rem; margin-bottom:.3rem; }
+  #mot .gr__a{ margin-left:auto; border:0; background:none; color:var(--blue);
+    font-size:.74rem; font-weight:800; cursor:pointer; font-family:inherit; }
+  #mot .dica{ font-size:.72rem; color:var(--muted); margin-top:.35rem; }
+
+  #mot .lista{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #mot .m{ border-bottom:1px solid #eef1f5; }
+  #mot .m:last-child{ border-bottom:0; }
+  #mot .m__h{ display:flex; gap:.6rem; padding:.6rem .8rem; align-items:flex-start;
+    cursor:pointer; min-width:0; }
+  #mot .m__h:hover{ background:#fafbfd; }
+  #mot .m__ic{ flex:0 0 36px; height:36px; border-radius:50%; display:grid;
+    place-items:center; font-size:.8rem; font-weight:800; background:#eaf1f9;
+    color:var(--blue-deep); }
+  #mot .m__ic--emp{ border-radius:10px; background:#f4f6f9; color:var(--muted); }
+  #mot .m__t{ flex:1; min-width:0; }
+  #mot .m__n{ font-weight:800; font-size:.88rem; overflow-wrap:anywhere; }
+  #mot .m__d{ display:flex; gap:.4rem .9rem; flex-wrap:wrap; margin-top:.25rem;
+    font-size:.75rem; color:#3a4655; min-width:0; overflow-wrap:anywhere; }
+  #mot .m__d .k{ color:var(--muted); }
+  #mot .m__d b{ font-weight:700; font-variant-numeric:tabular-nums; }
+  #mot .mov{ text-align:right; flex:0 0 auto; }
+  #mot .mov__v{ font-weight:800; font-size:.86rem; color:var(--blue-deep);
+    font-variant-numeric:tabular-nums; white-space:nowrap; }
+  #mot .mov__r{ font-size:.66rem; color:var(--muted); white-space:nowrap; }
+  #mot .barra{ height:5px; border-radius:9px; background:#eef2f7;
+    overflow:hidden; margin-top:.35rem; }
+  #mot .barra i{ display:block; height:100%;
+    background:linear-gradient(90deg,#2E6FB0,#1D63A5); }
+  #mot .selo{ display:inline-block; border-radius:99px; padding:.14rem .5rem;
+    font-size:.64rem; font-weight:800; white-space:nowrap; }
+  #mot .selo--par{ background:#f4f6f9; color:var(--muted); }
+  #mot .selo--fal{ background:#fdf0d6; color:var(--ambar); }
+  #mot .selo--com{ background:#e4f4e8; color:#1c6b34; }
+  #mot .selo--emp{ background:#eaf1f9; color:var(--blue-deep); }
+
+  #mot .m__c{ background:#f7f9fc; border-top:1px solid #eef1f5;
+    padding:.65rem .8rem .75rem; }
+  #mot .grade{ display:grid; gap:.5rem; grid-template-columns:1fr; }
+  @media (min-width:992px){ #mot .grade{ grid-template-columns:1fr 1fr 1fr; } }
+  #mot .bloco{ background:#fff; border:1px solid var(--borda);
+    border-radius:11px; padding:.55rem .7rem; min-width:0; }
+  #mot .bloco--av{ border-color:#f0d8a8; background:#fffdf7; }
+  #mot .bloco__t{ font-size:.64rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); margin-bottom:.3rem; }
+  #mot .bloco--av .bloco__t{ color:var(--ambar); }
+  #mot .li{ display:flex; gap:.5rem; font-size:.79rem; padding:.16rem 0; }
+  #mot .li .k{ color:var(--muted); flex:0 0 88px; }
+  #mot .li .v{ flex:1; min-width:0; font-weight:600; overflow-wrap:anywhere; }
+  #mot .vazio{ color:var(--ambar); font-weight:700; }
+  #mot .acoes{ display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.55rem; }
+  #mot .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:9px; padding:.36rem .7rem; font-size:.77rem; font-weight:700;
+    font-family:inherit; cursor:pointer; text-decoration:none;
+    display:inline-flex; gap:.3rem; align-items:center; }
+  #mot .bt:hover{ background:#dfeaf8; color:var(--blue-deep); }
+  #mot .bt--zap{ background:#e6f9ee; border-color:#a9dfc2; color:#146c43; }
+  #mot .bt--del{ background:#fbe9e9; border-color:#f0c8c8; color:var(--danger); }
+  #mot .nada{ padding:1.4rem .8rem; text-align:center; color:var(--muted); }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
+<div id="mot">
 
-  <!-- Hero header -->
-  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-    <div class="hero-icon"><i class="bi bi-person-badge-fill"></i></div>
-    <div class="flex-grow-1">
-      <h4 class="mb-0 fw-bold">Motoristas</h4>
-      <p class="mb-0 opacity-75 small">Gerencie os motoristas cadastrados no sistema.</p>
+  <div class="topo">
+    <div class="topo__l">
+      <span class="topo__t"><i class="bi bi-person-vcard"></i> Motoristas</span>
+      <a class="bt-t" href="{{ url_for('motoristas.novo') }}">
+        <i class="bi bi-plus-circle"></i> Novo motorista</a>
     </div>
-    {% if current_user.nivel == 'admin' %}
-    <a href="{{ url_for('motoristas.novo') }}"
-       class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
-      <i class="bi bi-plus-circle me-1"></i> Novo Motorista
-    </a>
-    {% endif %}
+    {% with aba_cad = 'motoristas' %}{% include 'includes/abas_cadastros.html' %}{% endwith %}
   </div>
 
-  <!-- Stat cards -->
-  {% set total = motoristas | length %}
-  {% set com_comissao = motoristas | selectattr('paga_comissao') | list | length %}
-  {% set sem_comissao = total - com_comissao %}
-  <div class="row g-3 mb-4">
-    <div class="col-6 col-md-4">
-      <div class="card stat-card h-100">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div class="stat-icon" style="background:#e8f0fb;">
-            <i class="bi bi-person-badge" style="color:#1D63A5;"></i>
-          </div>
-          <div>
-            <div class="fs-4 fw-bold" style="color:#1D63A5;">{{ total }}</div>
-            <div class="text-muted small">Motoristas</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-4">
-      <div class="card stat-card h-100">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div class="stat-icon" style="background:#e6f9ee;">
-            <i class="bi bi-check-circle" style="color:#198754;"></i>
-          </div>
-          <div>
-            <div class="fs-4 fw-bold" style="color:#198754;">{{ com_comissao }}</div>
-            <div class="text-muted small">Com Comissão</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-12 col-md-4">
-      <div class="card stat-card h-100">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div class="stat-icon" style="background:#fff3cd;">
-            <i class="bi bi-dash-circle" style="color:#856404;"></i>
-          </div>
-          <div>
-            <div class="fs-4 fw-bold" style="color:#856404;">{{ sem_comissao }}</div>
-            <div class="text-muted small">Sem Comissão</div>
-          </div>
-        </div>
-      </div>
-    </div>
+  <div class="g-nums">
+    <div class="n n--azul"><div class="r">Motoristas</div>
+      <div class="v">{{ totais.motoristas }}</div></div>
+    <div class="n n--verde"><div class="r">Rodando (90 dias)</div>
+      <div class="v">{{ totais.rodando }}</div></div>
+    <div class="n n--cinza"><div class="r">Parados</div>
+      <div class="v">{{ totais.parados }}</div></div>
+    <div class="n n--ambar"><div class="r">Comissão paga</div>
+      <div class="v">{{ totais.comissao | formatar_moeda }}</div></div>
   </div>
 
-  <!-- Tabela -->
-  <div class="card shadow-sm">
-    <div class="card-header d-flex justify-content-between align-items-center py-2"
-         style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-      <span><i class="bi bi-list me-1"></i> Lista de Motoristas</span>
-      {% if motoristas %}
-      <span class="badge bg-white text-secondary" style="font-size:0.7rem;font-weight:600;">{{ total }}</span>
-      {% endif %}
-    </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table mb-0" id="tbl-lista">
-          <thead>
-            <tr>
-              <th style="width:4%">ID</th>
-              <th>Nome</th>
-              <th>CPF</th>
-              <th>CNH</th>
-              <th>Telefone</th>
-              <th>Veículo Vinculado</th>
-              <th>Comissão</th>
-              <th>Observações</th>
-              <th class="text-center" style="width:8%">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% if motoristas %}
-              {% for motorista in motoristas %}
-              <tr class="row-mot"
-                  {% if current_user.nivel == 'admin' %}
-                  data-url="{{ url_for('motoristas.editar', id=motorista.id) }}"
-                  title="Clique para editar"
-                  {% endif %}>
-                <td class="text-muted">{{ motorista.id }}</td>
-                <td class="fw-semibold">{{ motorista.nome }}</td>
-                <td>{{ motorista.cpf or '—' }}</td>
-                <td>{{ motorista.cnh or '—' }}</td>
-                <td>{{ motorista.telefone or '—' }}</td>
-                <td>
-                  {% if motorista.veiculo_caminhao %}
-                    <span class="badge" style="background:#e8f0fb;color:#1D63A5;font-size:0.72rem;">
-                      <i class="bi bi-truck me-1"></i>{{ motorista.veiculo_caminhao }}{% if motorista.veiculo_placa %} ({{ motorista.veiculo_placa }}){% endif %}
-                    </span>
-                  {% else %}
-                    <span class="text-muted" style="font-size:0.74rem;">—</span>
-                  {% endif %}
-                </td>
-                <td>
-                  {% if motorista.paga_comissao %}
-                    <span class="badge bg-success" style="font-size:0.72rem;">Sim</span>
-                  {% else %}
-                    <span class="badge bg-secondary" style="font-size:0.72rem;">Não</span>
-                  {% endif %}
-                </td>
-                <td style="font-size:0.74rem;color:#6b7280;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                  {{ motorista.observacoes or '—' }}
-                </td>
-                <td class="text-center actions-cell" onclick="event.stopPropagation()">
-                  {% if current_user.nivel == 'admin' %}
-                  <a href="{{ url_for('motoristas.editar', id=motorista.id) }}" class="btn-acao btn-editar" title="Editar">
-                    <i class="bi bi-pencil"></i>
-                  </a>
-                  <form action="{{ url_for('motoristas.excluir', id=motorista.id) }}" method="POST"
-                        style="display:inline;" onsubmit="return confirm('Deseja realmente excluir este motorista?');">
-                    <button type="submit" class="btn-acao btn-excluir" title="Excluir">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  </form>
-                  {% endif %}
-                </td>
-              </tr>
-              {% endfor %}
-            {% else %}
-              <tr>
-                <td colspan="9" class="text-center text-muted py-4">
-                  <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
-                  <div class="mt-2" style="font-size:0.82rem;">Nenhum motorista cadastrado.</div>
-                </td>
-              </tr>
+  <div class="busca">
+    <input type="text" id="mot-busca" placeholder="Buscar por nome, CPF, CNH ou placa…"
+           oninput="motBusca(this)">
+    <button type="button" class="bt-fil" onclick="motAbrirFiltro()">
+      <i class="bi bi-sliders"></i> Filtro
+      <span class="bt-fil__n" id="mot-fil-n" hidden>0</span></button>
+  </div>
+
+  <div class="ordem">
+    <span class="ordem__t">Ordenar:</span>
+    <button type="button" class="ord on" data-o="fretes" onclick="motOrdem('fretes')">
+      <i class="bi bi-truck"></i> Mais fretes</button>
+    <button type="button" class="ord" data-o="comissao" onclick="motOrdem('comissao')">
+      <i class="bi bi-cash-stack"></i> Maior comissão</button>
+    <button type="button" class="ord" data-o="nome" onclick="motOrdem('nome')">
+      <i class="bi bi-sort-alpha-down"></i> Nome A–Z</button>
+  </div>
+
+  <div class="g-eco" id="mot-eco" hidden>
+    <i class="bi bi-funnel-fill"></i>
+    <span id="mot-eco-txt"></span>
+    <a href="#" onclick="motLimpar(); return false;">Limpar</a>
+  </div>
+
+  <div class="conta" id="mot-conta"></div>
+
+  <div class="lista">
+    {% for m in motoristas %}
+    {% set empresa = ('TRANSP' in (m.nome or '')|upper) or ('LTDA' in (m.nome or '')|upper)
+                     or ('&' in (m.nome or '')) %}
+    <div class="m" data-mov="{{ '0' if m.parado else '1' }}"
+         data-cpf="{{ '0' if not m.cpf else '1' }}"
+         data-cnh="{{ '0' if not m.cnh else '1' }}"
+         data-inc="{{ '1' if m.faltando else '0' }}"
+         data-comissao="{{ '1' if m.paga_comissao else '0' }}"
+         data-veic="{{ m.veiculo_id or '' }}"
+         data-valor="{{ '%.2f' | format(m.fre_valor or 0) }}"
+         data-com="{{ '%.2f' | format(m.fre_comissao or 0) }}"
+         data-fretes="{{ m.fre_n }}"
+         data-nome="{{ (m.nome or '') | lower }}"
+         data-busca="{{ ((m.nome or '') ~ ' ' ~ (m.cpf or '') ~ ' ' ~ (m.cnh or '') ~ ' ' ~ (m.veiculo_placa or '') ~ ' ' ~ (m.veiculo_caminhao or '')) | lower }}">
+      <div class="m__h" onclick="motAbre(this)">
+        <span class="m__ic {{ 'm__ic--emp' if empresa }}">
+          {%- if empresa %}<i class="bi bi-building"></i>
+          {%- else %}{{ (m.nome or '?')[:2] | upper }}{% endif -%}</span>
+        <div class="m__t">
+          <div class="m__n">{{ m.nome }}
+            {%- if empresa %} <span class="selo selo--emp"
+              title="transportadora parceira: roda frete mas não recebe comissão">parceira</span>{% endif -%}
+            {%- if m.parado %} <span class="selo selo--par"
+              title="{{ ('sem frete há %d dias' % m.dias_parado) if m.dias_parado else 'nunca rodou' }}">parado</span>{% endif -%}
+            {%- if m.paga_comissao %} <span class="selo selo--com">comissão</span>{% endif -%}
+          </div>
+          <div class="m__d">
+            {% if m.cpf %}<span><span class="k">CPF</span> <b>{{ m.cpf }}</b></span>{% endif %}
+            {% if m.cnh %}<span><span class="k">CNH</span> <b>{{ m.cnh }}</b></span>{% endif %}
+            {% if m.telefone %}<span><span class="k">Tel</span> <b>{{ m.telefone }}</b></span>{% endif %}
+            {% if m.veiculo_placa %}
+            <span><span class="k">Veículo</span>
+              <b>{{ m.veiculo_caminhao or m.veiculo_modelo }} · {{ m.veiculo_placa }}</b></span>
             {% endif %}
-          </tbody>
-        </table>
+            {% if m.faltando %}<span class="selo selo--fal">sem {{ m.faltando | join(', ') }}</span>{% endif %}
+          </div>
+          {% if m.peso %}<div class="barra"><i style="width:{{ m.peso }}%"></i></div>{% endif %}
+        </div>
+        <div class="mov">
+          {% if m.fre_n %}
+          <div class="mov__v">{{ m.fre_valor | formatar_moeda }}</div>
+          <div class="mov__r">{{ m.fre_n }} frete{{ '' if m.fre_n == 1 else 's' }}
+            {%- if m.fre_ultimo %} · {{ m.fre_ultimo.strftime('%d/%m') }}{% endif %}</div>
+          {% else %}
+          <div class="mov__v" style="color:#6b7684">—</div>
+          <div class="mov__r">nunca rodou</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="m__c" style="display:none">
+        <div class="grade">
+          <div class="bloco">
+            <div class="bloco__t"><i class="bi bi-truck"></i> Movimento</div>
+            <div class="li"><span class="k">Fretes</span>
+              <span class="v">{{ m.fre_n }}</span></div>
+            <div class="li"><span class="k">Valor rodado</span>
+              <span class="v">{{ m.fre_valor | formatar_moeda }}</span></div>
+            <div class="li"><span class="k">Comissão</span>
+              <span class="v">{{ m.fre_comissao | formatar_moeda }}</span></div>
+            <div class="li"><span class="k">Veículos</span>
+              <span class="v">{{ m.fre_veiculos }} diferente{{ '' if m.fre_veiculos == 1 else 's' }}</span></div>
+            <div class="li"><span class="k">Último frete</span>
+              <span class="v">{% if m.fre_ultimo %}{{ m.fre_ultimo.strftime('%d/%m/%Y') }}
+                {%- if m.dias_parado and m.dias_parado > 90 %}
+                <span class="vazio">· há {{ m.dias_parado }} dias</span>{% endif %}
+                {%- else %}<span class="vazio">nunca rodou</span>{% endif %}</span></div>
+          </div>
+
+          <div class="bloco {{ 'bloco--av' if m.faltando }}">
+            <div class="bloco__t"><i class="bi bi-person-badge"></i> Documentos</div>
+            <div class="li"><span class="k">CPF</span>
+              <span class="v">{% if m.cpf %}{{ m.cpf }}
+                {%- else %}<span class="vazio">—</span>{% endif %}</span></div>
+            <div class="li"><span class="k">CNH</span>
+              <span class="v">{% if m.cnh %}{{ m.cnh }}
+                {%- else %}<span class="vazio">—</span>{% endif %}</span></div>
+            <div class="li"><span class="k">Telefone</span>
+              <span class="v">{% if m.telefone %}{{ m.telefone }}
+                {%- else %}<span class="vazio">—</span>{% endif %}</span></div>
+            <div class="li"><span class="k">Cadastro</span>
+              <span class="v">{% if m.data_cadastro %}{{ m.data_cadastro.strftime('%d/%m/%Y') }}
+                {%- else %}—{% endif %}</span></div>
+          </div>
+
+          <div class="bloco">
+            <div class="bloco__t"><i class="bi bi-truck-front"></i> Veículo e comissão</div>
+            <div class="li"><span class="k">Veículo fixo</span>
+              <span class="v">{% if m.veiculo_placa %}{{ m.veiculo_caminhao or m.veiculo_modelo }}
+                · {{ m.veiculo_placa }}{% else %}<span class="vazio">— sem veículo fixo</span>{% endif %}</span></div>
+            <div class="li"><span class="k">Comissão</span>
+              <span class="v">{{ 'recebe por litro transportado' if m.paga_comissao
+                                 else 'não recebe comissão' }}</span></div>
+            {% if m.observacoes %}
+            <div class="li"><span class="k">Observações</span>
+              <span class="v">{{ m.observacoes }}</span></div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="acoes">
+          <a class="bt" href="{{ url_for('motoristas.editar', id=m.id) }}">
+            <i class="bi bi-pencil"></i> editar</a>
+          {% if m.telefone %}
+          <a class="bt bt--zap" target="_blank"
+             href="https://wa.me/55{{ m.telefone | replace('(','') | replace(')','') | replace('-','') | replace(' ','') }}">
+            <i class="bi bi-whatsapp"></i> WhatsApp</a>
+          {% endif %}
+          <form method="POST" action="{{ url_for('motoristas.excluir', id=m.id) }}"
+                style="display:inline"
+                onsubmit="return confirm('Deseja realmente excluir este motorista?');">
+            <button type="submit" class="bt bt--del"><i class="bi bi-trash"></i></button>
+          </form>
+        </div>
       </div>
     </div>
+    {% else %}
+    <div class="nada"><i class="bi bi-inbox" style="font-size:1.8rem;opacity:.4"></i>
+      <div class="mt-2">Nenhum motorista cadastrado</div></div>
+    {% endfor %}
   </div>
 
-</div>
-{% endblock %}
+  {# ---------- Filtro em passos (padrao do Recebimento) ---------- #}
+  <div class="escuro" id="mot-escuro" onclick="motFecharFiltro()"></div>
+  <div class="gav" id="mot-gav" role="dialog" aria-modal="true">
+    <div class="gav__pega"></div>
+    <div class="passos">
+      <button type="button" class="passo on aqui" id="mot-p1" onclick="motIr(1)">
+        <i></i><span>Situação</span></button>
+      <button type="button" class="passo" id="mot-p2" onclick="motIr(2)">
+        <i></i><span>Veículo</span></button>
+      <button type="button" class="passo" id="mot-p3" onclick="motIr(3)">
+        <i></i><span>Movimento</span></button>
+    </div>
+    <div class="pnome">Passo <span id="mot-pn">1</span> de 3 ·
+      <b id="mot-pt">Situação</b></div>
 
-{% block scripts %}
+    <div class="gav__b">
+      <div class="etapa" id="mot-e1">
+        <div class="gr__c">
+          <span class="gr__t">Como está o motorista</span>
+          <button type="button" class="gr__a" onclick="motMarcarTodas('mot-sit', false)">
+            limpar</button>
+        </div>
+        <div class="opcs" id="mot-sit">
+          <label class="opc"><input type="checkbox" value="mov">
+            <span>Rodando<small>{{ totais.rodando }} com frete nos últimos 90 dias</small></span></label>
+          <label class="opc"><input type="checkbox" value="par">
+            <span>Parados<small>{{ totais.parados }} sem frete há mais de 90 dias</small></span></label>
+          <label class="opc"><input type="checkbox" value="com">
+            <span>Recebem comissão<small>{{ totais.com_comissao }} marcados no cadastro</small></span></label>
+          <label class="opc"><input type="checkbox" value="inc">
+            <span>Documento faltando<small>{{ totais.incompletos }} sem CPF, CNH ou telefone</small></span></label>
+          <label class="opc"><input type="checkbox" value="sveic">
+            <span>Sem veículo fixo<small>{{ totais.sem_veiculo }} sem caminhão vinculado</small></span></label>
+        </div>
+        <div class="dica">Sem marcar nada, vêm todos.</div>
+      </div>
+
+      <div class="etapa" id="mot-e2" hidden>
+        <div class="gr__c">
+          <span class="gr__t">Veículo fixo</span>
+          <button type="button" class="gr__a" onclick="motMarcarTodas('mot-veic', true)">
+            marcar todos</button>
+        </div>
+        <input type="text" class="campo" id="mot-veic-busca"
+               placeholder="Procurar caminhão ou placa…" oninput="motFiltraVeic(this)">
+        <div class="opcs" id="mot-veic">
+          {% for v in veiculos %}
+          <label class="opc" data-nome="{{ ((v.caminhao or '') ~ ' ' ~ (v.placa or '')) | lower }}">
+            <input type="checkbox" value="{{ v.id }}">
+            <span>{{ v.caminhao or 'veículo' }}<small>{{ v.placa or 'sem placa' }}</small></span></label>
+          {% else %}
+          <div class="dica" style="padding:.5rem">Nenhum veículo cadastrado.</div>
+          {% endfor %}
+        </div>
+        <div class="dica">Sem marcar nenhum, vêm todos.</div>
+      </div>
+
+      <div class="etapa" id="mot-e3" hidden>
+        <div class="gr__t">Valor rodado</div>
+        <div class="chips" id="mot-faixa">
+          <button type="button" class="chip on" data-v="0" onclick="motChip(this,'mot-faixa')">Qualquer valor</button>
+          <button type="button" class="chip" data-v="20000" onclick="motChip(this,'mot-faixa')">Acima de R$ 20 mil</button>
+          <button type="button" class="chip" data-v="100000" onclick="motChip(this,'mot-faixa')">Acima de R$ 100 mil</button>
+        </div>
+        <div class="dica">Separa quem sustenta a operação de quem roda de vez
+          em quando.</div>
+      </div>
+    </div>
+
+    <div class="gav__f">
+      <button type="button" class="bt-g bt-g--ca" id="mot-bt-voltar"
+              onclick="motIr(motPasso - 1)" hidden>Voltar</button>
+      <button type="button" class="bt-g bt-g--ca" onclick="motFecharFiltro()">Cancelar</button>
+      <button type="button" class="bt-g bt-g--ok" id="mot-bt-ir"
+              onclick="motAvancar()">Avançar</button>
+    </div>
+  </div>
+</div>
+
 <script>
-document.querySelectorAll('.row-mot[data-url]').forEach(function(row) {
-  row.addEventListener('click', function() { window.location = this.dataset.url; });
+var motPasso = 1;
+var motFiltro = { sit: [], veic: [], faixa: 0 };
+
+function motCards() {
+  return [].slice.call(document.querySelectorAll('#mot .lista > .m'));
+}
+
+function motAbre(el) {
+  var card = el.closest('.m');
+  var corpo = card.querySelector('.m__c');
+  var aberto = corpo.style.display !== 'none';
+  corpo.style.display = aberto ? 'none' : 'block';
+  card.classList.toggle('aberto', !aberto);
+}
+
+/* ---------- Gaveta ---------- */
+function motAbrirFiltro() {
+  motIr(1);
+  document.getElementById('mot-escuro').classList.add('on');
+  document.getElementById('mot-gav').classList.add('on');
+}
+
+function motFecharFiltro() {
+  document.getElementById('mot-escuro').classList.remove('on');
+  document.getElementById('mot-gav').classList.remove('on');
+}
+
+function motIr(n) {
+  if (n < 1) { n = 1; }
+  if (n > 3) { n = 3; }
+  motPasso = n;
+  [1, 2, 3].forEach(function (i) {
+    document.getElementById('mot-e' + i).hidden = (i !== n);
+    var p = document.getElementById('mot-p' + i);
+    p.classList.toggle('on', i <= n);
+    p.classList.toggle('aqui', i === n);
+  });
+  var nomes = ['Situação', 'Veículo', 'Movimento'];
+  document.getElementById('mot-pn').textContent = n;
+  document.getElementById('mot-pt').textContent = nomes[n - 1];
+  document.getElementById('mot-bt-voltar').hidden = (n === 1);
+  document.getElementById('mot-bt-ir').textContent = (n === 3) ? 'Filtrar' : 'Avançar';
+}
+
+function motAvancar() {
+  if (motPasso < 3) { motIr(motPasso + 1); return; }
+  motAplicar();
+  motFecharFiltro();
+}
+
+function motFiltraVeic(inp) {
+  var q = (inp.value || '').toLowerCase().trim();
+  document.querySelectorAll('#mot-veic .opc').forEach(function (o) {
+    o.hidden = q && (o.dataset.nome || '').indexOf(q) < 0;
+  });
+}
+
+function motMarcarTodas(id, valor) {
+  document.querySelectorAll('#' + id + ' input[type=checkbox]').forEach(function (c) {
+    if (!c.closest('.opc').hidden) { c.checked = valor; }
+  });
+}
+
+function motChip(btn, grupo) {
+  document.querySelectorAll('#' + grupo + ' .chip').forEach(function (c) {
+    c.classList.toggle('on', c === btn);
+  });
+}
+
+function motAplicar() {
+  var marc = function (id) {
+    return [].slice.call(
+      document.querySelectorAll('#' + id + ' input[type=checkbox]:checked'))
+      .map(function (c) { return c.value; });
+  };
+  var on = document.querySelector('#mot-faixa .chip.on');
+  motFiltro = { sit: marc('mot-sit'), veic: marc('mot-veic'),
+                faixa: on ? parseFloat(on.dataset.v || 0) : 0 };
+  motPinta();
+  motEco();
+}
+
+function motLimpar() {
+  motFiltro = { sit: [], veic: [], faixa: 0 };
+  motMarcarTodas('mot-sit', false);
+  motMarcarTodas('mot-veic', false);
+  var chips = document.querySelectorAll('#mot-faixa .chip');
+  chips.forEach(function (c, i) { c.classList.toggle('on', i === 0); });
+  var b = document.getElementById('mot-busca');
+  if (b) { b.value = ''; motBusca(b); }
+  motPinta();
+  motEco();
+}
+
+function motEco() {
+  var p = [];
+  if (motFiltro.sit.length) { p.push(motFiltro.sit.length + ' situação(ões)'); }
+  if (motFiltro.veic.length) { p.push(motFiltro.veic.length + ' veículo(s)'); }
+  if (motFiltro.faixa) { p.push('acima de R$ ' + (motFiltro.faixa / 1000) + ' mil'); }
+  var n = p.length;
+  document.getElementById('mot-eco').hidden = !n;
+  if (n) { document.getElementById('mot-eco-txt').textContent = 'Filtrando por ' + p.join(' · '); }
+  var chip = document.getElementById('mot-fil-n');
+  chip.hidden = !n;
+  chip.textContent = n;
+}
+
+function motBusca(inp) {
+  var q = (inp.value || '').toLowerCase().trim();
+  motCards().forEach(function (c) {
+    c.dataset.busca_ok = (!q || (c.dataset.busca || '').indexOf(q) >= 0) ? '1' : '0';
+  });
+  motPinta();
+}
+
+/* Um lugar so decide o que aparece: filtro E busca precisam passar. */
+function motPinta() {
+  var vis = 0, soma = 0, com = 0;
+  motCards().forEach(function (c) {
+    var ok = (c.dataset.busca_ok !== '0');
+    if (ok && motFiltro.sit.length) {
+      ok = motFiltro.sit.some(function (s) {
+        if (s === 'mov')   { return c.dataset.mov === '1'; }
+        if (s === 'par')   { return c.dataset.mov === '0'; }
+        if (s === 'com')   { return c.dataset.comissao === '1'; }
+        if (s === 'inc')   { return c.dataset.inc === '1'; }
+        if (s === 'sveic') { return !c.dataset.veic; }
+        return false;
+      });
+    }
+    if (ok && motFiltro.veic.length) {
+      ok = motFiltro.veic.indexOf(c.dataset.veic || '') >= 0;
+    }
+    if (ok && motFiltro.faixa) {
+      ok = parseFloat(c.dataset.valor || 0) >= motFiltro.faixa;
+    }
+    c.style.display = ok ? '' : 'none';
+    if (ok) {
+      vis++;
+      soma += parseFloat(c.dataset.valor || 0);
+      com += parseFloat(c.dataset.com || 0);
+    }
+  });
+  var el = document.getElementById('mot-conta');
+  if (el) {
+    el.textContent = vis + ' de ' + motCards().length + ' motoristas' +
+      (soma ? ' · R$ ' + soma.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) +
+              ' rodados' : '') +
+      (com ? ' · R$ ' + com.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) +
+             ' de comissão' : '');
+  }
+}
+
+function motOrdem(o) {
+  document.querySelectorAll('#mot .ord').forEach(function (b) {
+    b.classList.toggle('on', b.dataset.o === o);
+  });
+  var lista = document.querySelector('#mot .lista');
+  var cards = motCards();
+  cards.sort(function (a, b) {
+    if (o === 'nome') {
+      return (a.dataset.nome || '').localeCompare(b.dataset.nome || '');
+    }
+    if (o === 'comissao') {
+      return parseFloat(b.dataset.com || 0) - parseFloat(a.dataset.com || 0);
+    }
+    return parseInt(b.dataset.fretes || 0, 10) - parseInt(a.dataset.fretes || 0, 10);
+  });
+  cards.forEach(function (c) { lista.appendChild(c); });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  motOrdem('fretes');
+  motPinta();
 });
 </script>
 {% endblock %}
