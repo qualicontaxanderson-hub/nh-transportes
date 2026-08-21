@@ -125,11 +125,144 @@ def lista():
         ORDER BY c.razao_social
     """)
     clientes = cursor.fetchall()
-
     cursor.close()
     conn.close()
 
-    return render_template('clientes/lista.html', clientes=clientes)
+    # O que falta em cada cadastro. Serve pra duas coisas: o selo da linha e
+    # o contador do topo. `municipio` entra aqui porque e o endereco que vai
+    # no boleto — nao confundir com destino_id, que e a rota do frete.
+    faltas = [('cnpj', 'CNPJ'), ('telefone', 'telefone'), ('email', 'e-mail'),
+              ('municipio', 'município'), ('endereco', 'endereço')]
+    for c in clientes:
+        c['faltando'] = [rot for campo, rot in faltas
+                         if not (c.get(campo) or '').strip()]
+        # So da pra completar pela Receita quem tem CNPJ.
+        c['completavel'] = bool((c.get('cnpj') or '').strip()) and bool(c['faltando'])
+
+    totais = {
+        'clientes': len(clientes),
+        'com_cnpj': sum(1 for c in clientes if (c.get('cnpj') or '').strip()),
+        'incompletos': sum(1 for c in clientes if c['faltando']),
+        'com_grupo': sum(1 for c in clientes if c.get('grupo_contabil_id')),
+        'completaveis': sum(1 for c in clientes if c['completavel']),
+        'sem_destino': sum(1 for c in clientes if not c.get('destino_id')),
+    }
+    return render_template('clientes/lista.html', clientes=clientes, totais=totais)
+
+
+def _consulta_receita(cnpj):
+    """Um CNPJ na BrasilAPI. Devolve dict com os campos ou None.
+
+    Mesma fonte que o Fornecedor ja usa. Aqui a consulta e feita no servidor
+    (e nao no navegador) porque a tela de completar em massa precisa de
+    dezenas de CNPJs numa tacada.
+    """
+    import json as _j
+    import re as _re
+    import urllib.request as _u
+    so = _re.sub(r'\D', '', cnpj or '')
+    if len(so) != 14:
+        return None
+    try:
+        req = _u.Request('https://brasilapi.com.br/api/cnpj/v1/' + so,
+                         headers={'User-Agent': 'Mozilla/5.0'})
+        with _u.urlopen(req, timeout=12) as r:
+            d = _j.loads(r.read().decode('utf-8'))
+    except Exception:
+        return None
+    if not isinstance(d, dict):
+        return None
+    return {
+        'razao_social': (d.get('razao_social') or '').strip(),
+        'nome_fantasia': (d.get('nome_fantasia') or '').strip(),
+        'telefone': (d.get('ddd_telefone_1') or '').strip(),
+        'email': (d.get('email') or '').strip(),
+        'cep': (d.get('cep') or '').strip(),
+        'endereco': (d.get('logradouro') or '').strip(),
+        'numero': (d.get('numero') or '').strip(),
+        'complemento': (d.get('complemento') or '').strip(),
+        'bairro': (d.get('bairro') or '').strip(),
+        'municipio': (d.get('municipio') or '').strip(),
+        'uf': (d.get('uf') or '').strip(),
+    }
+
+
+# Campos que a Receita pode preencher. `destino_id` NAO esta aqui de
+# proposito: ele e a rota do frete (origem x destino -> valor por litro do
+# CT-e), e escolha sua — a Receita nao tem opiniao sobre isso.
+_CAMPOS_RECEITA = ('razao_social', 'nome_fantasia', 'telefone', 'email', 'cep',
+                   'endereco', 'numero', 'complemento', 'bairro', 'municipio', 'uf')
+
+
+@bp.route('/completar-receita', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def completar_receita():
+    """Completa cadastros com o que a Receita sabe — SO campo vazio.
+
+    O que voce digitou a mao nunca e sobrescrito: se a Receita traz diferente,
+    vira aviso, nao substituicao. Isso importa porque o telefone e o e-mail do
+    cadastro sao os de quem voce fala de verdade, e a Receita costuma ter o
+    do contador.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        if request.method == 'POST':
+            ids = [int(i) for i in request.form.getlist('cliente_ids') if str(i).isdigit()]
+            aplicados = 0
+            for cid in ids:
+                cursor.execute("SELECT * FROM clientes WHERE id = %s", (cid,))
+                cli = cursor.fetchone()
+                if not cli:
+                    continue
+                dados = _consulta_receita(cli.get('cnpj'))
+                if not dados:
+                    continue
+                sets, params = [], []
+                for campo in _CAMPOS_RECEITA:
+                    if not dados.get(campo):
+                        continue
+                    if (cli.get(campo) or '').strip():
+                        continue            # tem valor: NAO mexe
+                    sets.append("%s = %%s" % campo)
+                    params.append(dados[campo])
+                if not sets:
+                    continue
+                params.append(cid)
+                cursor.execute("UPDATE clientes SET %s WHERE id = %%s"
+                               % ', '.join(sets), params)
+                aplicados += 1
+            conn.commit()
+            flash('%d cadastro(s) completado(s) pela Receita Federal.' % aplicados,
+                  'success')
+            return redirect(url_for('clientes.lista'))
+
+        cursor.execute("""SELECT * FROM clientes
+                           WHERE cnpj IS NOT NULL AND cnpj <> ''
+                           ORDER BY razao_social""")
+        todos = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    # So interessa quem tem buraco. Consulta a Receita de cada um pra mostrar
+    # o que ELA preencheria — nada e gravado antes de voce aprovar.
+    candidatos = []
+    for cli in todos:
+        faltando = [c for c in _CAMPOS_RECEITA if not (cli.get(c) or '').strip()]
+        if not faltando:
+            continue
+        dados = _consulta_receita(cli.get('cnpj'))
+        if not dados:
+            candidatos.append({'cliente': cli, 'erro': 'CNPJ não encontrado na Receita',
+                               'ganhos': []})
+            continue
+        ganhos = [{'campo': c, 'valor': dados[c]} for c in faltando if dados.get(c)]
+        if ganhos:
+            candidatos.append({'cliente': cli, 'erro': None, 'ganhos': ganhos})
+
+    return render_template('clientes/completar_receita.html', candidatos=candidatos)
 
 
 @bp.route('/novo', methods=['GET', 'POST'])

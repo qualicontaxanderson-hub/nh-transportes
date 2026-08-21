@@ -2,263 +2,313 @@
 
 {% block title %}Clientes - NH Transportes{% endblock %}
 
+{#- Lista no padrao do Banco: topo azul com as abas da familia Cadastros,
+    numeros em degrade, busca e pilulas. Cada cliente e uma linha que ABRE
+    (como a nota nas Compras) mostrando endereco, cadastro e acoes.
+
+    Cuidado que atravessa esta tela inteira: "Municipio" e o endereco da
+    empresa (vai no boleto); "Destino de frete" e o destino_id, que casa com
+    a origem em `rotas` e define o valor por litro do CT-e. Sao coisas
+    diferentes e aqui aparecem com nomes diferentes — o formulario antigo
+    chamava o destino de "Municipio", que foi o que deixou a coluna vazia
+    nos 39 cadastros. -#}
+
 {% block styles %}
+{% with esc = '#cli' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
 <style>
-  .page-hero {
-    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
-    border-radius: .75rem;
-    padding: 1.5rem 2rem;
-    margin-bottom: 1.5rem;
-    color: #fff;
-  }
-  .page-hero .hero-icon {
-    width: 3rem; height: 3rem;
-    background: rgba(255,255,255,.15);
-    border-radius: .6rem;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.5rem;
-    flex-shrink: 0;
-  }
-  .stat-card-cli {
-    border: 0;
-    border-radius: .65rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,.07);
-    transition: box-shadow .2s;
-  }
-  .stat-card-cli:hover { box-shadow: 0 4px 16px rgba(0,0,0,.13); }
-  .stat-card-cli .stat-icon {
-    width: 2.6rem; height: 2.6rem;
-    border-radius: .5rem;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.2rem;
-    flex-shrink: 0;
-  }
-  #tbl-lista { font-size: 0.72rem; }
-  #tbl-lista thead th {
-    background: #1D63A5; color: #fff;
-    font-size: 0.68rem; font-weight: 700;
-    text-transform: uppercase; letter-spacing: .04em;
-    padding: 0.45rem 0.5rem; border: none; white-space: nowrap;
-  }
-  #tbl-lista tbody td { padding: 0.35rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; }
-  #tbl-lista tbody tr.row-cli { cursor: pointer; transition: background .1s; }
-  #tbl-lista tbody tr.row-cli:hover td { background: #eef4ff; }
-  .badge-conta {
-    display: inline-block;
-    background: #e8f0fe;
-    color: #1a56db;
-    border-radius: 3px;
-    padding: 0.1rem 0.35rem;
-    font-size: 0.7rem;
-    font-weight: 700;
-    margin-right: 0.3rem;
-    letter-spacing: 0.02em;
-  }
-  .btn-acao {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.6rem;
-    height: 1.6rem;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    border: none;
-    cursor: pointer;
-    text-decoration: none;
-    transition: opacity 0.15s;
-  }
-  .btn-acao:hover { opacity: 0.8; }
-  .btn-editar  { background: #fff3cd; color: #856404; }
-  .btn-excluir { background: #f8d7da; color: #842029; }
-  .btn-whatsapp { background:#e6f9ee; color:#198754; }
-  @media (max-width: 768px) {
-    #tbl-lista { font-size: 0.70rem; }
-  }
+  #cli{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#6b7684; --ink:#151d27; --borda:#d9e0e8; }
+  #cli{ color:var(--ink); }
+
+  #cli .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .65rem;
+    margin-bottom:.7rem; }
+  #cli .topo__l{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  #cli .topo__t{ font-weight:800; font-size:1.02rem; flex:1; min-width:0; }
+  #cli .bt-t{ border:1px solid rgba(255,255,255,.35);
+    background:rgba(255,255,255,.14); color:#fff; border-radius:9px;
+    padding:.34rem .7rem; font-size:.78rem; font-weight:800;
+    font-family:inherit; cursor:pointer; text-decoration:none;
+    white-space:nowrap; display:inline-flex; gap:.3rem; align-items:center; }
+  #cli .bt-t:hover{ background:rgba(255,255,255,.26); color:#fff; }
+  #cli .fam{ display:flex; gap:.4rem; margin-top:.6rem; overflow-x:auto;
+    padding-bottom:.15rem; }
+  #cli .fam a{ flex:0 0 auto; border-radius:99px; padding:.35rem .8rem;
+    font-size:.78rem; font-weight:800; background:rgba(255,255,255,.18);
+    color:#fff; text-decoration:none; white-space:nowrap; }
+  #cli .fam a.on{ background:#fff; color:var(--blue-deep); }
+
+  #cli .faixa{ display:flex; align-items:center; gap:.5rem; margin-bottom:.7rem;
+    background:#fdf0d6; color:var(--ambar); border-radius:11px;
+    padding:.55rem .7rem; font-size:.82rem; font-weight:700; flex-wrap:wrap; }
+  #cli .faixa a{ margin-left:auto; background:#B8791C; color:#fff;
+    border-radius:8px; padding:.3rem .7rem; font-size:.77rem; font-weight:800;
+    text-decoration:none; }
+
+  #cli .busca{ display:flex; gap:.4rem; margin-bottom:.6rem; }
+  #cli .busca input{ flex:1; border:1px solid var(--borda); border-radius:10px;
+    padding:.5rem .65rem; font-size:.86rem; font-family:inherit; }
+  #cli .abas{ display:flex; gap:.35rem; margin-bottom:.7rem; overflow-x:auto;
+    padding-bottom:.15rem; }
+  #cli .aba{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
+    color:#3a4655; border-radius:99px; padding:.36rem .78rem; font-size:.8rem;
+    font-weight:800; font-family:inherit; cursor:pointer; display:inline-flex;
+    gap:.35rem; align-items:center; }
+  #cli .aba.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #cli .aba .b{ background:#eaf1f9; color:var(--blue-deep); border-radius:99px;
+    min-width:17px; height:17px; display:inline-grid; place-items:center;
+    font-size:.64rem; padding:0 .3rem; }
+  #cli .aba.on .b{ background:#fff; }
+
+  #cli .lista{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #cli .c{ border-bottom:1px solid #eef1f5; }
+  #cli .c:last-child{ border-bottom:0; }
+  #cli .c__h{ display:flex; gap:.6rem; padding:.6rem .8rem; align-items:flex-start;
+    cursor:pointer; }
+  #cli .c__h:hover{ background:#fafbfd; }
+  #cli .c__ic{ flex:0 0 34px; height:34px; border-radius:9px; background:#eaf1f9;
+    color:var(--blue-deep); display:grid; place-items:center; font-size:.78rem;
+    font-weight:800; }
+  #cli .c__t{ flex:1; min-width:0; }
+  #cli .c__n{ font-weight:800; font-size:.87rem; line-height:1.3; }
+  #cli .c__f{ color:var(--muted); font-size:.74rem; }
+  #cli .c__d{ display:flex; gap:.4rem .9rem; flex-wrap:wrap; margin-top:.25rem;
+    font-size:.75rem; color:#3a4655; }
+  #cli .c__d .k{ color:var(--muted); }
+  #cli .c__d b{ font-weight:700; font-variant-numeric:tabular-nums; }
+  #cli .chev{ color:var(--muted); font-size:.8rem; align-self:center;
+    transition:transform .2s; }
+  #cli .c.aberto .chev{ transform:rotate(180deg); }
+  #cli .selo{ display:inline-block; border-radius:99px; padding:.14rem .5rem;
+    font-size:.64rem; font-weight:800; white-space:nowrap; }
+  #cli .selo--fal{ background:#fdf0d6; color:var(--ambar); }
+  #cli .selo--ok{ background:#e4f4e8; color:#1c6b34; }
+  #cli .selo--gc{ background:#eaf1f9; color:var(--blue-deep); }
+
+  #cli .c__c{ background:#f7f9fc; border-top:1px solid #eef1f5;
+    padding:.65rem .8rem .75rem; }
+  #cli .grade{ display:grid; gap:.5rem; grid-template-columns:1fr; }
+  @media (min-width:768px){ #cli .grade{ grid-template-columns:1fr 1fr; } }
+  #cli .bloco{ background:#fff; border:1px solid var(--borda);
+    border-radius:11px; padding:.55rem .7rem; }
+  #cli .bloco__t{ font-size:.64rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); margin-bottom:.3rem; }
+  #cli .li{ display:flex; gap:.5rem; font-size:.8rem; padding:.16rem 0; }
+  #cli .li .k{ color:var(--muted); flex:0 0 96px; }
+  #cli .li .v{ flex:1; min-width:0; font-weight:600; word-break:break-word; }
+  #cli .vazio{ color:var(--ambar); font-weight:700; }
+  #cli .acoes{ display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.55rem; }
+  #cli .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:9px; padding:.36rem .7rem; font-size:.77rem; font-weight:700;
+    font-family:inherit; cursor:pointer; text-decoration:none;
+    display:inline-flex; gap:.3rem; align-items:center; }
+  #cli .bt:hover{ background:#dfeaf8; color:var(--blue-deep); }
+  #cli .bt--zap{ background:#e6f9ee; border-color:#a9dfc2; color:#146c43; }
+  #cli .bt--rf{ background:#fdf0d6; border-color:#f0d8a8; color:var(--ambar); }
+  #cli .bt--del{ background:#fbe9e9; border-color:#f0c8c8; color:var(--danger); }
+  #cli .nada{ padding:1.4rem .8rem; text-align:center; color:var(--muted);
+    font-size:.85rem; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
+<div id="cli">
 
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb" class="mb-3">
-      <ol class="breadcrumb small">
-        <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Dashboard</a></li>
-        <li class="breadcrumb-item active">Clientes</li>
-      </ol>
-    </nav>
-
-    <!-- Hero header -->
-    <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-      <div class="hero-icon"><i class="bi bi-people-fill"></i></div>
-      <div class="flex-grow-1">
-        <h4 class="mb-0 fw-bold">Clientes</h4>
-        <p class="mb-0 opacity-75 small">Cadastro e gestão de clientes com vínculos contábeis.</p>
-      </div>
-      <a href="{{ url_for('clientes.novo') }}"
-         class="btn btn-light fw-semibold btn-sm px-3">
-        <i class="bi bi-plus-circle me-1"></i> Novo Cliente
-      </a>
+  <div class="topo">
+    <div class="topo__l">
+      <span class="topo__t"><i class="bi bi-people-fill"></i> Clientes</span>
+      <a class="bt-t" href="{{ url_for('clientes.novo') }}">
+        <i class="bi bi-plus-circle"></i> Novo cliente</a>
     </div>
+    <div class="fam">
+      <a class="on" href="{{ url_for('clientes.lista') }}">Clientes</a>
+      <a href="/fornecedores/">Fornecedores</a>
+      <a href="/cartoes/">Cartões</a>
+      <a href="/caixa/">Formas Pagamento</a>
+      <a href="/tipos_receita_caixa/">Formas Recebimento</a>
+      <a href="/lubrificantes/produtos">Produtos Lubrificantes</a>
+    </div>
+  </div>
 
-    <!-- Stat cards -->
-    {% set total_cli = clientes | length %}
-    <div class="row g-3 mb-4">
-      <div class="col-6 col-md-4">
-        <div class="card stat-card-cli h-100">
-          <div class="card-body d-flex align-items-center gap-3 py-3">
-            <div class="stat-icon" style="background:#e8f0fb;">
-              <i class="bi bi-people" style="color:#1D63A5;"></i>
-            </div>
-            <div>
-              <div class="fs-4 fw-bold" style="color:#1D63A5;">{{ total_cli }}</div>
-              <div class="text-muted small">Clientes</div>
-            </div>
+  <div class="g-nums">
+    <div class="n n--azul"><div class="r">Clientes</div>
+      <div class="v">{{ totais.clientes }}</div></div>
+    <div class="n {{ 'n--verde' if totais.com_cnpj == totais.clientes else 'n--ambar' }}">
+      <div class="r">Com CNPJ</div>
+      <div class="v">{{ totais.com_cnpj }}/{{ totais.clientes }}</div></div>
+    <div class="n {{ 'n--ambar' if totais.incompletos else 'n--verde' }}">
+      <div class="r">Cadastro incompleto</div>
+      <div class="v">{{ totais.incompletos }}</div></div>
+    <div class="n n--cinza"><div class="r">Com grupo contábil</div>
+      <div class="v">{{ totais.com_grupo }}</div></div>
+  </div>
+
+  {% if totais.completaveis %}
+  <div class="faixa">
+    <i class="bi bi-bank"></i>
+    <b>{{ totais.completaveis }}</b> cadastro{{ '' if totais.completaveis == 1 else 's' }}
+    com CNPJ e campo em branco — a Receita Federal preenche município,
+    endereço, telefone e fantasia.
+    <a href="{{ url_for('clientes.completar_receita') }}">completar pela Receita</a>
+  </div>
+  {% endif %}
+
+  <div class="busca">
+    <input type="text" id="cli-busca" placeholder="Buscar por razão social, fantasia, CNPJ ou cidade…"
+           oninput="cliBusca(this)">
+  </div>
+
+  <div class="abas">
+    <button type="button" class="aba on" data-m="todos" onclick="cliAba('todos')">
+      Todos <span class="b">{{ totais.clientes }}</span></button>
+    <button type="button" class="aba" data-m="inc" onclick="cliAba('inc')">
+      Incompletos <span class="b">{{ totais.incompletos }}</span></button>
+    <button type="button" class="aba" data-m="scnpj" onclick="cliAba('scnpj')">
+      Sem CNPJ <span class="b">{{ totais.clientes - totais.com_cnpj }}</span></button>
+    <button type="button" class="aba" data-m="sdest" onclick="cliAba('sdest')">
+      Sem destino de frete <span class="b">{{ totais.sem_destino }}</span></button>
+  </div>
+
+  <div class="lista" id="cli-lista">
+    {% for c in clientes %}
+    {% set nome = c.razao_social or '(sem nome)' %}
+    <div class="c" data-inc="{{ '1' if c.faltando else '0' }}"
+         data-cnpj="{{ '1' if c.cnpj else '0' }}"
+         data-dest="{{ '1' if c.destino_id else '0' }}"
+         data-busca="{{ (nome ~ ' ' ~ (c.nome_fantasia or '') ~ ' ' ~ (c.cnpj or '') ~ ' ' ~ (c.municipio or '') ~ ' ' ~ (c.destino_nome or '')) | lower }}">
+      <div class="c__h" onclick="cliAbre(this)">
+        <span class="c__ic">{{ nome[:2] | upper }}</span>
+        <div class="c__t">
+          <div class="c__n">{{ nome }}
+            {%- if c.faltando %} <span class="selo selo--fal"
+              title="faltando: {{ c.faltando | join(', ') }}">falta {{ c.faltando | join(', ') }}</span>
+            {%- else %} <span class="selo selo--ok">completo</span>{% endif -%}
+          </div>
+          {% if c.nome_fantasia %}<div class="c__f">{{ c.nome_fantasia }}</div>{% endif %}
+          <div class="c__d">
+            <span><span class="k">CNPJ</span>
+              <b>{{ c.cnpj or '—' }}</b></span>
+            <span><span class="k">Tel</span>
+              <b>{{ c.telefone or '—' }}</b></span>
+            {% if c.email %}<span><span class="k">E-mail</span> {{ c.email }}</span>{% endif %}
+            <span><span class="k">Município</span>
+              {% if c.municipio %}<b>{{ c.municipio }}{% if c.uf %} / {{ c.uf }}{% endif %}</b>
+              {% else %}<b class="vazio">—</b>{% endif %}</span>
           </div>
         </div>
+        <span class="chev"><i class="bi bi-chevron-down"></i></span>
       </div>
-      <div class="col-6 col-md-4">
-        <div class="card stat-card-cli h-100">
-          <div class="card-body d-flex align-items-center gap-3 py-3">
-            <div class="stat-icon" style="background:#e6f9ee;">
-              <i class="bi bi-file-earmark-text" style="color:#198754;"></i>
-            </div>
-            <div>
-              <div class="fs-4 fw-bold" style="color:#198754;">{{ clientes | selectattr('cnpj') | list | length }}</div>
-              <div class="text-muted small">Com CNPJ</div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-md-4">
-        <div class="card stat-card-cli h-100">
-          <div class="card-body d-flex align-items-center gap-3 py-3">
-            <div class="stat-icon" style="background:#fff3cd;">
-              <i class="bi bi-journal-bookmark" style="color:#856404;"></i>
-            </div>
-            <div>
-              <div class="fs-4 fw-bold" style="color:#856404;">{{ clientes | selectattr('grupo_codigo') | list | length }}</div>
-              <div class="text-muted small">Com Grupo Contábil</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
 
-    <!-- Filtro de Busca -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-header d-flex align-items-center py-2"
-             style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-            <i class="bi bi-search me-1"></i> Buscar Cliente
-        </div>
-        <div class="card-body py-2">
-            <form method="GET" class="row g-2 align-items-end">
-                <div class="col-md-10">
-                    <input type="text" name="busca" class="form-control form-control-sm"
-                           placeholder="Buscar por razão social ou CNPJ" value="{{ busca or '' }}">
-                </div>
-                <div class="col-md-2">
-                    <button type="submit" class="btn btn-primary btn-sm w-100">
-                        <i class="bi bi-search"></i> Buscar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Tabela de Clientes -->
-    <div class="card shadow-sm">
-        <div class="card-header d-flex justify-content-between align-items-center py-2"
-             style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-            <span><i class="bi bi-list me-1"></i> Lista de Clientes</span>
-            {% if clientes %}
-            <span class="badge bg-white text-secondary" style="font-size:0.7rem;font-weight:600;">{{ clientes|length }}</span>
+      <div class="c__c" style="display:none">
+        <div class="grade">
+          <div class="bloco">
+            <div class="bloco__t"><i class="bi bi-geo-alt"></i> Endereço</div>
+            <div class="li"><span class="k">Logradouro</span>
+              <span class="v">{% if c.endereco %}{{ c.endereco }}{% if c.numero %}, {{ c.numero }}{% endif %}
+                {%- else %}<span class="vazio">—</span>{% endif %}</span></div>
+            {% if c.complemento %}
+            <div class="li"><span class="k">Complemento</span>
+              <span class="v">{{ c.complemento }}</span></div>
             {% endif %}
+            <div class="li"><span class="k">Bairro</span>
+              <span class="v">{{ c.bairro or '—' }}</span></div>
+            <div class="li"><span class="k">Município</span>
+              <span class="v">{% if c.municipio %}{{ c.municipio }}
+                {%- else %}<span class="vazio">— falta (a Receita traz)</span>{% endif %}</span></div>
+            <div class="li"><span class="k">UF / CEP</span>
+              <span class="v">{{ c.uf or '—' }} · {{ c.cep or '—' }}</span></div>
+          </div>
+
+          <div class="bloco">
+            <div class="bloco__t"><i class="bi bi-card-list"></i> Cadastro e vínculos</div>
+            <div class="li"><span class="k">Fantasia</span>
+              <span class="v">{{ c.nome_fantasia or '—' }}</span></div>
+            <div class="li"><span class="k">IE</span>
+              <span class="v">{{ c.ie or '—' }}</span></div>
+            <div class="li"><span class="k">Contato</span>
+              <span class="v">{{ c.contato or '—' }}</span></div>
+            <div class="li"><span class="k">Destino frete</span>
+              <span class="v">{% if c.destino_nome %}{{ c.destino_nome }}
+                  {%- if c.destino_estado %} / {{ c.destino_estado }}{% endif %}
+                {%- else %}<span class="vazio">— sem destino: o frete não pré-preenche a rota</span>{% endif %}</span></div>
+            <div class="li"><span class="k">Grupo contábil</span>
+              <span class="v">{% if c.grupo_nome %}{{ c.grupo_codigo }} {{ c.grupo_nome }}
+                {%- else %}—{% endif %}</span></div>
+            <div class="li"><span class="k">Comissão</span>
+              <span class="v">{{ 'paga ao motorista' if c.paga_comissao else 'não paga' }}
+                {%- if c.cte_integral %} · CT-e integral{% endif %}</span></div>
+          </div>
         </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table mb-0" id="tbl-lista">
-                    <thead>
-                        <tr>
-                            <th style="width:4%">ID</th>
-                            <th>Razão Social</th>
-                            <th>CNPJ</th>
-                            <th>Telefone</th>
-                            <th>Município</th>
-                            <th>Grupo Contábil</th>
-                            <th class="text-center" style="width:10%">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% if clientes %}
-                            {% for cliente in clientes %}
-                            <tr class="row-cli" data-url="{{ url_for('clientes.editar', id=cliente.id) }}"
-                                title="Clique para editar">
-                                <td class="text-muted">{{ cliente.id }}</td>
-                                <td>{{ cliente.razao_social }}</td>
-                                <td style="font-family:monospace;font-size:0.72rem;color:#555;">{{ cliente.cnpj or '—' }}</td>
-                                <td class="text-muted">{{ cliente.telefone or '—' }}</td>
-                                <td class="text-muted">
-                                    {% if cliente.destino_nome %}
-                                        {{ cliente.destino_nome }} - {{ cliente.destino_estado }}
-                                    {% else %}
-                                        —
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if cliente.grupo_codigo %}
-                                    <span class="badge-conta"><strong>{{ cliente.grupo_codigo }}</strong></span>
-                                    <span style="color:#374151;font-size:0.75rem;">{{ cliente.grupo_nome }}</span>
-                                    {% else %}
-                                    <span class="text-muted fst-italic" style="font-size:0.72rem;">—</span>
-                                    {% endif %}
-                                </td>
-                                <td class="text-center actions-cell" onclick="event.stopPropagation()">
-                                    <a href="{{ url_for('clientes.editar', id=cliente.id) }}" class="btn-acao btn-editar" title="Editar">
-                                        <i class="bi bi-pencil"></i>
-                                    </a>
-                                    <button type="button"
-                                            class="btn-acao btn-whatsapp"
-                                            title="Copiar dados para WhatsApp"
-                                            onclick="copiarDadosWhatsAppCliente({{ cliente.id }}, event, this)">
-                                        <i class="bi bi-whatsapp"></i>
-                                    </button>
-                                    {% if current_user.nivel == 'admin' %}
-                                    <form method="POST" action="{{ url_for('clientes.excluir', id=cliente.id) }}" style="display:inline;" onsubmit="return confirm('Deseja realmente excluir este cliente?');">
-                                        <button type="submit" class="btn-acao btn-excluir" title="Excluir">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </form>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        {% else %}
-                            <tr>
-                                <td colspan="7" class="text-center text-muted py-4">
-                                    <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
-                                    <div class="mt-2" style="font-size:0.82rem;">Nenhum cliente cadastrado</div>
-                                </td>
-                            </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            </div>
+
+        <div class="acoes">
+          {% if c.completavel %}
+          <a class="bt bt--rf" href="{{ url_for('clientes.editar', id=c.id) }}#receita">
+            <i class="bi bi-bank"></i> completar pela Receita</a>
+          {% endif %}
+          <a class="bt" href="{{ url_for('clientes.editar', id=c.id) }}">
+            <i class="bi bi-pencil"></i> editar</a>
+          <button type="button" class="bt bt--zap"
+                  onclick="copiarDadosWhatsAppCliente({{ c.id }}, event, this)"
+                  title="copiar os dados deste cliente pro WhatsApp">
+            <i class="bi bi-whatsapp"></i> WhatsApp</button>
+          <form method="POST" action="{{ url_for('clientes.excluir', id=c.id) }}"
+                style="display:inline"
+                onsubmit="return confirm('Deseja realmente excluir este cliente?');">
+            <button type="submit" class="bt bt--del"><i class="bi bi-trash"></i></button>
+          </form>
         </div>
+      </div>
     </div>
+    {% else %}
+    <div class="nada"><i class="bi bi-inbox" style="font-size:1.8rem;opacity:.4"></i>
+      <div class="mt-2">Nenhum cliente cadastrado</div></div>
+    {% endfor %}
+  </div>
 </div>
 
 <script>
 const whatsappClienteUrlBase = "{{ url_for('clientes.mensagem_whatsapp', id=0) }}";
 
-document.addEventListener('DOMContentLoaded', function () {
-  document.querySelectorAll('tr.row-cli[data-url]').forEach(function (row) {
-    row.addEventListener('click', function (e) {
-      if (e.target.closest('.actions-cell') || e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) return;
-      window.location.href = row.getAttribute('data-url');
-    });
+/* Abre/fecha a linha — mesmo gesto da nota nas Compras. */
+function cliAbre(el) {
+  var card = el.closest('.c');
+  var corpo = card.querySelector('.c__c');
+  var aberto = corpo.style.display !== 'none';
+  corpo.style.display = aberto ? 'none' : 'block';
+  card.classList.toggle('aberto', !aberto);
+}
+
+/* Filtro das pilulas: por cima do DOM, nada recarrega. */
+function cliAba(m) {
+  document.querySelectorAll('#cli .aba').forEach(function (b) {
+    b.classList.toggle('on', b.dataset.m === m);
   });
-});
+  document.querySelectorAll('#cli .c').forEach(function (c) {
+    var passa = (m === 'todos')
+      || (m === 'inc' && c.dataset.inc === '1')
+      || (m === 'scnpj' && c.dataset.cnpj === '0')
+      || (m === 'sdest' && c.dataset.dest === '0');
+    c.dataset.aba = passa ? '1' : '0';
+  });
+  cliPinta();
+}
+
+function cliBusca(inp) {
+  var q = (inp.value || '').toLowerCase().trim();
+  document.querySelectorAll('#cli .c').forEach(function (c) {
+    c.dataset.busca_ok = (!q || (c.dataset.busca || '').indexOf(q) >= 0) ? '1' : '0';
+  });
+  cliPinta();
+}
+
+/* Um lugar so decide o que aparece: aba E busca precisam passar. */
+function cliPinta() {
+  document.querySelectorAll('#cli .c').forEach(function (c) {
+    var ok = (c.dataset.aba !== '0') && (c.dataset.busca_ok !== '0');
+    c.style.display = ok ? '' : 'none';
+  });
+}
 
 function copiarTextoClipboard(texto){
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -270,15 +320,14 @@ function copiarTextoClipboard(texto){
     ta.style.position = 'fixed';
     ta.style.opacity = '0';
     document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
+    ta.focus(); ta.select();
     try {
       const ok = document.execCommand('copy');
       document.body.removeChild(ta);
-      ok ? resolve() : reject(new Error('Falha ao copiar'));
-    } catch (e) {
+      ok ? resolve() : reject(new Error('Não foi possível copiar.'));
+    } catch (err) {
       document.body.removeChild(ta);
-      reject(e);
+      reject(err);
     }
   });
 }
@@ -310,5 +359,4 @@ async function copiarDadosWhatsAppCliente(clienteId, event, btn){
   }
 }
 </script>
-
 {% endblock %}

@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Completar cadastros pela Receita - NH Transportes{% endblock %}
+
+{#- Mostra, cliente por cliente, o que a Receita Federal preencheria nos
+    campos que estao VAZIOS. Nada e gravado antes de voce marcar e aplicar,
+    e campo com valor nunca e sobrescrito.
+
+    O destino de frete (destino_id) nao aparece aqui de proposito: ele
+    define a rota que da o valor por litro do CT-e e e escolha sua. -#}
+
+{% block styles %}
+<style>
+  #crf{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --ambar:#8a5a00;
+        --muted:#6b7684; --borda:#d9e0e8; color:#151d27; }
+  #crf .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem; margin-bottom:.7rem;
+    display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  #crf .topo b{ font-size:1.02rem; flex:1; min-width:0; }
+  #crf .volta{ border:1px solid rgba(255,255,255,.35);
+    background:rgba(255,255,255,.14); color:#fff; border-radius:9px;
+    padding:.34rem .7rem; font-size:.78rem; font-weight:800;
+    text-decoration:none; }
+  #crf .faixa{ display:flex; align-items:center; gap:.6rem; flex-wrap:wrap;
+    background:#eaf1f9; color:var(--blue-deep); border-radius:11px;
+    padding:.6rem .75rem; font-size:.83rem; font-weight:700;
+    margin-bottom:.7rem; position:sticky; top:.4rem; z-index:5;
+    box-shadow:0 2px 10px rgba(20,35,60,.10); }
+  #crf .faixa .bt{ margin-left:auto; border:0; background:var(--blue);
+    color:#fff; border-radius:9px; padding:.4rem .9rem; font-size:.82rem;
+    font-weight:800; font-family:inherit; cursor:pointer; }
+  #crf .faixa .lk{ background:#fff; border:1px solid var(--borda);
+    color:#3a4655; border-radius:8px; padding:.3rem .65rem; font-size:.77rem;
+    font-weight:800; cursor:pointer; font-family:inherit; }
+  #crf .lista{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; overflow:hidden; }
+  #crf .l{ display:flex; gap:.6rem; padding:.6rem .8rem; align-items:flex-start;
+    border-bottom:1px solid #eef1f5; }
+  #crf .l:last-child{ border-bottom:0; }
+  #crf .l input{ width:19px; height:19px; accent-color:var(--blue);
+    margin-top:.15rem; flex:0 0 auto; }
+  #crf .l__t{ flex:1; min-width:0; }
+  #crf .l__n{ font-weight:800; font-size:.86rem; }
+  #crf .l__c{ color:var(--muted); font-size:.73rem; }
+  #crf .ganhos{ display:flex; gap:.35rem; flex-wrap:wrap; margin-top:.3rem; }
+  #crf .g{ background:#e4f4e8; color:#1c6b34; border-radius:8px;
+    padding:.18rem .5rem; font-size:.72rem; font-weight:700; }
+  #crf .g .k{ opacity:.75; font-weight:800; text-transform:uppercase;
+    font-size:.62rem; letter-spacing:.04em; margin-right:.2rem; }
+  #crf .erro{ background:#fdf0d6; color:var(--ambar); border-radius:8px;
+    padding:.18rem .5rem; font-size:.72rem; font-weight:700; }
+  #crf .cnt{ flex:0 0 auto; background:#eaf1f9; color:var(--blue-deep);
+    border-radius:99px; padding:.16rem .55rem; font-size:.68rem; font-weight:800; }
+  #crf .nada{ padding:1.6rem .8rem; text-align:center; color:var(--muted); }
+  #crf .regra{ background:#eaf1f9; color:var(--blue-deep); border-radius:10px;
+    padding:.6rem .8rem; font-size:.82rem; margin-top:.7rem; line-height:1.5; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="crf">
+  <div class="topo">
+    <b><i class="bi bi-bank"></i> Completar cadastros pela Receita</b>
+    <a class="volta" href="{{ url_for('clientes.lista') }}">
+      <i class="bi bi-arrow-left"></i> voltar</a>
+  </div>
+
+  {% set aptos = candidatos | selectattr('ganhos') | list %}
+  {% if aptos %}
+  <form method="POST">
+    <div class="faixa">
+      <span><b id="crf-n">{{ aptos | length }}</b> de {{ aptos | length }} marcados —
+        a Receita preenche só o que está em branco</span>
+      <button type="button" class="lk" onclick="crfTodos(true)">marcar todos</button>
+      <button type="button" class="lk" onclick="crfTodos(false)">desmarcar</button>
+      <button type="submit" class="bt">
+        <i class="bi bi-check2-all"></i> Aplicar aos marcados</button>
+    </div>
+
+    <div class="lista">
+      {% for cand in candidatos %}
+      <div class="l">
+        {% if cand.ganhos %}
+        <input type="checkbox" name="cliente_ids" value="{{ cand.cliente.id }}"
+               class="crf-chk" checked onchange="crfConta()">
+        {% else %}
+        <input type="checkbox" disabled>
+        {% endif %}
+        <div class="l__t">
+          <div class="l__n">{{ cand.cliente.razao_social }}</div>
+          <div class="l__c">CNPJ {{ cand.cliente.cnpj }}</div>
+          <div class="ganhos">
+            {% for g in cand.ganhos %}
+            <span class="g"><span class="k">{{ g.campo | replace('_', ' ') }}</span>{{ g.valor }}</span>
+            {% endfor %}
+            {% if cand.erro %}<span class="erro">{{ cand.erro }} — confira o número</span>{% endif %}
+          </div>
+        </div>
+        {% if cand.ganhos %}
+        <span class="cnt">{{ cand.ganhos | length }} campo{{ '' if cand.ganhos|length == 1 else 's' }}</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </form>
+  {% else %}
+  <div class="lista"><div class="nada">
+    <i class="bi bi-check-circle" style="font-size:2rem;color:#17963C;opacity:.6"></i>
+    <div class="mt-2" style="font-weight:800">Nada a completar</div>
+    <div style="font-size:.85rem">Todo cliente com CNPJ já está com os campos
+      que a Receita conhece preenchidos.</div>
+  </div></div>
+  {% endif %}
+
+  <div class="regra"><i class="bi bi-shield-check"></i>
+    <b>Campo com valor nunca é sobrescrito.</b> A Receita só entra onde está em
+    branco — se o telefone que você tem é diferente do que ela informa, o seu
+    fica (o dela costuma ser o do contador). O <b>destino de frete</b> não é
+    tocado: ele define a rota que dá o valor por litro do CT-e e é escolha sua.
+  </div>
+</div>
+
+<script>
+function crfTodos(marcar) {
+  document.querySelectorAll('#crf .crf-chk').forEach(function (c) { c.checked = marcar; });
+  crfConta();
+}
+function crfConta() {
+  var n = document.querySelectorAll('#crf .crf-chk:checked').length;
+  document.getElementById('crf-n').textContent = n;
+}
+</script>
+{% endblock %}
