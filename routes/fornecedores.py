@@ -120,6 +120,51 @@ def api_cnpj_lookup(cnpj):
         return jsonify({'erro': 'Erro ao consultar Receita Federal'}), 502
 
 
+def _movimento_fornecedores(cursor):
+    """Quanto ja saiu pra cada fornecedor, e quando foi a ultima vez.
+
+    E o que diferencia esta tela da de clientes: fornecedor a gente PAGA, e a
+    primeira pergunta ao abrir a lista e "quanto eu pago pra esse".
+    """
+    try:
+        cursor.execute("""
+            SELECT bt.fornecedor_id AS fid, COUNT(*) AS n,
+                   COALESCE(SUM(bt.valor),0) AS total,
+                   MAX(DATE(bt.data_transacao)) AS ultimo
+              FROM bank_transactions bt
+             WHERE bt.fornecedor_id IS NOT NULL AND bt.tipo = 'DEBIT'
+             GROUP BY bt.fornecedor_id
+        """)
+        return {r['fid']: {'n': int(r['n']), 'total': float(r['total'] or 0),
+                           'ultimo': r['ultimo']} for r in cursor.fetchall()}
+    except Exception:
+        return {}
+
+
+def _raizes_por_fornecedor(cursor):
+    """CNPJs agrupados no "juntar", com quantas notas vem de cada um.
+
+    Caso real: a RODOBRAS recebe pagamento num CNPJ (57.370.381) e emite nota
+    por outro (33.777.842). Sem mostrar isso, o cadastro parece ter 84
+    pagamentos e nenhuma nota — foi exatamente essa a confusao ao medir.
+    """
+    try:
+        cursor.execute("""
+            SELECT g.titular_id AS fid, g.raiz,
+                   (SELECT COUNT(*) FROM dfe_documentos d
+                     WHERE LEFT(LPAD(d.emit_cnpj,14,'0'),8) = g.raiz
+                       AND d.tipo = 'NFe') AS notas
+              FROM fornecedor_grupo_raiz g
+        """)
+        saida = {}
+        for r in cursor.fetchall():
+            saida.setdefault(r['fid'], []).append(
+                {'raiz': r['raiz'], 'notas': int(r['notas'] or 0)})
+        return saida
+    except Exception:
+        return {}
+
+
 @bp.route('/')
 @login_required
 def lista():
@@ -132,6 +177,40 @@ def lista():
         # Fornecedores list
         cursor.execute("SELECT * FROM fornecedores ORDER BY razao_social")
         fornecedores = cursor.fetchall()
+
+        movimento = _movimento_fornecedores(cursor)
+        raizes = _raizes_por_fornecedor(cursor)
+        maior = max([m['total'] for m in movimento.values()] or [0]) or 1
+        for f in fornecedores:
+            mv = movimento.get(f['id']) or {'n': 0, 'total': 0.0, 'ultimo': None}
+            f['pag_n'] = mv['n']
+            f['pag_total'] = mv['total']
+            f['pag_ultimo'] = mv['ultimo']
+            # Peso relativo ao maior — a barrinha da lista.
+            f['peso'] = round(100.0 * mv['total'] / maior, 1)
+            # A tabela de grupo costuma incluir a raiz do PROPRIO CNPJ do
+            # fornecedor (a RODOBRAS tem as duas). Contar sem tirar essa daria
+            # "3 CNPJs" num grupo de 2.
+            propria = re.sub(r'\D', '', f.get('cnpj') or '')[:8]
+            todas = raizes.get(f['id'], [])
+            f['raizes'] = [r for r in todas if r['raiz'] != propria]
+            f['n_cnpjs'] = 1 + len(f['raizes']) if todas else 1
+            # Como pagar este fornecedor: e o que mais falta no cadastro
+            # (51/51 sem e-mail, 49 sem PIX) e o que voce procura na hora de pagar.
+            f['falta_pgto'] = [rot for campo, rot in (
+                ('tipo_pagamento_padrao', 'forma de pagamento'),
+                ('chave_pix', 'PIX'), ('dados_bancarios', 'dados bancários'))
+                if not ((f.get(campo) or '').strip())]
+
+        totais = {
+            'fornecedores': len(fornecedores),
+            'com_movimento': sum(1 for f in fornecedores if f['pag_n']),
+            'parados': sum(1 for f in fornecedores if not f['pag_n']),
+            'sem_pgto': sum(1 for f in fornecedores if f['falta_pgto']),
+            'sem_pix': sum(1 for f in fornecedores if not (f.get('chave_pix') or '').strip()),
+            'agrupados': sum(1 for f in fornecedores if f['raizes']),
+            'sem_cnpj': sum(1 for f in fornecedores if not (f.get('cnpj') or '').strip()),
+        }
 
         # Companies with active products for the filter dropdown
         cursor.execute(
@@ -167,6 +246,7 @@ def lista():
         conn.close()
         return render_template('fornecedores/lista.html',
                                fornecedores=fornecedores,
+                               totais=totais,
                                empresas=empresas,
                                relatorio=relatorio,
                                cliente_id=cliente_id,
@@ -175,6 +255,9 @@ def lista():
         flash(f'Erro ao carregar fornecedores: {str(e)}', 'danger')
         return render_template('fornecedores/lista.html',
                                fornecedores=[],
+                               totais={'fornecedores': 0, 'com_movimento': 0,
+                                       'parados': 0, 'sem_pgto': 0, 'sem_pix': 0,
+                                       'agrupados': 0, 'sem_cnpj': 0},
                                empresas=[],
                                relatorio=[],
                                cliente_id='',

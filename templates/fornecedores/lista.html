@@ -2,386 +2,374 @@
 
 {% block title %}Fornecedores - NH Transportes{% endblock %}
 
+{#- Lista no padrao do Banco. A pergunta desta tela nao e a mesma do Clientes:
+    fornecedor a gente PAGA, entao a linha traz movimento (quanto ja saiu e
+    quando foi a ultima vez) e o que abre e COMO pagar.
+
+    Sobre o "grupo": a nota pode vir por um CNPJ e o pagamento sair para
+    outro (a RODOBRAS e assim). O `juntar` mantem os dois no mesmo card — sem
+    mostrar isso, o cadastro parece ter 84 pagamentos e nenhuma nota. -#}
+
 {% block styles %}
+{% with esc = '#for' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
 <style>
-  .page-hero {
-    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
-    border-radius: .75rem;
-    padding: 1.5rem 2rem;
-    margin-bottom: 1.5rem;
-    color: #fff;
-  }
-  .page-hero .hero-icon {
-    width: 3rem; height: 3rem;
-    background: rgba(255,255,255,.15);
-    border-radius: .6rem;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.5rem;
-    flex-shrink: 0;
-  }
-  .stat-card-forn {
-    border: 0;
-    border-radius: .65rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,.07);
-    transition: box-shadow .2s;
-  }
-  .stat-card-forn:hover { box-shadow: 0 4px 16px rgba(0,0,0,.13); }
-  .stat-card-forn .stat-icon {
-    width: 2.6rem; height: 2.6rem;
-    border-radius: .5rem;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.2rem;
-    flex-shrink: 0;
-  }
+  #for{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#6b7684; --ink:#151d27; --borda:#d9e0e8;
+        color:var(--ink); }
 
-    /* ── Main list table ───────────────────────────────────────── */
-    #tbl-lista {
-        font-size: 0.76rem;
-        border-collapse: separate;
-        border-spacing: 0;
-    }
-    #tbl-lista-head tr th {
-        background: #f0f4f8;
-        color: #2c3e50;
-        font-weight: 700;
-        font-size: 0.72rem;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        padding: 0.45rem 0.65rem;
-        border-bottom: 2px solid #c5d5e8;
-        white-space: nowrap;
-    }
-    #tbl-lista tbody tr td {
-        padding: 0.38rem 0.65rem;
-        border-bottom: 1px solid #eef1f4;
-        vertical-align: middle;
-        color: #374151;
-    }
-    #tbl-lista tbody tr:last-child td {
-        border-bottom: none;
-    }
-    #tbl-lista tbody tr.row-forn { cursor: pointer; transition: background .1s; }
-    #tbl-lista tbody tr.row-forn:hover td {
-        background: #f0f7ff;
-    }
+  #for .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .65rem;
+    margin-bottom:.7rem; }
+  #for .topo__l{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  #for .topo__t{ font-weight:800; font-size:1.02rem; flex:1; min-width:0; }
+  #for .bt-t{ border:1px solid rgba(255,255,255,.35);
+    background:rgba(255,255,255,.14); color:#fff; border-radius:9px;
+    padding:.34rem .7rem; font-size:.78rem; font-weight:800; font-family:inherit;
+    cursor:pointer; text-decoration:none; white-space:nowrap;
+    display:inline-flex; gap:.3rem; align-items:center; }
+  #for .bt-t:hover{ background:rgba(255,255,255,.26); color:#fff; }
+  #for .fam{ display:flex; gap:.4rem; margin-top:.6rem; overflow-x:auto;
+    padding-bottom:.15rem; }
+  #for .fam a{ flex:0 0 auto; border-radius:99px; padding:.35rem .8rem;
+    font-size:.78rem; font-weight:800; background:rgba(255,255,255,.18);
+    color:#fff; text-decoration:none; white-space:nowrap; }
+  #for .fam a.on{ background:#fff; color:var(--blue-deep); }
 
-    /* ── Report table ──────────────────────────────────────────── */
-    #tbl-relatorio {
-        font-size: 0.76rem;
-        border-collapse: separate;
-        border-spacing: 0;
-    }
-    #tbl-relatorio-head tr th {
-        background: #f0f4f8;
-        color: #2c3e50;
-        font-weight: 700;
-        font-size: 0.72rem;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        padding: 0.45rem 0.6rem;
-        border-bottom: 2px solid #c5d5e8;
-        white-space: nowrap;
-    }
-    #tbl-relatorio tbody tr td {
-        padding: 0.35rem 0.6rem;
-        border-bottom: 1px solid #eef1f4;
-        vertical-align: middle;
-        color: #374151;
-    }
-    #tbl-relatorio tbody tr:last-child td {
-        border-bottom: none;
-    }
-    #tbl-relatorio tbody tr:hover td {
-        background: #f0f7ff;
-    }
+  #for .busca{ display:flex; gap:.4rem; margin-bottom:.6rem; }
+  #for .busca input{ flex:1; border:1px solid var(--borda); border-radius:10px;
+    padding:.5rem .65rem; font-size:.86rem; font-family:inherit; }
+  #for .abas{ display:flex; gap:.35rem; margin-bottom:.7rem; overflow-x:auto;
+    padding-bottom:.15rem; }
+  #for .aba{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
+    color:#3a4655; border-radius:99px; padding:.36rem .78rem; font-size:.8rem;
+    font-weight:800; font-family:inherit; cursor:pointer; display:inline-flex;
+    gap:.35rem; align-items:center; }
+  #for .aba.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #for .aba .b{ background:#eaf1f9; color:var(--blue-deep); border-radius:99px;
+    min-width:17px; height:17px; display:inline-grid; place-items:center;
+    font-size:.64rem; padding:0 .3rem; }
+  #for .aba.on .b{ background:#fff; }
 
-    /* ── Shared helpers ────────────────────────────────────────── */
-    .badge-conta {
-        display: inline-block;
-        background: #e8f0fe;
-        color: #1a56db;
-        border-radius: 3px;
-        padding: 0.1rem 0.35rem;
-        font-size: 0.7rem;
-        font-weight: 700;
-        margin-right: 0.3rem;
-        letter-spacing: 0.02em;
-    }
-    .conta-nome {
-        color: #374151;
-        font-size: 0.75rem;
-    }
-    .font-monospace {
-        font-family: 'SFMono-Regular', Consolas, monospace;
-        font-size: 0.72rem;
-        color: #555;
-    }
+  #for .lista{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #for .f{ border-bottom:1px solid #eef1f5; }
+  #for .f:last-child{ border-bottom:0; }
+  #for .f__h{ display:flex; gap:.6rem; padding:.6rem .8rem; align-items:flex-start;
+    cursor:pointer; }
+  #for .f__h:hover{ background:#fafbfd; }
+  #for .f__ic{ flex:0 0 34px; height:34px; border-radius:9px; background:#eaf1f9;
+    color:var(--blue-deep); display:grid; place-items:center; font-size:.78rem;
+    font-weight:800; }
+  #for .f__t{ flex:1; min-width:0; }
+  #for .f__n{ font-weight:800; font-size:.87rem; line-height:1.3; }
+  #for .f__d{ display:flex; gap:.4rem .9rem; flex-wrap:wrap; margin-top:.25rem;
+    font-size:.75rem; color:#3a4655; }
+  #for .f__d .k{ color:var(--muted); }
+  #for .f__d b{ font-weight:700; font-variant-numeric:tabular-nums; }
+  #for .mov{ text-align:right; flex:0 0 auto; }
+  #for .mov__v{ font-weight:800; font-size:.86rem; color:var(--blue-deep);
+    font-variant-numeric:tabular-nums; white-space:nowrap; }
+  #for .mov__r{ font-size:.66rem; color:var(--muted); white-space:nowrap; }
+  #for .barra{ height:5px; border-radius:9px; background:#eef2f7;
+    overflow:hidden; margin-top:.35rem; }
+  #for .barra i{ display:block; height:100%;
+    background:linear-gradient(90deg,#2E6FB0,#1D63A5); }
+  #for .selo{ display:inline-block; border-radius:99px; padding:.14rem .5rem;
+    font-size:.64rem; font-weight:800; white-space:nowrap; }
+  #for .selo--gr{ background:#eaf1f9; color:var(--blue-deep); }
+  #for .selo--par{ background:#f4f6f9; color:var(--muted); }
+  #for .selo--fal{ background:#fdf0d6; color:var(--ambar); }
 
-    /* ── Action icon buttons ───────────────────────────────────── */
-    .btn-acao {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 1.6rem;
-        height: 1.6rem;
-        border-radius: 4px;
-        font-size: 0.75rem;
-        border: none;
-        cursor: pointer;
-        text-decoration: none;
-        transition: opacity 0.15s;
-    }
-    .btn-acao:hover { opacity: 0.8; }
-    .btn-editar  { background: #fff3cd; color: #856404; }
-    .btn-excluir { background: #f8d7da; color: #842029; }
+  #for .f__c{ background:#f7f9fc; border-top:1px solid #eef1f5;
+    padding:.65rem .8rem .75rem; }
+  #for .grade{ display:grid; gap:.5rem; grid-template-columns:1fr; }
+  @media (min-width:992px){ #for .grade{ grid-template-columns:1fr 1fr 1fr; } }
+  #for .bloco{ background:#fff; border:1px solid var(--borda);
+    border-radius:11px; padding:.55rem .7rem; }
+  #for .bloco--pg{ border-color:#f0d8a8; background:#fffdf7; }
+  #for .bloco__t{ font-size:.64rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); margin-bottom:.3rem; }
+  #for .bloco--pg .bloco__t{ color:var(--ambar); }
+  #for .li{ display:flex; gap:.5rem; font-size:.79rem; padding:.16rem 0; }
+  #for .li .k{ color:var(--muted); flex:0 0 88px; }
+  #for .li .v{ flex:1; min-width:0; font-weight:600; word-break:break-word; }
+  #for .vazio{ color:var(--ambar); font-weight:700; }
+  #for .raiz{ display:flex; gap:.3rem; flex-wrap:wrap; margin-top:.3rem; }
+  #for .raiz span{ background:#eaf1f9; color:var(--blue-deep); border-radius:7px;
+    padding:.12rem .45rem; font-size:.68rem; font-weight:700;
+    font-variant-numeric:tabular-nums; }
+  #for .acoes{ display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.55rem; }
+  #for .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:9px; padding:.36rem .7rem; font-size:.77rem; font-weight:700;
+    font-family:inherit; cursor:pointer; text-decoration:none;
+    display:inline-flex; gap:.3rem; align-items:center; }
+  #for .bt:hover{ background:#dfeaf8; color:var(--blue-deep); }
+  #for .bt--del{ background:#fbe9e9; border-color:#f0c8c8; color:var(--danger); }
+  #for .nada{ padding:1.4rem .8rem; text-align:center; color:var(--muted);
+    font-size:.85rem; }
 
-    @media (max-width: 768px) {
-        #tbl-lista, #tbl-relatorio { font-size: 0.70rem; }
-    }
-
-    @media print {
-        .btn, form, nav, .card-header .btn, .btn-acao { display: none !important; }
-        #tbl-relatorio, #tbl-lista { width: 100%; font-size: 0.7rem; }
-    }
+  #for .rel{ background:#fff; border:1px solid var(--borda); border-radius:14px;
+    margin-top:.9rem; overflow:hidden; }
+  #for .rel__h{ background:#f7f9fc; padding:.55rem .8rem; font-size:.82rem;
+    font-weight:800; border-bottom:1px solid var(--borda); display:flex;
+    gap:.5rem; align-items:center; flex-wrap:wrap; }
+  #for .rel table{ width:100%; border-collapse:collapse; font-size:.8rem; }
+  #for .rel th{ text-align:left; padding:.4rem .8rem; color:var(--muted);
+    font-size:.68rem; text-transform:uppercase; letter-spacing:.04em;
+    border-bottom:1px solid #eef1f5; }
+  #for .rel td{ padding:.4rem .8rem; border-bottom:1px solid #eef1f5; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
+<div id="for">
 
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb" class="mb-3">
-      <ol class="breadcrumb small">
-        <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Dashboard</a></li>
-        <li class="breadcrumb-item active">Fornecedores</li>
-      </ol>
-    </nav>
-
-    <!-- Hero header -->
-    <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-      <div class="hero-icon"><i class="bi bi-building-fill"></i></div>
-      <div class="flex-grow-1">
-        <h4 class="mb-0 fw-bold">Fornecedores</h4>
-        <p class="mb-0 opacity-75 small">Cadastro e gestão de fornecedores com vínculos contábeis por empresa.</p>
-      </div>
-      <div class="d-flex gap-2 flex-wrap">
-        <a href="{{ url_for('fornecedores.novo') }}"
-           class="btn btn-light fw-semibold btn-sm px-3">
-          <i class="bi bi-plus-circle me-1"></i> Novo Fornecedor
-        </a>
-        <a href="#card-relatorio-filtro"
-           class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
-          <i class="bi bi-table me-1"></i> Relatório de Contas Contábeis
-        </a>
-      </div>
+  <div class="topo">
+    <div class="topo__l">
+      <span class="topo__t"><i class="bi bi-truck"></i> Fornecedores</span>
+      <a class="bt-t" href="{{ url_for('fornecedores.novo') }}">
+        <i class="bi bi-plus-circle"></i> Novo fornecedor</a>
+      <a class="bt-t" href="/relatorios/conf_fornecedores_dfe">
+        <i class="bi bi-bar-chart"></i> Fornecedores × Compras</a>
     </div>
-
-    <!-- Stat cards -->
-    {% set total_forn = fornecedores | length %}
-    <div class="row g-3 mb-4">
-      <div class="col-6 col-md-4">
-        <div class="card stat-card-forn h-100">
-          <div class="card-body d-flex align-items-center gap-3 py-3">
-            <div class="stat-icon" style="background:#e8f0fb;">
-              <i class="bi bi-building" style="color:#1D63A5;"></i>
-            </div>
-            <div>
-              <div class="fs-4 fw-bold" style="color:#1D63A5;">{{ total_forn }}</div>
-              <div class="text-muted small">Fornecedores</div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-6 col-md-4">
-        <div class="card stat-card-forn h-100">
-          <div class="card-body d-flex align-items-center gap-3 py-3">
-            <div class="stat-icon" style="background:#e6f9ee;">
-              <i class="bi bi-link-45deg" style="color:#198754;"></i>
-            </div>
-            <div>
-              <div class="fs-4 fw-bold" style="color:#198754;">{{ empresas | length }}</div>
-              <div class="text-muted small">Empresas</div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-md-4">
-        <div class="card stat-card-forn h-100">
-          <div class="card-body d-flex align-items-center gap-3 py-3">
-            <div class="stat-icon" style="background:#fff3cd;">
-              <i class="bi bi-journal-text" style="color:#856404;"></i>
-            </div>
-            <div>
-              <div class="fs-4 fw-bold" style="color:#856404;">{{ relatorio | length if relatorio else '—' }}</div>
-              <div class="text-muted small">Vínculos no Relatório</div>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div class="fam">
+      <a href="/clientes/">Clientes</a>
+      <a class="on" href="{{ url_for('fornecedores.lista') }}">Fornecedores</a>
+      <a href="/cartoes/">Cartões</a>
+      <a href="/caixa/">Formas Pagamento</a>
+      <a href="/tipos_receita_caixa/">Formas Recebimento</a>
+      <a href="/lubrificantes/produtos">Produtos Lubrificantes</a>
     </div>
+  </div>
 
-    <!-- Filtro por Empresa -->
-    <div class="card shadow-sm mb-4" id="card-relatorio-filtro">
-        <div class="card-header d-flex justify-content-between align-items-center py-2"
-             style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-          <span><i class="bi bi-table me-1"></i> Relatório de Contas Contábeis por Empresa</span>
-        </div>
-        <div class="card-body">
-            <form method="GET" class="row g-2 align-items-end">
-                <div class="col-md-5">
-                    <label class="form-label mb-1" style="font-size:0.85rem;">Selecione a Empresa</label>
-                    <select name="cliente_id" class="form-select form-select-sm">
-                        <option value="">— Selecione uma empresa —</option>
-                        {% for emp in empresas %}
-                        <option value="{{ emp.id }}" {% if cliente_id == emp.id|string %}selected{% endif %}>
-                            {{ emp.nome }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-auto">
-                    <button type="submit" class="btn btn-primary btn-sm">
-                        <i class="bi bi-search"></i> Pesquisar
-                    </button>
-                    {% if cliente_id %}
-                    <a href="{{ url_for('fornecedores.lista') }}" class="btn btn-secondary btn-sm ms-1">
-                        <i class="bi bi-x-circle"></i> Limpar
-                    </a>
-                    {% endif %}
-                </div>
-            </form>
-        </div>
-    </div>
+  <div class="g-nums">
+    <div class="n n--azul"><div class="r">Fornecedores</div>
+      <div class="v">{{ totais.fornecedores }}</div></div>
+    <div class="n n--verde"><div class="r">Com movimento</div>
+      <div class="v">{{ totais.com_movimento }}</div></div>
+    <div class="n n--cinza"><div class="r">Parados</div>
+      <div class="v">{{ totais.parados }}</div></div>
+    <div class="n {{ 'n--ambar' if totais.sem_pgto else 'n--verde' }}">
+      <div class="r">Sem forma de pagto</div>
+      <div class="v">{{ totais.sem_pgto }}</div></div>
+  </div>
 
-    <!-- Relatório -->
-    {% if cliente_id %}
-    <div class="card shadow-sm mb-4" id="card-relatorio">
-        <div class="card-header d-flex justify-content-between align-items-center py-2" style="background:#17a2b8;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-            <span><i class="bi bi-table me-1"></i> Fornecedores e Contas Contábeis — {{ empresa_selecionada.nome if empresa_selecionada else '' }}</span>
-            {% if relatorio %}
-            <button class="btn btn-sm btn-light py-0 px-2" style="font-size:0.75rem;" onclick="window.print()" title="Imprimir relatório">
-                <i class="bi bi-printer"></i> Imprimir
-            </button>
-            {% endif %}
+  <div class="busca">
+    <input type="text" id="for-busca"
+           placeholder="Buscar por razão social, fantasia, CNPJ ou cidade…"
+           oninput="forBusca(this)">
+  </div>
+
+  <div class="abas">
+    <button type="button" class="aba on" data-m="todos" onclick="forAba('todos')">
+      Todos <span class="b">{{ totais.fornecedores }}</span></button>
+    <button type="button" class="aba" data-m="mov" onclick="forAba('mov')">
+      Com movimento <span class="b">{{ totais.com_movimento }}</span></button>
+    <button type="button" class="aba" data-m="par" onclick="forAba('par')">
+      Parados <span class="b">{{ totais.parados }}</span></button>
+    <button type="button" class="aba" data-m="spix" onclick="forAba('spix')">
+      Sem PIX <span class="b">{{ totais.sem_pix }}</span></button>
+    {% if totais.agrupados %}
+    <button type="button" class="aba" data-m="grp" onclick="forAba('grp')">
+      Agrupados <span class="b">{{ totais.agrupados }}</span></button>
+    {% endif %}
+  </div>
+
+  <div class="lista">
+    {% for f in fornecedores %}
+    {% set nome = f.razao_social or '(sem nome)' %}
+    <div class="f" data-mov="{{ '1' if f.pag_n else '0' }}"
+         data-pix="{{ '1' if f.chave_pix else '0' }}"
+         data-grp="{{ '1' if f.raizes else '0' }}"
+         data-busca="{{ (nome ~ ' ' ~ (f.nome_fantasia or '') ~ ' ' ~ (f.cnpj or '') ~ ' ' ~ (f.municipio or '')) | lower }}">
+      <div class="f__h" onclick="forAbre(this)">
+        <span class="f__ic">{{ nome[:2] | upper }}</span>
+        <div class="f__t">
+          <div class="f__n">{{ nome }}
+            {%- if f.raizes %} <span class="selo selo--gr"
+              title="notas e pagamento chegam por CNPJs diferentes — o juntar mantém os dois no mesmo card">grupo · {{ f.n_cnpjs }} CNPJs</span>{% endif -%}
+            {%- if not f.cnpj %} <span class="selo selo--fal"
+              title="sem CNPJ não casa com nota nenhuma">sem CNPJ</span>{% endif -%}
+            {%- if not f.pag_n %} <span class="selo selo--par">parado</span>{% endif -%}
+          </div>
+          <div class="f__d">
+            {% if f.nome_fantasia %}<span>{{ f.nome_fantasia }}</span>{% endif %}
+            <span><span class="k">CNPJ</span> <b>{{ f.cnpj or '—' }}</b></span>
+            {% if f.telefone %}<span><span class="k">Tel</span> <b>{{ f.telefone }}</b></span>{% endif %}
+            {% if f.municipio %}<span>{{ f.municipio }}{% if f.uf %} / {{ f.uf }}{% endif %}</span>{% endif %}
+            {% if f.falta_pgto %}<span class="selo selo--fal">sem {{ f.falta_pgto|join(', ') }}</span>{% endif %}
+          </div>
+          {% if f.peso %}<div class="barra"><i style="width:{{ f.peso }}%"></i></div>{% endif %}
         </div>
-        <div class="card-body p-0">
-            {% if relatorio %}
-            <div class="table-responsive">
-                <table class="table table-hover mb-0" id="tbl-relatorio">
-                    <thead id="tbl-relatorio-head">
-                        <tr>
-                            <th style="width:3%">#</th>
-                            <th>Razão Social</th>
-                            <th>Nome Fantasia</th>
-                            <th>CNPJ</th>
-                            <th>Conta Contábil</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in relatorio %}
-                        <tr>
-                            <td class="text-muted">{{ loop.index }}</td>
-                            <td>{{ row.razao_social }}</td>
-                            <td class="text-muted">{{ row.nome_fantasia or '—' }}</td>
-                            <td class="font-monospace">{{ row.cnpj or '—' }}</td>
-                            <td>
-                                {% if row.conta_codigo %}
-                                    <span class="badge-conta"><strong>{{ row.conta_codigo }}</strong></span>
-                                    <span class="conta-nome">{{ row.conta_nome }}</span>
-                                {% else %}
-                                    <span class="text-muted fst-italic" style="font-size:0.72rem;">não vinculada</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <div class="px-3 py-2 border-top" style="font-size:0.72rem;color:#6c757d;background:#f8f9fa;">
-                <i class="bi bi-info-circle me-1"></i>
-                <strong>{{ relatorio|length }}</strong> fornecedor(es) vinculado(s) a esta empresa.
+        <div class="mov">
+          {% if f.pag_n %}
+          <div class="mov__v">{{ f.pag_total | formatar_moeda }}</div>
+          <div class="mov__r">{{ f.pag_n }} pagamento{{ '' if f.pag_n == 1 else 's' }}
+            {%- if f.pag_ultimo %} · {{ f.pag_ultimo.strftime('%d/%m') }}{% endif %}</div>
+          {% else %}
+          <div class="mov__v" style="color:#6b7684">—</div>
+          <div class="mov__r">nenhum pagamento</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="f__c" style="display:none">
+        <div class="grade">
+          <div class="bloco bloco--pg">
+            <div class="bloco__t"><i class="bi bi-credit-card"></i> Como pagamos</div>
+            <div class="li"><span class="k">Forma padrão</span>
+              <span class="v">{% if f.tipo_pagamento_padrao %}{{ f.tipo_pagamento_padrao }}
+                {%- else %}<span class="vazio">— não definida</span>{% endif %}</span></div>
+            <div class="li"><span class="k">Chave PIX</span>
+              <span class="v">{% if f.chave_pix %}{{ f.chave_pix }}
+                {%- else %}<span class="vazio">—</span>{% endif %}</span></div>
+            <div class="li"><span class="k">Banco</span>
+              <span class="v">{% if f.dados_bancarios %}{{ f.dados_bancarios }}
+                {%- else %}<span class="vazio">—</span>{% endif %}</span></div>
+            <div class="li"><span class="k">Vendedor</span>
+              <span class="v">{% if f.nome_vendedor %}{{ f.nome_vendedor }}
+                {%- else %}<span class="vazio">—</span>{% endif %}</span></div>
+          </div>
+
+          <div class="bloco">
+            <div class="bloco__t"><i class="bi bi-geo-alt"></i> Contato e endereço</div>
+            <div class="li"><span class="k">Telefone</span>
+              <span class="v">{{ f.telefone or '—' }}</span></div>
+            <div class="li"><span class="k">E-mail</span>
+              <span class="v">{% if f.email %}{{ f.email }}
+                {%- else %}<span class="vazio">—</span>{% endif %}</span></div>
+            <div class="li"><span class="k">Endereço</span>
+              <span class="v">{% if f.endereco %}{{ f.endereco }}{% if f.numero %}, {{ f.numero }}{% endif %}
+                {%- else %}—{% endif %}</span></div>
+            <div class="li"><span class="k">Cidade</span>
+              <span class="v">{{ f.municipio or '—' }}{% if f.uf %} / {{ f.uf }}{% endif %}</span></div>
+            <div class="li"><span class="k">IE</span>
+              <span class="v">{{ f.ie or '—' }}</span></div>
+          </div>
+
+          <div class="bloco">
+            <div class="bloco__t"><i class="bi bi-diagram-3"></i> CNPJs e movimento</div>
+            {% if f.raizes %}
+            <div style="font-size:.75rem;color:var(--muted);line-height:1.45">
+              As notas chegam por um CNPJ e o pagamento sai por outro — o
+              <b>juntar</b> soma os dois no mesmo card da conferência.</div>
+            <div class="raiz">
+              <span>{{ (f.cnpj or '')[:10] }} · titular</span>
+              {% for r in f.raizes %}
+              <span>{{ r.raiz }} · {{ r.notas }} nota{{ '' if r.notas == 1 else 's' }}</span>
+              {% endfor %}
             </div>
             {% else %}
-            <div class="text-center text-muted py-4" style="font-size:0.85rem;">
-                <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
-                <div class="mt-2">Nenhum fornecedor vinculado a esta empresa.</div>
-            </div>
+            <div class="li"><span class="k">CNPJ</span>
+              <span class="v">{{ f.cnpj or '—' }}</span></div>
             {% endif %}
+            <div class="li"><span class="k">Pagamentos</span>
+              <span class="v">{{ f.pag_n }}{% if f.pag_ultimo %} · último em
+                {{ f.pag_ultimo.strftime('%d/%m/%Y') }}{% endif %}</span></div>
+            <div class="li"><span class="k">Total pago</span>
+              <span class="v">{{ f.pag_total | formatar_moeda }}</span></div>
+          </div>
         </div>
-    </div>
-    {% endif %}
 
-    <!-- Tabela de Fornecedores -->
-    <div class="card shadow-sm">
-        <div class="card-header d-flex justify-content-between align-items-center py-2" style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-            <span><i class="bi bi-list me-1"></i> Lista de Fornecedores</span>
-            {% if fornecedores %}
-            <span class="badge bg-white text-secondary" style="font-size:0.7rem;font-weight:600;">{{ fornecedores|length }}</span>
-            {% endif %}
+        <div class="acoes">
+          <a class="bt" href="/relatorios/conf_fornecedores_dfe?fornecedor_ids[]={{ f.id }}">
+            <i class="bi bi-bar-chart"></i> ver em Fornecedores × Compras</a>
+          <a class="bt" href="{{ url_for('fornecedores.editar', id=f.id) }}">
+            <i class="bi bi-pencil"></i> editar</a>
+          <form method="POST" action="{{ url_for('fornecedores.excluir', id=f.id) }}"
+                style="display:inline"
+                onsubmit="return confirm('Deseja realmente excluir este fornecedor?');">
+            <button type="submit" class="bt bt--del"><i class="bi bi-trash"></i></button>
+          </form>
         </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover mb-0" id="tbl-lista">
-                    <thead id="tbl-lista-head">
-                        <tr>
-                            <th style="width:4%">ID</th>
-                            <th>Razão Social</th>
-                            <th>Nome Fantasia</th>
-                            <th>CNPJ</th>
-                            <th>Telefone</th>
-                            <th>Município</th>
-                            <th class="text-center" style="width:8%">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% if fornecedores %}
-                            {% for fornecedor in fornecedores %}
-                            <tr class="row-forn" data-url="{{ url_for('fornecedores.editar', id=fornecedor.id) }}"
-                                title="Clique para editar">
-                                <td class="text-muted">{{ fornecedor.id }}</td>
-                                <td>{{ fornecedor.razao_social }}</td>
-                                <td class="text-muted">{{ fornecedor.nome_fantasia or '—' }}</td>
-                                <td class="font-monospace">{{ fornecedor.cnpj or '—' }}</td>
-                                <td class="text-muted">{{ fornecedor.telefone or '—' }}</td>
-                                <td class="text-muted">{{ fornecedor.municipio or '—' }}</td>
-                                <td class="text-center actions-cell" onclick="event.stopPropagation()">
-                                    <a href="{{ url_for('fornecedores.editar', id=fornecedor.id) }}" class="btn-acao btn-editar" title="Editar">
-                                        <i class="bi bi-pencil"></i>
-                                    </a>
-                                    {% if current_user.nivel == 'admin' %}
-                                    <form method="POST" action="{{ url_for('fornecedores.excluir', id=fornecedor.id) }}" style="display:inline;" onsubmit="return confirm('Deseja realmente excluir este fornecedor?');">
-                                        <button type="submit" class="btn-acao btn-excluir" title="Excluir">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </form>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        {% else %}
-                            <tr>
-                                <td colspan="7" class="text-center text-muted py-4">
-                                    <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
-                                    <div class="mt-2" style="font-size:0.82rem;">Nenhum fornecedor cadastrado</div>
-                                </td>
-                            </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+      </div>
     </div>
+    {% else %}
+    <div class="nada"><i class="bi bi-inbox" style="font-size:1.8rem;opacity:.4"></i>
+      <div class="mt-2">Nenhum fornecedor cadastrado</div></div>
+    {% endfor %}
+  </div>
+
+  {# Relatorio por empresa (contas contabeis) — segue como estava, so no visual novo #}
+  <div class="rel" id="card-relatorio-filtro">
+    <div class="rel__h">
+      <i class="bi bi-table"></i> Fornecedores e contas contábeis por empresa
+      <form method="GET" style="margin-left:auto;display:flex;gap:.4rem">
+        <select name="cliente_id" class="campo" style="width:auto;margin:0">
+          <option value="">— escolha a empresa —</option>
+          {% for emp in empresas %}
+          <option value="{{ emp.id }}" {% if cliente_id == emp.id|string %}selected{% endif %}>
+            {{ emp.nome }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="bt">ver</button>
+        {% if cliente_id %}
+        <a class="bt" href="{{ url_for('fornecedores.lista') }}">limpar</a>
+        {% endif %}
+      </form>
+    </div>
+    {% if cliente_id %}
+      {% if relatorio %}
+      <table>
+        <thead><tr><th>Fornecedor</th><th>CNPJ</th><th>Conta contábil</th></tr></thead>
+        <tbody>
+          {% for r in relatorio %}
+          <tr>
+            <td>{{ r.razao_social }}{% if r.nome_fantasia %}
+              <span style="color:#6b7684"> · {{ r.nome_fantasia }}</span>{% endif %}</td>
+            <td>{{ r.cnpj or '—' }}</td>
+            <td>{% if r.conta_codigo %}{{ r.conta_codigo }} — {{ r.conta_nome }}
+              {%- else %}<span class="vazio">sem conta</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="nada">Nenhum fornecedor vinculado a esta empresa.</div>
+      {% endif %}
+    {% endif %}
+  </div>
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-  document.querySelectorAll('tr.row-forn[data-url]').forEach(function (row) {
-    row.addEventListener('click', function (e) {
-      if (e.target.closest('.actions-cell') || e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) return;
-      window.location.href = row.getAttribute('data-url');
-    });
-  });
-});
-</script>
+/* Abre/fecha a linha — mesmo gesto das outras telas da familia. */
+function forAbre(el) {
+  var card = el.closest('.f');
+  var corpo = card.querySelector('.f__c');
+  var aberto = corpo.style.display !== 'none';
+  corpo.style.display = aberto ? 'none' : 'block';
+  card.classList.toggle('aberto', !aberto);
+}
 
+function forAba(m) {
+  document.querySelectorAll('#for .aba').forEach(function (b) {
+    b.classList.toggle('on', b.dataset.m === m);
+  });
+  document.querySelectorAll('#for .f').forEach(function (f) {
+    var passa = (m === 'todos')
+      || (m === 'mov' && f.dataset.mov === '1')
+      || (m === 'par' && f.dataset.mov === '0')
+      || (m === 'spix' && f.dataset.pix === '0')
+      || (m === 'grp' && f.dataset.grp === '1');
+    f.dataset.aba = passa ? '1' : '0';
+  });
+  forPinta();
+}
+
+function forBusca(inp) {
+  var q = (inp.value || '').toLowerCase().trim();
+  document.querySelectorAll('#for .f').forEach(function (f) {
+    f.dataset.busca_ok = (!q || (f.dataset.busca || '').indexOf(q) >= 0) ? '1' : '0';
+  });
+  forPinta();
+}
+
+/* Um lugar so decide o que aparece: aba E busca precisam passar. */
+function forPinta() {
+  document.querySelectorAll('#for .f').forEach(function (f) {
+    var ok = (f.dataset.aba !== '0') && (f.dataset.busca_ok !== '0');
+    f.style.display = ok ? '' : 'none';
+  });
+}
+</script>
 {% endblock %}
