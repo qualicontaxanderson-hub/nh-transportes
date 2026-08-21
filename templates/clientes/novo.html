@@ -1,286 +1,36 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
-{% block title %}Novo Cliente - {{ app_name }}{% endblock %}
+{% block title %}Novo Cliente - NH Transportes{% endblock %}
 
-{% block styles %}
-<style>
-  .page-hero {
-    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
-    border-radius: .75rem;
-    padding: 1.5rem 2rem;
-    margin-bottom: 1.5rem;
-    color: #fff;
-  }
-  .page-hero .hero-icon {
-    width: 3rem; height: 3rem;
-    background: rgba(255,255,255,.15);
-    border-radius: .6rem;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.5rem;
-    flex-shrink: 0;
-  }
-  .form-section-title {
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: #1D63A5;
-    border-left: 3px solid #1D63A5;
-    padding-left: 0.5rem;
-    margin: 1rem 0 0.6rem;
-  }
-  .form-label { font-size: 0.83rem; font-weight: 600; color: #374151; }
-  .form-control-sm, .form-select-sm { font-size: 0.84rem; }
-</style>
-{% endblock %}
+{% block styles %}{% include 'clientes/_ficha_css.html' %}{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb" class="mb-3">
-        <ol class="breadcrumb small">
-            <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="{{ url_for('clientes.lista') }}" class="text-decoration-none">Clientes</a></li>
-            <li class="breadcrumb-item active">Novo Cliente</li>
-        </ol>
-    </nav>
-
-    <!-- Hero header -->
-    <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-        <div class="hero-icon"><i class="bi bi-person-plus-fill"></i></div>
-        <div class="flex-grow-1">
-            <h4 class="mb-0 fw-bold">Novo Cliente</h4>
-            <p class="mb-0 opacity-75 small">Cadastre um novo cliente com dados de contato e configurações de frete.</p>
-        </div>
-        <a href="{{ url_for('clientes.lista') }}"
-           class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
-            <i class="bi bi-arrow-left me-1"></i> Voltar
-        </a>
+<div id="cfi">
+  <div class="cartao">
+    <div class="topo">
+      <div class="topo__t">
+        <div class="topo__n">Novo cliente</div>
+        <div class="topo__s">comece pelo CNPJ — a Receita preenche o resto</div>
+      </div>
+      <a class="bt-t" href="{{ url_for('clientes.lista') }}">
+        <i class="bi bi-arrow-left"></i> Voltar</a>
     </div>
 
-    <div class="card shadow-sm">
-        <div class="card-header d-flex align-items-center py-2"
-             style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-            <i class="bi bi-person-fill me-2"></i> Dados do Cliente
-        </div>
-        <div class="card-body">
-            <form method="POST">
-
-                <!-- Dados Principais -->
-                <div class="form-section-title"><i class="bi bi-person-badge me-1"></i>Dados Principais</div>
-                <div class="row">
-                    <div class="col-md-6 mb-2">
-                        <label class="form-label">Razão Social <span class="text-danger">*</span></label>
-                        <input type="text" name="razao_social" class="form-control form-control-sm" required>
-                    </div>
-                    <div class="col-md-6 mb-2">
-                        <label class="form-label">Nome Fantasia</label>
-                        <input type="text" name="nome_fantasia" class="form-control form-control-sm">
-                    </div>
-                </div>
-
-                <!-- Identificação Fiscal -->
-                <div class="form-section-title"><i class="bi bi-file-earmark-text me-1"></i>Identificação Fiscal</div>
-                <div id="cli-rf-eco" hidden></div>
-                <div class="row">
-                    <div class="col-md-4 mb-2">
-                        <label class="form-label">CNPJ</label>
-                        <div class="input-group input-group-sm">
-                          <input type="text" name="cnpj" class="form-control form-control-sm" placeholder="00.000.000/0000-00">
-                          <button class="btn btn-outline-primary" type="button" onclick="cliRfBuscar(this)"
-                                  title="puxar razão social, endereço, município e telefone da Receita Federal">
-                            <i class="bi bi-bank"></i> Buscar na Receita
-                          </button>
-                        </div>
-                    </div>
-                    <div class="col-md-4 mb-2">
-                        <label class="form-label">IE</label>
-                        <input type="text" name="ie" class="form-control form-control-sm">
-                    </div>
-                    <div class="col-md-4 mb-2">
-                        <label class="form-label">Telefone</label>
-                        <input type="text" name="telefone" class="form-control form-control-sm" placeholder="(00) 0000-0000">
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="col-md-6 mb-2">
-                        <label class="form-label">Contato</label>
-                        <input type="text" name="contato" class="form-control form-control-sm" placeholder="Nome do responsável">
-                    </div>
-                    <div class="col-md-6 mb-2">
-                        <label class="form-label">E-mail</label>
-                        <input type="email" name="email" class="form-control form-control-sm" placeholder="email@exemplo.com">
-                    </div>
-                </div>
-
-                <!-- Configurações de Frete -->
-                <div class="form-section-title"><i class="bi bi-truck me-1"></i>Configurações de Frete</div>
-                <div class="row">
-                    <div class="col-md-6 mb-2">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" name="paga_comissao" id="paga_comissao" checked>
-                            <label class="form-check-label" for="paga_comissao" style="font-size: 0.85rem;">
-                                <strong>Paga Comissão ao Motorista</strong>
-                                <small class="text-muted d-block">R$ 0,01 por litro transportado</small>
-                            </label>
-                        </div>
-                    </div>
-                    <div class="col-md-6 mb-2">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="cte_integral" name="cte_integral" value="1">
-                            <label class="form-check-label" for="cte_integral" style="font-size: 0.85rem;">
-                                <strong>CTE Integral</strong>
-                                <small class="text-muted d-block">Valor do CTE = Valor total do frete</small>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Endereço -->
-                <div class="form-section-title"><i class="bi bi-geo-alt me-1"></i>Endereço</div>
-                <div class="row">
-                    <div class="col-md-8 mb-2">
-                        <label class="form-label">Logradouro</label>
-                        <input type="text" name="endereco" class="form-control form-control-sm" placeholder="Rua, Avenida...">
-                    </div>
-                    <div class="col-md-2 mb-2">
-                        <label class="form-label">Número</label>
-                        <input type="text" name="numero" class="form-control form-control-sm">
-                    </div>
-                    <div class="col-md-2 mb-2">
-                        <label class="form-label">CEP</label>
-                        <input type="text" name="cep" class="form-control form-control-sm" placeholder="00000-000">
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="col-md-6 mb-2">
-                        <label class="form-label">Complemento</label>
-                        <input type="text" name="complemento" class="form-control form-control-sm" placeholder="Apto, Sala, Bloco...">
-                    </div>
-                    <div class="col-md-6 mb-2">
-                        <label class="form-label">Bairro</label>
-                        <input type="text" name="bairro" class="form-control form-control-sm">
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="col-md-8 mb-2">
-                        <label class="form-label">Município</label>
-                        <input type="text" name="municipio" class="form-control form-control-sm"
-                               placeholder="cidade do endereço">
-                        <small class="form-text text-muted">Endereço da empresa —
-                          é o que vai no boleto. O "Buscar na Receita" preenche.</small>
-                    </div>
-                    <div class="col-md-4 mb-2">
-                        <label class="form-label">UF</label>
-                        <input type="text" name="uf" class="form-control form-control-sm" maxlength="2" placeholder="GO">
-                    </div>
-                </div>
-
-                <div class="form-section-title"><i class="bi bi-truck me-1"></i>Destino de frete</div>
-                <div class="row">
-                    <div class="col-md-12 mb-2">
-                        <label class="form-label">Destino padrão deste cliente</label>
-                        <select name="destino_id" class="form-select form-select-sm">
-                            <option value="">— sem destino padrão —</option>
-                            {% for destino in destinos %}
-                            <option value="{{ destino.id }}">{{ destino.nome }} - {{ destino.estado }}</option>
-                            {% endfor %}
-                        </select>
-                        <small class="form-text text-muted">Define a <b>rota</b> (origem × destino) que dá o valor por litro do CT-e. Sem ele o frete não pré-preenche o preço — dá pra escolher na hora do lançamento, mas é digitar toda vez.</small>
-                    </div>
-                </div>
-
-                <!-- Grupo Contábil -->
-                {% if grupos %}
-                <div class="form-section-title"><i class="bi bi-journal-bookmark me-1"></i>Contabilidade</div>
-                <div class="row">
-                    <div class="col-md-6 mb-2">
-                        <label class="form-label">Grupo do Plano de Contas</label>
-                        <select name="grupo_contabil_id" class="form-select form-select-sm">
-                            <option value="">— Sem grupo contábil —</option>
-                            {% for g in grupos %}
-                            <option value="{{ g.id }}">{{ g.codigo }} — {{ g.nome }}</option>
-                            {% endfor %}
-                        </select>
-                        <div class="form-text" style="font-size:0.78rem;">
-                            Associe este cliente a um grupo do Plano de Contas para exportação contábil.
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
-
-                <!-- Botões -->
-                <div class="d-flex justify-content-between mt-4 pt-2 border-top">
-                    <a href="{{ url_for('clientes.lista') }}" class="btn btn-secondary btn-sm">
-                        <i class="bi bi-arrow-left me-1"></i> Voltar
-                    </a>
-                    <button type="submit" class="btn btn-primary btn-sm px-4">
-                        <i class="bi bi-check-circle me-1"></i> Salvar
-                    </button>
-                </div>
-
-            </form>
-        </div>
+    <div class="estado" id="cli-estado">
+      🏛️ Digite o CNPJ e clique em <b>Buscar</b>: razão social, fantasia,
+      endereço, município, CEP e telefone vêm prontos. Sem CNPJ? Preencha à mão.
     </div>
+
+    <form method="POST">
+      {% include 'clientes/_ficha.html' %}
+      <div class="rodape">
+        <a class="bt-ca" href="{{ url_for('clientes.lista') }}">Cancelar</a>
+        <button type="submit" class="bt-ok">
+          <i class="bi bi-check-lg"></i> Salvar cliente</button>
+      </div>
+    </form>
+  </div>
 </div>
-{% endblock %}
 
-<script>
-/* Busca na Receita (BrasilAPI) — mesmo endpoint que o Fornecedor ja usa.
-   So preenche campo vazio: o que voce digitou a mao fica, e a divergencia
-   vira aviso em vez de sobrescrita silenciosa. */
-function cliRfBuscar(btn) {
-  var inp = document.querySelector('[name="cnpj"]');
-  var so = ((inp && inp.value) || '').replace(/\D/g, '');
-  var eco = document.getElementById('cli-rf-eco');
-  function diz(classe, html) {
-    eco.className = 'alert ' + classe + ' py-2 px-3 small mb-2';
-    eco.innerHTML = html; eco.hidden = false;
-  }
-  if (so.length !== 14) {
-    diz('alert-warning', 'Digite o CNPJ completo (14 dígitos) para buscar.');
-    return;
-  }
-  var rotulo = btn.innerHTML;
-  btn.disabled = true; btn.innerHTML = 'buscando…'; eco.hidden = true;
-  fetch('/fornecedores/api/cnpj/' + so)
-    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
-    .then(function (res) {
-      btn.disabled = false; btn.innerHTML = rotulo;
-      if (!res.ok || res.j.erro) {
-        diz('alert-warning', (res.j && res.j.erro) || 'Não consegui consultar a Receita.');
-        return;
-      }
-      var d = res.j;
-      var mapa = { razao_social: d.razao_social, nome_fantasia: d.nome_fantasia,
-                   telefone: d.telefone, email: d.email, cep: d.cep,
-                   endereco: d.endereco, numero: d.numero,
-                   complemento: d.complemento, bairro: d.bairro,
-                   municipio: d.municipio, uf: d.uf };
-      var postos = [], mantidos = [];
-      Object.keys(mapa).forEach(function (k) {
-        var campo = document.querySelector('[name="' + k + '"]');
-        if (!campo || !mapa[k]) return;
-        if ((campo.value || '').trim()) {
-          if (campo.value.trim().toUpperCase() !== String(mapa[k]).trim().toUpperCase()) {
-            mantidos.push(k);
-          }
-          return;
-        }
-        campo.value = mapa[k];
-        campo.style.background = '#f0fdf4';
-        postos.push(k);
-      });
-      diz('alert-success', '<b>Encontrado na Receita Federal.</b> ' +
-        (postos.length ? 'Preenchi ' + postos.length + ' campo(s) que estavam vazios (em verde).'
-                       : 'Nada a preencher — já estava tudo digitado.') +
-        (mantidos.length ? '<br>Mantive o que você já tinha em <b>' + mantidos.join(', ') +
-                           '</b> — a Receita traz diferente.' : ''));
-    })
-    .catch(function (e) {
-      btn.disabled = false; btn.innerHTML = rotulo;
-      diz('alert-danger', 'Erro de rede ao consultar a Receita: ' + e);
-    });
-}
-</script>
+{% include 'clientes/_ficha_js.html' %}
+{% endblock %}

@@ -1,0 +1,117 @@
+{#- Comportamento da ficha: busca na Receita e o painel de rotas do destino. -#}
+<script>
+/* As rotas ativas por destino, servidas pela rota Python. E daqui que sai o
+   valor por litro do CT-e — o painel existe pra esse campo parar de parecer
+   um cadastro solto. */
+var CLI_ROTAS = {{ rotas | default({}) | tojson }};
+
+function cliMoeda(v) {
+  return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',');
+}
+
+/* Mostra o que o destino escolhido ATIVA. Sem destino (ou sem rota), avisa
+   o que isso custa na hora do lançamento. */
+function cliRotas() {
+  var sel = document.getElementById('cli-destino');
+  var alvo = document.getElementById('cli-rotas');
+  if (!sel || !alvo) return;
+  var id = sel.value;
+  var nome = id ? sel.options[sel.selectedIndex].text.trim() : '';
+  if (!id) {
+    alvo.innerHTML = '<div class="rota rota--vazia"><div class="rota__t">' +
+      'Sem destino padrão</div><div style="font-size:.72rem;color:#8a5a00">' +
+      'O frete não vai pré-preencher a rota deste cliente — dá pra escolher ' +
+      'no lançamento, mas é digitar toda vez.</div></div>';
+    return;
+  }
+  var lista = CLI_ROTAS[id] || [];
+  if (!lista.length) {
+    alvo.innerHTML = '<div class="rota rota--vazia"><div class="rota__t">' +
+      'Nenhuma rota ativa chega em ' + nome + '</div>' +
+      '<div style="font-size:.72rem;color:#8a5a00">Sem rota cadastrada, o ' +
+      'valor por litro do CT-e não vem sozinho.</div></div>';
+    return;
+  }
+  alvo.innerHTML = '<div class="rota"><div class="rota__t">✓ ' + lista.length +
+    ' rota(s) ativa(s) chegam em ' + nome + ' — é daqui que sai o valor por ' +
+    'litro do CT-e:</div><div class="rota__l">' +
+    lista.map(function (r) {
+      return '<span class="rota__i">' + r.origem + ' <b>' +
+        cliMoeda(r.valor) + '</b></span>';
+    }).join('') + '</div></div>';
+}
+
+/* Busca na Receita (BrasilAPI) — mesmo endpoint que o Fornecedor ja usa.
+   REGRA: so preenche campo vazio. O que voce digitou a mao fica, e a
+   divergencia vira aviso em vez de sobrescrita silenciosa. */
+function cliRfBuscar(btn) {
+  var inp = document.querySelector('[name="cnpj"]');
+  var so = ((inp && inp.value) || '').replace(/\D/g, '');
+  var eco = document.getElementById('cli-estado');
+  function diz(classe, html) {
+    eco.className = 'estado' + (classe ? ' ' + classe : '');
+    eco.innerHTML = html;
+    eco.hidden = false;
+  }
+  if (so.length !== 14) {
+    diz('', '⚠️ Digite o CNPJ completo (14 dígitos) para buscar.');
+    return;
+  }
+  var rotulo = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = 'buscando…';
+  fetch('/fornecedores/api/cnpj/' + so)
+    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    .then(function (res) {
+      btn.disabled = false; btn.innerHTML = rotulo;
+      if (!res.ok || res.j.erro) {
+        diz('', '⚠️ ' + ((res.j && res.j.erro) || 'Não consegui consultar a Receita.'));
+        return;
+      }
+      var d = res.j;
+      var mapa = { razao_social: d.razao_social, nome_fantasia: d.nome_fantasia,
+                   telefone: d.telefone, email: d.email, cep: d.cep,
+                   endereco: d.endereco, numero: d.numero,
+                   complemento: d.complemento, bairro: d.bairro,
+                   municipio: d.municipio, uf: d.uf };
+      var postos = [], mantidos = [];
+      Object.keys(mapa).forEach(function (k) {
+        var campo = document.querySelector('[name="' + k + '"]');
+        if (!campo || !mapa[k]) return;
+        if ((campo.value || '').trim()) {
+          if (campo.value.trim().toUpperCase() !== String(mapa[k]).trim().toUpperCase()) {
+            mantidos.push(k.replace('_', ' '));
+          }
+          return;
+        }
+        campo.value = mapa[k];
+        var caixa = campo.closest('.cmp');
+        if (caixa) { caixa.classList.remove('vazio-aviso'); caixa.classList.add('rf-ok'); }
+        postos.push(k.replace('_', ' '));
+      });
+      diz('estado--ok', '✓ <b>Encontrado na Receita Federal.</b> ' +
+        (postos.length
+          ? 'Preenchi ' + postos.length + ' campo(s) que estavam vazios (em verde): '
+            + postos.map(function (p) { return '<span class="chip">' + p + '</span>'; }).join(' ')
+          : 'Nada a preencher — já estava tudo digitado.') +
+        (mantidos.length
+          ? '<br>Mantive o que você já tinha em ' +
+            mantidos.map(function (p) { return '<span class="chip">' + p + '</span>'; }).join(' ') +
+            ' — a Receita traz diferente.'
+          : ''));
+    })
+    .catch(function (e) {
+      btn.disabled = false; btn.innerHTML = rotulo;
+      diz('', '⚠️ Erro de rede ao consultar a Receita: ' + e);
+    });
+}
+
+/* O painel de rotas ja nasce mostrando o destino gravado. Se este script
+   rodar DEPOIS do documento pronto (bloco incluido no fim, defer, etc), o
+   evento nunca mais dispara — entao chama na hora. */
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', cliRotas);
+} else {
+  cliRotas();
+}
+</script>

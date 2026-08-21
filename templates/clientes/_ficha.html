@@ -1,0 +1,163 @@
+{#- Ficha do cliente — o corpo do formulario, compartilhado por novo e editar.
+
+    Espera no contexto:
+      cliente   dict com os valores (ou {} no cadastro novo)
+      destinos  lista de destinos de frete
+      grupos    grupos do plano de contas
+      rotas     {destino_id: [{origem, valor}]} — o que cada destino ATIVA
+
+    Duas coisas que esta tela deixa explicitas, porque confundi-las foi o que
+    deixou 39 cadastros sem municipio:
+      Municipio      = endereco da empresa. Vai no boleto (utils/boletos.py).
+      Destino frete  = destino_id. Casa com a origem em `rotas` e define o
+                       valor por litro do CT-e. A Receita nao mexe nele. -#}
+
+{% set c = cliente or {} %}
+
+<div class="sec">
+  <div class="sec__t">Identificação</div>
+  <div class="lin tres">
+    <div class="cmp">
+      <label>CNPJ</label>
+      <div class="grupo-cnpj">
+        <input type="text" name="cnpj" value="{{ c.cnpj or '' }}"
+               placeholder="00.000.000/0000-00">
+        <button type="button" class="bt-rf2" onclick="cliRfBuscar(this)">
+          <i class="bi bi-bank"></i> {{ 'Completar pela Receita' if c else 'Buscar' }}
+        </button>
+      </div>
+      <span class="aj">Puxa razão social, fantasia, endereço, município, CEP e
+        telefone. <b>Só preenche o que está vazio.</b></span>
+    </div>
+    <div class="cmp">
+      <label>IE</label>
+      <input type="text" name="ie" value="{{ c.ie or '' }}">
+    </div>
+    <div class="cmp">
+      <label>Telefone</label>
+      <input type="text" name="telefone" value="{{ c.telefone or '' }}"
+             placeholder="(00) 00000-0000">
+    </div>
+  </div>
+
+  <div class="lin duas">
+    <div class="cmp">
+      <label>Razão social <span class="ob">*</span></label>
+      <input type="text" name="razao_social" value="{{ c.razao_social or '' }}" required>
+    </div>
+    <div class="cmp">
+      <label>Nome fantasia</label>
+      <input type="text" name="nome_fantasia" value="{{ c.nome_fantasia or '' }}">
+    </div>
+  </div>
+
+  <div class="lin duas">
+    <div class="cmp">
+      <label>E-mail</label>
+      <input type="email" name="email" value="{{ c.email or '' }}">
+      <span class="aj">Vai no boleto e na mensagem de WhatsApp.</span>
+    </div>
+    <div class="cmp">
+      <label>Contato</label>
+      <input type="text" name="contato" value="{{ c.contato or '' }}"
+             placeholder="nome do responsável">
+    </div>
+  </div>
+</div>
+
+<div class="sec">
+  <div class="sec__t">Endereço da empresa</div>
+  <div class="lin tres">
+    <div class="cmp">
+      <label>Logradouro</label>
+      <input type="text" name="endereco" value="{{ c.endereco or '' }}">
+    </div>
+    <div class="cmp">
+      <label>Número</label>
+      <input type="text" name="numero" value="{{ c.numero or '' }}">
+    </div>
+    <div class="cmp">
+      <label>CEP</label>
+      <input type="text" name="cep" value="{{ c.cep or '' }}" placeholder="00000-000">
+    </div>
+  </div>
+  <div class="lin duas">
+    <div class="cmp">
+      <label>Bairro</label>
+      <input type="text" name="bairro" value="{{ c.bairro or '' }}">
+    </div>
+    <div class="cmp">
+      <label>Complemento</label>
+      <input type="text" name="complemento" value="{{ c.complemento or '' }}"
+             placeholder="apto, sala, bloco…">
+    </div>
+  </div>
+  <div class="lin tres">
+    <div class="cmp {{ 'vazio-aviso' if not c.municipio }}">
+      <label>Município</label>
+      <input type="text" name="municipio" value="{{ c.municipio or '' }}"
+             placeholder="cidade do endereço">
+      <span class="aj">É o endereço que <b>vai no boleto</b> — diferente do
+        destino de frete.</span>
+    </div>
+    <div class="cmp">
+      <label>UF</label>
+      <input type="text" name="uf" value="{{ c.uf or '' }}" maxlength="2" placeholder="GO">
+    </div>
+    <div></div>
+  </div>
+</div>
+
+<div class="sec">
+  <div class="sec__t"><i class="bi bi-truck"></i> Destino de frete</div>
+  <div class="lin duas">
+    <div class="cmp {{ 'vazio-aviso' if not c.destino_id }}">
+      <label>Destino padrão deste cliente</label>
+      <select name="destino_id" id="cli-destino" onchange="cliRotas()">
+        <option value="">— sem destino padrão —</option>
+        {% for d in destinos %}
+        <option value="{{ d.id }}" {{ 'selected' if c.destino_id == d.id }}>
+          {{ d.nome }} - {{ d.estado }}</option>
+        {% endfor %}
+      </select>
+      <span class="aj">Casa com a origem na tabela de rotas e define o
+        <b>valor por litro do CT-e</b>. É escolha sua — a Receita não mexe nele.</span>
+    </div>
+    <div id="cli-rotas"></div>
+  </div>
+</div>
+
+<div class="sec">
+  <div class="sec__t">Frete e contabilidade</div>
+  <div class="lin duas">
+    <label class="chave">
+      <input type="checkbox" name="paga_comissao" value="1"
+             {{ 'checked' if c.paga_comissao }}>
+      <span class="chave__t">
+        <span class="chave__n">Paga comissão ao motorista</span>
+        <span class="chave__d">R$ 0,01 por litro transportado</span></span>
+    </label>
+    <label class="chave">
+      <input type="checkbox" name="cte_integral" value="1"
+             {{ 'checked' if c.cte_integral }}>
+      <span class="chave__t">
+        <span class="chave__n">CT-e integral</span>
+        <span class="chave__d">Valor do CT-e = valor total do frete</span></span>
+    </label>
+  </div>
+  {% if grupos %}
+  <div class="lin duas">
+    <div class="cmp">
+      <label>Grupo do plano de contas</label>
+      <select name="grupo_contabil_id">
+        <option value="">— sem grupo contábil —</option>
+        {% for g in grupos %}
+        <option value="{{ g.id }}" {{ 'selected' if c.grupo_contabil_id == g.id }}>
+          {{ g.codigo }} — {{ g.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div></div>
+  </div>
+  {% endif %}
+</div>

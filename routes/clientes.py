@@ -150,6 +150,41 @@ def lista():
     return render_template('clientes/lista.html', clientes=clientes, totais=totais)
 
 
+def _rotas_por_destino(cursor):
+    """Quais rotas ativas chegam em cada destino, com o valor por litro.
+
+    Serve pra tela mostrar o que o campo "Destino de frete" de fato faz: e
+    dele que sai o preco do CT-e (rotas casa origem x destino). Sem isso o
+    select parece so mais um cadastro solto.
+    """
+    try:
+        cursor.execute("""
+            SELECT r.destino_id, o.nome AS origem, r.valor_por_litro AS valor
+              FROM rotas r
+              JOIN origens o ON o.id = r.origem_id
+             WHERE r.ativo = 1
+             ORDER BY r.destino_id, r.valor_por_litro
+        """)
+        rows = cursor.fetchall()
+    except Exception:
+        return {}
+    saida = {}
+    for r in rows:
+        saida.setdefault(r['destino_id'], []).append(
+            {'origem': r['origem'], 'valor': float(r['valor'] or 0)})
+    return saida
+
+
+def _falta_no_cadastro(cliente):
+    """O que esta em branco e a Receita saberia preencher."""
+    rotulos = [('nome_fantasia', 'fantasia'), ('cnpj', 'CNPJ'),
+               ('telefone', 'telefone'), ('email', 'e-mail'),
+               ('endereco', 'endereço'), ('municipio', 'município'),
+               ('uf', 'UF'), ('cep', 'CEP')]
+    return [rot for campo, rot in rotulos
+            if not ((cliente or {}).get(campo) or '').strip()]
+
+
 def _consulta_receita(cnpj):
     """Um CNPJ na BrasilAPI. Devolve dict com os campos ou None.
 
@@ -331,7 +366,8 @@ def novo():
         """)
         destinos = cursor.fetchall()
         grupos = _get_grupos_contabeis(cursor)
-        return render_template('clientes/novo.html', destinos=destinos, grupos=grupos)
+        return render_template('clientes/novo.html', destinos=destinos,
+                               grupos=grupos, rotas=_rotas_por_destino(cursor))
     except Exception as e:
         if conn:
             conn.rollback()
@@ -411,7 +447,9 @@ def editar(id):
         destinos = cursor.fetchall()
         grupos = _get_grupos_contabeis(cursor)
         return render_template('clientes/editar.html', cliente=cliente,
-                               destinos=destinos, grupos=grupos)
+                               destinos=destinos, grupos=grupos,
+                               rotas=_rotas_por_destino(cursor),
+                               faltando=_falta_no_cadastro(cliente))
     except Exception as e:
         if conn:
             conn.rollback()
