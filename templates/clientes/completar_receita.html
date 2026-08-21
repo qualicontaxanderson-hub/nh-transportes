@@ -11,6 +11,22 @@
 
 {% block styles %}
 <style>
+/* O layout base pinta todo body > .container-fluid de branco com 2rem de
+   padding; no celular vira moldura e a tela nao enche. Mesma neutralizacao
+   que as telas do Banco ja usam. */
+body > .container-fluid:has(#crf){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#crf){ padding:.7rem 1rem 0; }
+}
+/* Quando a propria tela e um container-fluid, os .75rem dela somavam com os
+   de fora e sobrava faixa dos dois lados. */
+#crf.container-fluid{ padding-left:0; padding-right:0; }
+</style>
+
+<style>
   #crf{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --ambar:#8a5a00;
         --muted:#6b7684; --borda:#d9e0e8; color:#151d27; }
   #crf .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);

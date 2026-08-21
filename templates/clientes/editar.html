@@ -2,7 +2,23 @@
 
 {% block title %}Editar Cliente - NH Transportes{% endblock %}
 
-{% block styles %}{% with esc = '#cfi' %}{% include 'includes/ficha_css.html' %}{% endwith %}{% endblock %}
+{% block styles %}
+<style>
+/* O layout base pinta todo body > .container-fluid de branco com 2rem de
+   padding; no celular vira moldura e a tela nao enche. Mesma neutralizacao
+   que as telas do Banco ja usam. */
+body > .container-fluid:has(#cfi){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#cfi){ padding:.7rem 1rem 0; }
+}
+/* Quando a propria tela e um container-fluid, os .75rem dela somavam com os
+   de fora e sobrava faixa dos dois lados. */
+#cfi.container-fluid{ padding-left:0; padding-right:0; }
+</style>
+{% with esc = '#cfi' %}{% include 'includes/ficha_css.html' %}{% endwith %}{% endblock %}
 
 {% block content %}
 <div id="cfi">
