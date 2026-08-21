@@ -1,0 +1,24 @@
+{#- Abas da familia CADASTROS — fonte unica, igual ao abas_migracoes.
+
+    Uso:
+      {% with aba_cad = 'clientes' %}
+        {% include 'includes/abas_cadastros.html' %}
+      {% endwith %}
+
+    A ordem e o conteudo seguem o menu do ADMIN (navbar.html): Clientes,
+    Fornecedores, Produtos, Motoristas, Veiculos, Bases, Origens/Destinos.
+    Copiei do menu do SUPERVISOR por engano na primeira versao e as abas
+    apontavam pra Cartoes/Formas — telas de outra familia. -#}
+<div class="fam">
+  {% for chave, rotulo, destino in [
+      ('clientes',    'Clientes',          '/clientes/'),
+      ('fornecedores','Fornecedores',      '/fornecedores/'),
+      ('produtos',    'Produtos',          '/produtos/'),
+      ('motoristas',  'Motoristas',        '/motoristas/'),
+      ('veiculos',    'Veículos',          '/veiculos/'),
+      ('bases',       'Bases',             '/bases/'),
+      ('origens',     'Origens/Destinos',  '/origens_destinos/')
+  ] %}
+  <a href="{{ destino }}"{% if aba_cad == chave %} class="on"{% endif %}>{{ rotulo }}</a>
+  {% endfor %}
+</div>

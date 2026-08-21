@@ -177,14 +177,7 @@ body > .container-fluid:has(#cli){
       <a class="bt-t" href="{{ url_for('clientes.novo') }}">
         <i class="bi bi-plus-circle"></i> Novo cliente</a>
     </div>
-    <div class="fam">
-      <a class="on" href="{{ url_for('clientes.lista') }}">Clientes</a>
-      <a href="/fornecedores/">Fornecedores</a>
-      <a href="/cartoes/">Cartões</a>
-      <a href="/caixa/">Formas Pagamento</a>
-      <a href="/tipos_receita_caixa/">Formas Recebimento</a>
-      <a href="/lubrificantes/produtos">Produtos Lubrificantes</a>
-    </div>
+    {% with aba_cad = 'clientes' %}{% include 'includes/abas_cadastros.html' %}{% endwith %}
   </div>
 
   <div class="g-nums">

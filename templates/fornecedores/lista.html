@@ -180,14 +180,7 @@ body > .container-fluid:has(#for){
       <a class="bt-t" href="/relatorios/conf_fornecedores_dfe">
         <i class="bi bi-bar-chart"></i> Fornecedores × Compras</a>
     </div>
-    <div class="fam">
-      <a href="/clientes/">Clientes</a>
-      <a class="on" href="{{ url_for('fornecedores.lista') }}">Fornecedores</a>
-      <a href="/cartoes/">Cartões</a>
-      <a href="/caixa/">Formas Pagamento</a>
-      <a href="/tipos_receita_caixa/">Formas Recebimento</a>
-      <a href="/lubrificantes/produtos">Produtos Lubrificantes</a>
-    </div>
+    {% with aba_cad = 'fornecedores' %}{% include 'includes/abas_cadastros.html' %}{% endwith %}
   </div>
 
   <div class="g-nums">
