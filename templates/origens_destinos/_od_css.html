@@ -1,0 +1,325 @@
+{#- Visual + comportamento de Origens/Destinos, parametrizado por `esc`
+    (#org ou #dst) e `pre` (org ou dst). As duas telas sao gemeas. -#}
+<style>
+/* O layout base pinta todo body > .container-fluid de branco com 2rem de
+   padding; no celular vira moldura e a tela nao enche. */
+body > .container-fluid:has({{ esc }}){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has({{ esc }}){ padding:.7rem 1rem 0; }
+}
+{{ esc }}.container-fluid{ padding-left:0; padding-right:0; }
+
+{{ esc }}{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+  --ambar:#8a5a00; --muted:#6b7684; --ink:#151d27; --borda:#d9e0e8;
+  color:var(--ink); max-width:100%; }
+
+{{ esc }} .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+  color:#fff; border-radius:14px; padding:.75rem .85rem .65rem;
+  margin-bottom:.7rem; }
+{{ esc }} .topo__l{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+{{ esc }} .topo__t{ font-weight:800; font-size:1.02rem; flex:1; min-width:0; }
+{{ esc }} .bt-t{ border:1px solid rgba(255,255,255,.35);
+  background:rgba(255,255,255,.14); color:#fff; border-radius:9px;
+  padding:.34rem .7rem; font-size:.78rem; font-weight:800; font-family:inherit;
+  cursor:pointer; text-decoration:none; white-space:nowrap; }
+{{ esc }} .bt-t:hover{ background:rgba(255,255,255,.26); color:#fff; }
+{{ esc }} .fam{ display:flex; gap:.4rem; margin-top:.6rem; overflow-x:auto;
+  padding-bottom:.15rem; }
+{{ esc }} .fam a{ flex:0 0 auto; border-radius:99px; padding:.35rem .8rem;
+  font-size:.78rem; font-weight:800; background:rgba(255,255,255,.18);
+  color:#fff; text-decoration:none; white-space:nowrap; }
+{{ esc }} .fam a.on{ background:#fff; color:var(--blue-deep); }
+
+{{ esc }} .alerta{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;
+  background:#fbe9e9; color:var(--danger); border-radius:11px;
+  padding:.6rem .75rem; font-size:.83rem; font-weight:700; margin-bottom:.7rem; }
+{{ esc }} .alerta a{ margin-left:auto; background:var(--danger); color:#fff;
+  border-radius:8px; padding:.3rem .7rem; font-size:.77rem; font-weight:800;
+  text-decoration:none; cursor:pointer; }
+
+{{ esc }} .busca{ display:flex; gap:.4rem; margin-bottom:.6rem; }
+{{ esc }} .busca input{ flex:1; min-width:0; border:1px solid var(--borda);
+  border-radius:10px; padding:.5rem .65rem; font-size:.86rem; font-family:inherit; }
+{{ esc }} .bt-fil{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
+  color:#3a4655; border-radius:10px; padding:.5rem .8rem; font-size:.83rem;
+  font-weight:800; font-family:inherit; cursor:pointer; display:inline-flex;
+  gap:.35rem; align-items:center; }
+{{ esc }} .bt-fil__n{ background:var(--blue); color:#fff; border-radius:99px;
+  min-width:18px; height:18px; display:inline-grid; place-items:center;
+  font-size:.66rem; padding:0 .3rem; }
+{{ esc }} .ordem{ display:flex; gap:.35rem; align-items:center;
+  margin-bottom:.6rem; overflow-x:auto; padding-bottom:.15rem; }
+{{ esc }} .ordem__t{ font-size:.72rem; font-weight:800; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.05em; flex:0 0 auto; }
+{{ esc }} .ord{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
+  color:#3a4655; border-radius:99px; padding:.32rem .7rem; font-size:.78rem;
+  font-weight:800; font-family:inherit; cursor:pointer; display:inline-flex;
+  gap:.3rem; align-items:center; }
+{{ esc }} .ord.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+{{ esc }} .conta{ font-size:.76rem; color:var(--muted); margin-bottom:.5rem;
+  font-weight:700; }
+{{ esc }} .gr__c{ display:flex; align-items:center; gap:.5rem; margin-bottom:.3rem; }
+{{ esc }} .gr__a{ margin-left:auto; border:0; background:none; color:var(--blue);
+  font-size:.74rem; font-weight:800; cursor:pointer; font-family:inherit; }
+{{ esc }} .dica{ font-size:.72rem; color:var(--muted); margin-top:.35rem; }
+
+{{ esc }} .lista{ background:#fff; border:1px solid var(--borda);
+  border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+{{ esc }} .it{ border-bottom:1px solid #eef1f5; }
+{{ esc }} .it:last-child{ border-bottom:0; }
+{{ esc }} .it__h{ display:flex; gap:.6rem; padding:.6rem .8rem;
+  align-items:flex-start; cursor:pointer; min-width:0; }
+{{ esc }} .it__h:hover{ background:#fafbfd; }
+{{ esc }} .it__ic{ flex:0 0 36px; height:36px; border-radius:10px; display:grid;
+  place-items:center; font-size:1rem; background:#eaf1f9; color:var(--blue-deep); }
+{{ esc }} .it__ic--al{ background:#fbe9e9; color:var(--danger); }
+{{ esc }} .it__t{ flex:1; min-width:0; }
+{{ esc }} .it__n{ font-weight:800; font-size:.9rem; overflow-wrap:anywhere; }
+{{ esc }} .it__d{ display:flex; gap:.4rem .9rem; flex-wrap:wrap; margin-top:.25rem;
+  font-size:.75rem; color:#3a4655; min-width:0; overflow-wrap:anywhere; }
+{{ esc }} .it__d .k{ color:var(--muted); }
+{{ esc }} .it__d b{ font-weight:700; font-variant-numeric:tabular-nums; }
+{{ esc }} .mov{ text-align:right; flex:0 0 auto; }
+{{ esc }} .mov__v{ font-weight:800; font-size:.84rem; color:var(--blue-deep);
+  font-variant-numeric:tabular-nums; white-space:nowrap; }
+{{ esc }} .mov__r{ font-size:.66rem; color:var(--muted); white-space:nowrap; }
+{{ esc }} .barra{ height:5px; border-radius:9px; background:#eef2f7;
+  overflow:hidden; margin-top:.35rem; }
+{{ esc }} .barra i{ display:block; height:100%;
+  background:linear-gradient(90deg,#2E6FB0,#1D63A5); }
+{{ esc }} .selo{ display:inline-block; border-radius:99px; padding:.14rem .5rem;
+  font-size:.64rem; font-weight:800; white-space:nowrap; }
+{{ esc }} .selo--al{ background:#fbe9e9; color:var(--danger); }
+{{ esc }} .selo--par{ background:#f4f6f9; color:var(--muted); }
+
+{{ esc }} .it__c{ background:#f7f9fc; border-top:1px solid #eef1f5;
+  padding:.65rem .8rem .75rem; }
+{{ esc }} .grade{ display:grid; gap:.5rem; grid-template-columns:1fr; }
+@media (min-width:768px){ {{ esc }} .grade{ grid-template-columns:1fr 1fr; } }
+{{ esc }} .bloco{ background:#fff; border:1px solid var(--borda);
+  border-radius:11px; padding:.55rem .7rem; min-width:0; }
+{{ esc }} .bloco__t{ font-size:.64rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--muted); margin-bottom:.3rem; }
+{{ esc }} .li{ display:flex; gap:.5rem; font-size:.79rem; padding:.16rem 0; }
+{{ esc }} .li .k{ color:var(--muted); flex:0 0 72px; }
+{{ esc }} .li .v{ flex:1; min-width:0; font-weight:600; overflow-wrap:anywhere; }
+{{ esc }} .vazio{ color:var(--ambar); font-weight:700; }
+
+{{ esc }} .rt{ display:flex; align-items:center; gap:.5rem; padding:.26rem 0;
+  border-bottom:1px dashed #eef1f5; font-size:.79rem; }
+{{ esc }} .rt:last-child{ border-bottom:0; }
+{{ esc }} .rt__n{ flex:1; min-width:0; font-weight:700; overflow-wrap:anywhere; }
+{{ esc }} .rt__v{ font-weight:800; color:var(--blue-deep);
+  font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+{{ esc }} .acoes{ display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.5rem; }
+{{ esc }} .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+  border-radius:9px; padding:.36rem .7rem; font-size:.77rem; font-weight:700;
+  font-family:inherit; cursor:pointer; text-decoration:none;
+  display:inline-flex; gap:.3rem; align-items:center; }
+{{ esc }} .bt:hover{ background:#dfeaf8; color:var(--blue-deep); }
+{{ esc }} .bt--del{ background:#fbe9e9; border-color:#f0c8c8; color:var(--danger); }
+{{ esc }} .fedit .campo{ margin-bottom:.35rem; }
+{{ esc }} .nova{ margin-top:.7rem; }
+{{ esc }} .fnova{ display:flex; gap:.4rem; flex-wrap:wrap; align-items:center; }
+{{ esc }} .fnova .campo{ flex:1 1 140px; margin:0; }
+{{ esc }} .nada{ padding:1.4rem .8rem; text-align:center; color:var(--muted); }
+</style>
+
+<script>
+(function () {
+  var PRE = '{{ pre }}';
+  var passo = 1;
+  var filtro = { sit: [], uf: [], faixa: 0 };
+
+  function q(id) { return document.getElementById(PRE + '-' + id); }
+  function cards() {
+    return [].slice.call(document.querySelectorAll('{{ esc }} .lista > .it'));
+  }
+
+  function abre(el) {
+    var card = el.closest('.it');
+    var corpo = card.querySelector('.it__c');
+    var aberto = corpo.style.display !== 'none';
+    corpo.style.display = aberto ? 'none' : 'block';
+    card.classList.toggle('aberto', !aberto);
+  }
+
+  function abrirFiltro() {
+    ir(1);
+    q('escuro').classList.add('on');
+    q('gav').classList.add('on');
+  }
+
+  function fecharFiltro() {
+    q('escuro').classList.remove('on');
+    q('gav').classList.remove('on');
+  }
+
+  function ir(n) {
+    if (n < 1) { n = 1; }
+    if (n > 3) { n = 3; }
+    passo = n;
+    window[PRE + 'Passo'] = n;
+    [1, 2, 3].forEach(function (i) {
+      q('e' + i).hidden = (i !== n);
+      var p = q('p' + i);
+      p.classList.toggle('on', i <= n);
+      p.classList.toggle('aqui', i === n);
+    });
+    var nomes = ['Situação', 'Estado', 'Movimento'];
+    q('pn').textContent = n;
+    q('pt').textContent = nomes[n - 1];
+    q('bt-voltar').hidden = (n === 1);
+    q('bt-ir').textContent = (n === 3) ? 'Filtrar' : 'Avançar';
+  }
+
+  function avancar() {
+    if (passo < 3) { ir(passo + 1); return; }
+    aplicar();
+    fecharFiltro();
+  }
+
+  function marcarTodas(id, valor) {
+    document.querySelectorAll('#' + id + ' input[type=checkbox]')
+      .forEach(function (c) {
+        if (!c.closest('.opc').hidden) { c.checked = valor; }
+      });
+  }
+
+  function chip(btn, grupo) {
+    document.querySelectorAll('#' + grupo + ' .chip').forEach(function (c) {
+      c.classList.toggle('on', c === btn);
+    });
+  }
+
+  function marcados(id) {
+    return [].slice.call(
+      document.querySelectorAll('#' + id + ' input[type=checkbox]:checked'))
+      .map(function (c) { return c.value; });
+  }
+
+  function aplicar() {
+    var on = document.querySelector('#' + PRE + '-faixa .chip.on');
+    filtro = { sit: marcados(PRE + '-sit'), uf: marcados(PRE + '-uf'),
+               faixa: on ? parseFloat(on.dataset.v || 0) : 0 };
+    pinta();
+    eco();
+  }
+
+  function limpar() {
+    filtro = { sit: [], uf: [], faixa: 0 };
+    marcarTodas(PRE + '-sit', false);
+    marcarTodas(PRE + '-uf', false);
+    var chips = document.querySelectorAll('#' + PRE + '-faixa .chip');
+    chips.forEach(function (c, i) { c.classList.toggle('on', i === 0); });
+    var b = q('busca');
+    if (b) { b.value = ''; busca(b); }
+    pinta();
+    eco();
+  }
+
+  /* Atalho da faixa vermelha: so quem roda frete sem rota cadastrada. */
+  function soSemRota() {
+    limpar();
+    var chk = document.querySelector('#' + PRE + '-sit input[value="srcf"]');
+    if (chk) { chk.checked = true; }
+    aplicar();
+  }
+
+  function eco() {
+    var p = [];
+    if (filtro.sit.length) { p.push(filtro.sit.length + ' situação(ões)'); }
+    if (filtro.uf.length) { p.push(filtro.uf.length + ' estado(s)'); }
+    if (filtro.faixa) { p.push(filtro.faixa + ' fretes ou mais'); }
+    var n = p.length;
+    q('eco').hidden = !n;
+    if (n) { q('eco-txt').textContent = 'Filtrando por ' + p.join(' · '); }
+    var c = q('fil-n');
+    c.hidden = !n;
+    c.textContent = n;
+  }
+
+  function busca(inp) {
+    var s = (inp.value || '').toLowerCase().trim();
+    cards().forEach(function (c) {
+      c.dataset.busca_ok = (!s || (c.dataset.busca || '').indexOf(s) >= 0) ? '1' : '0';
+    });
+    pinta();
+  }
+
+  /* Um lugar so decide o que aparece: filtro E busca precisam passar. */
+  function pinta() {
+    var vis = 0, fretes = 0;
+    cards().forEach(function (c) {
+      var ok = (c.dataset.busca_ok !== '0');
+      if (ok && filtro.sit.length) {
+        ok = filtro.sit.some(function (s) {
+          if (s === 'comrota') { return c.dataset.rota === '1'; }
+          if (s === 'semrota') { return c.dataset.rota === '0'; }
+          if (s === 'srcf')    { return c.dataset.srcf === '1'; }
+          if (s === 'nunca')   { return c.dataset.uso === '0'; }
+          return false;
+        });
+      }
+      if (ok && filtro.uf.length) {
+        ok = filtro.uf.indexOf(c.dataset.estado || '') >= 0;
+      }
+      if (ok && filtro.faixa) {
+        ok = parseInt(c.dataset.fretes || 0, 10) >= filtro.faixa;
+      }
+      c.style.display = ok ? '' : 'none';
+      if (ok) { vis++; fretes += parseInt(c.dataset.fretes || 0, 10); }
+    });
+    var el = q('conta');
+    if (el) {
+      el.textContent = vis + ' de ' + cards().length + ' registros' +
+        (fretes ? ' · ' + fretes.toLocaleString('pt-BR') + ' fretes' : '');
+    }
+  }
+
+  function ordem(o) {
+    document.querySelectorAll('{{ esc }} .ord').forEach(function (b) {
+      b.classList.toggle('on', b.dataset.o === o);
+    });
+    var lista = document.querySelector('{{ esc }} .lista');
+    var cs = cards();
+    cs.sort(function (a, b) {
+      if (o === 'nome') {
+        return (a.dataset.nome || '').localeCompare(b.dataset.nome || '');
+      }
+      if (o === 'rotas') {
+        return parseInt(b.dataset.nrotas || 0, 10) - parseInt(a.dataset.nrotas || 0, 10);
+      }
+      return parseInt(b.dataset.fretes || 0, 10) - parseInt(a.dataset.fretes || 0, 10);
+    });
+    cs.forEach(function (c) { lista.appendChild(c); });
+  }
+
+  /* As funcoes viram globais com o prefixo da tela, porque o HTML chama
+     por onclick — e as duas telas (org/dst) nunca coexistem na mesma pagina. */
+  window[PRE + 'Abre'] = abre;
+  window[PRE + 'AbrirFiltro'] = abrirFiltro;
+  window[PRE + 'FecharFiltro'] = fecharFiltro;
+  window[PRE + 'Ir'] = ir;
+  window[PRE + 'Avancar'] = avancar;
+  window[PRE + 'MarcarTodas'] = marcarTodas;
+  window[PRE + 'Chip'] = chip;
+  window[PRE + 'Aplicar'] = aplicar;
+  window[PRE + 'Limpar'] = limpar;
+  window[PRE + 'SoSemRota'] = soSemRota;
+  window[PRE + 'Busca'] = busca;
+  window[PRE + 'Ordem'] = ordem;
+  window[PRE + 'Passo'] = 1;
+
+  function iniciar() { ordem('fretes'); pinta(); }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', iniciar);
+  } else {
+    iniciar();
+  }
+})();
+</script>

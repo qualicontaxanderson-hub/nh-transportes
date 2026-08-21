@@ -2,161 +2,23 @@
 
 {% block title %}Destinos - NH Transportes{% endblock %}
 
+{#- Destino e o lado onde a carga chega, e e ele que o cadastro do cliente
+    aponta (clientes.destino_id). Origem x destino casa em `rotas` e da o
+    valor por litro do CT-e. -#}
+
+{% block styles %}
+{% with esc = '#dst', pre = 'dst' %}
+  {% include 'origens_destinos/_od_css.html' %}
+{% endwith %}
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 style="font-size: 1.5rem;"><i class="bi bi-pin-map"></i> Destinos</h2>
-        <div>
-            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNovoDestino">
-                <i class="bi bi-plus-circle"></i> Novo Destino
-            </button>
-            <a href="{{ url_for('rotas.lista') }}" class="btn btn-secondary btn-sm">
-                <i class="bi bi-arrow-left"></i> Voltar para Rotas
-            </a>
-        </div>
-    </div>
-
-    <div class="card">
-        <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
-            <i class="bi bi-list"></i> Lista de Destinos
-        </div>
-        <div class="card-body" style="padding: 0.5rem;">
-            <div class="table-responsive">
-                <table class="table table-hover table-striped table-sm mb-0">
-                    <thead style="background:#4A90E2;color:#000;font-weight:700;font-size:0.85rem;">
-                        <tr>
-                            <th>ID</th>
-                            <th>Cidade</th>
-                            <th>Estado</th>
-                            <th class="text-center">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody style="font-size: 0.85rem;">
-                        {% if destinos %}
-                            {% for destino in destinos %}
-                            <tr>
-                                <td><strong>{{ destino.id }}</strong></td>
-                                <td>{{ destino.nome }}</td>
-                                <td>{{ destino.estado }}</td>
-                                <td class="text-center">
-                                    <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#modalEditarDestino{{ destino.id }}" title="Editar" style="padding: 0.2rem 0.4rem;">
-                                        <i class="bi bi-pencil"></i>
-                                    </button>
-                                    <a href="{{ url_for('origens_destinos.excluir_destino', id=destino.id) }}" 
-                                       class="btn btn-sm btn-danger"
-                                       title="Excluir"
-                                       style="padding: 0.2rem 0.4rem;"
-                                       onclick="return confirm('Deseja realmente excluir este destino?')">
-                                        <i class="bi bi-trash"></i>
-                                    </a>
-                                </td>
-                            </tr>
-
-                            <!-- Modal Editar -->
-                            <div class="modal fade" id="modalEditarDestino{{ destino.id }}" tabindex="-1">
-                                <div class="modal-dialog">
-                                    <div class="modal-content">
-                                        <div class="modal-header" style="background:#ffc107;color:#000;">
-                                            <h5 class="modal-title" style="font-size: 1rem;font-weight:600;">
-                                                <i class="bi bi-pencil"></i> Editar Destino
-                                            </h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                        </div>
-                                        <form method="POST" action="{{ url_for('origens_destinos.editar_destino', id=destino.id) }}">
-                                            <div class="modal-body">
-                                                <div class="mb-3">
-                                                    <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                                                        Cidade <span class="text-danger">*</span>
-                                                    </label>
-                                                    <input type="text" name="nome" class="form-control form-control-sm" value="{{ destino.nome }}" required>
-                                                </div>
-                                                <div class="mb-3">
-                                                    <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                                                        Estado <span class="text-danger">*</span>
-                                                    </label>
-                                                    <input type="text" name="estado" class="form-control form-control-sm" value="{{ destino.estado }}" maxlength="2" required>
-                                                </div>
-                                            </div>
-                                            <div class="modal-footer">
-                                                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                                                <button type="submit" class="btn btn-warning btn-sm">
-                                                    <i class="bi bi-check-circle"></i> Atualizar
-                                                </button>
-                                            </div>
-                                        </form>
-                                    </div>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        {% else %}
-                            <tr>
-                                <td colspan="4" class="text-center text-muted py-3" style="font-size: 0.9rem;">
-                                    <i class="bi bi-inbox" style="font-size:1.5rem;"></i><br>
-                                    Nenhum destino cadastrado
-                                </td>
-                            </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+<div id="dst">
+  {% with itens = destinos, esc = '#dst', pre = 'dst', titulo = 'Destinos',
+          acao_nova = 'origens_destinos.novo_destino',
+          acao_edit = 'origens_destinos.editar_destino',
+          acao_del  = 'origens_destinos.excluir_destino' %}
+    {% include 'origens_destinos/_od.html' %}
+  {% endwith %}
 </div>
-
-<!-- Modal Novo Destino -->
-<div class="modal fade" id="modalNovoDestino" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header" style="background:#4A90E2;color:#000;">
-                <h5 class="modal-title" style="font-size: 1rem;font-weight:600;">
-                    <i class="bi bi-plus-circle"></i> Novo Destino
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="POST" action="{{ url_for('origens_destinos.novo_destino') }}">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Cidade <span class="text-danger">*</span>
-                        </label>
-                        <input type="text" name="nome" class="form-control form-control-sm" placeholder="Ex: RIO DE JANEIRO" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Estado <span class="text-danger">*</span>
-                        </label>
-                        <input type="text" name="estado" class="form-control form-control-sm" placeholder="Ex: RJ" maxlength="2" required>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary btn-sm">
-                        <i class="bi bi-check-circle"></i> Cadastrar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<style>
-    .table-sm th, .table-sm td {
-        padding: 0.4rem;
-    }
-    
-    .btn-sm {
-        font-size: 0.8rem;
-        padding: 0.3rem 0.6rem;
-    }
-    
-    @media (max-width: 768px) {
-        h2 {
-            font-size: 1.2rem !important;
-        }
-        .table-sm th, .table-sm td {
-            font-size: 0.75rem !important;
-            padding: 0.3rem !important;
-        }
-    }
-</style>
 {% endblock %}

@@ -1,0 +1,252 @@
+{#- Corpo compartilhado de Origens e Destinos: as duas telas sao gemeas
+    (mesma pergunta, lados opostos da rota), entao um arquivo so decide como
+    elas se parecem e se comportam.
+
+    Espera no contexto:
+      itens      lista de origens ou destinos (ja com rotas/fretes)
+      totais     dict de _monta_od
+      esc        '#org' ou '#dst'  (prefixo do CSS e dos ids)
+      pre        'org' ou 'dst'    (prefixo das funcoes JS)
+      titulo     'Origens' ou 'Destinos'
+      lado       'destino' ou 'origem' — o OUTRO lado da rota, pro texto
+      acao_nova  endpoint do POST de criar
+      acao_edit  endpoint do POST de editar (recebe id)
+      acao_del   endpoint de excluir (recebe id) -#}
+
+<div class="topo">
+  <div class="topo__l">
+    <span class="topo__t"><i class="bi bi-geo-alt"></i> {{ titulo }}</span>
+    <a class="bt-t" href="{{ url_for('origens_destinos.lista_origens') }}"
+       {% if pre == 'org' %}style="background:#fff;color:#0C4C86"{% endif %}>Origens</a>
+    <a class="bt-t" href="{{ url_for('origens_destinos.lista_destinos') }}"
+       {% if pre == 'dst' %}style="background:#fff;color:#0C4C86"{% endif %}>Destinos</a>
+  </div>
+  {% with aba_cad = 'origens' %}{% include 'includes/abas_cadastros.html' %}{% endwith %}
+</div>
+
+<div class="g-nums">
+  <div class="n n--azul"><div class="r">{{ titulo }}</div>
+    <div class="v">{{ totais.itens }}</div></div>
+  <div class="n n--verde"><div class="r">Com rota</div>
+    <div class="v">{{ totais.com_rota }}/{{ totais.itens }}</div></div>
+  <div class="n {{ 'n--verm' if totais.sem_rota_com_frete else 'n--cinza' }}">
+    <div class="r">Roda sem rota</div>
+    <div class="v">{{ totais.sem_rota_com_frete }}</div></div>
+  <div class="n n--cinza"><div class="r">Nunca usado</div>
+    <div class="v">{{ totais.nunca_usados }}</div></div>
+</div>
+
+{% if totais.sem_rota_com_frete %}
+<div class="alerta">
+  <i class="bi bi-exclamation-triangle-fill"></i>
+  <b>{{ totais.sem_rota_com_frete }}
+  {{ 'origem' if pre == 'org' else 'destino' }}{{ '' if totais.sem_rota_com_frete == 1 else 's' }}
+  com frete e sem rota cadastrada</b> — nesses o valor por litro do CT-e é
+  digitado à mão em cada lançamento.
+  <a onclick="{{ pre }}SoSemRota()">ver só {{ 'essa' if totais.sem_rota_com_frete == 1 else 'esses' }}</a>
+</div>
+{% endif %}
+
+<div class="busca">
+  <input type="text" id="{{ pre }}-busca" placeholder="Buscar por nome ou cidade…"
+         oninput="{{ pre }}Busca(this)">
+  <button type="button" class="bt-fil" onclick="{{ pre }}AbrirFiltro()">
+    <i class="bi bi-sliders"></i> Filtro
+    <span class="bt-fil__n" id="{{ pre }}-fil-n" hidden>0</span></button>
+</div>
+
+<div class="ordem">
+  <span class="ordem__t">Ordenar:</span>
+  <button type="button" class="ord on" data-o="fretes" onclick="{{ pre }}Ordem('fretes')">
+    <i class="bi bi-truck"></i> Mais fretes</button>
+  <button type="button" class="ord" data-o="rotas" onclick="{{ pre }}Ordem('rotas')">
+    <i class="bi bi-signpost-split"></i> Mais rotas</button>
+  <button type="button" class="ord" data-o="nome" onclick="{{ pre }}Ordem('nome')">
+    <i class="bi bi-sort-alpha-down"></i> Nome A–Z</button>
+</div>
+
+<div class="g-eco" id="{{ pre }}-eco" hidden>
+  <i class="bi bi-funnel-fill"></i>
+  <span id="{{ pre }}-eco-txt"></span>
+  <a href="#" onclick="{{ pre }}Limpar(); return false;">Limpar</a>
+</div>
+
+<div class="conta" id="{{ pre }}-conta"></div>
+
+<div class="lista">
+  {% for it in itens %}
+  <div class="it" data-rota="{{ '1' if it.n_rotas else '0' }}"
+       data-srcf="{{ '1' if it.sem_rota_com_frete else '0' }}"
+       data-uso="{{ '0' if it.nunca_usado else '1' }}"
+       data-estado="{{ it.estado or '—' }}"
+       data-fretes="{{ it.fre_n }}"
+       data-nrotas="{{ it.n_rotas }}"
+       data-nome="{{ (it.nome or '') | lower }}"
+       data-busca="{{ ((it.nome or '') ~ ' ' ~ (it.cidade or '') ~ ' ' ~ (it.estado or '')) | lower }}">
+    <div class="it__h" onclick="{{ pre }}Abre(this)">
+      <span class="it__ic {{ 'it__ic--al' if it.sem_rota_com_frete }}">
+        <i class="bi bi-geo-alt-fill"></i></span>
+      <div class="it__t">
+        <div class="it__n">{{ it.nome }}
+          {%- if it.sem_rota_com_frete %} <span class="selo selo--al">sem rota</span>
+          {%- elif it.nunca_usado %} <span class="selo selo--par">nunca usado</span>{% endif -%}
+        </div>
+        <div class="it__d">
+          <span><span class="k">{{ it.cidade or 'sem cidade' }}
+            {%- if it.estado %} / {{ it.estado }}{% endif %}</span></span>
+          <span><span class="k">Rotas</span> <b>{{ it.n_rotas }}</b></span>
+          {% if it.clientes %}
+          <span><span class="k">Clientes</span> <b>{{ it.clientes }}</b></span>
+          {% endif %}
+        </div>
+        {% if it.peso %}<div class="barra"><i style="width:{{ it.peso }}%"></i></div>{% endif %}
+      </div>
+      <div class="mov">
+        {% if it.fre_n %}
+        <div class="mov__v">{{ it.fre_n }} frete{{ '' if it.fre_n == 1 else 's' }}</div>
+        <div class="mov__r">{% if it.fre_ultimo %}último {{ it.fre_ultimo.strftime('%d/%m') }}
+          {%- else %}—{% endif %}</div>
+        {% else %}
+        <div class="mov__v" style="color:#6b7684">—</div>
+        <div class="mov__r">sem frete</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="it__c" style="display:none">
+      <div class="grade">
+        <div class="bloco">
+          <div class="bloco__t"><i class="bi bi-signpost-split"></i>
+            Rotas ({{ it.n_rotas }}) — valor por litro do CT-e</div>
+          {% for r in it.rotas %}
+          <div class="rt">
+            <span class="rt__n">
+              {%- if pre == 'org' %}→ {{ r.outro }}{% else %}{{ r.outro }} →{% endif -%}
+            </span>
+            <span class="rt__v">{{ r.valor | formatar_moeda }}/L</span>
+            {% if not r.ativo %}<span class="selo selo--par">inativa</span>{% endif %}
+          </div>
+          {% else %}
+          <div class="li"><span class="v vazio">Nenhuma rota cadastrada.
+            {% if it.fre_n %}Os {{ it.fre_n }} fretes tiveram o valor digitado
+            à mão.{% endif %}</span></div>
+          {% endfor %}
+        </div>
+
+        <div class="bloco">
+          <div class="bloco__t"><i class="bi bi-pencil"></i> Editar cadastro</div>
+          <form method="POST" action="{{ url_for(acao_edit, id=it.id) }}"
+                class="fedit">
+            <input type="text" name="nome" value="{{ it.nome or '' }}"
+                   class="campo" placeholder="nome" required>
+            <div class="par">
+              <input type="text" name="cidade" value="{{ it.cidade or '' }}"
+                     class="campo" placeholder="cidade">
+              <input type="text" name="estado" value="{{ it.estado or '' }}"
+                     class="campo" placeholder="UF" maxlength="2">
+            </div>
+            <div class="acoes">
+              <button type="submit" class="bt"><i class="bi bi-check-lg"></i> Salvar</button>
+              <a class="bt bt--del" href="{{ url_for(acao_del, id=it.id) }}"
+                 onclick="return confirm('Excluir {{ it.nome }}?');">
+                <i class="bi bi-trash"></i></a>
+            </div>
+          </form>
+          <div class="li" style="margin-top:.3rem"><span class="k">Fretes</span>
+            <span class="v">{{ it.fre_n }}
+              {%- if it.fre_ultimo %} · último {{ it.fre_ultimo.strftime('%d/%m/%Y') }}{% endif %}</span></div>
+          {% if it.fre_cte %}
+          <div class="li"><span class="k">CT-e</span>
+            <span class="v">{{ it.fre_cte | formatar_moeda }}</span></div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="nada"><i class="bi bi-inbox" style="font-size:1.8rem;opacity:.4"></i>
+    <div class="mt-2">Nenhum registro cadastrado</div></div>
+  {% endfor %}
+</div>
+
+{# ---------- Nova ---------- #}
+<div class="bloco nova">
+  <div class="bloco__t"><i class="bi bi-plus-circle"></i> Nova {{ titulo[:-1] | lower }}</div>
+  <form method="POST" action="{{ url_for(acao_nova) }}" class="fnova">
+    <input type="text" name="nome" class="campo" placeholder="nome" required>
+    <input type="text" name="cidade" class="campo" placeholder="cidade">
+    <input type="text" name="estado" class="campo" placeholder="UF" maxlength="2">
+    <button type="submit" class="bt-g bt-g--ok" style="flex:0 0 auto">
+      <i class="bi bi-plus-lg"></i> Cadastrar</button>
+  </form>
+</div>
+
+{# ---------- Filtro em passos (padrao do Recebimento) ---------- #}
+<div class="escuro" id="{{ pre }}-escuro" onclick="{{ pre }}FecharFiltro()"></div>
+<div class="gav" id="{{ pre }}-gav" role="dialog" aria-modal="true">
+  <div class="gav__pega"></div>
+  <div class="passos">
+    <button type="button" class="passo on aqui" id="{{ pre }}-p1" onclick="{{ pre }}Ir(1)">
+      <i></i><span>Situação</span></button>
+    <button type="button" class="passo" id="{{ pre }}-p2" onclick="{{ pre }}Ir(2)">
+      <i></i><span>Estado</span></button>
+    <button type="button" class="passo" id="{{ pre }}-p3" onclick="{{ pre }}Ir(3)">
+      <i></i><span>Movimento</span></button>
+  </div>
+  <div class="pnome">Passo <span id="{{ pre }}-pn">1</span> de 3 ·
+    <b id="{{ pre }}-pt">Situação</b></div>
+
+  <div class="gav__b">
+    <div class="etapa" id="{{ pre }}-e1">
+      <div class="gr__c">
+        <span class="gr__t">Situação da rota</span>
+        <button type="button" class="gr__a" onclick="{{ pre }}MarcarTodas('{{ pre }}-sit', false)">
+          limpar</button>
+      </div>
+      <div class="opcs" id="{{ pre }}-sit">
+        <label class="opc"><input type="checkbox" value="comrota">
+          <span>Com rota<small>{{ totais.com_rota }} com valor por litro definido</small></span></label>
+        <label class="opc"><input type="checkbox" value="semrota">
+          <span>Sem rota<small>{{ totais.sem_rota }} sem nenhuma rota</small></span></label>
+        <label class="opc"><input type="checkbox" value="srcf">
+          <span>Roda sem rota<small>{{ totais.sem_rota_com_frete }} com frete e sem rota — valor na mão</small></span></label>
+        <label class="opc"><input type="checkbox" value="nunca">
+          <span>Nunca usado<small>{{ totais.nunca_usados }} sem nenhum frete</small></span></label>
+      </div>
+      <div class="dica">Sem marcar nada, vêm todos.</div>
+    </div>
+
+    <div class="etapa" id="{{ pre }}-e2" hidden>
+      <div class="gr__c">
+        <span class="gr__t">Estado</span>
+        <button type="button" class="gr__a" onclick="{{ pre }}MarcarTodas('{{ pre }}-uf', true)">
+          marcar todos</button>
+      </div>
+      <div class="opcs" id="{{ pre }}-uf">
+        {% for uf in totais.estados %}
+        <label class="opc" data-nome="{{ uf | lower }}">
+          <input type="checkbox" value="{{ uf }}"><span>{{ uf }}</span></label>
+        {% endfor %}
+      </div>
+      <div class="dica">Sem marcar nenhum, vêm todos.</div>
+    </div>
+
+    <div class="etapa" id="{{ pre }}-e3" hidden>
+      <div class="gr__t">Quantidade de fretes</div>
+      <div class="chips" id="{{ pre }}-faixa">
+        <button type="button" class="chip on" data-v="0" onclick="{{ pre }}Chip(this,'{{ pre }}-faixa')">Tanto faz</button>
+        <button type="button" class="chip" data-v="10" onclick="{{ pre }}Chip(this,'{{ pre }}-faixa')">10 ou mais</button>
+        <button type="button" class="chip" data-v="100" onclick="{{ pre }}Chip(this,'{{ pre }}-faixa')">100 ou mais</button>
+      </div>
+      <div class="dica">Separa a rota do dia a dia da eventual.</div>
+    </div>
+  </div>
+
+  <div class="gav__f">
+    <button type="button" class="bt-g bt-g--ca" id="{{ pre }}-bt-voltar"
+            onclick="{{ pre }}Ir({{ pre }}Passo - 1)" hidden>Voltar</button>
+    <button type="button" class="bt-g bt-g--ca" onclick="{{ pre }}FecharFiltro()">Cancelar</button>
+    <button type="button" class="bt-g bt-g--ok" id="{{ pre }}-bt-ir"
+            onclick="{{ pre }}Avancar()">Avançar</button>
+  </div>
+</div>
