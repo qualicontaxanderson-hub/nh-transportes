@@ -342,6 +342,64 @@ def _gerar_mensagem_whatsapp_veiculo(veiculo, licencas, compartimentos=None):
     return '\n'.join(linhas)
 
 
+def _documentos_por_veiculo(cursor):
+    """As licencas de cada veiculo, com quantos dias faltam pra vencer.
+
+    `data_validade` nula acontece bastante (RNTRC, ANTT, SEGURO): o
+    documento existe mas ninguem anotou ate quando vale. Isso NAO e o mesmo
+    que vencido — vira categoria propria ("sem validade"), senao a tela
+    grita errado.
+    """
+    try:
+        cursor.execute("""
+            SELECT l.veiculo_id AS vid, l.tipo_documento, l.numero_doc,
+                   l.data_validade, l.arquivo_pdf, l.parte,
+                   DATEDIFF(l.data_validade, CURDATE()) AS dias
+              FROM veiculo_licencas l
+             ORDER BY (l.data_validade IS NULL), l.data_validade
+        """)
+        rows = cursor.fetchall()
+    except Exception:
+        return {}
+    saida = {}
+    for r in rows:
+        dias = r['dias']
+        if dias is None:
+            estado = 'sem_validade'
+        elif dias < 0:
+            estado = 'vencido'
+        elif dias <= 30:
+            estado = 'vencendo'
+        else:
+            estado = 'ok'
+        saida.setdefault(r['vid'], []).append({
+            'tipo': r['tipo_documento'] or 'documento',
+            'numero': r['numero_doc'],
+            'validade': r['data_validade'],
+            'dias': dias,
+            'estado': estado,
+            'pdf': r['arquivo_pdf'],
+            'parte': r['parte'],
+        })
+    return saida
+
+
+def _movimento_veiculos(cursor):
+    """Quanto cada veiculo rodou."""
+    try:
+        cursor.execute("""
+            SELECT f.veiculos_id AS vid, COUNT(*) AS n,
+                   COALESCE(SUM(f.valor_total_frete),0) AS valor,
+                   MAX(DATE(f.data_frete)) AS ultimo
+              FROM fretes f WHERE f.veiculos_id IS NOT NULL
+             GROUP BY f.veiculos_id
+        """)
+        return {r['vid']: {'n': int(r['n']), 'valor': float(r['valor'] or 0),
+                           'ultimo': r['ultimo']} for r in cursor.fetchall()}
+    except Exception:
+        return {}
+
+
 @bp.route('/')
 @login_required
 def lista():
@@ -351,8 +409,10 @@ def lista():
         cursor = conn.cursor(dictionary=True)
         cursor.execute("""
             SELECT v.*,
-                   m.nome AS motorista_nome,
-                   m.id   AS motorista_id,
+                   (SELECT GROUP_CONCAT(m.nome ORDER BY m.nome SEPARATOR ' · ')
+                      FROM motoristas m WHERE m.veiculo_id = v.id) AS motorista_nome,
+                   (SELECT MIN(m.id) FROM motoristas m
+                     WHERE m.veiculo_id = v.id) AS motorista_id,
                    cj_as_cavalo.carreta_id  AS conjunto_carreta_id,
                    vc_carreta.placa         AS conjunto_carreta_placa,
                    cj_as_carreta.cavalo_id  AS conjunto_cavalo_id,
@@ -371,7 +431,6 @@ def lista():
                       )
                    ) AS docs_obrigatorios_pendentes
             FROM veiculos v
-            LEFT JOIN motoristas m ON m.veiculo_id = v.id
             LEFT JOIN conjuntos_veiculos cj_as_cavalo
                    ON cj_as_cavalo.cavalo_id = v.id AND cj_as_cavalo.ativo = 1
             LEFT JOIN veiculos vc_carreta ON vc_carreta.id = cj_as_cavalo.carreta_id
@@ -381,12 +440,52 @@ def lista():
             ORDER BY v.placa
         """)
         veiculos = cursor.fetchall()
+        docs = _documentos_por_veiculo(cursor)
+        movimento = _movimento_veiculos(cursor)
         cursor.close()
         conn.close()
-        return render_template('veiculos/lista.html', veiculos=veiculos)
+
+        maior = max([m['valor'] for m in movimento.values()] or [0]) or 1
+        for v in veiculos:
+            lst = docs.get(v['id'], [])
+            v['docs'] = lst
+            v['n_vencidos'] = sum(1 for d in lst if d['estado'] == 'vencido')
+            v['n_vencendo'] = sum(1 for d in lst if d['estado'] == 'vencendo')
+            v['n_sem_validade'] = sum(1 for d in lst if d['estado'] == 'sem_validade')
+            # O pior documento manda no selo da linha.
+            v['doc_estado'] = ('vencido' if v['n_vencidos'] else
+                               'vencendo' if v['n_vencendo'] else
+                               'sem_validade' if v['n_sem_validade'] else 'ok')
+            venc = [d for d in lst if d['dias'] is not None]
+            v['doc_pior'] = min(venc, key=lambda d: d['dias']) if venc else None
+
+            mv = movimento.get(v['id']) or {'n': 0, 'valor': 0.0, 'ultimo': None}
+            v['fre_n'] = mv['n']
+            v['fre_valor'] = mv['valor']
+            v['fre_ultimo'] = mv['ultimo']
+            v['peso'] = round(100.0 * mv['valor'] / maior, 1)
+            v['parado'] = (not mv['ultimo']) or (
+                (date.today() - mv['ultimo']).days > 90)
+
+        totais = {
+            'veiculos': len(veiculos),
+            'vencidos': sum(v['n_vencidos'] for v in veiculos),
+            'vencendo': sum(v['n_vencendo'] for v in veiculos),
+            'sem_validade': sum(v['n_sem_validade'] for v in veiculos),
+            'com_pendencia': sum(1 for v in veiculos if v['doc_estado'] != 'ok'),
+            'sem_motorista': sum(1 for v in veiculos if not v.get('motorista_nome')),
+            'parados': sum(1 for v in veiculos if v['parado']),
+            'tipos': sorted({(v.get('tipo_veiculo') or '—') for v in veiculos}),
+        }
+        return render_template('veiculos/lista.html', veiculos=veiculos,
+                               totais=totais)
     except Exception as e:
         flash(f'Erro ao carregar veículos: {str(e)}', 'danger')
-        return render_template('veiculos/lista.html', veiculos=[])
+        return render_template('veiculos/lista.html', veiculos=[],
+                               totais={'veiculos': 0, 'vencidos': 0, 'vencendo': 0,
+                                       'sem_validade': 0, 'com_pendencia': 0,
+                                       'sem_motorista': 0, 'parados': 0,
+                                       'tipos': []})
 
 
 @bp.route('/listar', methods=['GET'])

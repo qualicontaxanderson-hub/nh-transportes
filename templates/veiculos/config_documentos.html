@@ -3,6 +3,32 @@
 
 {% block styles %}
 <style>
+/* O layout base pinta todo body > .container-fluid de branco com 2rem de
+   padding; no celular vira moldura e a tela nao enche. */
+body > .container-fluid:has(#vcd){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#vcd){ padding:.7rem 1rem 0; }
+}
+#vcd.container-fluid{ padding-left:0; padding-right:0; }
+
+#vcd .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+  color:#fff; border-radius:14px; padding:.7rem .85rem; margin-bottom:.7rem;
+  display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; }
+#vcd .topo__t{ flex:1; min-width:0; }
+#vcd .topo__n{ font-weight:800; font-size:1rem; line-height:1.3; }
+#vcd .topo__s{ font-size:.75rem; opacity:.9; }
+#vcd .bt-t{ border:1px solid rgba(255,255,255,.35);
+  background:rgba(255,255,255,.14); color:#fff; border-radius:9px;
+  padding:.34rem .7rem; font-size:.77rem; font-weight:800; font-family:inherit;
+  cursor:pointer; white-space:nowrap; text-decoration:none;
+  display:inline-flex; gap:.3rem; align-items:center; }
+#vcd .bt-t:hover{ background:rgba(255,255,255,.26); color:#fff; }
+</style>
+
+<style>
   .page-hero {
     background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
     border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
@@ -23,27 +49,16 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-  <nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb small">
-      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
-      <li class="breadcrumb-item"><a href="{{ url_for('veiculos.lista') }}" class="text-decoration-none">Veículos</a></li>
-      <li class="breadcrumb-item active">Tipos de Documento</li>
-    </ol>
-  </nav>
-
-  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-    <div class="hero-icon"><i class="bi bi-file-earmark-check-fill"></i></div>
-    <div class="flex-grow-1">
-      <h4 class="mb-0 fw-bold">Tipos de Documento / Licença</h4>
-      <p class="mb-0 opacity-75 small">Configure quais documentos são exigidos por tipo de veículo e marque os obrigatórios.</p>
+<div class="container-fluid" id="vcd">
+  <div class="topo">
+    <div class="topo__t">
+      <div class="topo__n">Tipos de documento</div>
+      <div class="topo__s">quais documentos cada tipo de veículo precisa ter</div>
     </div>
-    <a href="{{ url_for('veiculos.lista') }}"
-       class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
-      <i class="bi bi-arrow-left me-1"></i> Voltar
-    </a>
+    
+    <a class="bt-t" href="{{ url_for('veiculos.lista') }}">
+      <i class="bi bi-arrow-left"></i> Voltar</a>
   </div>
-
   <div class="row g-3">
     <!-- Formulário de novo tipo -->
     <div class="col-lg-4">
