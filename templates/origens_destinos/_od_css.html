@@ -1,5 +1,11 @@
 {#- Visual + comportamento de Origens/Destinos, parametrizado por `esc`
     (#org ou #dst) e `pre` (org ou dst). As duas telas sao gemeas. -#}
+
+{#- O padrao da familia vem daqui: cartoes de numero (.g-nums), gaveta em
+    passos, .opcs/.opc, .chips, .campo e a faixa .g-eco. Sem este include os
+    numeros viram texto solto e o filtro abre sem estilo. -#}
+{% include 'includes/gaveta_css.html' %}
+
 <style>
 /* O layout base pinta todo body > .container-fluid de branco com 2rem de
    padding; no celular vira moldura e a tela nao enche. */
