@@ -121,6 +121,9 @@
             <li><a class="dropdown-item" href="/pedidos/"><i class="bi bi-clipboard-check" style="color: #007bff;"></i> Pedidos</a></li>
             {% if nivel_usuario == 'ADMIN' %}
             <li><a class="dropdown-item" href="/fretes/"><i class="bi bi-truck-front" style="color: #dc3545;"></i> Fretes</a></li>
+            {#- Porta nova (Fase 1, so leitura): a carga vista pelo caminhao,
+                juntando os fretes que hoje aparecem fatiados em varios pedidos. -#}
+            <li><a class="dropdown-item" href="/ped-frete-novo/"><i class="bi bi-truck-front-fill" style="color: #1D63A5;"></i> PED/FRETE - NOVO</a></li>
             <li><a class="dropdown-item" href="/precos/"><i class="bi bi-tags-fill" style="color: #e65c00;"></i> Preços</a></li>
             {% endif %}
             <li><a class="dropdown-item" href="/descargas/"><i class="bi bi-fuel-pump-fill" style="color: #1a6b3c;"></i> Descargas</a></li>

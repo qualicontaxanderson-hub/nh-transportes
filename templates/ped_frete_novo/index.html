@@ -1,0 +1,476 @@
+{% extends "base.html" %}
+
+{% block title %}PED/FRETE - NOVO{% endblock %}
+
+{#- Fase 1: SOMENTE LEITURA. A tela junta os fretes pela chave fisica da carga
+    (data + veiculo + motorista) e mostra o caminhao como ele sai na estrada:
+    as bocas ocupadas, os postos dentro e o que cada um deve. Nenhum botao
+    aqui grava, altera ou emite nada — a cobranca e da Fase 2. -#}
+
+{% block styles %}
+<style>
+/* O layout base pinta todo body > .container-fluid de branco com 2rem de
+   padding; no celular vira moldura e a tela nao enche. */
+body > .container-fluid:has(#pfn){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#pfn){ padding:.7rem 1rem 0; }
+}
+#pfn.container-fluid{ padding-left:0; padding-right:0; }
+</style>
+{% with esc = '#pfn' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
+<style>
+  #pfn{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#6b7684; --ink:#151d27; --borda:#d9e0e8;
+        --propria:#7a6bab; color:var(--ink); max-width:100%; }
+
+  #pfn .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .65rem;
+    margin-bottom:.7rem; }
+  #pfn .topo__l{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  #pfn .topo__t{ font-weight:800; font-size:1.02rem; flex:1; min-width:0; }
+  #pfn .topo__s{ font-size:.75rem; opacity:.9; margin-top:.15rem; }
+  #pfn .bt-t{ border:1px solid rgba(255,255,255,.35);
+    background:rgba(255,255,255,.14); color:#fff; border-radius:9px;
+    padding:.34rem .7rem; font-size:.78rem; font-weight:800; font-family:inherit;
+    cursor:pointer; text-decoration:none; white-space:nowrap;
+    display:inline-flex; gap:.3rem; align-items:center; }
+  #pfn .bt-t:hover{ background:rgba(255,255,255,.26); color:#fff; }
+  #pfn .fam{ display:flex; gap:.4rem; margin-top:.6rem; overflow-x:auto;
+    padding-bottom:.15rem; }
+  #pfn .fam a{ flex:0 0 auto; border-radius:99px; padding:.35rem .8rem;
+    font-size:.78rem; font-weight:800; background:rgba(255,255,255,.18);
+    color:#fff; text-decoration:none; white-space:nowrap; }
+  #pfn .fam a.on{ background:#fff; color:var(--blue-deep); }
+
+  #pfn .piloto{ display:flex; align-items:flex-start; gap:.45rem;
+    background:#efecf7; color:#4a3f75; border-radius:10px; padding:.5rem .7rem;
+    font-size:.78rem; line-height:1.5; margin-bottom:.7rem; font-weight:600; }
+  #pfn .aviso{ display:flex; align-items:flex-start; gap:.45rem;
+    background:#fdf0d6; color:var(--ambar); border-radius:10px;
+    padding:.5rem .7rem; font-size:.79rem; line-height:1.5;
+    margin-bottom:.7rem; font-weight:700; }
+  #pfn .aviso--erro{ background:#fbe9e9; color:var(--danger); }
+
+  /* regua de datas */
+  #pfn .regua{ display:flex; gap:.3rem; overflow-x:auto; padding-bottom:.2rem;
+    margin-bottom:.7rem; align-items:stretch; }
+  #pfn .regua a{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
+    border-radius:10px; padding:.32rem .6rem; font-size:.74rem; font-weight:800;
+    color:#3a4655; text-align:center; line-height:1.3; text-decoration:none;
+    min-width:62px; }
+  #pfn .regua a small{ display:block; font-weight:700; font-size:.63rem;
+    color:var(--muted); }
+  #pfn .regua a.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #pfn .regua a.on small{ color:rgba(255,255,255,.85); }
+
+  #pfn .frota{ display:flex; gap:.35rem; overflow-x:auto; padding-bottom:.2rem;
+    margin-bottom:.7rem; }
+  #pfn .frota a{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
+    border-radius:99px; padding:.34rem .75rem; font-size:.78rem; font-weight:800;
+    color:#3a4655; text-decoration:none; white-space:nowrap; }
+  #pfn .frota a.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+
+  /* cartao da viagem */
+  #pfn .vg{ border:1px solid var(--borda); border-radius:13px; background:#fff;
+    overflow:hidden; margin-bottom:.6rem; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #pfn .vg--ocioso{ background:#fafbfd; }
+  #pfn .vg__h{ display:flex; gap:.5rem; align-items:center; padding:.55rem .7rem;
+    flex-wrap:wrap; cursor:pointer; }
+  #pfn .vg__ic{ width:30px; height:30px; border-radius:9px; flex:0 0 auto;
+    display:grid; place-items:center; background:#eaf1f9; color:var(--blue-deep);
+    font-size:.95rem; }
+  #pfn .vg__t{ flex:1; min-width:0; }
+  #pfn .vg__p{ font-weight:800; font-size:.92rem; letter-spacing:.02em; }
+  #pfn .vg__d{ font-size:.74rem; color:var(--muted); font-weight:700;
+    margin-top:.1rem; }
+  #pfn .vg__n{ text-align:right; flex:0 0 auto; }
+  #pfn .vg__l{ font-weight:800; font-size:.86rem; font-variant-numeric:tabular-nums;
+    color:var(--blue-deep); white-space:nowrap; }
+  #pfn .vg__c{ font-size:.7rem; color:var(--muted); font-weight:700;
+    font-variant-numeric:tabular-nums; }
+  #pfn .vg__seta{ flex:0 0 auto; color:var(--muted); transition:transform .15s; }
+  #pfn .vg.aberta .vg__seta{ transform:rotate(90deg); }
+
+  #pfn .barra{ height:9px; background:#eef1f5; display:flex; }
+  #pfn .barra i{ display:block; height:100%; }
+  #pfn .barra--vazia{ background:#eef1f5; }
+
+  #pfn .vg__c2{ padding:.55rem .7rem; border-top:1px solid #eef1f5; }
+  #pfn .vg__corpo{ display:none; }
+  #pfn .vg.aberta .vg__corpo{ display:block; }
+
+  #pfn .po{ display:flex; gap:.5rem; align-items:center; padding:.36rem 0;
+    border-bottom:1px dashed #eef1f5; font-size:.81rem; }
+  #pfn .po:last-child{ border-bottom:0; }
+  #pfn .po__p{ width:10px; height:10px; border-radius:3px; flex:0 0 auto; }
+  #pfn .po__n{ flex:1; min-width:0; font-weight:700; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
+  #pfn .po__l{ font-variant-numeric:tabular-nums; color:var(--muted);
+    font-size:.75rem; white-space:nowrap; }
+  #pfn .po__v{ font-weight:800; font-variant-numeric:tabular-nums;
+    white-space:nowrap; }
+
+  #pfn .selo{ display:inline-block; border-radius:99px; padding:.14rem .5rem;
+    font-size:.63rem; font-weight:800; white-space:nowrap; }
+  #pfn .selo--pago{ background:#e4f4e8; color:#1c6b34; }
+  #pfn .selo--emitido{ background:#eaf1f9; color:var(--blue-deep); }
+  #pfn .selo--falta{ background:#fdf0d6; color:var(--ambar); }
+  #pfn .selo--zero{ background:#efecf7; color:var(--propria); }
+  #pfn .selo--vg{ background:#eef1f5; color:var(--muted); }
+  #pfn .selo--al{ background:#fdf0d6; color:var(--ambar); }
+  #pfn .selo--er{ background:#fbe9e9; color:var(--danger); }
+
+  /* bocas */
+  #pfn .bocas{ border:1px solid #cddff0; background:#eaf1f9; border-radius:11px;
+    padding:.55rem .65rem; margin-bottom:.55rem; }
+  #pfn .bocas--al{ border-color:#f0d8a8; background:#fffdf7; }
+  #pfn .bocas__t{ font-size:.73rem; font-weight:800; color:var(--blue-deep);
+    margin-bottom:.4rem; }
+  #pfn .bocas--al .bocas__t{ color:var(--ambar); }
+  #pfn .bl{ display:flex; gap:.25rem; flex-wrap:wrap; }
+  #pfn .b{ border-radius:7px; padding:.24rem .42rem; font-size:.68rem;
+    font-weight:800; border:1px solid #cddff0; background:#fff; color:#3a4655;
+    font-variant-numeric:tabular-nums; min-width:46px; text-align:center;
+    line-height:1.25; }
+  #pfn .b small{ display:block; font-size:.58rem; font-weight:700; opacity:.85; }
+  #pfn .b--livre{ opacity:.45; }
+  #pfn .b--parc{ box-shadow:inset 0 -4px 0 rgba(255,255,255,.55); }
+  #pfn .leg{ display:flex; gap:.6rem; flex-wrap:wrap; font-size:.69rem;
+    color:var(--muted); margin-top:.45rem; align-items:center; font-weight:700; }
+  #pfn .leg i{ width:11px; height:11px; border-radius:3px; display:inline-block;
+    vertical-align:-1px; margin-right:.25rem; }
+
+  #pfn .fr{ display:flex; gap:.45rem; align-items:center; padding:.28rem 0;
+    font-size:.76rem; border-bottom:1px dashed #f2f5f8; }
+  #pfn .fr:last-child{ border-bottom:0; }
+  #pfn .fr__n{ flex:1; min-width:0; }
+  #pfn .fr__v{ font-weight:800; font-variant-numeric:tabular-nums; }
+  #pfn .fr__f{ color:var(--muted); font-size:.71rem; }
+
+  #pfn .cli{ border:1px solid var(--borda); border-radius:11px;
+    margin-bottom:.5rem; overflow:hidden; }
+  #pfn .cli--falta{ border-color:#f0d8a8; }
+  #pfn .cli__h{ display:flex; gap:.5rem; align-items:center; padding:.45rem .6rem;
+    background:#f7f9fc; border-bottom:1px solid #eef1f5; flex-wrap:wrap; }
+  #pfn .cli--falta .cli__h{ background:#fffdf7; }
+  #pfn .cli__n{ font-weight:800; font-size:.82rem; flex:1; min-width:0; }
+  #pfn .cli__c{ padding:.45rem .6rem; }
+  #pfn .cli__r{ display:flex; gap:.5rem; align-items:center; margin-top:.5rem;
+    padding-top:.45rem; border-top:1px solid #eef1f5; flex-wrap:wrap;
+    font-size:.82rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  #pfn .cli__r .fase2{ margin-left:auto; font-size:.7rem; font-weight:700;
+    color:var(--muted); background:#f2f5f8; border-radius:8px;
+    padding:.28rem .55rem; }
+
+  #pfn .vazio{ text-align:center; color:var(--muted); font-size:.85rem;
+    padding:1.6rem .8rem; background:#fff; border:1px dashed var(--borda);
+    border-radius:13px; font-weight:700; }
+  #pfn .rod{ font-size:.73rem; color:var(--muted); margin:1rem 0 .5rem;
+    line-height:1.55; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="pfn">
+
+  {% set fmtl = '{:,.0f}' %}
+  <div class="topo">
+    <div class="topo__l">
+      <span class="topo__t"><i class="bi bi-truck-front-fill"></i> PED/FRETE — NOVO</span>
+      {% if modo == 'dia' %}
+      <a class="bt-t" href="{{ url_for('ped_frete_novo.index', modo='dia', data=hoje.isoformat()) }}">
+        <i class="bi bi-calendar-event"></i> Hoje</a>
+      {% endif %}
+    </div>
+    <div class="topo__s">
+      {%- if modo == 'cobrar' -%}
+        {{ totais.postos }} cliente(s) · {{ totais.a_cobrar | formatar_moeda }} sem boleto
+      {%- elif modo == 'caminhao' -%}
+        linha do tempo do caminhão · {{ dia.strftime('%d/%m/%Y') }}
+      {%- else -%}
+        {{ dia.strftime('%d/%m/%Y') }} · {{ totais.viagens }} viagem(ns) ·
+        {{ fmtl.format(totais.litros).replace(',', '.') }} L
+      {%- endif -%}
+    </div>
+    <div class="fam">
+      <a href="{{ url_for('ped_frete_novo.index', modo='dia', data=dia.isoformat()) }}"
+         class="{{ 'on' if modo == 'dia' }}">Por dia</a>
+      <a href="{{ url_for('ped_frete_novo.index', modo='caminhao', data=dia.isoformat(), veiculo=veiculo_id) }}"
+         class="{{ 'on' if modo == 'caminhao' }}">Por caminhão</a>
+      <a href="{{ url_for('ped_frete_novo.index', modo='cobrar') }}"
+         class="{{ 'on' if modo == 'cobrar' }}">A cobrar</a>
+    </div>
+  </div>
+
+  <div class="piloto">
+    <i class="bi bi-eye"></i>
+    <span><b>Fase 1 — só leitura.</b> Esta tela lê os mesmos pedidos e fretes de
+    sempre e junta a carga pela chave física <b>data + caminhão + motorista</b>.
+    Nada aqui grava, altera ou emite. As telas de Pedidos e Fretes continuam
+    valendo — esta é uma segunda porta pra olhar.</span>
+  </div>
+
+  {% if erro %}
+  <div class="aviso aviso--erro"><i class="bi bi-exclamation-octagon-fill"></i>
+    <span>Não deu pra montar a leitura: {{ erro }}</span></div>
+  {% endif %}
+
+  {% if divergencias %}
+  <div class="aviso"><i class="bi bi-signpost-split-fill"></i>
+    <span><b>Pedido e frete apontam pra caminhões diferentes</b> —
+      {% for d in divergencias %}<b>{{ d.numero }}</b> ({{ d.data_pedido.strftime('%d/%m') }}):
+      pedido diz {{ d.placa_pedido or '—' }}, os {{ d.n }} fretes dizem
+      {{ d.placa_frete or '—' }}{{ '; ' if not loop.last }}{% endfor %}.
+      Trocar o veículo do pedido não propaga pros fretes, e é o frete que manda
+      em comissão e CT-e. A carga abaixo aparece pelo <b>frete</b>.</span></div>
+  {% endif %}
+
+  {# ══════════════ MODO: A COBRAR ══════════════ #}
+  {% if modo == 'cobrar' %}
+
+    <div class="g-nums duas">
+      <div class="n n--ambar"><div class="r">Falta cobrar</div>
+        <div class="v">{{ totais.a_cobrar | formatar_moeda }}</div></div>
+      <div class="n n--azul"><div class="r">Clientes</div>
+        <div class="v">{{ totais.postos }}</div></div>
+    </div>
+
+    {% for c in cobrar %}
+    <div class="cli cli--falta">
+      <div class="cli__h">
+        <span class="cli__n">{{ c.cliente }}</span>
+        <span class="selo selo--falta">{{ c.fretes|length }} frete(s) ·
+          {{ c.dias }} dia(s) · {{ c.placas|length }} caminhã{{ 'o' if c.placas|length == 1 else 'os' }}</span>
+      </div>
+      <div class="cli__c">
+        {% for f in c.fretes %}
+        <div class="fr">
+          <span class="fr__n">{{ f.data_frete.strftime('%d/%m') }} ·
+            <span class="fr__f">{{ f.placa or '—' }}</span> ·
+            {{ f.produto or '—' }} {{ fmtl.format(f.litros).replace(',', '.') }} L</span>
+          <span class="fr__v">{{ f.valor | formatar_moeda }}</span>
+        </div>
+        {% endfor %}
+        <div class="cli__r">
+          <span>{{ fmtl.format(c.litros).replace(',', '.') }} L ·
+            {{ c.valor | formatar_moeda }}</span>
+          <span class="fase2"><i class="bi bi-lock"></i> emitir: Fase 2</span>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="vazio"><i class="bi bi-check2-circle"></i><br>
+      Nenhum frete com valor esperando boleto nos últimos 120 dias.</div>
+    {% endfor %}
+
+    <p class="rod">Esta aba é a única que atravessa cargas: junta os fretes do
+    mesmo cliente mesmo que estejam em dias e caminhões diferentes. É o que hoje
+    obriga a fatiar o pedido pra cobrar um posto sozinho — e o que a Fase 2
+    resolve ligando um boleto a vários fretes.</p>
+
+  {% else %}
+
+  {# ══════════════ MODOS: DIA e CAMINHÃO ══════════════ #}
+
+    {% if modo == 'caminhao' %}
+    <div class="frota">
+      {% for v in veiculos %}
+      <a href="{{ url_for('ped_frete_novo.index', modo='caminhao', veiculo=v.id, data=dia.isoformat()) }}"
+         class="{{ 'on' if v.id == veiculo_id }}">{{ v.placa }}
+        {%- if v.capacidade %} · {{ fmtl.format(v.capacidade).replace(',', '.') }} L{% endif -%}
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="regua">
+      <a href="{{ url_for('ped_frete_novo.index', modo=modo, veiculo=veiculo_id, data=ontem.isoformat()) }}"
+         title="dia anterior">‹<small>{{ ontem.strftime('%d/%m') }}</small></a>
+      {% for d in dias %}
+      <a href="{{ url_for('ped_frete_novo.index', modo=modo, veiculo=veiculo_id, data=d.d.isoformat()) }}"
+         class="{{ 'on' if d.d == dia }}">{{ d.d.strftime('%d/%m') }}
+        <small>{{ fmtl.format(d.litros).replace(',', '.') }} L</small></a>
+      {% endfor %}
+      <a href="{{ url_for('ped_frete_novo.index', modo=modo, veiculo=veiculo_id, data=amanha.isoformat()) }}"
+         title="dia seguinte">›<small>{{ amanha.strftime('%d/%m') }}</small></a>
+    </div>
+
+    <div class="g-nums">
+      <div class="n n--azul"><div class="r">Litros no dia</div>
+        <div class="v">{{ fmtl.format(totais.litros).replace(',', '.') }}</div></div>
+      <div class="n n--verde"><div class="r">Viagens</div>
+        <div class="v">{{ totais.viagens }}</div></div>
+      <div class="n n--cinza"><div class="r">Postos</div>
+        <div class="v">{{ totais.postos }}</div></div>
+      <div class="n {{ 'n--ambar' if totais.a_cobrar else 'n--verde' }}">
+        <div class="r">Falta cobrar</div>
+        <div class="v">{{ totais.a_cobrar | formatar_moeda }}</div></div>
+    </div>
+
+    {% for v in viagens %}
+    <div class="vg aberta" id="vg{{ loop.index }}">
+      <div class="vg__h" onclick="pfnAbre(this)">
+        <span class="vg__ic"><i class="bi bi-truck-front-fill"></i></span>
+        <div class="vg__t">
+          <div class="vg__p">{{ v.placa }}
+            {%- if v.viagem_n %} <span class="selo selo--vg">{{ v.viagem_n }}ª viagem
+              de {{ v.viagem_de }}</span>{% endif -%}
+            {%- if v.estoura %} <span class="selo selo--al">estoura a carreta</span>
+            {%- elif v.sem_cadastro %} <span class="selo selo--er">sem bocas cadastradas</span>
+            {% endif -%}
+          </div>
+          <div class="vg__d">{{ v.motorista }}
+            {%- if v.carreta %} · carreta {{ v.carreta }}{% endif -%}
+            {%- if v.pedidos %} · {{ v.pedidos|join(', ') }}{% endif -%}
+          </div>
+        </div>
+        <div class="vg__n">
+          <div class="vg__l">{{ fmtl.format(v.litros).replace(',', '.') }} L</div>
+          <div class="vg__c">
+            {%- if v.capacidade -%}
+              de {{ fmtl.format(v.capacidade).replace(',', '.') }} · {{ v.pct }}%
+            {%- else -%}capacidade não cadastrada{%- endif -%}
+          </div>
+        </div>
+        <span class="vg__seta"><i class="bi bi-chevron-right"></i></span>
+      </div>
+
+      <div class="barra">
+        {% for p in v.postos %}<i style="width:{{ p.pct }}%;background:{{ p.cor }}"></i>{% endfor %}
+      </div>
+
+      <div class="vg__corpo">
+        <div class="vg__c2">
+
+          {% if v.bocas %}
+          <div class="bocas {{ 'bocas--al' if v.estoura or v.sem_boca }}">
+            <div class="bocas__t">
+              {%- if v.estoura -%}
+                ⚠️ {{ fmtl.format(v.litros).replace(',', '.') }} L numa carreta de
+                {{ fmtl.format(v.capacidade).replace(',', '.') }} L — confere?
+              {%- elif v.sem_boca -%}
+                ⚠️ {{ fmtl.format(v.sem_boca).replace(',', '.') }} L não acharam boca
+              {%- elif v.livre < 1 -%}
+                ✓ Carreta fechada — {{ v.bocas|length }} bocas,
+                {{ fmtl.format(v.capacidade).replace(',', '.') }} L
+              {%- else -%}
+                {{ v.bocas|length }} bocas · sobram
+                {{ fmtl.format(v.livre).replace(',', '.') }} L livres
+              {%- endif -%}
+            </div>
+            <div class="bl">
+              {% for b in v.desenho %}
+              <span class="b {{ 'b--livre' if not b.cor }} {{ 'b--parc' if b.parcial }}"
+                    title="{{ b.cliente or 'livre' }}"
+                    {% if b.cor %}style="background:{{ b.cor }};border-color:{{ b.cor }};color:#fff"{% endif %}>
+                {{ (b.cap / 1000)|round(0, 'floor')|int }}
+                {%- if b.parcial %}<small>{{ (b.usado / 1000)|round(1) }} usada</small>{% endif -%}
+              </span>
+              {% endfor %}
+            </div>
+            <div class="leg">
+              {% for p in v.postos %}
+              <span><i style="background:{{ p.cor }}"></i>{{ p.nome|truncate(22, True, '…') }}
+                {{ fmtl.format(p.litros).replace(',', '.') }} L</span>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          {% for p in v.postos %}
+          <div class="cli {{ 'cli--falta' if p.estado == 'falta' }}">
+            <div class="cli__h">
+              <span class="po__p" style="background:{{ p.cor }}"></span>
+              <span class="cli__n">{{ p.nome }}</span>
+              {% if p.estado == 'zero' %}
+                <span class="selo selo--zero">não cobra — R$ 0,00</span>
+              {% elif p.estado == 'falta' %}
+                <span class="selo selo--falta">falta cobrar {{ p.valor | formatar_moeda }}</span>
+              {% elif p.estado == 'pago' %}
+                <span class="selo selo--pago">pago</span>
+              {% else %}
+                <span class="selo selo--emitido">boleto emitido</span>
+              {% endif %}
+            </div>
+            <div class="cli__c">
+              {% for f in p.fretes %}
+              <div class="fr">
+                <span class="fr__n">{{ f.produto or '—' }}
+                  {{ fmtl.format(f.litros).replace(',', '.') }} L
+                  {%- if f.fornecedor %} <span class="fr__f">·
+                    {{ f.fornecedor|truncate(24, True, '…') }}</span>{% endif -%}
+                </span>
+                {% if f.estado == 'zero' %}
+                  <span class="selo selo--zero">R$ 0,00</span>
+                {% else %}
+                  <span class="fr__v">{{ f.valor | formatar_moeda }}</span>
+                {% endif %}
+              </div>
+              {% endfor %}
+              <div class="cli__r">
+                <span>{{ fmtl.format(p.litros).replace(',', '.') }} L
+                  {%- if p.valor %} · {{ p.valor | formatar_moeda }}{% endif -%}
+                </span>
+                {% if p.estado == 'falta' %}
+                <span class="fase2"><i class="bi bi-lock"></i> emitir: Fase 2</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="vazio"><i class="bi bi-moon-stars"></i><br>
+      Nenhuma carga em {{ dia.strftime('%d/%m/%Y') }}
+      {%- if modo == 'caminhao' %} nesse caminhão{% endif %}.</div>
+    {% endfor %}
+
+    {% if ociosos and modo == 'dia' %}
+    {% for v in ociosos %}
+    <div class="vg vg--ocioso">
+      <div class="vg__h" style="cursor:default">
+        <span class="vg__ic" style="background:#f2f5f8;color:#9aa5b1">
+          <i class="bi bi-truck"></i></span>
+        <div class="vg__t">
+          <div class="vg__p">{{ v.placa }}</div>
+          <div class="vg__d">{{ v.caminhao }} · sem carga nesse dia</div>
+        </div>
+        <div class="vg__n">
+          <div class="vg__c">
+            {%- if v.capacidade -%}
+              0 de {{ fmtl.format(v.capacidade).replace(',', '.') }} L
+            {%- else -%}livre{%- endif -%}
+          </div>
+        </div>
+      </div>
+      <div class="barra barra--vazia"></div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <p class="rod">A carga é agrupada por <b>data + caminhão + motorista</b>.
+    Quando a mesma placa sai duas vezes no mesmo dia, os cartões vêm marcados
+    1ª e 2ª viagem. As bocas vêm do cadastro da carreta
+    (<i>veiculo_compartimentos</i>), ligada ao cavalo por
+    <i>conjuntos_veiculos</i> — a tela só lê.</p>
+
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Abre e fecha o cartao da viagem. Nada aqui envia nada — Fase 1 e so leitura.
+function pfnAbre(el){
+  var c = el.closest('.vg');
+  if (c) c.classList.toggle('aberta');
+}
+</script>
+{% endblock %}
