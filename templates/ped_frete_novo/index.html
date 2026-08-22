@@ -102,16 +102,9 @@ body > .container-fluid:has(#pfn){
   #pfn .vg__corpo{ display:none; }
   #pfn .vg.aberta .vg__corpo{ display:block; }
 
-  #pfn .po{ display:flex; gap:.5rem; align-items:center; padding:.36rem 0;
-    border-bottom:1px dashed #eef1f5; font-size:.81rem; }
-  #pfn .po:last-child{ border-bottom:0; }
-  #pfn .po__p{ width:10px; height:10px; border-radius:3px; flex:0 0 auto; }
-  #pfn .po__n{ flex:1; min-width:0; font-weight:700; overflow:hidden;
-    text-overflow:ellipsis; white-space:nowrap; }
-  #pfn .po__l{ font-variant-numeric:tabular-nums; color:var(--muted);
-    font-size:.75rem; white-space:nowrap; }
-  #pfn .po__v{ font-weight:800; font-variant-numeric:tabular-nums;
-    white-space:nowrap; }
+  /* Quadradinho da cor do posto, no titulo do bloco. */
+  #pfn .po__p{ width:10px; height:10px; border-radius:3px; flex:0 0 auto;
+    margin-top:.3rem; }
 
   #pfn .selo{ display:inline-block; border-radius:99px; padding:.14rem .5rem;
     font-size:.63rem; font-weight:800; white-space:nowrap; }
@@ -138,10 +131,20 @@ body > .container-fluid:has(#pfn){
   #pfn .b small{ display:block; font-size:.58rem; font-weight:700; opacity:.85; }
   #pfn .b--livre{ opacity:.45; }
   #pfn .b--parc{ box-shadow:inset 0 -4px 0 rgba(255,255,255,.55); }
-  #pfn .leg{ display:flex; gap:.6rem; flex-wrap:wrap; font-size:.69rem;
-    color:var(--muted); margin-top:.45rem; align-items:center; font-weight:700; }
-  #pfn .leg i{ width:11px; height:11px; border-radius:3px; display:inline-block;
-    vertical-align:-1px; margin-right:.25rem; }
+  /* Legenda: nome do posto INTEIRO. No celular empilha um por linha; quando
+     a tela deixa, entram lado a lado. Truncar aqui escondia justamente o que
+     a Monica precisa ler pra saber de quem e a carga. */
+  #pfn .leg{ display:grid; grid-template-columns:1fr; gap:.3rem .9rem;
+    font-size:.73rem; color:var(--muted); margin-top:.5rem; font-weight:700; }
+  #pfn .leg > span{ display:flex; align-items:flex-start; gap:.35rem;
+    line-height:1.4; min-width:0; }
+  #pfn .leg i{ width:11px; height:11px; border-radius:3px; flex:0 0 auto;
+    margin-top:.18rem; }
+  #pfn .leg b{ margin-left:auto; padding-left:.6rem; color:var(--ink);
+    font-variant-numeric:tabular-nums; white-space:nowrap; }
+  @media (min-width:640px){
+    #pfn .leg{ grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); }
+  }
 
   #pfn .fr{ display:flex; gap:.45rem; align-items:center; padding:.28rem 0;
     font-size:.76rem; border-bottom:1px dashed #f2f5f8; }
@@ -153,8 +156,12 @@ body > .container-fluid:has(#pfn){
   #pfn .cli{ border:1px solid var(--borda); border-radius:11px;
     margin-bottom:.5rem; overflow:hidden; }
   #pfn .cli--falta{ border-color:#f0d8a8; }
-  #pfn .cli__h{ display:flex; gap:.5rem; align-items:center; padding:.45rem .6rem;
-    background:#f7f9fc; border-bottom:1px solid #eef1f5; flex-wrap:wrap; }
+  /* flex-start, nao center: o nome do posto pode ocupar duas linhas no
+     celular, e a etiqueta tem que ficar alinhada com a primeira delas. */
+  #pfn .cli__h{ display:flex; gap:.5rem; align-items:flex-start;
+    padding:.45rem .6rem; background:#f7f9fc; border-bottom:1px solid #eef1f5;
+    flex-wrap:wrap; }
+  #pfn .cli__n{ line-height:1.35; }
   #pfn .cli--falta .cli__h{ background:#fffdf7; }
   #pfn .cli__n{ font-weight:800; font-size:.82rem; flex:1; min-width:0; }
   #pfn .cli__c{ padding:.45rem .6rem; }
@@ -373,8 +380,8 @@ body > .container-fluid:has(#pfn){
             </div>
             <div class="leg">
               {% for p in v.postos %}
-              <span><i style="background:{{ p.cor }}"></i>{{ p.nome|truncate(22, True, '…') }}
-                {{ fmtl.format(p.litros).replace(',', '.') }} L</span>
+              <span><i style="background:{{ p.cor }}"></i>{{ p.nome }}
+                <b>{{ fmtl.format(p.litros).replace(',', '.') }} L</b></span>
               {% endfor %}
             </div>
           </div>
@@ -401,7 +408,7 @@ body > .container-fluid:has(#pfn){
                 <span class="fr__n">{{ f.produto or '—' }}
                   {{ fmtl.format(f.litros).replace(',', '.') }} L
                   {%- if f.fornecedor %} <span class="fr__f">·
-                    {{ f.fornecedor|truncate(24, True, '…') }}</span>{% endif -%}
+                    {{ f.fornecedor }}</span>{% endif -%}
                 </span>
                 {% if f.estado == 'zero' %}
                   <span class="selo selo--zero">R$ 0,00</span>
