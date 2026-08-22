@@ -84,26 +84,83 @@ def _capacidades(cur):
     return cap, carretas
 
 
-def _encaixar(itens, bocas):
-    """Distribui os itens nas bocas e devolve o desenho do compartimento.
+def _combina_exato(disponiveis, alvo, menos_bocas=True):
+    """Subconjunto das bocas livres que soma EXATAMENTE `alvo` litros.
+
+    `disponiveis` e [(indice, capacidade_em_litros_inteiros)]. Devolve a lista
+    de indices, ou None se nao houver combinacao exata.
+
+    Existe porque o guloso erra num caso comum: 6.000 L numa carreta com bocas
+    de 5 e 3 vira 5+3, desperdicando 2.000 L de uma boca que outro produto ia
+    querer — quando 3+3 fecha certinho. Com no maximo ~10 bocas por carreta o
+    numero de somas alcancaveis e pequeno, entao da pra procurar a exata.
+
+    `menos_bocas` decide o desempate, e os dois lados sao necessarios:
+      - menos: 10.000 L em 5/5/3/2/5/5/5 vira 5+5, e nao 5+3+2 (que queima
+        tres bocas e deixa o proximo produto de 3.000 sem lugar);
+      - mais:  15.000 L em 5/5/3/3/3/5/3/3/5 vira 3+3+3+3+3, guardando os
+        quatro 5 inteiros pros dois produtos de 10.000 que vem atras.
+    Nenhum dos dois ganha sempre — por isso `_encaixar` roda os dois.
+    """
+    melhor = {0: ()}
+    for i, cap in disponiveis:
+        if cap <= 0:
+            continue
+        # Dicionario separado: escrever direto em `melhor` durante a varredura
+        # deixaria o mesmo compartimento ser usado duas vezes no mesmo caminho.
+        novos = {}
+        for s, caminho in melhor.items():
+            ns = s + cap
+            if ns > alvo:
+                continue
+            novo = caminho + (i,)
+            atual = melhor.get(ns)
+            if atual is not None and _ganha(len(atual), len(novo), menos_bocas):
+                continue
+            se_ja = novos.get(ns)
+            if se_ja is None or not _ganha(len(se_ja), len(novo), menos_bocas):
+                novos[ns] = novo
+        melhor.update(novos)
+    caminho = melhor.get(alvo)
+    return list(caminho) if caminho else None
+
+
+def _ganha(atual, novo, menos_bocas):
+    """O caminho `atual` continua melhor que `novo`?"""
+    return atual <= novo if menos_bocas else atual >= novo
+
+
+def _tentativa(itens, bocas, maior_primeiro=True, menos_bocas=True, exato=True):
+    """Uma distribuicao dos itens nas bocas, com uma estrategia fixa.
 
     Regra da estrada: uma boca nao mistura produto. Entao cada frete ocupa
     bocas inteiras enquanto der, e a sobra entra numa boca parcial.
 
-    Ganancioso e deterministico: item maior primeiro, e pra cada item a maior
-    boca livre que ainda cabe. Nao promete ser o melhor arranjo possivel — o
-    que a tela precisa e mostrar se FECHA e quanto sobra, nao planejar a
-    carga pelo motorista.
-
-    Devolve (desenho, sobrou) onde desenho e uma lista por boca:
-        {'cap': L, 'usado': L, 'cor': '#...', 'cliente': str, 'parcial': bool}
-    e `sobrou` e o total em litros que nao coube em boca nenhuma.
+    Para cada item tenta primeiro o encaixe EXATO — o conjunto de bocas livres
+    que soma a quantidade certa. So quando nao existe combinacao exata cai no
+    guloso: maior boca que ainda cabe, e o resto numa boca parcial.
     """
     livres = [{'cap': b, 'usado': 0.0, 'cor': None, 'cliente': None,
                'parcial': False} for b in bocas]
     sobrou = 0.0
 
-    for it in sorted(itens, key=lambda x: -x['litros']):
+    def _ocupa(b, it, usa):
+        b['usado'] = usa
+        b['cor'] = it['cor']
+        b['cliente'] = it['cliente']
+        b['parcial'] = usa < b['cap'] - 0.01
+
+    ordenados = sorted(itens, key=lambda x: x['litros'], reverse=maior_primeiro)
+    for it in ordenados:
+        if exato:
+            disp = [(i, int(round(b['cap']))) for i, b in enumerate(livres)
+                    if b['cor'] is None]
+            escolha = _combina_exato(disp, int(round(it['litros'])), menos_bocas)
+            if escolha:
+                for i in escolha:
+                    _ocupa(livres[i], it, livres[i]['cap'])
+                continue
+
         resta = it['litros']
         while resta > 0.01:
             # Maior boca livre que cabe inteira; se nenhuma cabe, a menor livre.
@@ -117,12 +174,50 @@ def _encaixar(itens, bocas):
                     break
                 alvo = min(vazias, key=lambda b: b['cap'])
             usa = min(alvo['cap'], resta)
-            alvo['usado'] = usa
-            alvo['cor'] = it['cor']
-            alvo['cliente'] = it['cliente']
-            alvo['parcial'] = usa < alvo['cap'] - 0.01
+            _ocupa(alvo, it, usa)
             resta -= usa
     return livres, sobrou
+
+
+# (maior_primeiro, menos_bocas, tenta_exato) — a ordem importa: em empate fica
+# a primeira, que e a que desenha o compartimento de forma mais natural.
+_ESTRATEGIAS = (
+    (True, True, True),
+    (True, False, True),
+    (False, True, True),
+    (False, False, True),
+    (True, True, False),
+)
+
+
+def _encaixar(itens, bocas):
+    """Melhor distribuicao dos itens nas bocas entre algumas estrategias.
+
+    Distribuir produtos em compartimentos e um problema de empacotamento:
+    nenhuma regra simples acerta sempre. Duas falham de jeitos opostos —
+    preferir menos bocas resolve a carreta 5/5/3/2/5/5/5 e quebra a
+    5/5/3/3/3/5/3/3/5; preferir mais faz o contrario. Como sao poucas bocas e
+    poucos itens, sai mais barato rodar as duas (e as variantes de ordem) e
+    ficar com a que deixa menos produto sem lugar.
+
+    Isso importa pra confianca na tela: dizer "1.000 L nao acharam boca" numa
+    carga que cabe inteira e alarme falso, e alarme falso ensina a ignorar o
+    aviso de verdade.
+
+    Devolve (desenho, sobrou) onde desenho e uma lista por boca:
+        {'cap': L, 'usado': L, 'cor': '#...', 'cliente': str, 'parcial': bool}
+    e `sobrou` e o total em litros que nao coube em boca nenhuma.
+    """
+    melhor = None
+    for maior, menos, exato in _ESTRATEGIAS:
+        desenho, sobrou = _tentativa(itens, bocas, maior, menos, exato)
+        parciais = sum(1 for b in desenho if b['parcial'])
+        nota = (sobrou, parciais)
+        if melhor is None or nota < melhor[0]:
+            melhor = (nota, desenho, sobrou)
+        if sobrou <= 0.01 and parciais == 0:
+            break  # fechou redondo, nao ha o que melhorar
+    return melhor[1], melhor[2]
 
 
 def _fretes_do_periodo(cur, ini, fim, veiculo_id=None):
