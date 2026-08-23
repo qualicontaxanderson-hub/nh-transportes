@@ -90,11 +90,15 @@ def _f(v):
 
 
 def _ensure_tabela():
-    """Cria `frete_saldo_bordo` — a UNICA tabela que esta tela escreve.
+    """Cria as duas tabelas proprias desta tela. Nada mais e escrito.
 
-    Guarda a resposta de "esse produto ficou no caminhao?". Nao encosta em
-    `fretes`, `pedidos` nem `cobrancas`: e uma anotacao a parte, e apagar a
-    tabela devolve a tela ao estado de so-leitura sem perder nada do sistema.
+    `carga_fechada`     — "essa carga esta montada, o caminhao sai com ela".
+    `frete_saldo_bordo` — "esta mercadoria de viagem anterior estava a bordo
+                           durante esta carga, e por isso ela nao encheu".
+
+    Nenhuma das duas encosta em `fretes`, `pedidos`, `cobrancas` ou estoque.
+    Apagar as duas devolve a tela ao estado de so-leitura sem o sistema
+    perder absolutamente nada.
     """
     global _tabela_pronta
     if _tabela_pronta:
@@ -104,20 +108,47 @@ def _ensure_tabela():
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS frete_saldo_bordo (
-                id             INT AUTO_INCREMENT PRIMARY KEY,
-                frete_id       INT NOT NULL,
-                a_bordo        TINYINT(1) NOT NULL,
-                respondido_por VARCHAR(80) NULL,
-                respondido_em  DATETIME NOT NULL,
-                UNIQUE KEY uq_frete_saldo_bordo (frete_id)
+            CREATE TABLE IF NOT EXISTS carga_fechada (
+                id            INT AUTO_INCREMENT PRIMARY KEY,
+                data_frete    DATE NOT NULL,
+                veiculo_id    INT NOT NULL,
+                motorista_id  INT NOT NULL DEFAULT 0,
+                fechada_por   VARCHAR(80) NULL,
+                fechada_em    DATETIME NOT NULL,
+                UNIQUE KEY uq_carga_fechada (data_frete, veiculo_id, motorista_id)
             )
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS frete_saldo_bordo (
+                id                 INT AUTO_INCREMENT PRIMARY KEY,
+                frete_id           INT NOT NULL,
+                carga_data         DATE NOT NULL,
+                carga_veiculo_id   INT NOT NULL,
+                carga_motorista_id INT NOT NULL DEFAULT 0,
+                litros             DECIMAL(12,3) NOT NULL DEFAULT 0,
+                respondido_por     VARCHAR(80) NULL,
+                respondido_em      DATETIME NOT NULL,
+                UNIQUE KEY uq_bordo (frete_id, carga_data, carga_veiculo_id)
+            )
+        """)
+        # A primeira versao da tabela so tinha (frete_id, a_bordo). Estas
+        # colunas trazem a versao antiga pro formato novo sem perder linha.
+        for alter in (
+            "ALTER TABLE frete_saldo_bordo ADD COLUMN carga_data DATE NOT NULL",
+            "ALTER TABLE frete_saldo_bordo ADD COLUMN carga_veiculo_id INT NOT NULL",
+            "ALTER TABLE frete_saldo_bordo ADD COLUMN carga_motorista_id INT NOT NULL DEFAULT 0",
+            "ALTER TABLE frete_saldo_bordo ADD COLUMN litros DECIMAL(12,3) NOT NULL DEFAULT 0",
+        ):
+            try:
+                cur.execute(alter)
+                conn.commit()
+            except Exception:
+                conn.rollback()
         conn.commit()
         _tabela_pronta = True
     except Exception:
         logging.getLogger(__name__).exception(
-            "[ped_frete_novo] nao deu pra criar frete_saldo_bordo")
+            "[ped_frete_novo] nao deu pra preparar as tabelas da tela")
         if conn:
             try:
                 conn.rollback()
@@ -136,71 +167,78 @@ def _ensure_tabela():
                 pass
 
 
-def _clientes_que_descarregam(cur):
-    """Clientes em que "sem descarga" quer dizer alguma coisa.
+def _chave(v):
+    """A carga em tres campos: data + veiculo + motorista."""
+    return (v['data'], v['veiculo_id'], v['motorista_id'] or 0)
 
-    So o Posto Novo Horizonte descarrega no sistema (439 fretes); pros outros
-    clientes nao existe nenhum registro, entao ausencia de descarga ali nao
-    informa nada e nao pode virar pergunta.
-    """
+
+def _fechadas(cur, dia):
+    """{(data, veiculo, motorista): quem/quando} das cargas ja fechadas no dia."""
+    cur.execute("""SELECT data_frete, veiculo_id, motorista_id, fechada_por, fechada_em
+                     FROM carga_fechada WHERE data_frete = %s""", (dia,))
+    return {(r['data_frete'], r['veiculo_id'], r['motorista_id']): r
+            for r in cur.fetchall()}
+
+
+def _bordo_registrado(cur, dia):
+    """{(data, veiculo, motorista): [mercadoria...]} ja marcada como a bordo."""
     cur.execute("""
-        SELECT f.clientes_id AS cid, COUNT(*) AS n
-          FROM descargas d
-          JOIN fretes f ON f.id = d.frete_id
-         WHERE f.clientes_id IS NOT NULL
-         GROUP BY f.clientes_id
-        HAVING n >= 5
-    """)
-    return [r['cid'] for r in cur.fetchall()]
+        SELECT sb.frete_id, sb.carga_data, sb.carga_veiculo_id, sb.carga_motorista_id,
+               sb.litros, f.data_frete, pr.nome AS produto, cl.razao_social AS cliente
+          FROM frete_saldo_bordo sb
+          JOIN fretes f          ON f.id = sb.frete_id
+          LEFT JOIN produto pr   ON pr.id = f.produto_id
+          LEFT JOIN clientes cl  ON cl.id = f.clientes_id
+         WHERE sb.carga_data = %s
+         ORDER BY f.data_frete, f.id
+    """, (dia,))
+    fora = {}
+    for r in cur.fetchall():
+        r['litros'] = _f(r['litros'])
+        ch = (r['carga_data'], r['carga_veiculo_id'], r['carga_motorista_id'])
+        fora.setdefault(ch, []).append(r)
+    return fora
 
 
-def _saldo_a_bordo(cur, dia, veiculo_ids):
-    """{veiculo_id: [item...]} — produto de viagem anterior que talvez esteja
-    no caminhao ainda.
+def _candidatos_bordo(cur, dia, veiculo_ids):
+    """{veiculo_id: [frete...]} — a mercadoria da carga ANTERIOR do caminhao.
 
-    Candidato e o frete que junta as quatro condicoes: mesmo veiculo, data
-    ANTERIOR a que se esta olhando, cliente que normalmente descarrega, e
-    nenhuma descarga registrada. Foi o caso de 21/08: o Marcos voltou com
-    5.000 L de diesel que nao desceram, e no dia seguinte a tela dizia que
-    sobravam 5.000 L de espaco — quando o caminhao estava cheio.
-
-    A resposta do usuario fica em `frete_saldo_bordo`. Enquanto ninguem
-    responde, o item vem como pendente: a tela mostra a duvida em vez de
-    escolher sozinha um dos dois lados.
+    Quando a carga do dia nao encheu a carreta, e daqui que sai a resposta pra
+    "o que ficou a bordo": os fretes da ultima viagem daquele mesmo caminhao.
+    Qualquer cliente entra — nao so o Posto. A viagem tambem pode ter saido
+    com boca vazia mesmo, e nesse caso a resposta e "nada ficou".
     """
     if not veiculo_ids:
         return {}
-    cids = _clientes_que_descarregam(cur)
-    if not cids:
-        return {}
-
-    marcadores_v = ','.join(['%s'] * len(veiculo_ids))
-    marcadores_c = ','.join(['%s'] * len(cids))
+    marc = ','.join(['%s'] * len(veiculo_ids))
     cur.execute("""
         SELECT f.id, f.veiculos_id, f.data_frete,
                COALESCE(f.quantidade_manual, q.valor) AS litros,
                pr.nome AS produto, cl.razao_social AS cliente,
-               sb.a_bordo AS resposta
+               m.nome AS motorista
           FROM fretes f
           LEFT JOIN quantidades q ON q.id = f.quantidade_id
           LEFT JOIN produto pr    ON pr.id = f.produto_id
           LEFT JOIN clientes cl   ON cl.id = f.clientes_id
-          LEFT JOIN frete_saldo_bordo sb ON sb.frete_id = f.id
+          LEFT JOIN motoristas m  ON m.id = f.motoristas_id
          WHERE f.veiculos_id IN (%s)
-           AND f.clientes_id IN (%s)
            AND f.data_frete < %%s
            AND f.data_frete >= %%s
-           AND NOT EXISTS (SELECT 1 FROM descargas d WHERE d.frete_id = f.id)
-           AND (sb.a_bordo IS NULL OR sb.a_bordo = 1)
-         ORDER BY f.data_frete DESC, f.id
-    """ % (marcadores_v, marcadores_c),
-        list(veiculo_ids) + list(cids) + [dia, dia - timedelta(days=_DIAS_BORDO)])
+         ORDER BY f.veiculos_id, f.data_frete DESC, f.id
+    """ % marc, list(veiculo_ids) + [dia, dia - timedelta(days=_DIAS_BORDO)])
 
     por_veic = {}
+    ultima = {}
     for r in cur.fetchall():
+        vid = r['veiculos_id']
+        # So a viagem mais recente antes do dia — o que ficou a bordo veio
+        # dela, nao de uma carga de tres dias atras que ja rodou de novo.
+        if vid not in ultima:
+            ultima[vid] = r['data_frete']
+        if r['data_frete'] != ultima[vid]:
+            continue
         r['litros'] = _f(r['litros'])
-        r['confirmado'] = (r['resposta'] == 1)
-        por_veic.setdefault(r['veiculos_id'], []).append(r)
+        por_veic.setdefault(vid, []).append(r)
     return por_veic
 
 
@@ -447,6 +485,7 @@ def _montar_viagens(fretes, cap):
             v = viagens[ch] = {
                 'data': fr['data_frete'], 'veiculo_id': fr['veiculos_id'],
                 'placa': fr['placa'] or '—', 'caminhao': fr['caminhao'] or '',
+                'motorista_id': fr['motoristas_id'] or 0,
                 'motorista': fr['motorista'] or '—',
                 'bocas': c['bocas'], 'capacidade': c['total'], 'carreta': c['carreta'],
                 'fretes': [], 'pedidos': [], 'postos': {},
@@ -497,51 +536,65 @@ def _montar_viagens(fretes, cap):
         v['pct'] = round(100.0 * v['litros'] / v['capacidade'], 1) if v['capacidade'] else 0.0
         v['estoura'] = bool(v['capacidade']) and v['litros'] > v['capacidade'] + 0.01
         v['sem_cadastro'] = not v['capacidade']
-        # Sobrescritos por _aplicar_bordo quando ha produto de viagem anterior.
+        # Preenchidos de verdade por _aplicar_estado.
         v['bordo'] = []
-        v['bordo_confirmado'] = 0.0
-        v['bordo_pendente'] = 0.0
+        v['bordo_litros'] = 0.0
         v['ocupado'] = v['litros']
-        v['livre_se_tudo'] = v['livre']
+        v['fechada'] = False
+        v['pergunta_bordo'] = False
+        v['candidatos'] = []
         saida.append(v)
 
     saida.sort(key=lambda v: (v['data'], -v['litros'], v['placa']))
     return saida
 
 
-def _aplicar_bordo(viagens, por_veic):
-    """Junta o produto que ficou de viagem anterior ao desenho da carreta.
+def _aplicar_estado(viagens, fechadas, bordo, candidatos):
+    """Aplica na viagem o que a tela sabe: fechada ou nao, e o que ficou a bordo.
 
-    So o que o usuario JA confirmou ocupa boca e desconta do espaco livre. O
-    pendente aparece como pergunta e a tela mostra os dois numeros ("sobram
-    5.000 L, ou 0 se os 5.000 do dia 21 ainda estiverem a bordo") — contar
-    sozinho erraria pro outro lado quando a descarga so nao foi registrada.
+    O ciclo que o usuario descreveu:
+      - carga aberta   -> ela ainda esta montando. "Sobram 25.000 L" e convite,
+                          nao afirmacao, entao a tela nao pergunta nada.
+      - clicou fechar  -> se encheu a carreta, fecha direto e acabou.
+                          Se sobrou espaco, ai sim pergunta o que ficou a bordo,
+                          escolhendo entre as mercadorias da viagem anterior
+                          daquele caminhao (qualquer cliente) — ou respondendo
+                          que nada ficou, que ela saiu com boca vazia mesmo.
+      - fechada        -> o numero vira afirmacao: "saiu com 25.000 L de espaco".
     """
     for v in viagens:
-        itens_bordo = list(por_veic.get(v['veiculo_id']) or [])
-        v['bordo'] = itens_bordo
-        v['bordo_confirmado'] = sum(b['litros'] for b in itens_bordo if b['confirmado'])
-        v['bordo_pendente'] = sum(b['litros'] for b in itens_bordo if not b['confirmado'])
-        if not itens_bordo:
-            continue
+        ch = _chave(v)
+        f = fechadas.get(ch)
+        v['fechada'] = bool(f)
+        v['fechada_por'] = (f or {}).get('fechada_por')
+        v['fechada_em'] = (f or {}).get('fechada_em')
 
-        if v['bordo_confirmado']:
+        itens_bordo = list(bordo.get(ch) or [])
+        v['bordo'] = itens_bordo
+        v['bordo_litros'] = sum(b['litros'] for b in itens_bordo)
+
+        if itens_bordo:
             itens = [{'litros': fr['litros'], 'cor': fr['cor'],
                       'cliente': fr['cliente'] or '—'}
                      for fr in v['fretes'] if fr['litros'] > 0]
             itens += [{'litros': b['litros'], 'cor': _COR_BORDO,
                        'cliente': '%s · ficou de %s' % (b['produto'] or '?',
                                                         b['data_frete'].strftime('%d/%m'))}
-                      for b in itens_bordo if b['confirmado']]
+                      for b in itens_bordo]
             v['desenho'], v['sem_boca'] = _encaixar(itens, v['bocas'])
 
-        ocupado = v['litros'] + v['bordo_confirmado']
+        ocupado = v['litros'] + v['bordo_litros']
         v['ocupado'] = ocupado
         v['livre'] = max(0.0, v['capacidade'] - ocupado)
-        # Se todo o pendente estiver mesmo a bordo, o espaco livre e este.
-        v['livre_se_tudo'] = max(0.0, v['livre'] - v['bordo_pendente'])
         v['pct'] = round(100.0 * ocupado / v['capacidade'], 1) if v['capacidade'] else 0.0
         v['estoura'] = bool(v['capacidade']) and ocupado > v['capacidade'] + 0.01
+
+        # A pergunta so faz sentido quando ha carreta cadastrada, ainda sobra
+        # espaco e ninguem respondeu ainda. Carreta cheia fecha direto.
+        v['pergunta_bordo'] = bool(
+            v['capacidade'] and v['livre'] > 0.01 and not itens_bordo and not v['fechada'])
+        v['candidatos'] = list(candidatos.get(v['veiculo_id']) or []) \
+            if v['pergunta_bordo'] else []
 
 
 def _marcar_viagens_do_dia(viagens):
@@ -656,51 +709,142 @@ def _divergencias(cur, desde):
     return cur.fetchall()
 
 
-@bp.route('/ped-frete-novo/bordo', methods=['POST'])
-@login_required
-def bordo():
-    """Registra "esse produto ficou no caminhao?" — sim ou nao.
-
-    E a unica escrita desta tela, e vai so pra `frete_saldo_bordo`. Nao
-    altera o frete, nao mexe em quantidade, nao encosta em cobranca: e uma
-    anotacao de quem olhou e respondeu.
-    """
-    dados = request.get_json(silent=True) or {}
-    try:
-        frete_id = int(dados.get('frete_id') or 0)
-    except (TypeError, ValueError):
-        frete_id = 0
-    if not frete_id:
-        return jsonify({'ok': False, 'erro': 'frete não informado'}), 400
-    a_bordo = 1 if dados.get('a_bordo') else 0
-
-    _ensure_tabela()
-    quem = (getattr(current_user, 'username', None)
+def _quem():
+    return (getattr(current_user, 'username', None)
             or getattr(current_user, 'nome_completo', None) or '')[:80]
 
+
+def _carga_do_pedido(dados):
+    """Le data + veiculo + motorista do corpo da requisicao."""
+    try:
+        d = date.fromisoformat(dados.get('data') or '')
+    except (TypeError, ValueError):
+        return None
+    try:
+        vid = int(dados.get('veiculo_id') or 0)
+        mid = int(dados.get('motorista_id') or 0)
+    except (TypeError, ValueError):
+        return None
+    if not vid:
+        return None
+    return d, vid, mid
+
+
+@bp.route('/ped-frete-novo/fechar', methods=['POST'])
+@login_required
+def fechar():
+    """Fecha a carga e, se ela nao encheu, registra o que ficou a bordo.
+
+    A partir daqui "sobram 5.000 L" deixa de ser "faltam lancar" e passa a ser
+    "saiu com 5.000 L de espaco". As duas coisas vao juntas de proposito: e no
+    momento de fechar que a Monica sabe o que ficou no caminhao.
+
+    Escreve so em `carga_fechada` e `frete_saldo_bordo`.
+    """
+    dados = request.get_json(silent=True) or {}
+    carga = _carga_do_pedido(dados)
+    if not carga:
+        return jsonify({'ok': False, 'erro': 'carga não informada'}), 400
+    dia, vid, mid = carga
+
+    itens = dados.get('bordo') or []
+    if not isinstance(itens, list):
+        itens = []
+
+    _ensure_tabela()
     conn = cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT id FROM fretes WHERE id = %s", (frete_id,))
-        if not cursor.fetchone():
-            return jsonify({'ok': False, 'erro': 'frete não encontrado'}), 404
+
+        gravados = 0
+        for it in itens:
+            try:
+                fid = int((it or {}).get('frete_id') or 0)
+                litros = _f((it or {}).get('litros'))
+            except (TypeError, ValueError, AttributeError):
+                continue
+            if not fid or litros <= 0:
+                continue
+            cursor.execute("SELECT id FROM fretes WHERE id = %s", (fid,))
+            if not cursor.fetchone():
+                continue
+            cursor.execute("""
+                INSERT INTO frete_saldo_bordo
+                       (frete_id, carga_data, carga_veiculo_id, carga_motorista_id,
+                        litros, respondido_por, respondido_em)
+                     VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                ON DUPLICATE KEY UPDATE litros = VALUES(litros),
+                                        carga_motorista_id = VALUES(carga_motorista_id),
+                                        respondido_por = VALUES(respondido_por),
+                                        respondido_em = NOW()
+            """, (fid, dia, vid, mid, litros, _quem()))
+            gravados += 1
+
         cursor.execute("""
-            INSERT INTO frete_saldo_bordo (frete_id, a_bordo, respondido_por, respondido_em)
-                 VALUES (%s, %s, %s, NOW())
-            ON DUPLICATE KEY UPDATE a_bordo = VALUES(a_bordo),
-                                    respondido_por = VALUES(respondido_por),
-                                    respondido_em = NOW()
-        """, (frete_id, a_bordo, quem))
+            INSERT INTO carga_fechada (data_frete, veiculo_id, motorista_id,
+                                       fechada_por, fechada_em)
+                 VALUES (%s, %s, %s, %s, NOW())
+            ON DUPLICATE KEY UPDATE fechada_por = VALUES(fechada_por),
+                                    fechada_em = NOW()
+        """, (dia, vid, mid, _quem()))
         conn.commit()
-        return jsonify({'ok': True, 'frete_id': frete_id, 'a_bordo': a_bordo})
+        return jsonify({'ok': True, 'bordo': gravados})
     except Exception as e:
         if conn:
             try:
                 conn.rollback()
             except Exception:
                 pass
-        logging.getLogger(__name__).exception("[ped_frete_novo] bordo")
+        logging.getLogger(__name__).exception("[ped_frete_novo] fechar")
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@bp.route('/ped-frete-novo/reabrir', methods=['POST'])
+@login_required
+def reabrir():
+    """Desfaz o fechamento e apaga o que tinha sido marcado como a bordo.
+
+    Existe porque errar o clique tem que sair barato: a tela volta exatamente
+    ao que era, sem deixar rastro que atrapalhe a leitura do dia seguinte.
+    """
+    dados = request.get_json(silent=True) or {}
+    carga = _carga_do_pedido(dados)
+    if not carga:
+        return jsonify({'ok': False, 'erro': 'carga não informada'}), 400
+    dia, vid, mid = carga
+
+    _ensure_tabela()
+    conn = cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""DELETE FROM carga_fechada
+                           WHERE data_frete=%s AND veiculo_id=%s AND motorista_id=%s""",
+                       (dia, vid, mid))
+        cursor.execute("""DELETE FROM frete_saldo_bordo
+                           WHERE carga_data=%s AND carga_veiculo_id=%s""",
+                       (dia, vid))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.getLogger(__name__).exception("[ped_frete_novo] reabrir")
         return jsonify({'ok': False, 'erro': str(e)}), 500
     finally:
         if cursor:
@@ -785,10 +929,11 @@ def index():
             fretes = _fretes_do_periodo(cursor, dia, dia, alvo)
             viagens = _montar_viagens(fretes, cap)
             _marcar_viagens_do_dia(viagens)
-            _aplicar_bordo(viagens,
-                           _saldo_a_bordo(cursor, dia,
-                                          {v['veiculo_id'] for v in viagens
-                                           if v['veiculo_id']}))
+            vids = {v['veiculo_id'] for v in viagens if v['veiculo_id']}
+            _aplicar_estado(viagens,
+                            _fechadas(cursor, dia),
+                            _bordo_registrado(cursor, dia),
+                            _candidatos_bordo(cursor, dia, vids))
             ctx['viagens'] = viagens
 
             usados = {v['veiculo_id'] for v in viagens}

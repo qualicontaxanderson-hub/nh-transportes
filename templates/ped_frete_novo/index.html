@@ -144,6 +144,27 @@ body > .container-fluid:has(#pfn){
   #pfn .bd__ok{ font-size:.73rem; font-weight:800; color:#1c6b34;
     background:#e4f4e8; border-radius:99px; padding:.22rem .55rem;
     white-space:nowrap; }
+  #pfn .bd--esc{ cursor:pointer; align-items:center; }
+  #pfn .bd--esc:hover{ background:#fffaf0; }
+  #pfn .bd__ck{ width:20px; height:20px; flex:0 0 auto; accent-color:var(--ambar);
+    margin-top:.1rem; }
+  #pfn .bd__q{ font-size:.75rem; font-weight:800; color:var(--muted);
+    white-space:nowrap; }
+  #pfn .bd__l{ width:84px; border:1px solid var(--borda); border-radius:8px;
+    padding:.28rem .4rem; font-size:.78rem; font-family:inherit;
+    font-variant-numeric:tabular-nums; text-align:right; }
+  #pfn .bd__l[disabled]{ background:#f2f5f8; color:var(--muted); }
+  #pfn .bd__rod{ display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.6rem;
+    padding-top:.5rem; border-top:1px solid #f0e2c4; }
+
+  /* faixa de estado da carga */
+  #pfn .fechou{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
+    background:#e4f4e8; color:#1c6b34; border-radius:11px; padding:.5rem .65rem;
+    font-size:.78rem; margin-bottom:.55rem; line-height:1.45; }
+  #pfn .fechou > span{ flex:1; min-width:0; }
+  #pfn .fechou--abre{ background:#f2f5f8; color:var(--muted); }
+  #pfn .selo--fech{ background:#e4f4e8; color:#1c6b34; }
+  #pfn .selo--abre{ background:#f2f5f8; color:var(--muted); }
 
   /* bocas */
   #pfn .bocas{ border:1px solid #cddff0; background:#eaf1f9; border-radius:11px;
@@ -245,9 +266,11 @@ body > .container-fluid:has(#pfn){
     <i class="bi bi-eye"></i>
     <span><b>Fase 1 — leitura.</b> Esta tela lê os mesmos pedidos e fretes de
     sempre e junta a carga pela chave física <b>data + caminhão + motorista</b>.
-    Não altera frete, pedido nem cobrança, e não emite nada. A única coisa que
-    ela grava é a sua resposta a <b>“esse produto ficou no caminhão?”</b>, numa
-    anotação separada. As telas de Pedidos e Fretes continuam valendo.</span>
+    <b>Não altera frete, pedido nem cobrança, e não emite nada.</b> O que ela
+    grava é só o <b>fechamento da carga</b> e o que ficou a bordo, em tabelas
+    próprias. Enquanto a carga está <i>montando</i>, “sobram 5.000 L” quer
+    dizer que ainda cabe; depois de fechada, quer dizer que saiu com esse
+    espaço vazio. As telas de Pedidos e Fretes continuam valendo.</span>
   </div>
 
   {% if erro %}
@@ -355,6 +378,8 @@ body > .container-fluid:has(#pfn){
         <span class="vg__ic"><i class="bi bi-truck-front-fill"></i></span>
         <div class="vg__t">
           <div class="vg__p">{{ v.placa }}
+            {%- if v.fechada %} <span class="selo selo--fech">carga fechada</span>
+            {%- else %} <span class="selo selo--abre">montando</span>{% endif -%}
             {%- if v.viagem_n %} <span class="selo selo--vg">{{ v.viagem_n }}ª viagem
               de {{ v.viagem_de }}</span>{% endif -%}
             {%- if v.estoura %} <span class="selo selo--al">estoura a carreta</span>
@@ -388,44 +413,87 @@ body > .container-fluid:has(#pfn){
       <div class="vg__corpo">
         <div class="vg__c2">
 
+          {% if v.fechada %}
+          <div class="fechou">
+            <span><i class="bi bi-lock-fill"></i> <b>Carga fechada</b>
+              {%- if v.fechada_por %} por {{ v.fechada_por }}{% endif -%}
+              {%- if v.fechada_em %} em {{ v.fechada_em.strftime('%d/%m %H:%M') }}{% endif -%}
+              {%- if v.livre > 0.01 and v.capacidade %} · saiu com
+                {{ fmtl.format(v.livre).replace(',', '.') }} L de espaço{% endif -%}
+            </span>
+            <button type="button" class="bd__b"
+                    onclick="pfnReabrir(this, '{{ v.data.isoformat() }}',
+                             {{ v.veiculo_id }}, {{ v.motorista_id or 0 }})">reabrir</button>
+          </div>
+          {% elif not v.pergunta_bordo %}
+          <div class="fechou fechou--abre">
+            <span><i class="bi bi-pencil"></i> Carga em montagem
+              {%- if v.capacidade and v.livre <= 0.01 %} · a carreta encheu{% endif -%}
+            </span>
+            <button type="button" class="bd__b bd__b--sim"
+                    onclick="pfnFechar(this, '{{ v.data.isoformat() }}',
+                             {{ v.veiculo_id }}, {{ v.motorista_id or 0 }}, false)">
+              <i class="bi bi-lock-fill"></i> Fechar carga</button>
+          </div>
+          {% endif %}
+
           {% if v.bordo %}
-          <div class="bordo {{ 'bordo--ok' if not v.bordo_pendente }}">
-            <div class="bordo__t">
-              <i class="bi bi-box-seam"></i>
-              {%- if v.bordo_pendente -%}
-                Ficou produto no caminhão de viagem anterior?
-              {%- else -%}
-                Produto de viagem anterior ainda a bordo
-              {%- endif -%}
-            </div>
+          <div class="bordo bordo--ok">
+            <div class="bordo__t"><i class="bi bi-box-seam"></i>
+              Ficou no caminhão da viagem anterior</div>
             {% for b in v.bordo %}
-            <div class="bd" data-frete="{{ b.id }}">
+            <div class="bd">
               <span class="bd__n">{{ b.produto or '—' }}
                 <b>{{ fmtl.format(b.litros).replace(',', '.') }} L</b>
                 <small>carregado em {{ b.data_frete.strftime('%d/%m') }} ·
                   {{ b.cliente or '—' }}</small></span>
-              {% if b.confirmado %}
-              <span class="bd__ok"><i class="bi bi-check-circle-fill"></i> no caminhão</span>
-              <button type="button" class="bd__b" onclick="pfnBordo(this, {{ b.id }}, 0)">
-                já desceu</button>
-              {% else %}
-              <span class="bd__acao">
-                <button type="button" class="bd__b bd__b--sim"
-                        onclick="pfnBordo(this, {{ b.id }}, 1)">Está no caminhão</button>
-                <button type="button" class="bd__b"
-                        onclick="pfnBordo(this, {{ b.id }}, 0)">Já desceu</button>
-              </span>
-              {% endif %}
+              <span class="bd__ok"><i class="bi bi-check-circle-fill"></i> a bordo</span>
             </div>
             {% endfor %}
-            {% if v.bordo_pendente and v.capacidade %}
-            <div class="bordo__c">
-              Sobram <b>{{ fmtl.format(v.livre).replace(',', '.') }} L</b> —
-              ou <b>{{ fmtl.format(v.livre_se_tudo).replace(',', '.') }} L</b>,
-              se esses {{ fmtl.format(v.bordo_pendente).replace(',', '.') }} L
-              ainda estiverem a bordo. Responda pra tela parar de chutar.
+          </div>
+          {% endif %}
+
+          {% if v.pergunta_bordo %}
+          <div class="bordo" id="fech{{ loop.index }}">
+            <div class="bordo__t"><i class="bi bi-box-seam"></i>
+              Fechar a carga: sobram
+              {{ fmtl.format(v.livre).replace(',', '.') }} L de espaço</div>
+            {% if v.candidatos %}
+            <div class="bordo__c" style="margin:0 0 .5rem">
+              Ficou alguma mercadoria da viagem de
+              {{ v.candidatos[0].data_frete.strftime('%d/%m') }} no caminhão?
+              Marque o que não desceu.
+            </div>
+            {% for b in v.candidatos %}
+            <label class="bd bd--esc">
+              <input type="checkbox" class="bd__ck" value="{{ b.id }}"
+                     data-litros="{{ '%.0f' | format(b.litros) }}"
+                     onchange="pfnMarca(this)">
+              <span class="bd__n">{{ b.produto or '—' }} · {{ b.cliente or '—' }}
+                <small>{{ b.data_frete.strftime('%d/%m') }} ·
+                  {{ fmtl.format(b.litros).replace(',', '.') }} L carregados</small></span>
+              <span class="bd__q">
+                <input type="number" class="bd__l" value="{{ '%.0f' | format(b.litros) }}"
+                       min="1" step="100" disabled> L
+              </span>
+            </label>
+            {% endfor %}
+            {% else %}
+            <div class="bordo__c" style="margin:0 0 .5rem">
+              Não achei viagem anterior desse caminhão nos últimos 7 dias — então
+              é fechar e pronto.
             </div>
             {% endif %}
+            <div class="bd__rod">
+              <button type="button" class="bd__b bd__b--sim"
+                      onclick="pfnFechar(this, '{{ v.data.isoformat() }}',
+                               {{ v.veiculo_id }}, {{ v.motorista_id or 0 }}, true)">
+                <i class="bi bi-lock-fill"></i> Fechar com o que marquei</button>
+              <button type="button" class="bd__b"
+                      onclick="pfnFechar(this, '{{ v.data.isoformat() }}',
+                               {{ v.veiculo_id }}, {{ v.motorista_id or 0 }}, false)">
+                Nada ficou — saiu com boca vazia</button>
+            </div>
           </div>
           {% endif %}
 
@@ -558,30 +626,64 @@ function pfnAbre(el){
   if (c) c.classList.toggle('aberta');
 }
 
-// Responde "esse produto ficou no caminhao?". E a unica coisa que esta tela
-// grava, e vai so pra frete_saldo_bordo — nao altera o frete nem a cobranca.
-// O fetch do base.html ja anexa o X-CSRFToken sozinho.
-function pfnBordo(botao, freteId, aBordo){
-  var linha = botao.closest('.bd');
-  var botoes = linha ? linha.querySelectorAll('.bd__b') : [];
-  for (var i = 0; i < botoes.length; i++) botoes[i].disabled = true;
-  botao.textContent = 'salvando…';
+// Marcar a mercadoria libera o campo de litros: as vezes desceu parte e ficou
+// o resto, entao a quantidade tem que ser editavel.
+function pfnMarca(ck){
+  var linha = ck.closest('.bd');
+  var campo = linha ? linha.querySelector('.bd__l') : null;
+  if (campo) campo.disabled = !ck.checked;
+}
 
-  fetch('/ped-frete-novo/bordo', {
+// Fecha a carga. E a unica escrita desta tela, e vai so pras tabelas dela
+// (carga_fechada e frete_saldo_bordo) — nao altera frete, pedido nem cobranca.
+// O fetch do base.html anexa o X-CSRFToken sozinho.
+function pfnFechar(botao, data, veiculoId, motoristaId, usarMarcados){
+  var caixa = botao.closest('.bordo') || botao.closest('.fechou');
+  var bordo = [];
+  if (usarMarcados && caixa){
+    var cks = caixa.querySelectorAll('.bd__ck');
+    for (var i = 0; i < cks.length; i++){
+      if (!cks[i].checked) continue;
+      var linha = cks[i].closest('.bd');
+      var campo = linha ? linha.querySelector('.bd__l') : null;
+      var litros = campo ? parseFloat(campo.value) : 0;
+      if (!litros || litros <= 0) continue;
+      bordo.push({frete_id: parseInt(cks[i].value, 10), litros: litros});
+    }
+    if (!bordo.length){
+      alert('Marque o que ficou no caminhão, ou use "Nada ficou".');
+      return;
+    }
+  }
+  pfnEnvia(botao, '/ped-frete-novo/fechar',
+           {data: data, veiculo_id: veiculoId, motorista_id: motoristaId, bordo: bordo});
+}
+
+function pfnReabrir(botao, data, veiculoId, motoristaId){
+  pfnEnvia(botao, '/ped-frete-novo/reabrir',
+           {data: data, veiculo_id: veiculoId, motorista_id: motoristaId});
+}
+
+function pfnEnvia(botao, url, corpo){
+  var texto = botao.innerHTML;
+  botao.disabled = true;
+  botao.textContent = 'salvando…';
+  fetch(url, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({frete_id: freteId, a_bordo: aBordo})
+    body: JSON.stringify(corpo)
   })
   .then(function(r){ return r.json(); })
   .then(function(d){
     if (!d || !d.ok) throw new Error((d && d.erro) || 'falhou');
-    // Recarrega pra recalcular bocas e espaco livre com a resposta nova.
+    // Recarrega pra recalcular bocas, espaco livre e o estado da carga.
     window.location.reload();
   })
   .catch(function(e){
-    botao.textContent = 'erro — tente de novo';
-    for (var i = 0; i < botoes.length; i++) botoes[i].disabled = false;
-    console.error('bordo:', e);
+    botao.disabled = false;
+    botao.innerHTML = texto;
+    alert('Não deu pra salvar: ' + e.message);
+    console.error('pfn:', e);
   });
 }
 </script>
