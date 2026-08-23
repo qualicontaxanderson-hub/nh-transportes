@@ -2,10 +2,13 @@
 
 {% block title %}PED/FRETE - NOVO{% endblock %}
 
-{#- Fase 1: SOMENTE LEITURA. A tela junta os fretes pela chave fisica da carga
-    (data + veiculo + motorista) e mostra o caminhao como ele sai na estrada:
-    as bocas ocupadas, os postos dentro e o que cada um deve. Nenhum botao
-    aqui grava, altera ou emite nada — a cobranca e da Fase 2. -#}
+{#- A tela junta os fretes pela chave fisica da carga (data + veiculo +
+    motorista) e mostra o caminhao como ele sai na estrada: as bocas ocupadas,
+    os postos dentro e o que cada um deve.
+
+    Nao altera frete nem pedido. Grava so o fechamento da carga e o que ficou
+    a bordo (tabelas proprias), e emite boleto pelo endpoint que ja existe
+    (/financeiro/emitir-boleto-multiple/), o mesmo da tela de Fretes. -#}
 
 {% block styles %}
 <style>
@@ -161,6 +164,38 @@ body > .container-fluid:has(#pfn){
   #pfn .bd__rod{ display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.6rem;
     padding-top:.5rem; border-top:1px solid #f0e2c4; }
 
+  /* seletor de emissao de boleto */
+  #pfn .emis{ border:1px solid #cddff0; background:#f4f8fc; border-radius:11px;
+    padding:.55rem .65rem; margin-top:.55rem; }
+  #pfn .emis--solta{ border:0; background:transparent; padding:0; margin-top:0; }
+  #pfn .emis__t{ font-size:.8rem; font-weight:800; color:var(--blue-deep);
+    margin-bottom:.25rem; }
+  #pfn .emis__s{ font-size:.73rem; color:var(--muted); line-height:1.45;
+    margin-bottom:.5rem; font-weight:600; }
+  #pfn .ef{ display:flex; gap:.5rem; align-items:flex-start; cursor:pointer;
+    padding:.4rem 0; border-bottom:1px dashed #e3ebf3; }
+  #pfn .ef:last-of-type{ border-bottom:0; }
+  #pfn .ef:hover{ background:#eef4fa; }
+  #pfn .ef__ck{ width:20px; height:20px; flex:0 0 auto; accent-color:var(--blue);
+    margin-top:.1rem; }
+  #pfn .ef__n{ flex:1; min-width:0; font-size:.78rem; font-weight:700;
+    line-height:1.4; }
+  #pfn .ef__n small{ display:block; font-size:.7rem; font-weight:600;
+    color:var(--muted); }
+  #pfn .ef--daqui .ef__n{ color:var(--blue-deep); }
+  #pfn .ef__v{ font-size:.79rem; font-weight:800; white-space:nowrap;
+    font-variant-numeric:tabular-nums; }
+  #pfn .emis__r{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
+    margin-top:.55rem; padding-top:.5rem; border-top:1px solid #dbe6f1; }
+  #pfn .emis__venc{ font-size:.75rem; font-weight:700; color:var(--muted);
+    display:inline-flex; gap:.35rem; align-items:center; }
+  #pfn .emis__venc input{ border:1px solid var(--borda); border-radius:8px;
+    padding:.3rem .45rem; font-size:.78rem; font-family:inherit; }
+  #pfn .emis__tot{ margin-left:auto; font-size:.82rem; font-weight:700;
+    color:var(--muted); }
+  #pfn .emis__tot b{ color:var(--blue-deep); font-size:1rem;
+    font-variant-numeric:tabular-nums; }
+
   /* faixa de estado da carga */
   #pfn .fechou{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
     background:#e4f4e8; color:#1c6b34; border-radius:11px; padding:.5rem .65rem;
@@ -269,13 +304,13 @@ body > .container-fluid:has(#pfn){
 
   <div class="piloto">
     <i class="bi bi-eye"></i>
-    <span><b>Fase 1 — leitura.</b> Esta tela lê os mesmos pedidos e fretes de
-    sempre e junta a carga pela chave física <b>data + caminhão + motorista</b>.
-    <b>Não altera frete, pedido nem cobrança, e não emite nada.</b> O que ela
-    grava é só o <b>fechamento da carga</b> e o que ficou a bordo, em tabelas
-    próprias. Enquanto a carga está <i>montando</i>, “sobram 5.000 L” quer
-    dizer que ainda cabe; depois de fechada, quer dizer que saiu com esse
-    espaço vazio. As telas de Pedidos e Fretes continuam valendo.</span>
+    <span>Esta tela lê os mesmos pedidos e fretes de sempre e junta a carga
+    pela chave física <b>data + caminhão + motorista</b>. <b>Não altera frete
+    nem pedido.</b> Enquanto a carga está <i>montando</i>, “sobram 5.000 L”
+    quer dizer que ainda cabe; depois de <i>fechada</i>, quer dizer que saiu
+    com esse espaço vazio. A cobrança sai daqui pelo mesmo caminho da tela de
+    Fretes — um boleto pode juntar fretes de caminhões e dias diferentes.
+    As telas de Pedidos e Fretes continuam valendo.</span>
   </div>
 
   {% if erro %}
@@ -311,18 +346,32 @@ body > .container-fluid:has(#pfn){
           {{ c.dias }} dia(s) · {{ c.placas|length }} caminhã{{ 'o' if c.placas|length == 1 else 'os' }}</span>
       </div>
       <div class="cli__c">
-        {% for f in c.fretes %}
-        <div class="fr">
-          <span class="fr__n">{{ f.data_frete.strftime('%d/%m') }} ·
-            <span class="fr__f">{{ f.placa or '—' }}</span> ·
-            {{ f.produto or '—' }} {{ fmtl.format(f.litros).replace(',', '.') }} L</span>
-          <span class="fr__v">{{ f.valor | formatar_moeda }}</span>
-        </div>
-        {% endfor %}
-        <div class="cli__r">
-          <span>{{ fmtl.format(c.litros).replace(',', '.') }} L ·
-            {{ c.valor | formatar_moeda }}</span>
-          <span class="fase2"><i class="bi bi-lock"></i> emitir: Fase 2</span>
+        <div class="emis emis--solta">
+          <div class="emis__s">Marque o que entra neste boleto. Tudo vem
+            marcado — desmarque o que ficar pra depois.</div>
+          {% for f in c.fretes %}
+          <label class="ef ef--daqui">
+            <input type="checkbox" class="ef__ck" value="{{ f.id }}"
+                   data-valor="{{ '%.2f' | format(f.valor) }}" checked
+                   onchange="pfnSoma(this)">
+            <span class="ef__n">{{ f.semana }} {{ f.data_frete.strftime('%d/%m') }}
+              · {{ f.placa or '—' }}
+              <small>{{ f.produto or '—' }}
+                {{ fmtl.format(f.litros).replace(',', '.') }} L</small></span>
+            <span class="ef__v">{{ f.valor | formatar_moeda }}</span>
+          </label>
+          {% endfor %}
+          <div class="emis__r">
+            <label class="emis__venc">Vence em
+              <input type="date" class="ef__venc" value="{{ vencimento_padrao }}">
+            </label>
+            <span class="emis__tot">Total: <b class="ef__tot">—</b></span>
+          </div>
+          <div class="bd__rod">
+            <button type="button" class="bd__b bd__b--sim"
+                    onclick="pfnEmitir(this, '{{ c.cliente|replace("'", "\\'") }}')">
+              <i class="bi bi-receipt"></i> Emitir um boleto</button>
+          </div>
         </div>
       </div>
     </div>
@@ -331,8 +380,9 @@ body > .container-fluid:has(#pfn){
       Nenhum frete com valor esperando boleto nos últimos 120 dias.</div>
     {% endfor %}
 
-    <p class="rod">Esta aba é a única que atravessa cargas: junta os fretes do
-    mesmo cliente mesmo que estejam em dias e caminhões diferentes. Um frete só
+    <p class="rod">Esta aba junta os fretes do mesmo cliente mesmo que estejam
+    em dias e caminhões diferentes — e o mesmo seletor existe dentro da carga,
+    pra você emitir já no lançamento. Um frete só
     sai daqui quando existe boleto vivo cobrindo ele — seja um boleto próprio
     (<i>cobrancas.frete_id</i>) ou um agrupado, ligado por
     <i>cobrancas_freites</i>. A marca <i>boleto_emitido</i> do frete não é
@@ -574,10 +624,49 @@ body > .container-fluid:has(#pfn){
                 <span>{{ fmtl.format(p.litros).replace(',', '.') }} L
                   {%- if p.valor %} · {{ p.valor | formatar_moeda }}{% endif -%}
                 </span>
-                {% if p.estado == 'falta' %}
-                <span class="fase2"><i class="bi bi-lock"></i> emitir: Fase 2</span>
+                {% if p.estado == 'falta' and p.abertos %}
+                <button type="button" class="bd__b bd__b--sim"
+                        onclick="pfnAbreEmissao(this)">
+                  <i class="bi bi-receipt"></i> Emitir cobrança</button>
                 {% endif %}
               </div>
+
+              {% if p.estado == 'falta' and p.abertos %}
+              {% set cx = 'em-%s-%s'|format(loop.index0, p.cliente_id) %}
+              <div class="emis" hidden>
+                <div class="emis__t"><i class="bi bi-receipt"></i>
+                  Um boleto para {{ p.nome }}</div>
+                <div class="emis__s">Marque tudo que entra neste boleto — pode
+                  juntar frete de outro caminhão e de outro dia. Os desta carga
+                  já vêm marcados.</div>
+                {% for a in p.abertos %}
+                <label class="ef {{ 'ef--daqui' if a.desta_carga }}">
+                  <input type="checkbox" class="ef__ck" value="{{ a.id }}"
+                         data-valor="{{ '%.2f' | format(a.valor) }}"
+                         {{ 'checked' if a.desta_carga }} onchange="pfnSoma(this)">
+                  <span class="ef__n">{{ a.semana }} {{ a.data_frete.strftime('%d/%m') }}
+                    · {{ a.placa or '—' }}
+                    <small>{{ a.produto or '—' }}
+                      {{ fmtl.format(a.litros).replace(',', '.') }} L
+                      {{- ' · nesta carga' if a.desta_carga }}</small></span>
+                  <span class="ef__v">{{ a.valor | formatar_moeda }}</span>
+                </label>
+                {% endfor %}
+                <div class="emis__r">
+                  <label class="emis__venc">Vence em
+                    <input type="date" class="ef__venc" value="{{ vencimento_padrao }}">
+                  </label>
+                  <span class="emis__tot">Total: <b class="ef__tot">—</b></span>
+                </div>
+                <div class="bd__rod">
+                  <button type="button" class="bd__b bd__b--sim"
+                          onclick="pfnEmitir(this, '{{ p.nome|replace("'", "\\'") }}')">
+                    <i class="bi bi-receipt"></i> Emitir boleto</button>
+                  <button type="button" class="bd__b" onclick="pfnFechaEmissao(this)">
+                    Cancelar</button>
+                </div>
+              </div>
+              {% endif %}
             </div>
           </div>
           {% endfor %}
@@ -639,10 +728,19 @@ body > .container-fluid:has(#pfn){
     var meio = alvo.offsetLeft - (regua.clientWidth / 2) + (alvo.offsetWidth / 2);
     regua.scrollLeft = Math.max(0, meio);
   }
+  function totais(){
+    // Os painéis da aba "A cobrar" já nascem abertos e marcados: o total tem
+    // que aparecer sem precisar de clique.
+    var abertos = document.querySelectorAll('#pfn .emis:not([hidden])');
+    for (var i = 0; i < abertos.length; i++){
+      pfnSoma(abertos[i].querySelector('.ef__ck'));
+    }
+  }
+  function inicia(){ centraliza(); totais(); }
   if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', centraliza);
+    document.addEventListener('DOMContentLoaded', inicia);
   } else {
-    centraliza();
+    inicia();
   }
 })();
 
@@ -688,6 +786,101 @@ function pfnFechar(botao, data, veiculoId, motoristaId, usarMarcados){
 function pfnReabrir(botao, data, veiculoId, motoristaId){
   pfnEnvia(botao, '/ped-frete-novo/reabrir',
            {data: data, veiculo_id: veiculoId, motorista_id: motoristaId});
+}
+
+// ─── emissao de boleto ──────────────────────────────────────────────────
+// Usa o endpoint que ja existe (/financeiro/emitir-boleto-multiple/), o mesmo
+// que gerou os 129 boletos agrupados. Ele grava cobrancas_freites e recusa se
+// algum frete ja tiver cobranca viva — a trava contra duplicidade vem de la.
+
+function pfnAbreEmissao(botao){
+  var bloco = botao.closest('.cli');
+  var painel = bloco ? bloco.querySelector('.emis') : null;
+  if (!painel) return;
+  painel.hidden = false;
+  botao.hidden = true;
+  pfnSoma(painel.querySelector('.ef__ck'));
+}
+
+function pfnFechaEmissao(botao){
+  var painel = botao.closest('.emis');
+  var bloco = botao.closest('.cli');
+  if (painel) painel.hidden = true;
+  var abre = bloco ? bloco.querySelector('.cli__r .bd__b--sim') : null;
+  if (abre) abre.hidden = false;
+}
+
+// Soma o que esta marcado e mostra o total, pra nao emitir no escuro.
+function pfnSoma(el){
+  if (!el) return;
+  var painel = el.closest('.emis');
+  if (!painel) return;
+  var cks = painel.querySelectorAll('.ef__ck');
+  var total = 0, n = 0;
+  for (var i = 0; i < cks.length; i++){
+    if (!cks[i].checked) continue;
+    total += parseFloat(cks[i].getAttribute('data-valor')) || 0;
+    n++;
+  }
+  var alvo = painel.querySelector('.ef__tot');
+  if (alvo){
+    alvo.textContent = n
+      ? total.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}) +
+        ' · ' + n + (n === 1 ? ' frete' : ' fretes')
+      : '—';
+  }
+  painel.setAttribute('data-total', total.toFixed(2));
+}
+
+function pfnEmitir(botao, cliente){
+  var painel = botao.closest('.emis');
+  if (!painel) return;
+  var cks = painel.querySelectorAll('.ef__ck');
+  var ids = [], total = 0;
+  for (var i = 0; i < cks.length; i++){
+    if (!cks[i].checked) continue;
+    ids.push(parseInt(cks[i].value, 10));
+    total += parseFloat(cks[i].getAttribute('data-valor')) || 0;
+  }
+  if (!ids.length){ alert('Marque pelo menos um frete.'); return; }
+
+  var campoVenc = painel.querySelector('.ef__venc');
+  var venc = campoVenc ? campoVenc.value : '';
+  if (!venc){ alert('Informe o vencimento.'); return; }
+
+  var brl = total.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+  var vencBr = venc.split('-').reverse().join('/');
+  // Emitir manda cobranca pro cliente: confirma antes, sempre.
+  if (!confirm('Emitir UM boleto para ' + cliente + '\n\n' +
+               ids.length + (ids.length === 1 ? ' frete' : ' fretes') + '\n' +
+               'Valor: ' + brl + '\n' +
+               'Vencimento: ' + vencBr + '\n\nConfirma?')) return;
+
+  var texto = botao.innerHTML;
+  botao.disabled = true;
+  botao.textContent = 'emitindo…';
+  fetch('/financeiro/emitir-boleto-multiple/', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {'Content-Type': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest'},
+    body: JSON.stringify({frete_ids: ids, vencimento: venc})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (!d || !d.success) throw new Error((d && d.error) || 'falhou');
+    var link = d.visualizar_url || d.boleto_url || d.pdf_boleto;
+    if (link && confirm('Boleto emitido: ' + brl + '\n\nAbrir agora?')){
+      window.open(link, '_blank');
+    }
+    window.location.reload();
+  })
+  .catch(function(e){
+    botao.disabled = false;
+    botao.innerHTML = texto;
+    alert('Não deu pra emitir: ' + e.message);
+    console.error('emitir:', e);
+  });
 }
 
 function pfnEnvia(botao, url, corpo){

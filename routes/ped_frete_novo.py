@@ -686,6 +686,7 @@ def _a_cobrar(cur, desde):
                                  'placas': []}
         fr['litros'] = _f(fr['litros'])
         fr['valor'] = _f(fr['valor_total_frete'])
+        fr['semana'] = _semana(fr['data_frete'], curta=True)
         c['fretes'].append(fr)
         c['litros'] += fr['litros']
         c['valor'] += fr['valor']
@@ -699,6 +700,64 @@ def _a_cobrar(cur, desde):
     for c in lista:
         c['dias'] = len({fr['data_frete'] for fr in c['fretes']})
     return lista
+
+
+def _abertos_por_cliente(cur, cliente_ids, desde):
+    """{cliente_id: [frete...]} — tudo que o cliente deve e ainda nao tem boleto.
+
+    A escolha do que entra no boleto atravessa carga e dia: o Terra Branca
+    costuma juntar dois fretes do mesmo dia em caminhoes diferentes com um do
+    dia seguinte, e sai um boleto so pros tres. Por isso o seletor que abre
+    dentro da carga mostra a lista INTEIRA do cliente, nao so o que esta ali —
+    os desta carga so vem pre-marcados.
+    """
+    if not cliente_ids:
+        return {}
+    marc = ','.join(['%s'] * len(cliente_ids))
+    cur.execute("""
+        SELECT f.id, f.clientes_id, f.data_frete, f.valor_total_frete AS valor,
+               COALESCE(f.quantidade_manual, q.valor) AS litros,
+               pr.nome AS produto, v.placa
+          FROM fretes f
+          LEFT JOIN quantidades q ON q.id = f.quantidade_id
+          LEFT JOIN produto pr    ON pr.id = f.produto_id
+          LEFT JOIN veiculos v    ON v.id  = f.veiculos_id
+          """ + _COBERTURA + """
+         WHERE f.clientes_id IN (%s)
+           AND f.data_frete >= %%s
+           AND f.valor_total_frete > 0
+           AND cob.frete_id IS NULL
+         ORDER BY f.data_frete, f.id
+    """ % marc, list(cliente_ids) + [desde])
+    fora = {}
+    for r in cur.fetchall():
+        r['litros'] = _f(r['litros'])
+        r['valor'] = _f(r['valor'])
+        r['semana'] = _semana(r['data_frete'], curta=True)
+        fora.setdefault(r['clientes_id'], []).append(r)
+    return fora
+
+
+def _anexar_abertos(viagens, abertos):
+    """Poe a lista de fretes em aberto do cliente dentro do bloco dele na carga.
+
+    `desta_carga` marca quais ja vem selecionados: os que estao justamente na
+    carga que a Monica esta olhando. O resto ela marca se quiser juntar.
+    """
+    for v in viagens:
+        for p in v['postos']:
+            if p['estado'] != 'falta':
+                p['abertos'] = []
+                continue
+            cid = next((fr['clientes_id'] for fr in p['fretes'] if fr.get('clientes_id')), None)
+            daqui = {fr['id'] for fr in p['fretes']}
+            lista = []
+            for a in (abertos.get(cid) or []):
+                a = dict(a)
+                a['desta_carga'] = a['id'] in daqui
+                lista.append(a)
+            p['abertos'] = lista
+            p['cliente_id'] = cid
 
 
 def _divergencias(cur, desde):
@@ -895,6 +954,9 @@ def index():
     ctx = {'modo': modo, 'dia': dia, 'hoje': hoje, 'veiculo_id': veiculo_id,
            'semana': _semana(dia), 'semana_ontem': _semana(dia - timedelta(days=1), True),
            'semana_amanha': _semana(dia + timedelta(days=1), True),
+           # +3 dias e o prazo da casa: 151 dos 188 boletos desde junho, e
+           # todo cliente fica entre +2,7 e +3,0. Vem preenchido, da pra mudar.
+           'vencimento_padrao': (hoje + timedelta(days=3)).isoformat(),
            'viagens': [], 'ociosos': [], 'dias': [], 'veiculos': [],
            'cobrar': [], 'divergencias': [], 'erro': None,
            'ontem': dia - timedelta(days=1), 'amanha': dia + timedelta(days=1),
@@ -950,6 +1012,12 @@ def index():
                             _fechadas(cursor, dia),
                             _bordo_registrado(cursor, dia),
                             _candidatos_bordo(cursor, dia, vids))
+            cids = {fr['clientes_id'] for v in viagens for p in v['postos']
+                    if p['estado'] == 'falta' for fr in p['fretes']
+                    if fr.get('clientes_id')}
+            _anexar_abertos(viagens,
+                            _abertos_por_cliente(cursor, cids,
+                                                 hoje - timedelta(days=120)))
             ctx['viagens'] = viagens
 
             usados = {v['veiculo_id'] for v in viagens}
