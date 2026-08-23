@@ -116,6 +116,35 @@ body > .container-fluid:has(#pfn){
   #pfn .selo--al{ background:#fdf0d6; color:var(--ambar); }
   #pfn .selo--er{ background:#fbe9e9; color:var(--danger); }
 
+  /* produto que ficou de viagem anterior */
+  #pfn .bordo{ border:1px solid #f0d8a8; background:#fffdf7; border-radius:11px;
+    padding:.55rem .65rem; margin-bottom:.55rem; }
+  #pfn .bordo--ok{ border-color:#cddff0; background:#f4f8fc; }
+  #pfn .bordo__t{ font-size:.76rem; font-weight:800; color:var(--ambar);
+    margin-bottom:.45rem; display:flex; gap:.35rem; align-items:center; }
+  #pfn .bordo--ok .bordo__t{ color:var(--blue-deep); }
+  #pfn .bordo__c{ font-size:.74rem; color:var(--ambar); margin-top:.45rem;
+    line-height:1.5; font-weight:700; }
+  #pfn .bd{ display:flex; gap:.5rem; align-items:flex-start; flex-wrap:wrap;
+    padding:.4rem 0; border-bottom:1px dashed #f0e2c4; }
+  #pfn .bd:last-child{ border-bottom:0; }
+  #pfn .bd__n{ flex:1 1 190px; min-width:0; font-size:.79rem; font-weight:700;
+    line-height:1.4; }
+  #pfn .bd__n b{ font-variant-numeric:tabular-nums; }
+  #pfn .bd__n small{ display:block; font-size:.7rem; font-weight:600;
+    color:var(--muted); }
+  #pfn .bd__acao{ display:flex; gap:.35rem; flex-wrap:wrap; }
+  #pfn .bd__b{ border:1px solid var(--borda); background:#fff; color:#3a4655;
+    border-radius:9px; padding:.34rem .65rem; font-size:.75rem; font-weight:800;
+    font-family:inherit; cursor:pointer; white-space:nowrap; }
+  #pfn .bd__b:hover{ background:#f7f9fc; }
+  #pfn .bd__b--sim{ background:var(--ambar); border-color:var(--ambar); color:#fff; }
+  #pfn .bd__b--sim:hover{ background:#774e00; }
+  #pfn .bd__b[disabled]{ opacity:.55; cursor:default; }
+  #pfn .bd__ok{ font-size:.73rem; font-weight:800; color:#1c6b34;
+    background:#e4f4e8; border-radius:99px; padding:.22rem .55rem;
+    white-space:nowrap; }
+
   /* bocas */
   #pfn .bocas{ border:1px solid #cddff0; background:#eaf1f9; border-radius:11px;
     padding:.55rem .65rem; margin-bottom:.55rem; }
@@ -214,10 +243,11 @@ body > .container-fluid:has(#pfn){
 
   <div class="piloto">
     <i class="bi bi-eye"></i>
-    <span><b>Fase 1 — só leitura.</b> Esta tela lê os mesmos pedidos e fretes de
+    <span><b>Fase 1 — leitura.</b> Esta tela lê os mesmos pedidos e fretes de
     sempre e junta a carga pela chave física <b>data + caminhão + motorista</b>.
-    Nada aqui grava, altera ou emite. As telas de Pedidos e Fretes continuam
-    valendo — esta é uma segunda porta pra olhar.</span>
+    Não altera frete, pedido nem cobrança, e não emite nada. A única coisa que
+    ela grava é a sua resposta a <b>“esse produto ficou no caminhão?”</b>, numa
+    anotação separada. As telas de Pedidos e Fretes continuam valendo.</span>
   </div>
 
   {% if erro %}
@@ -337,12 +367,16 @@ body > .container-fluid:has(#pfn){
           </div>
         </div>
         <div class="vg__n">
-          <div class="vg__l">{{ fmtl.format(v.litros).replace(',', '.') }} L</div>
+          <div class="vg__l">{{ fmtl.format(v.ocupado).replace(',', '.') }} L</div>
           <div class="vg__c">
             {%- if v.capacidade -%}
               de {{ fmtl.format(v.capacidade).replace(',', '.') }} · {{ v.pct }}%
             {%- else -%}capacidade não cadastrada{%- endif -%}
           </div>
+          {% if v.bordo_confirmado %}
+          <div class="vg__c" style="color:var(--ambar)">inclui
+            {{ fmtl.format(v.bordo_confirmado).replace(',', '.') }} L de antes</div>
+          {% endif %}
         </div>
         <span class="vg__seta"><i class="bi bi-chevron-right"></i></span>
       </div>
@@ -353,6 +387,48 @@ body > .container-fluid:has(#pfn){
 
       <div class="vg__corpo">
         <div class="vg__c2">
+
+          {% if v.bordo %}
+          <div class="bordo {{ 'bordo--ok' if not v.bordo_pendente }}">
+            <div class="bordo__t">
+              <i class="bi bi-box-seam"></i>
+              {%- if v.bordo_pendente -%}
+                Ficou produto no caminhão de viagem anterior?
+              {%- else -%}
+                Produto de viagem anterior ainda a bordo
+              {%- endif -%}
+            </div>
+            {% for b in v.bordo %}
+            <div class="bd" data-frete="{{ b.id }}">
+              <span class="bd__n">{{ b.produto or '—' }}
+                <b>{{ fmtl.format(b.litros).replace(',', '.') }} L</b>
+                <small>carregado em {{ b.data_frete.strftime('%d/%m') }} ·
+                  {{ b.cliente or '—' }}</small></span>
+              {% if b.confirmado %}
+              <span class="bd__ok"><i class="bi bi-check-circle-fill"></i> no caminhão</span>
+              <button type="button" class="bd__b" onclick="pfnBordo(this, {{ b.id }}, 0)">
+                já desceu</button>
+              {% else %}
+              <span class="bd__acao">
+                <button type="button" class="bd__b bd__b--sim"
+                        onclick="pfnBordo(this, {{ b.id }}, 1)">Está no caminhão</button>
+                <button type="button" class="bd__b"
+                        onclick="pfnBordo(this, {{ b.id }}, 0)">Já desceu</button>
+              </span>
+              {% endif %}
+            </div>
+            {% endfor %}
+            {% if v.bordo_pendente and v.capacidade %}
+            <div class="bordo__c">
+              Sobram <b>{{ fmtl.format(v.livre).replace(',', '.') }} L</b> —
+              ou <b>{{ fmtl.format(v.livre_se_tudo).replace(',', '.') }} L</b>,
+              se esses {{ fmtl.format(v.bordo_pendente).replace(',', '.') }} L
+              ainda estiverem a bordo. Responda pra tela parar de chutar.
+            </div>
+            {% endif %}
+          </div>
+          {% endif %}
+
 
           {% if v.bocas %}
           <div class="bocas {{ 'bocas--al' if v.estoura or v.sem_boca }}">
@@ -476,10 +552,37 @@ body > .container-fluid:has(#pfn){
 
 {% block scripts %}
 <script>
-// Abre e fecha o cartao da viagem. Nada aqui envia nada — Fase 1 e so leitura.
+// Abre e fecha o cartao da viagem.
 function pfnAbre(el){
   var c = el.closest('.vg');
   if (c) c.classList.toggle('aberta');
+}
+
+// Responde "esse produto ficou no caminhao?". E a unica coisa que esta tela
+// grava, e vai so pra frete_saldo_bordo — nao altera o frete nem a cobranca.
+// O fetch do base.html ja anexa o X-CSRFToken sozinho.
+function pfnBordo(botao, freteId, aBordo){
+  var linha = botao.closest('.bd');
+  var botoes = linha ? linha.querySelectorAll('.bd__b') : [];
+  for (var i = 0; i < botoes.length; i++) botoes[i].disabled = true;
+  botao.textContent = 'salvando…';
+
+  fetch('/ped-frete-novo/bordo', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({frete_id: freteId, a_bordo: aBordo})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (!d || !d.ok) throw new Error((d && d.erro) || 'falhou');
+    // Recarrega pra recalcular bocas e espaco livre com a resposta nova.
+    window.location.reload();
+  })
+  .catch(function(e){
+    botao.textContent = 'erro — tente de novo';
+    for (var i = 0; i < botoes.length; i++) botoes[i].disabled = false;
+    console.error('bordo:', e);
+  });
 }
 </script>
 {% endblock %}
