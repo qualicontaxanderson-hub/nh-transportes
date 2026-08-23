@@ -8,17 +8,18 @@ altera nada — le `fretes`, `pedidos`, `veiculo_compartimentos`,
 Por que a tela existe
 ---------------------
 Hoje a carga fisica de um caminhao aparece fatiada em varios pedidos, porque
-pra cobrar UM cliente sozinho foi preciso arranca-lo pra pedido proprio (o
-boleto e de um frete so). Resultado: ninguem consegue olhar e responder "o que
-esse caminhao esta levando e ainda cabe alguma coisa?". Esta tela junta de
-volta pela chave fisica — data + veiculo + motorista — sem tocar nos dados.
+por muito tempo cobrar UM cliente sozinho exigia arranca-lo pra pedido proprio.
+Resultado: ninguem consegue olhar e responder "o que esse caminhao esta levando
+e ainda cabe alguma coisa?". Esta tela junta de volta pela chave fisica —
+data + veiculo + motorista — sem tocar nos dados.
 
 Tres modos, uma tela:
   dia      — todos os caminhoes do dia (a pergunta frequente)
   caminhao — a linha do tempo de um caminhao (a pergunta ocasional)
   cobrar   — por cliente, atravessando cargas (o que nenhum dos dois resolve)
 
-Fase 2 (nao esta aqui) liga a cobranca agrupada, que precisa de tabela nova.
+Fase 2 (nao esta aqui) e emitir a cobranca de dentro desta tela. A tabela de
+vinculo boleto<->fretes ja existe e ja e usada: `cobrancas_freites`.
 """
 
 from datetime import date, timedelta
@@ -38,6 +39,35 @@ _CORES = ['#1D63A5', '#7a6bab', '#17963C', '#c98a2b', '#a32d2d', '#0f7d8c',
 
 # Boletos nesse estado nao contam como cobranca viva.
 _COB_MORTA = ('cancelado',)
+
+# Um frete pode estar coberto de dois jeitos: por uma cobranca que aponta
+# direto pra ele (`cobrancas.frete_id`) ou por um boleto agrupado, ligado pela
+# tabela `cobrancas_freites`. Hoje 121 dos 129 boletos agrupados usam o
+# vinculo, e a tela de Fretes ja decide "faturado" exatamente assim — esta
+# subquery existe pra as duas telas responderem a mesma coisa.
+#
+# A flag `fretes.boleto_emitido` NAO serve como verdade: 33 fretes a tem
+# ligada com o boleto cancelado, e 10 fretes com boleto vivo estao com ela
+# desligada. Ela e sinal secundario, nunca o criterio.
+_COBERTURA = """
+    LEFT JOIN (
+        SELECT x.frete_id,
+               COUNT(*)                       AS n,
+               MAX(LOWER(x.status) = 'pago')  AS pago
+          FROM (
+                SELECT cb.frete_id, cb.status
+                  FROM cobrancas cb
+                 WHERE cb.frete_id IS NOT NULL
+                   AND (cb.status IS NULL OR cb.status <> 'cancelado')
+                UNION ALL
+                SELECT cf.frete_id, cb.status
+                  FROM cobrancas_freites cf
+                  JOIN cobrancas cb ON cb.id = cf.cobranca_id
+                 WHERE (cb.status IS NULL OR cb.status <> 'cancelado')
+               ) x
+         GROUP BY x.frete_id
+    ) cob ON cob.frete_id = f.id
+"""
 
 
 def _f(v):
@@ -236,7 +266,7 @@ def _fretes_do_periodo(cur, ini, fim, veiculo_id=None):
                m.nome AS motorista,
                p.numero AS pedido,
                fo.razao_social AS fornecedor,
-               co.status AS cob_status, co.data_vencimento AS cob_venc
+               COALESCE(cob.n, 0) AS cob_n, COALESCE(cob.pago, 0) AS cob_pago
           FROM fretes f
           LEFT JOIN quantidades q ON q.id = f.quantidade_id
           LEFT JOIN clientes cl   ON cl.id = f.clientes_id
@@ -245,7 +275,7 @@ def _fretes_do_periodo(cur, ini, fim, veiculo_id=None):
           LEFT JOIN motoristas m  ON m.id  = f.motoristas_id
           LEFT JOIN pedidos p     ON p.id  = f.pedido_id
           LEFT JOIN fornecedores fo ON fo.id = f.fornecedores_id
-          LEFT JOIN cobrancas co   ON co.frete_id = f.id AND co.status NOT IN ('cancelado')
+          """ + _COBERTURA + """
          WHERE f.data_frete >= %s AND f.data_frete <= %s
     """
     params = [ini, fim]
@@ -262,15 +292,16 @@ def _estado_cobranca(fr):
 
     `zero` e o Posto Novo Horizonte: viaja em quase toda carga com frete
     R$ 0,00 porque e da casa. Nao pode aparecer como "falta cobrar" nunca.
+
+    O criterio e a cobertura (`_COBERTURA`), nunca `boleto_emitido` — ver a
+    explicacao la em cima. Se dependesse da flag, um frete coberto por boleto
+    agrupado apareceria como "falta cobrar" e daria pra emitir em duplicidade.
     """
     if _f(fr['valor_total_frete']) <= 0:
         return 'zero'
-    st = (fr.get('cob_status') or '').lower()
-    if st == 'pago':
-        return 'pago'
-    if st:
-        return 'emitido'
-    return 'emitido' if fr.get('boleto_emitido') else 'falta'
+    if int(fr.get('cob_n') or 0) > 0:
+        return 'pago' if int(fr.get('cob_pago') or 0) else 'emitido'
+    return 'falta'
 
 
 def _montar_viagens(fretes, cap):
@@ -398,18 +429,16 @@ def _a_cobrar(cur, desde):
         SELECT f.id, f.data_frete, f.valor_total_frete,
                COALESCE(f.quantidade_manual, q.valor) AS litros,
                cl.id AS cid, cl.razao_social AS cliente,
-               pr.nome AS produto, v.placa,
-               co.status AS cob_status
+               pr.nome AS produto, v.placa
           FROM fretes f
           LEFT JOIN quantidades q ON q.id = f.quantidade_id
           LEFT JOIN clientes cl   ON cl.id = f.clientes_id
           LEFT JOIN produto pr    ON pr.id = f.produto_id
           LEFT JOIN veiculos v    ON v.id  = f.veiculos_id
-          LEFT JOIN cobrancas co   ON co.frete_id = f.id AND co.status NOT IN ('cancelado')
+          """ + _COBERTURA + """
          WHERE f.data_frete >= %s
            AND f.valor_total_frete > 0
-           AND co.id IS NULL
-           AND (f.boleto_emitido = 0 OR f.boleto_emitido IS NULL)
+           AND cob.frete_id IS NULL
          ORDER BY cl.razao_social, f.data_frete, f.id
     """, (desde,))
     por_cli = {}

@@ -274,9 +274,11 @@ body > .container-fluid:has(#pfn){
     {% endfor %}
 
     <p class="rod">Esta aba é a única que atravessa cargas: junta os fretes do
-    mesmo cliente mesmo que estejam em dias e caminhões diferentes. É o que hoje
-    obriga a fatiar o pedido pra cobrar um posto sozinho — e o que a Fase 2
-    resolve ligando um boleto a vários fretes.</p>
+    mesmo cliente mesmo que estejam em dias e caminhões diferentes. Um frete só
+    sai daqui quando existe boleto vivo cobrindo ele — seja um boleto próprio
+    (<i>cobrancas.frete_id</i>) ou um agrupado, ligado por
+    <i>cobrancas_freites</i>. A marca <i>boleto_emitido</i> do frete não é
+    usada: hoje ela discorda da cobrança em 43 fretes.</p>
 
   {% else %}
 
