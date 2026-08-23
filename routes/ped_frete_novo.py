@@ -43,6 +43,17 @@ _DIAS_BORDO = 7
 
 _tabela_pronta = False
 
+# strftime('%A') devolve o dia da semana no idioma do servidor — que roda em
+# ingles. Como a tela e pra Monica ler de relance ("sexta"), a lista vem daqui.
+_SEMANA = ('segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo')
+_SEMANA_CURTA = ('seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom')
+
+
+def _semana(d, curta=False):
+    if not d:
+        return ''
+    return (_SEMANA_CURTA if curta else _SEMANA)[d.weekday()]
+
 # Cores dos postos dentro da carga. O indice vem da ordem de litros na viagem,
 # entao o maior carregamento fica sempre com a mesma cor no topo da legenda.
 _CORES = ['#1D63A5', '#7a6bab', '#17963C', '#c98a2b', '#a32d2d', '#0f7d8c',
@@ -543,6 +554,7 @@ def _montar_viagens(fretes, cap):
         v['fechada'] = False
         v['pergunta_bordo'] = False
         v['candidatos'] = []
+        v['semana'] = _semana(v['data'])
         saida.append(v)
 
     saida.sort(key=lambda v: (v['data'], -v['litros'], v['placa']))
@@ -595,6 +607,7 @@ def _aplicar_estado(viagens, fechadas, bordo, candidatos):
             v['capacidade'] and v['livre'] > 0.01 and not itens_bordo and not v['fechada'])
         v['candidatos'] = list(candidatos.get(v['veiculo_id']) or []) \
             if v['pergunta_bordo'] else []
+        v['semana'] = _semana(v['data'])
 
 
 def _marcar_viagens_do_dia(viagens):
@@ -634,6 +647,7 @@ def _dias_com_carga(cur, ate, quantos=14, veiculo_id=None):
     dias = cur.fetchall()
     for d in dias:
         d['litros'] = _f(d['litros'])
+        d['semana'] = _semana(d['d'], curta=True)
     dias.reverse()
     return dias
 
@@ -879,6 +893,8 @@ def index():
         veiculo_id = None
 
     ctx = {'modo': modo, 'dia': dia, 'hoje': hoje, 'veiculo_id': veiculo_id,
+           'semana': _semana(dia), 'semana_ontem': _semana(dia - timedelta(days=1), True),
+           'semana_amanha': _semana(dia + timedelta(days=1), True),
            'viagens': [], 'ociosos': [], 'dias': [], 'veiculos': [],
            'cobrar': [], 'divergencias': [], 'erro': None,
            'ontem': dia - timedelta(days=1), 'amanha': dia + timedelta(days=1),

@@ -63,8 +63,12 @@ body > .container-fluid:has(#pfn){
     min-width:62px; }
   #pfn .regua a small{ display:block; font-weight:700; font-size:.63rem;
     color:var(--muted); }
+  #pfn .regua a em{ display:block; font-style:normal; font-weight:800;
+    font-size:.62rem; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--muted); }
   #pfn .regua a.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
-  #pfn .regua a.on small{ color:rgba(255,255,255,.85); }
+  #pfn .regua a.on small, #pfn .regua a.on em{ color:rgba(255,255,255,.85); }
+  #pfn .vg__dia{ color:var(--blue-deep); font-weight:800; }
 
   #pfn .frota{ display:flex; gap:.35rem; overflow-x:auto; padding-bottom:.2rem;
     margin-bottom:.7rem; }
@@ -246,9 +250,10 @@ body > .container-fluid:has(#pfn){
       {%- if modo == 'cobrar' -%}
         {{ totais.postos }} cliente(s) · {{ totais.a_cobrar | formatar_moeda }} sem boleto
       {%- elif modo == 'caminhao' -%}
-        linha do tempo do caminhão · {{ dia.strftime('%d/%m/%Y') }}
+        {{ semana }}, {{ dia.strftime('%d/%m/%Y') }} · linha do tempo do caminhão
       {%- else -%}
-        {{ dia.strftime('%d/%m/%Y') }} · {{ totais.viagens }} viagem(ns) ·
+        <b>{{ semana }}</b>, {{ dia.strftime('%d/%m/%Y') }} ·
+        {{ totais.viagens }} viage{{ 'm' if totais.viagens == 1 else 'ns' }} ·
         {{ fmtl.format(totais.litros).replace(',', '.') }} L
       {%- endif -%}
     </div>
@@ -348,16 +353,17 @@ body > .container-fluid:has(#pfn){
     </div>
     {% endif %}
 
-    <div class="regua">
+    <div class="regua" id="pfn-regua">
       <a href="{{ url_for('ped_frete_novo.index', modo=modo, veiculo=veiculo_id, data=ontem.isoformat()) }}"
-         title="dia anterior">‹<small>{{ ontem.strftime('%d/%m') }}</small></a>
+         title="dia anterior">‹<small>{{ semana_ontem }} {{ ontem.strftime('%d/%m') }}</small></a>
       {% for d in dias %}
       <a href="{{ url_for('ped_frete_novo.index', modo=modo, veiculo=veiculo_id, data=d.d.isoformat()) }}"
-         class="{{ 'on' if d.d == dia }}">{{ d.d.strftime('%d/%m') }}
+         class="{{ 'on' if d.d == dia }}">
+        <em>{{ d.semana }}</em>{{ d.d.strftime('%d/%m') }}
         <small>{{ fmtl.format(d.litros).replace(',', '.') }} L</small></a>
       {% endfor %}
       <a href="{{ url_for('ped_frete_novo.index', modo=modo, veiculo=veiculo_id, data=amanha.isoformat()) }}"
-         title="dia seguinte">›<small>{{ amanha.strftime('%d/%m') }}</small></a>
+         title="dia seguinte">›<small>{{ semana_amanha }} {{ amanha.strftime('%d/%m') }}</small></a>
     </div>
 
     <div class="g-nums">
@@ -386,7 +392,8 @@ body > .container-fluid:has(#pfn){
             {%- elif v.sem_cadastro %} <span class="selo selo--er">sem bocas cadastradas</span>
             {% endif -%}
           </div>
-          <div class="vg__d">{{ v.motorista }}
+          <div class="vg__d"><span class="vg__dia">{{ v.semana }},
+              {{ v.data.strftime('%d/%m/%Y') }}</span> · {{ v.motorista }}
             {%- if v.carreta %} · carreta {{ v.carreta }}{% endif -%}
             {%- if v.pedidos %} · {{ v.pedidos|join(', ') }}{% endif -%}
           </div>
@@ -620,6 +627,25 @@ body > .container-fluid:has(#pfn){
 
 {% block scripts %}
 <script>
+// A regua de datas rola sozinha: ao recarregar, o navegador comeca do zero e
+// jogava a faixa la no primeiro dia (07/08), escondendo o dia escolhido.
+// Centraliza o selecionado, sem rolar a pagina junto.
+(function pfnCentralizaRegua(){
+  function centraliza(){
+    var regua = document.getElementById('pfn-regua');
+    if (!regua) return;
+    var alvo = regua.querySelector('a.on');
+    if (!alvo) return;
+    var meio = alvo.offsetLeft - (regua.clientWidth / 2) + (alvo.offsetWidth / 2);
+    regua.scrollLeft = Math.max(0, meio);
+  }
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', centraliza);
+  } else {
+    centraliza();
+  }
+})();
+
 // Abre e fecha o cartao da viagem.
 function pfnAbre(el){
   var c = el.closest('.vg');
