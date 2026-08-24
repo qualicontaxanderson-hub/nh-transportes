@@ -840,7 +840,7 @@ body > .container-fluid:has(#pfn){
               {% if p.estado == 'zero' %}
                 <span class="selo selo--zero">não cobra — R$ 0,00</span>
               {% elif p.estado == 'falta' %}
-                <span class="selo selo--falta">falta cobrar {{ p.valor | formatar_moeda }}</span>
+                <span class="selo selo--falta">falta cobrar {{ p.a_cobrar | formatar_moeda }}</span>
               {% elif p.estado == 'pago' %}
                 <span class="selo selo--pago">pago</span>
               {% else %}
@@ -863,6 +863,9 @@ body > .container-fluid:has(#pfn){
                 {% if f.estado == 'zero' %}
                   <span class="selo selo--zero">R$ 0,00</span>
                 {% else %}
+                  {% if f.estado == 'pago' %}<span class="selo selo--pago">pago</span>
+                  {% elif f.estado == 'emitido' %}<span class="selo selo--emitido">emitido</span>
+                  {% endif %}
                   <span class="fr__v">{{ f.valor | formatar_moeda }}</span>
                 {% endif %}
               </div>
@@ -936,6 +939,10 @@ body > .container-fluid:has(#pfn){
               <div class="cli__r">
                 <span>{{ fmtl.format(p.litros).replace(',', '.') }} L
                   {%- if p.valor %} · {{ p.valor | formatar_moeda }}{% endif -%}
+                  {%- if p.estado == 'falta' and p.a_cobrar < p.valor %}
+                  <small style="display:block;font-weight:700;color:var(--ambar)">
+                    a cobrar agora: {{ p.a_cobrar | formatar_moeda }}</small>
+                  {%- endif -%}
                 </span>
                 {% if p.estado == 'falta' and p.abertos %}
                 <button type="button" class="bd__b bd__b--sim"

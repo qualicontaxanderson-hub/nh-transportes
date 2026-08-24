@@ -536,9 +536,14 @@ def _montar_viagens(fretes, cap):
         p = v['postos'].get(nome)
         if p is None:
             p = v['postos'][nome] = {'nome': nome, 'litros': 0.0, 'valor': 0.0,
-                                     'fretes': [], 'estados': set()}
+                                     'a_cobrar': 0.0, 'fretes': [], 'estados': set()}
         p['litros'] += fr['litros']
         p['valor'] += fr['valor']
+        # So o que AINDA nao tem boleto. O posto pode ter um frete pago e
+        # outro em aberto na mesma carga — somar os dois faria o selo dizer
+        # "falta cobrar" um valor que ja foi pago em parte.
+        if fr['estado'] == 'falta':
+            p['a_cobrar'] += fr['valor']
         p['fretes'].append(fr)
         p['estados'].add(fr['estado'])
 
