@@ -447,6 +447,8 @@ def _fretes_do_periodo(cur, ini, fim, veiculo_id=None):
                fo.razao_social AS fornecedor,
                cl.cnpj AS cnpj, o.nome AS origem, ba.nome AS base,
                f.preco_produto_unitario AS preco_unit, f.total_nf_compra AS total_nf,
+               f.fornecedores_id, f.produto_id, f.quantidade_id, f.origem_id,
+               f.preco_por_litro, f.valor_cte, pi.base_id, pi.id AS item_id,
                COALESCE(cob.n, 0) AS cob_n, COALESCE(cob.pago, 0) AS cob_pago
           FROM fretes f
           LEFT JOIN quantidades q ON q.id = f.quantidade_id
@@ -938,6 +940,216 @@ def _carga_do_dia(cursor, dia, vid, mid, criar=True):
                            VALUES (%s, %s, %s, %s, %s, %s)""",
                    (numero, dia, 'Faturado', '', mid or None, vid))
     return cursor.lastrowid, numero, True
+
+
+def _tem_boleto(cursor, frete_id):
+    """Existe cobranca viva cobrindo esse frete? (direta ou agrupada)"""
+    cursor.execute("""
+        SELECT COUNT(*) AS n FROM (
+            SELECT cb.id FROM cobrancas cb
+             WHERE cb.frete_id = %s AND (cb.status IS NULL OR cb.status <> 'cancelado')
+            UNION ALL
+            SELECT cb.id FROM cobrancas_freites cf
+              JOIN cobrancas cb ON cb.id = cf.cobranca_id
+             WHERE cf.frete_id = %s AND (cb.status IS NULL OR cb.status <> 'cancelado')
+        ) x
+    """, (frete_id, frete_id))
+    return int((cursor.fetchone() or {}).get('n') or 0) > 0
+
+
+@bp.route('/ped-frete-novo/editar', methods=['POST'])
+@login_required
+def editar():
+    """Corrige um frete da carga — e o item do pedido junto.
+
+    Sem isso a Fase 3 ficava pela metade: dava pra adicionar mas o primeiro
+    erro de digitacao mandava a Monica de volta pra tela de Fretes, onde o
+    pedido e o frete voltam a divergir.
+
+    Quantidade e precos so mudam enquanto NAO existe boleto vivo: mexer neles
+    depois de emitido faria o boleto cobrar um valor que o frete nao diz mais.
+    Fornecedor, produto e base nao tocam em dinheiro e mudam sempre.
+    """
+    dados = request.get_json(silent=True) or {}
+    try:
+        frete_id = int(dados.get('frete_id') or 0)
+    except (TypeError, ValueError):
+        frete_id = 0
+    if not frete_id:
+        return jsonify({'ok': False, 'erro': 'frete não informado'}), 400
+
+    _ensure_tabela()
+    conn = cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""SELECT f.*, COALESCE(f.quantidade_manual, q.valor) AS litros
+                            FROM fretes f
+                            LEFT JOIN quantidades q ON q.id = f.quantidade_id
+                           WHERE f.id = %s""", (frete_id,))
+        fr = cursor.fetchone()
+        if not fr:
+            return jsonify({'ok': False, 'erro': 'frete não encontrado'}), 404
+
+        cursor.execute("""SELECT id FROM carga_fechada
+                           WHERE data_frete=%s AND veiculo_id=%s AND motorista_id=%s""",
+                       (fr['data_frete'], fr['veiculos_id'], fr['motoristas_id'] or 0))
+        if cursor.fetchone():
+            return jsonify({'ok': False,
+                            'erro': 'a carga está fechada — reabra antes de editar'}), 409
+
+        def _num(chave, atual):
+            v = dados.get(chave)
+            return atual if v in (None, '') else _f(v)
+
+        def _id(chave, atual):
+            v = dados.get(chave)
+            if v in (None, ''):
+                return atual
+            try:
+                return int(v) or None
+            except (TypeError, ValueError):
+                return atual
+
+        litros = _num('litros', _f(fr['litros']))
+        preco_litro = _num('preco_litro', _f(fr['preco_por_litro']))
+        preco_merc = _num('preco_mercadoria', _f(fr['preco_produto_unitario']))
+        cte_atual = (_f(fr['valor_cte']) / _f(fr['litros'])) if _f(fr['litros']) else 0.0
+        preco_cte = _num('preco_cte', cte_atual)
+
+        mexeu_dinheiro = (abs(litros - _f(fr['litros'])) > 0.001
+                          or abs(preco_litro - _f(fr['preco_por_litro'])) > 0.0001
+                          or abs(preco_cte - cte_atual) > 0.0001)
+        if mexeu_dinheiro and _tem_boleto(cursor, frete_id):
+            return jsonify({'ok': False,
+                            'erro': 'esse frete já tem boleto. Cancele o boleto '
+                                    'antes de mudar quantidade ou preço.'}), 409
+
+        cursor.execute("SELECT paga_comissao FROM motoristas WHERE id = %s",
+                       (fr['motoristas_id'],))
+        paga = bool((cursor.fetchone() or {}).get('paga_comissao', 1))
+        val = _calcular_frete(litros, preco_litro, preco_merc, paga, preco_cte)
+
+        forn = _id('fornecedor_id', fr['fornecedores_id'])
+        prod = _id('produto_id', fr['produto_id'])
+        qid = _id('quantidade_id', fr['quantidade_id'])
+        base = dados.get('base_id')
+        base = (None if base in (None, '', 0, '0')
+                else (int(base) if str(base).isdigit() else None))
+
+        cursor.execute("""
+            UPDATE fretes SET fornecedores_id=%s, produto_id=%s, quantidade_id=%s,
+                   quantidade_manual=%s, preco_produto_unitario=%s, preco_por_litro=%s,
+                   total_nf_compra=%s, valor_total_frete=%s, comissao_motorista=%s,
+                   valor_cte=%s, comissao_cte=%s, lucro=%s, updated_at=NOW()
+             WHERE id=%s
+        """, (forn, prod, qid, litros, preco_merc, preco_litro, val['total_nf'],
+              val['valor_total_frete'], val['comissao_motorista'], val['valor_cte'],
+              val['comissao_cte'], val['lucro'], frete_id))
+
+        cursor.execute("""
+            UPDATE pedidos_itens SET produto_id=%s, fornecedor_id=%s, base_id=%s,
+                   quantidade=%s, quantidade_id=%s, preco_unitario=%s, total_nf=%s
+             WHERE frete_id=%s
+        """, (prod, forn, base, litros, qid, preco_merc, val['total_nf'], frete_id))
+        itens = cursor.rowcount
+        conn.commit()
+        return jsonify({'ok': True, 'itens': itens, 'valores': val})
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.getLogger(__name__).exception("[ped_frete_novo] editar")
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@bp.route('/ped-frete-novo/excluir', methods=['POST'])
+@login_required
+def excluir():
+    """Tira um frete da carga — com o item do pedido.
+
+    Frete com boleto vivo NUNCA some: apagar deixaria cobranca sem origem. E a
+    regra que voce definiu, e aqui ela vale tanto pro emitido quanto pro pago.
+    """
+    dados = request.get_json(silent=True) or {}
+    try:
+        frete_id = int(dados.get('frete_id') or 0)
+    except (TypeError, ValueError):
+        frete_id = 0
+    if not frete_id:
+        return jsonify({'ok': False, 'erro': 'frete não informado'}), 400
+
+    _ensure_tabela()
+    conn = cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""SELECT data_frete, veiculos_id, motoristas_id, pedido_id
+                            FROM fretes WHERE id = %s""", (frete_id,))
+        fr = cursor.fetchone()
+        if not fr:
+            return jsonify({'ok': False, 'erro': 'frete não encontrado'}), 404
+
+        cursor.execute("""SELECT id FROM carga_fechada
+                           WHERE data_frete=%s AND veiculo_id=%s AND motorista_id=%s""",
+                       (fr['data_frete'], fr['veiculos_id'], fr['motoristas_id'] or 0))
+        if cursor.fetchone():
+            return jsonify({'ok': False,
+                            'erro': 'a carga está fechada — reabra antes de excluir'}), 409
+
+        if _tem_boleto(cursor, frete_id):
+            return jsonify({'ok': False,
+                            'erro': 'esse frete tem boleto. Cancele o boleto antes '
+                                    'de excluir.'}), 409
+
+        cursor.execute("DELETE FROM pedidos_itens WHERE frete_id=%s", (frete_id,))
+        itens = cursor.rowcount
+        cursor.execute("DELETE FROM frete_saldo_bordo WHERE frete_id=%s", (frete_id,))
+        cursor.execute("DELETE FROM fretes WHERE id=%s", (frete_id,))
+        # Pedido que ficou sem nenhum frete nao serve pra nada.
+        vazio = False
+        if fr['pedido_id']:
+            cursor.execute("SELECT COUNT(*) AS n FROM fretes WHERE pedido_id=%s",
+                           (fr['pedido_id'],))
+            if int((cursor.fetchone() or {}).get('n') or 0) == 0:
+                cursor.execute("DELETE FROM pedidos_itens WHERE pedido_id=%s",
+                               (fr['pedido_id'],))
+                cursor.execute("DELETE FROM pedidos WHERE id=%s", (fr['pedido_id'],))
+                vazio = True
+        conn.commit()
+        return jsonify({'ok': True, 'itens': itens, 'pedido_vazio': vazio})
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.getLogger(__name__).exception("[ped_frete_novo] excluir")
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @bp.route('/ped-frete-novo/mover', methods=['POST'])

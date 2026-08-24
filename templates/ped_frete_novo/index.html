@@ -223,6 +223,11 @@ body > .container-fluid:has(#pfn){
     border-radius:7px; padding:.12rem .4rem; font-size:.75rem; cursor:pointer;
     font-family:inherit; flex:0 0 auto; }
   #pfn .fr__mv:hover{ background:#eaf1f9; }
+  #pfn .ed{ background:#f4f8fc; border:1px solid #cddff0; border-radius:10px;
+    padding:.55rem .6rem; margin:.15rem 0 .45rem; }
+  #pfn .ed[hidden]{ display:none; }
+  #pfn .bd__b--del{ border-color:#f0c8c8; background:#fbe9e9; color:var(--danger); }
+  #pfn .bd__b--del:hover{ background:#f7dcdc; }
   #pfn .mv{ display:flex; gap:.4rem; align-items:center; flex-wrap:wrap;
     background:#eaf1f9; border-radius:9px; padding:.45rem .55rem;
     margin:.1rem 0 .4rem; }
@@ -845,6 +850,11 @@ body > .container-fluid:has(#pfn){
                   {%- if f.fornecedor %} <span class="fr__f">·
                     {{ f.fornecedor }}</span>{% endif -%}
                 </span>
+                {% if not v.fechada %}
+                <button type="button" class="fr__mv" title="editar"
+                        onclick="pfnAbreEditar(this)">
+                  <i class="bi bi-pencil"></i></button>
+                {% endif %}
                 {% if not v.fechada and destinos|length > 1 %}
                 <button type="button" class="fr__mv" title="mover de caminhão"
                         onclick="pfnAbreMover(this, {{ f.id }})">
@@ -856,6 +866,56 @@ body > .container-fluid:has(#pfn){
                   <span class="fr__v">{{ f.valor | formatar_moeda }}</span>
                 {% endif %}
               </div>
+              {% if not v.fechada %}
+              <div class="ed" hidden data-frete="{{ f.id }}">
+                <div class="nf__g">
+                  <div class="nf__c nf__c--w">Fornecedor
+                    <button type="button" class="esc esc--w tem ed__forn"
+                            data-lista="fornecedores" data-valor="{{ f.fornecedores_id or '' }}"
+                            onclick="pfnEscolher(this, 'Escolha a distribuidora')">{{ f.fornecedor or '— escolha —' }}</button></div>
+                  <div class="nf__c">Produto
+                    <button type="button" class="esc tem ed__prod"
+                            data-lista="produtos" data-valor="{{ f.produto_id or '' }}"
+                            onclick="pfnEscolher(this, 'Escolha o produto')">{{ f.produto or '— escolha —' }}</button></div>
+                  <div class="nf__c">Base <span class="nf__op">opcional</span>
+                    <button type="button" class="esc {{ 'tem' if f.base_id }} ed__base"
+                            data-lista="bases" data-valor="{{ f.base_id or '' }}"
+                            onclick="pfnEscolher(this, 'Escolha a base')">{{ f.base or '—' }}</button></div>
+                  <div class="nf__c">Quantidade
+                    <button type="button" class="esc tem ed__qtd"
+                            data-lista="quantidades" data-valor="{{ f.quantidade_id or '' }}"
+                            data-litros="{{ '%.0f' | format(f.litros) }}"
+                            onclick="pfnEscolher(this, 'Quantos litros')">{{ fmtl.format(f.litros).replace(',', '.') }} litros</button></div>
+                  <label class="nf__c">Preço da mercadoria
+                    <input type="text" inputmode="numeric" class="ed__pm nf__mask"
+                           value="{{ '%.3f' | format(f.preco_unit or 0) | replace('.', ',') }}"
+                           oninput="pfnMascara(this)"></label>
+                  <label class="nf__c nf__c--manual">Frete por litro
+                    <input type="text" inputmode="numeric" class="ed__pl nf__mask"
+                           value="{{ '%.3f' | format(f.preco_por_litro or 0) | replace('.', ',') }}"
+                           oninput="pfnMascara(this)"></label>
+                  <label class="nf__c">CT-e por litro
+                    <input type="text" inputmode="numeric" class="ed__pc nf__mask"
+                           value="{{ '%.3f' | format((f.valor_cte or 0) / f.litros if f.litros else 0) | replace('.', ',') }}"
+                           oninput="pfnMascara(this)"></label>
+                </div>
+                {% if f.estado in ('emitido', 'pago') %}
+                <div class="dica" style="color:var(--ambar);font-weight:700">
+                  Esse frete já tem boleto. Fornecedor, produto e base mudam
+                  normalmente; quantidade e preço só depois de cancelar o boleto.
+                </div>
+                {% endif %}
+                <div class="bd__rod">
+                  <button type="button" class="bd__b bd__b--sim"
+                          onclick="pfnSalvarEd(this, {{ f.id }})">Salvar</button>
+                  <button type="button" class="bd__b" onclick="pfnFechaEd(this)">Cancelar</button>
+                  {% if f.estado not in ('emitido', 'pago') %}
+                  <button type="button" class="bd__b bd__b--del"
+                          onclick="pfnExcluir(this, {{ f.id }})">🗑 Excluir</button>
+                  {% endif %}
+                </div>
+              </div>
+              {% endif %}
               {% if not v.fechada and destinos|length > 1 %}
               <div class="mv" hidden>
                 <span class="mv__t">Mover {{ f.produto or '' }}
@@ -1250,7 +1310,7 @@ function pfnZapIr(n){
   document.getElementById('pfn-zap-n').textContent = n;
   document.getElementById('pfn-zap-t').textContent = nomes[n];
   document.getElementById('pfn-zap-volta').hidden = (n === 1);
-  document.getElementById('pfn-zap-ok').textContent = (n === 4) ? 'Enviar' : 'Continuar';
+  document.getElementById('pfn-zap-ok').textContent = (n === 4) ? 'Copiar texto' : 'Continuar';
   if (n === 2) pfnZapQuem();
   if (n === 3) pfnZapProdutos();
   if (n === 4) pfnZapTexto();
@@ -1358,8 +1418,38 @@ function pfnZapAvanca(){
   if (p === 1){ pfnZapIr(PFN_ZAP.escopo === 'integral' ? 4 : 2); return; }
   if (p === 2){ pfnZapIr(3); return; }
   if (p === 3){ pfnZapIr(4); return; }
-  window.open('https://wa.me/?text=' + encodeURIComponent(PFN_ZAP.texto || ''), '_blank');
-  pfnZapFecha();
+  // Copiar, não enviar: o texto vai pra área de transferência e ela cola onde
+  // quiser — grupo, conversa da distribuidora, e-mail. Abrir o WhatsApp
+  // direto escolhia o destino por ela.
+  pfnCopia(PFN_ZAP.texto || '', document.getElementById('pfn-zap-ok'));
+}
+
+function pfnCopia(texto, botao){
+  function ok(){
+    if (!botao) return;
+    var antes = botao.textContent;
+    botao.textContent = '✓ copiado!';
+    setTimeout(function(){ botao.textContent = antes; }, 1800);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(texto).then(ok).catch(function(){ pfnCopiaVelha(texto, ok); });
+  } else {
+    pfnCopiaVelha(texto, ok);
+  }
+}
+
+// Safari em http e alguns webviews não têm clipboard API — o textarea escondido
+// continua funcionando em todos.
+function pfnCopiaVelha(texto, ok){
+  var t = document.createElement('textarea');
+  t.value = texto;
+  t.style.position = 'fixed';
+  t.style.opacity = '0';
+  document.body.appendChild(t);
+  t.select();
+  try { document.execCommand('copy'); ok(); }
+  catch(e){ alert('Selecione e copie o texto.'); }
+  document.body.removeChild(t);
 }
 
 // ─── folha de escolha ───────────────────────────────────────────────────
@@ -1382,27 +1472,54 @@ function pfnEscolher(botao, titulo){
   setTimeout(function(){ q.focus(); }, 60);
 }
 
+// Os dados de cada opção vão em data-*, e um ouvinte só na lista trata o
+// clique. Montar chamada de JS dentro de onclick="" quebrava com aspas: um
+// argumento vazio fechava o atributo no meio e o toque não fazia nada.
 function pfnGavPinta(lista, busca){
   var itens = PFN_OP[lista] || [];
   var alvo = document.getElementById('pfn-gav-l');
   var b = (busca || '').toLowerCase();
-  var html = '';
   var atual = pfnAlvo ? pfnAlvo.getAttribute('data-valor') : '';
-  if (lista === 'bases'){
-    html += '<label class="opc" onclick="pfnGavPega(\'\',\'—\',\'\')">' +
-            '<span>— sem base —</span></label>';
+  alvo.textContent = '';
+
+  function linha(id, nome, litros){
+    var el = document.createElement('label');
+    el.className = 'opc' + (String(id) === atual ? ' on' : '');
+    el.setAttribute('data-id', id === null ? '' : String(id));
+    el.setAttribute('data-nome', nome);
+    el.setAttribute('data-litros', litros == null ? '' : String(litros));
+    var sp = document.createElement('span');
+    sp.textContent = nome;
+    el.appendChild(sp);
+    alvo.appendChild(el);
   }
+
+  if (lista === 'bases') linha('', '—', '');
+  var achou = false;
   for (var i = 0; i < itens.length; i++){
     var it = itens[i];
     if (b && it.nome.toLowerCase().indexOf(b) < 0) continue;
-    var lit = it.litros != null ? it.litros : '';
-    html += '<label class="opc' + (String(it.id) === atual ? ' on' : '') +
-            '" onclick="pfnGavPega(' + it.id + ',' +
-            JSON.stringify(it.nome).replace(/"/g, '&quot;') + ',' +
-            JSON.stringify(String(lit)) + ')"><span>' + it.nome + '</span></label>';
+    linha(it.id, it.nome, it.litros);
+    achou = true;
   }
-  alvo.innerHTML = html || '<div class="dica">Nada encontrado.</div>';
+  if (!achou && lista !== 'bases'){
+    var d = document.createElement('div');
+    d.className = 'dica';
+    d.textContent = 'Nada encontrado.';
+    alvo.appendChild(d);
+  }
 }
+
+document.addEventListener('DOMContentLoaded', function(){
+  var lista = document.getElementById('pfn-gav-l');
+  if (!lista) return;
+  lista.addEventListener('click', function(ev){
+    var op = ev.target.closest ? ev.target.closest('.opc') : null;
+    if (!op) return;
+    pfnGavPega(op.getAttribute('data-id'), op.getAttribute('data-nome'),
+               op.getAttribute('data-litros'));
+  });
+});
 
 function pfnGavFiltra(){
   if (!pfnAlvo) return;
@@ -1412,10 +1529,11 @@ function pfnGavFiltra(){
 
 function pfnGavPega(id, nome, litros){
   if (!pfnAlvo) return;
-  pfnAlvo.setAttribute('data-valor', id === '' ? '' : String(id));
-  if (litros !== '') pfnAlvo.setAttribute('data-litros', litros);
+  var vazio = (id === '' || id === null || id === undefined);
+  pfnAlvo.setAttribute('data-valor', vazio ? '' : String(id));
+  if (litros) pfnAlvo.setAttribute('data-litros', litros);
   pfnAlvo.textContent = nome;
-  pfnAlvo.classList.toggle('tem', id !== '');
+  pfnAlvo.classList.toggle('tem', !vazio);
   var campo = pfnAlvo;
   pfnEscFecha();
   if (campo.classList.contains('nf__cli')) pfnPosto(campo);
@@ -1607,6 +1725,49 @@ function pfnCabe(form){
       ' da carreta. O maior que entra aqui é ' + pfnLitros(livre) +
       '. Dá pra salvar assim mesmo.';
   }
+}
+
+// ─── editar e excluir o frete ───────────────────────────────────────────
+// Sem isso a tela adicionava mas nao corrigia, e o primeiro erro de digitacao
+// mandava a Monica de volta pra tela de Fretes — onde pedido e frete voltam a
+// divergir. Aqui os dois mudam juntos.
+function pfnAbreEditar(botao){
+  var linha = botao.closest('.fr');
+  var cx = linha ? linha.nextElementSibling : null;
+  while (cx && !cx.classList.contains('ed')) cx = cx.nextElementSibling;
+  if (cx) cx.hidden = !cx.hidden;
+}
+function pfnFechaEd(botao){
+  var cx = botao.closest('.ed');
+  if (cx) cx.hidden = true;
+}
+function pfnSalvarEd(botao, freteId){
+  var cx = botao.closest('.ed');
+  function val(cls){
+    var e = cx.querySelector(cls);
+    if (!e) return '';
+    return e.hasAttribute('data-valor') ? e.getAttribute('data-valor') : e.value;
+  }
+  var q = cx.querySelector('.ed__qtd');
+  var litros = q ? parseFloat(q.getAttribute('data-litros')) || 0 : 0;
+  if (!litros){ alert('Escolha a quantidade.'); return; }
+  pfnEnvia(botao, '/ped-frete-novo/editar', {
+    frete_id: freteId,
+    fornecedor_id: val('.ed__forn'),
+    produto_id: val('.ed__prod'),
+    base_id: val('.ed__base'),
+    quantidade_id: val('.ed__qtd'),
+    litros: litros,
+    preco_mercadoria: pfnNum(cx.querySelector('.ed__pm')) || 0,
+    preco_litro: String(pfnNum(cx.querySelector('.ed__pl')) || 0),
+    preco_cte: String(pfnNum(cx.querySelector('.ed__pc')) || 0)
+  });
+}
+function pfnExcluir(botao, freteId){
+  if (!confirm('Tirar este frete da carga?
+
+O item do pedido sai junto.')) return;
+  pfnEnvia(botao, '/ped-frete-novo/excluir', {frete_id: freteId});
 }
 
 // ─── mover frete de caminhao ────────────────────────────────────────────
