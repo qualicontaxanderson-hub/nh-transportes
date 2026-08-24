@@ -896,7 +896,7 @@ body > .container-fluid:has(#pfn){
                            oninput="pfnMascara(this)"></label>
                   <label class="nf__c">CT-e por litro
                     <input type="text" inputmode="numeric" class="ed__pc nf__mask"
-                           value="{{ '%.3f' | format((f.valor_cte or 0) / f.litros if f.litros else 0) | replace('.', ',') }}"
+                           value="{{ '%.3f' | format(f.preco_cte_litro) | replace('.', ',') }}"
                            oninput="pfnMascara(this)"></label>
                 </div>
                 {% if f.estado in ('emitido', 'pago') %}

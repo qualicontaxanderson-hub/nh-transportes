@@ -516,6 +516,13 @@ def _montar_viagens(fretes, cap):
         fr['estado'] = _estado_cobranca(fr)
         fr['litros'] = _f(fr['litros'])
         fr['valor'] = _f(fr['valor_total_frete'])
+        # Tudo que a tela usa em conta vira float AQUI. O banco devolve
+        # Decimal, e Decimal/float levanta TypeError no meio do template —
+        # que roda fora do try e derruba a pagina inteira em 500.
+        fr['preco_unit'] = _f(fr.get('preco_unit'))
+        fr['preco_por_litro'] = _f(fr.get('preco_por_litro'))
+        fr['valor_cte'] = _f(fr.get('valor_cte'))
+        fr['preco_cte_litro'] = (fr['valor_cte'] / fr['litros']) if fr['litros'] else 0.0
         v['fretes'].append(fr)
         v['litros'] += fr['litros']
         if fr['estado'] == 'falta':
