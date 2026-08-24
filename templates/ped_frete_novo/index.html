@@ -223,6 +223,11 @@ body > .container-fluid:has(#pfn){
     border-radius:7px; padding:.12rem .4rem; font-size:.75rem; cursor:pointer;
     font-family:inherit; flex:0 0 auto; }
   #pfn .fr__mv:hover{ background:#eaf1f9; }
+  #pfn .fr--ed{ cursor:pointer; border-radius:7px; margin:0 -.25rem;
+    padding-left:.25rem; padding-right:.25rem; }
+  #pfn .fr--ed:hover{ background:#f4f8fc; }
+  #pfn .fr--ed .fr__n::after{ content:' ✎'; color:var(--blue); font-size:.8em;
+    opacity:.55; }
   #pfn .ed{ background:#f4f8fc; border:1px solid #cddff0; border-radius:10px;
     padding:.55rem .6rem; margin:.15rem 0 .45rem; }
   #pfn .ed[hidden]{ display:none; }
@@ -844,20 +849,15 @@ body > .container-fluid:has(#pfn){
             </div>
             <div class="cli__c">
               {% for f in p.fretes %}
-              <div class="fr">
+              <div class="fr {{ 'fr--ed' if not v.fechada }}">
                 <span class="fr__n">{{ f.produto or '—' }}
                   {{ fmtl.format(f.litros).replace(',', '.') }} L
                   {%- if f.fornecedor %} <span class="fr__f">·
                     {{ f.fornecedor }}</span>{% endif -%}
                 </span>
-                {% if not v.fechada %}
-                <button type="button" class="fr__mv" title="editar"
-                        onclick="pfnAbreEditar(this)">
-                  <i class="bi bi-pencil"></i></button>
-                {% endif %}
                 {% if not v.fechada and destinos|length > 1 %}
                 <button type="button" class="fr__mv" title="mover de caminhão"
-                        onclick="pfnAbreMover(this, {{ f.id }})">
+                        onclick="event.stopPropagation(); pfnAbreMover(this, {{ f.id }})">
                   <i class="bi bi-arrow-left-right"></i></button>
                 {% endif %}
                 {% if f.estado == 'zero' %}
@@ -1731,12 +1731,21 @@ function pfnCabe(form){
 // Sem isso a tela adicionava mas nao corrigia, e o primeiro erro de digitacao
 // mandava a Monica de volta pra tela de Fretes — onde pedido e frete voltam a
 // divergir. Aqui os dois mudam juntos.
-function pfnAbreEditar(botao){
-  var linha = botao.closest('.fr');
-  var cx = linha ? linha.nextElementSibling : null;
-  while (cx && !cx.classList.contains('ed')) cx = cx.nextElementSibling;
-  if (cx) cx.hidden = !cx.hidden;
-}
+// Clicar na linha do lançamento abre a edição. Ouvinte delegado num lugar só:
+// onclick dentro do atributo já me traiu uma vez nesta tela, e aqui a linha
+// nem precisa de botão — o alvo é o próprio lançamento.
+document.addEventListener('DOMContentLoaded', function(){
+  var raiz = document.getElementById('pfn');
+  if (!raiz) return;
+  raiz.addEventListener('click', function(ev){
+    if (ev.target.closest('button, input, select, a, .mv, .ed')) return;
+    var linha = ev.target.closest('.fr--ed');
+    if (!linha) return;
+    var cx = linha.nextElementSibling;
+    while (cx && !cx.classList.contains('ed')) cx = cx.nextElementSibling;
+    if (cx) cx.hidden = !cx.hidden;
+  });
+});
 function pfnFechaEd(botao){
   var cx = botao.closest('.ed');
   if (cx) cx.hidden = true;
