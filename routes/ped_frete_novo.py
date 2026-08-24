@@ -782,6 +782,243 @@ def _divergencias(cur, desde):
     return cur.fetchall()
 
 
+# Regras que os 406 fretes desde 01/06 seguem, conferidas no banco. Elas fazem
+# a ARITMETICA do lancamento — nunca a decisao. O preco do frete por litro fica
+# de fora de proposito: o RLM ja foi cobrado a 0,100, 0,125 e 0,130, sendo os
+# dois ultimos na MESMA rota. Preco e negociacao, entao e sempre digitado.
+_COMISSAO_POR_LITRO = 0.01     # 406 de 406 fretes
+_COMISSAO_CTE_PCT = 0.08       # 402 de 406
+
+
+def _calcular_frete(litros, preco_litro, preco_mercadoria, paga_comissao=True,
+                    preco_cte=None):
+    """Deriva os valores do frete a partir do que a Monica digitou.
+
+    Ela digita quantidade e preco do frete por litro; o resto e conta.
+
+    O CT-e tem preco PROPRIO, que na maioria das vezes e o mesmo do frete (347
+    de 406) mas nem sempre — e o Posto Novo Horizonte e o caso extremo: sao 240
+    fretes com valor R$ 0,00 (posto da casa, nao se cobra) e CT-e a R$ 0,130/L
+    assim mesmo, porque o documento fiscal existe de qualquer jeito. Por isso
+    `preco_cte` e separado; quando nao vem, espelha o do frete.
+
+    Frete zerado zera junto a comissao do motorista e o lucro — nos 240 casos
+    do banco os dois estao em 0,00. Sem isso o posto da casa apareceria dando
+    prejuizo em todo relatorio.
+    """
+    litros = _f(litros)
+    preco_litro = _f(preco_litro)
+    p_cte = preco_litro if preco_cte in (None, '') else _f(preco_cte)
+
+    valor_frete = round(litros * preco_litro, 2)
+    tem_frete = valor_frete > 0
+    comissao = round(litros * _COMISSAO_POR_LITRO, 2) if (paga_comissao and tem_frete) else 0.0
+    valor_cte = round(litros * p_cte, 2)
+    comissao_cte = round(valor_cte * _COMISSAO_CTE_PCT, 2)
+    return {
+        'total_nf': round(litros * _f(preco_mercadoria), 2),
+        'valor_total_frete': valor_frete,
+        'comissao_motorista': comissao,
+        'valor_cte': valor_cte,
+        'comissao_cte': comissao_cte,
+        'lucro': round(valor_frete - comissao - comissao_cte, 2) if tem_frete else 0.0,
+    }
+
+
+def _opcoes(cur):
+    """Listas dos campos do lancamento, ja com o que a tela precisa mostrar."""
+    cur.execute("""SELECT c.id, c.razao_social, c.destino_id, d.nome AS destino
+                     FROM clientes c LEFT JOIN destinos d ON d.id = c.destino_id
+                    ORDER BY c.razao_social""")
+    clientes = cur.fetchall()
+    cur.execute("SELECT id, razao_social FROM fornecedores ORDER BY razao_social")
+    fornecedores = cur.fetchall()
+    cur.execute("SELECT id, nome FROM produto ORDER BY nome")
+    produtos = cur.fetchall()
+    cur.execute("SELECT id, nome FROM origens ORDER BY nome")
+    origens = cur.fetchall()
+    cur.execute("SELECT id, nome FROM bases WHERE ativo = 1 ORDER BY nome")
+    bases = cur.fetchall()
+    cur.execute("SELECT id, valor, descricao FROM quantidades ORDER BY valor")
+    quantidades = cur.fetchall()
+    for q in quantidades:
+        q['valor'] = _f(q['valor'])
+
+    # Historico de preco por cliente: consulta, nunca sugestao preenchida.
+    cur.execute("""
+        SELECT f.clientes_id AS cid, o.nome AS origem,
+               f.preco_por_litro AS preco, COUNT(*) AS n
+          FROM fretes f
+          LEFT JOIN origens o ON o.id = f.origem_id
+         WHERE f.data_frete >= DATE_SUB(CURDATE(), INTERVAL 120 DAY)
+           AND f.preco_por_litro > 0
+         GROUP BY f.clientes_id, o.nome, f.preco_por_litro
+         ORDER BY n DESC
+    """)
+    hist = {}
+    for r in cur.fetchall():
+        linhas = hist.setdefault(r['cid'], [])
+        if len(linhas) < 4:
+            linhas.append({'preco': _f(r['preco']), 'origem': r['origem'] or '—',
+                           'n': int(r['n'])})
+    return {'clientes': clientes, 'fornecedores': fornecedores,
+            'produtos': produtos, 'origens': origens, 'bases': bases,
+            'quantidades': quantidades, 'historico': hist}
+
+
+@bp.route('/ped-frete-novo/lancar', methods=['POST'])
+@login_required
+def lancar():
+    """Poe um posto na carga: grava pedido + item + frete de uma vez so.
+
+    O defeito antigo era esse: o pedido nascia numa tela e o frete em outra, e
+    depois seguiam vidas separadas — trocar o caminhao no pedido nao trocava
+    nos fretes, reduzir a quantidade nao reduzia. Nascendo no mesmo INSERT, os
+    dois sempre concordam.
+
+    O pedido NAO e fatiado: se ja existe carga daquele caminhao naquela data,
+    o item entra nela. O pedido continua sendo a carga fisica.
+    """
+    dados = request.get_json(silent=True) or {}
+    carga = _carga_do_pedido(dados)
+    if not carga:
+        return jsonify({'ok': False, 'erro': 'carga não informada'}), 400
+    dia, vid, mid = carga
+
+    def _int(chave):
+        try:
+            v = int(dados.get(chave) or 0)
+        except (TypeError, ValueError):
+            return 0
+        return v
+
+    cliente_id = _int('cliente_id')
+    fornecedor_id = _int('fornecedor_id')
+    produto_id = _int('produto_id')
+    origem_id = _int('origem_id')
+    base_id = _int('base_id') or None
+    quantidade_id = _int('quantidade_id') or None
+    litros = _f(dados.get('litros'))
+    preco_mercadoria = _f(dados.get('preco_mercadoria'))
+    # 0 e resposta valida: o Posto Novo Horizonte viaja com frete R$ 0,00.
+    # Por isso a checagem e "veio o campo?", nao "e maior que zero?".
+    if dados.get('preco_litro') in (None, ''):
+        return jsonify({'ok': False, 'erro': 'informe o frete por litro'}), 400
+    preco_litro = _f(dados.get('preco_litro'))
+
+    faltando = [n for n, v in (('posto', cliente_id), ('fornecedor', fornecedor_id),
+                               ('produto', produto_id), ('origem', origem_id))
+                if not v]
+    if faltando:
+        return jsonify({'ok': False, 'erro': 'falta ' + ', '.join(faltando)}), 400
+    if litros <= 0:
+        return jsonify({'ok': False, 'erro': 'informe a quantidade'}), 400
+
+    _ensure_tabela()
+    conn = cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Carga fechada nao recebe item novo: fechar significa que o caminhao
+        # saiu com aquilo. Reabrir e um clique, e deixa o rastro certo.
+        cursor.execute("""SELECT id FROM carga_fechada
+                           WHERE data_frete=%s AND veiculo_id=%s AND motorista_id=%s""",
+                       (dia, vid, mid))
+        if cursor.fetchone():
+            return jsonify({'ok': False,
+                            'erro': 'esta carga está fechada — reabra antes de '
+                                    'adicionar um posto'}), 409
+
+        cursor.execute("SELECT destino_id FROM clientes WHERE id = %s", (cliente_id,))
+        cli = cursor.fetchone()
+        if not cli:
+            return jsonify({'ok': False, 'erro': 'posto não encontrado'}), 404
+        destino_id = cli['destino_id']
+
+        cursor.execute("SELECT paga_comissao FROM motoristas WHERE id = %s", (mid,))
+        mot = cursor.fetchone()
+        paga = bool((mot or {}).get('paga_comissao', 1))
+
+        valores = _calcular_frete(litros, preco_litro, preco_mercadoria, paga,
+                                  dados.get('preco_cte'))
+
+        # 1) a carga: entra na que existe, ou nasce uma.
+        cursor.execute("""SELECT id, numero FROM pedidos
+                           WHERE data_pedido=%s AND veiculo_id=%s
+                             AND COALESCE(motorista_id,0)=%s LIMIT 1""",
+                       (dia, vid, mid))
+        ped = cursor.fetchone()
+        if ped:
+            pedido_id, numero = ped['id'], ped['numero']
+            criou_pedido = False
+        else:
+            cursor.execute("SELECT COALESCE(MAX(CAST(SUBSTRING(numero, 5) AS UNSIGNED)), 0) "
+                           "AS m FROM pedidos")
+            numero = 'PED-%05d' % (int((cursor.fetchone() or {}).get('m') or 0) + 1)
+            cursor.execute("""INSERT INTO pedidos (numero, data_pedido, status,
+                                     observacoes, motorista_id, veiculo_id)
+                                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                           (numero, dia, 'Faturado', '', mid or None, vid))
+            pedido_id = cursor.lastrowid
+            criou_pedido = True
+
+        # 2) a mercadoria
+        cursor.execute("""
+            INSERT INTO pedidos_itens
+                   (pedido_id, cliente_id, produto_id, fornecedor_id, origem_id,
+                    base_id, quantidade, quantidade_id, tipo_quantidade,
+                    preco_unitario, total_nf)
+                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (pedido_id, cliente_id, produto_id, fornecedor_id, origem_id,
+              base_id, litros, quantidade_id,
+              'lista' if quantidade_id else 'manual',
+              preco_mercadoria, valores['total_nf']))
+        item_id = cursor.lastrowid
+
+        # 3) o transporte — mesmo caminhao, motorista e quantidade do item
+        cursor.execute("""
+            INSERT INTO fretes
+                   (data_frete, status, observacoes, clientes_id, fornecedores_id,
+                    produto_id, origem_id, destino_id, motoristas_id, veiculos_id,
+                    quantidade_id, quantidade_manual, preco_produto_unitario,
+                    preco_por_litro, total_nf_compra, valor_total_frete,
+                    comissao_motorista, valor_cte, comissao_cte, lucro,
+                    pedido_id, boleto_emitido)
+                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,0)
+        """, (dia, 'Pendente', dados.get('observacoes') or '', cliente_id,
+              fornecedor_id, produto_id, origem_id, destino_id, mid or None, vid,
+              quantidade_id, litros, preco_mercadoria, preco_litro,
+              valores['total_nf'], valores['valor_total_frete'],
+              valores['comissao_motorista'], valores['valor_cte'],
+              valores['comissao_cte'], valores['lucro'], pedido_id))
+        frete_id = cursor.lastrowid
+
+        conn.commit()
+        return jsonify({'ok': True, 'pedido': numero, 'pedido_novo': criou_pedido,
+                        'item_id': item_id, 'frete_id': frete_id,
+                        'valores': valores})
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.getLogger(__name__).exception("[ped_frete_novo] lancar")
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 def _quem():
     return (getattr(current_user, 'username', None)
             or getattr(current_user, 'nome_completo', None) or '')[:80]
@@ -959,6 +1196,8 @@ def index():
            'vencimento_padrao': (hoje + timedelta(days=3)).isoformat(),
            'viagens': [], 'ociosos': [], 'dias': [], 'veiculos': [],
            'cobrar': [], 'divergencias': [], 'erro': None,
+           'op': {'clientes': [], 'fornecedores': [], 'produtos': [],
+                  'origens': [], 'bases': [], 'quantidades': [], 'historico': {}},
            'ontem': dia - timedelta(days=1), 'amanha': dia + timedelta(days=1),
            'totais': {'litros': 0.0, 'a_cobrar': 0.0, 'emitido': 0.0,
                       'viagens': 0, 'postos': 0}}
@@ -1019,6 +1258,7 @@ def index():
                             _abertos_por_cliente(cursor, cids,
                                                  hoje - timedelta(days=120)))
             ctx['viagens'] = viagens
+            ctx['op'] = _opcoes(cursor)
 
             usados = {v['veiculo_id'] for v in viagens}
             ctx['ociosos'] = [v for v in veiculos if v['id'] not in usados

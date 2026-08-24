@@ -196,6 +196,46 @@ body > .container-fluid:has(#pfn){
   #pfn .emis__tot b{ color:var(--blue-deep); font-size:1rem;
     font-variant-numeric:tabular-nums; }
 
+  /* lancamento de posto na carga */
+  #pfn .novo{ margin-bottom:.55rem; }
+  #pfn .novo__abre{ width:100%; padding:.5rem .7rem; font-size:.8rem; }
+  #pfn .novo__f{ border:1px solid #cddff0; background:#f4f8fc; border-radius:11px;
+    padding:.6rem .7rem; margin-top:.5rem; }
+  #pfn .nf__t{ font-size:.8rem; font-weight:800; color:var(--blue-deep);
+    margin-bottom:.55rem; }
+  #pfn .nf__g{ display:grid; grid-template-columns:1fr; gap:.5rem; }
+  @media (min-width:620px){
+    #pfn .nf__g{ grid-template-columns:1fr 1fr; }
+    #pfn .nf__c--w{ grid-column:1 / -1; }
+  }
+  #pfn .nf__c{ display:block; font-size:.72rem; font-weight:800;
+    color:var(--muted); }
+  #pfn .nf__c select, #pfn .nf__c input{ display:block; width:100%; margin-top:.2rem;
+    border:1px solid var(--borda); border-radius:9px; padding:.45rem .55rem;
+    font-size:.85rem; font-family:inherit; background:#fff; color:var(--ink);
+    font-weight:600; }
+  #pfn .nf__c input[readonly]{ background:#eef7f8; border-color:#a8d4d9; }
+  #pfn .nf__op{ font-weight:600; text-transform:none; opacity:.8; }
+  /* o preco do frete e sempre digitado: e negociacao, nao regra */
+  #pfn .nf__c--manual input{ border:2px solid var(--ambar); background:#fffdf7; }
+  #pfn .nf__hist{ display:block; font-size:.69rem; font-weight:700;
+    color:var(--muted); margin-top:.28rem; line-height:1.4; }
+  #pfn .nf__hist b{ color:var(--ink); font-variant-numeric:tabular-nums; }
+  #pfn .nf__conta{ background:#fff; border:1px solid var(--borda);
+    border-radius:10px; padding:.55rem .65rem; margin-top:.6rem; }
+  #pfn .nf__ct{ font-size:.68rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; color:#0f7d8c; margin-bottom:.35rem; }
+  #pfn .cl{ display:flex; gap:.5rem; font-size:.8rem; padding:.18rem 0; }
+  #pfn .cl .k{ color:var(--muted); flex:1; }
+  #pfn .cl .v{ font-weight:800; font-variant-numeric:tabular-nums; }
+  #pfn .cl--tot{ border-top:1px solid var(--borda); margin-top:.3rem;
+    padding-top:.35rem; }
+  #pfn .cl--tot .v{ font-size:.98rem; color:var(--blue-deep); }
+  #pfn .nf__cabe{ font-size:.75rem; font-weight:800; margin-top:.45rem;
+    line-height:1.45; }
+  #pfn .nf__cabe--ok{ color:#1c6b34; }
+  #pfn .nf__cabe--al{ color:var(--ambar); }
+
   /* faixa de estado da carga */
   #pfn .fechou{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
     background:#e4f4e8; color:#1c6b34; border-radius:11px; padding:.5rem .65rem;
@@ -494,6 +534,104 @@ body > .container-fluid:has(#pfn){
           </div>
           {% endif %}
 
+          {% if not v.fechada %}
+          <div class="novo">
+            <button type="button" class="bd__b bd__b--sim novo__abre"
+                    onclick="pfnAbreNovo(this)">
+              <i class="bi bi-plus-circle"></i> Adicionar posto à carga</button>
+
+            <div class="novo__f" hidden
+                 data-data="{{ v.data.isoformat() }}"
+                 data-veiculo="{{ v.veiculo_id }}"
+                 data-motorista="{{ v.motorista_id or 0 }}"
+                 data-capacidade="{{ '%.0f' | format(v.capacidade or 0) }}"
+                 data-ocupado="{{ '%.0f' | format(v.ocupado or 0) }}">
+              <div class="nf__t">Novo posto em {{ v.placa }} ·
+                {{ v.semana }} {{ v.data.strftime('%d/%m') }}</div>
+
+              <div class="nf__g">
+                <label class="nf__c nf__c--w">Posto
+                  <select class="nf__cli" onchange="pfnPosto(this)">
+                    <option value="">— escolha —</option>
+                    {% for cl in op.clientes %}
+                    <option value="{{ cl.id }}"
+                            data-destino="{{ cl.destino or '' }}"
+                            data-hist="{{ (op.historico.get(cl.id) or [])
+                              | map(attribute='preco') | join('|') }}"
+                            data-histori="{{ (op.historico.get(cl.id) or [])
+                              | map(attribute='origem') | join('|') }}">{{ cl.razao_social }}</option>
+                    {% endfor %}
+                  </select></label>
+                <label class="nf__c">Destino
+                  <input class="nf__dest" readonly placeholder="—"></label>
+                <label class="nf__c">Origem
+                  <select class="nf__ori">
+                    <option value="">— escolha —</option>
+                    {% for o in op.origens %}<option value="{{ o.id }}">{{ o.nome }}</option>{% endfor %}
+                  </select></label>
+                <label class="nf__c nf__c--w">Fornecedor
+                  <select class="nf__forn">
+                    <option value="">— escolha —</option>
+                    {% for fo in op.fornecedores %}<option value="{{ fo.id }}">{{ fo.razao_social }}</option>{% endfor %}
+                  </select></label>
+                <label class="nf__c">Produto
+                  <select class="nf__prod">
+                    <option value="">— escolha —</option>
+                    {% for pr in op.produtos %}<option value="{{ pr.id }}">{{ pr.nome }}</option>{% endfor %}
+                  </select></label>
+                <label class="nf__c">Base <span class="nf__op">opcional</span>
+                  <select class="nf__base">
+                    <option value="">—</option>
+                    {% for ba in op.bases %}<option value="{{ ba.id }}">{{ ba.nome }}</option>{% endfor %}
+                  </select></label>
+                <label class="nf__c">Quantidade
+                  <select class="nf__qtd" onchange="pfnConta(this)">
+                    <option value="">— escolha —</option>
+                    {% for q in op.quantidades %}
+                    <option value="{{ q.id }}" data-litros="{{ '%.0f' | format(q.valor) }}">
+                      {{ '{:,.0f}'.format(q.valor).replace(',', '.') }} litros</option>
+                    {% endfor %}
+                  </select></label>
+                <label class="nf__c">Preço da mercadoria
+                  <input type="number" step="0.001" min="0" class="nf__pm"
+                         placeholder="0,000" oninput="pfnConta(this)"></label>
+                <label class="nf__c nf__c--manual">Frete por litro
+                  <input type="number" step="0.001" min="0" class="nf__pl"
+                         placeholder="0,000" oninput="pfnConta(this)">
+                  <span class="nf__hist"></span></label>
+                <label class="nf__c">CT-e por litro
+                  <input type="number" step="0.001" min="0" class="nf__pc"
+                         placeholder="0,000" oninput="pfnCteManual(this)">
+                  <span class="nf__hist nf__hcte">Acompanha o frete. Só mexa se
+                    o CT-e sair por outro valor.</span></label>
+              </div>
+
+              <div class="nf__conta" hidden>
+                <div class="nf__ct">⚡ o resto é conta</div>
+                <div class="cl"><span class="k">Mercadoria</span>
+                  <span class="v nf__nf">—</span></div>
+                <div class="cl"><span class="k">Frete</span>
+                  <span class="v nf__vf">—</span></div>
+                <div class="cl"><span class="k">Comissão do motorista · R$ 0,01/L</span>
+                  <span class="v nf__cm">—</span></div>
+                <div class="cl"><span class="k">CT-e · comissão 8%</span>
+                  <span class="v nf__cc">—</span></div>
+                <div class="cl cl--tot"><span class="k">Lucro</span>
+                  <span class="v nf__lu">—</span></div>
+                <div class="nf__cabe"></div>
+              </div>
+
+              <div class="bd__rod">
+                <button type="button" class="bd__b bd__b--sim"
+                        onclick="pfnLancar(this)">
+                  <i class="bi bi-check-lg"></i> Adicionar à carga</button>
+                <button type="button" class="bd__b" onclick="pfnFechaNovo(this)">
+                  Cancelar</button>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
           {% if v.bordo %}
           <div class="bordo bordo--ok">
             <div class="bordo__t"><i class="bi bi-box-seam"></i>
@@ -786,6 +924,158 @@ function pfnFechar(botao, data, veiculoId, motoristaId, usarMarcados){
 function pfnReabrir(botao, data, veiculoId, motoristaId){
   pfnEnvia(botao, '/ped-frete-novo/reabrir',
            {data: data, veiculo_id: veiculoId, motorista_id: motoristaId});
+}
+
+// ─── lancar posto na carga ──────────────────────────────────────────────
+// Grava pedido + item + frete de uma vez. O preco do frete por litro e o unico
+// campo que nunca vem preenchido: e negociacao, nao regra (o RLM ja foi
+// cobrado a 0,100, 0,125 e 0,130, os dois ultimos na mesma rota).
+
+var PFN_BRL = {style:'currency', currency:'BRL'};
+function pfnMoeda(v){ return (v || 0).toLocaleString('pt-BR', PFN_BRL); }
+function pfnLitros(v){ return (v || 0).toLocaleString('pt-BR') + ' L'; }
+
+function pfnAbreNovo(botao){
+  var caixa = botao.closest('.novo');
+  var form = caixa ? caixa.querySelector('.novo__f') : null;
+  if (!form) return;
+  form.hidden = false;
+  botao.hidden = true;
+}
+
+function pfnFechaNovo(botao){
+  var caixa = botao.closest('.novo');
+  var form = caixa ? caixa.querySelector('.novo__f') : null;
+  var abre = caixa ? caixa.querySelector('.novo__abre') : null;
+  if (form) form.hidden = true;
+  if (abre) abre.hidden = false;
+}
+
+// Ao escolher o posto: destino vem do cadastro, e o historico de preco aparece
+// como CONSULTA — nunca preenchendo o campo.
+function pfnPosto(sel){
+  var form = sel.closest('.novo__f');
+  if (!form) return;
+  var op = sel.options[sel.selectedIndex];
+  var dest = form.querySelector('.nf__dest');
+  if (dest) dest.value = (op && op.getAttribute('data-destino')) || '';
+
+  var precos = ((op && op.getAttribute('data-hist')) || '').split('|').filter(Boolean);
+  var origens = ((op && op.getAttribute('data-histori')) || '').split('|');
+  var alvo = form.querySelector('.nf__hist');
+  if (!alvo) return;
+  if (!precos.length){
+    alvo.textContent = 'Sem frete cobrado desse posto nos últimos 120 dias.';
+    return;
+  }
+  var partes = [];
+  for (var i = 0; i < precos.length; i++){
+    partes.push('<b>' + parseFloat(precos[i]).toFixed(3).replace('.', ',') + '</b> ' +
+                (origens[i] || ''));
+  }
+  alvo.innerHTML = 'Já cobrado: ' + partes.join(' · ');
+}
+
+// O CT-e acompanha o frete ate alguem mexer nele. E preciso poder separar: o
+// Posto Novo Horizonte tem frete R$ 0,00 e CT-e a R$ 0,130/L nos 240 fretes.
+function pfnCteManual(campo){
+  campo.setAttribute('data-tocado', '1');
+  pfnConta(campo);
+}
+
+// Recalcula a conta e diz se cabe na carreta, enquanto ela digita.
+function pfnConta(el){
+  var form = el.closest('.novo__f');
+  if (!form) return;
+  var qtd = form.querySelector('.nf__qtd');
+  var opQ = qtd ? qtd.options[qtd.selectedIndex] : null;
+  var litros = opQ ? parseFloat(opQ.getAttribute('data-litros')) || 0 : 0;
+  var pm = parseFloat((form.querySelector('.nf__pm') || {}).value) || 0;
+  var plCampo = form.querySelector('.nf__pl');
+  var temPl = plCampo && plCampo.value !== '';
+  var pl = parseFloat((plCampo || {}).value) || 0;
+
+  var pcCampo = form.querySelector('.nf__pc');
+  if (pcCampo && !pcCampo.getAttribute('data-tocado')){
+    pcCampo.value = temPl ? plCampo.value : '';
+  }
+  var pc = pcCampo && pcCampo.value !== '' ? parseFloat(pcCampo.value) || 0 : pl;
+
+  // Frete zerado é o posto da casa: sem comissão e sem lucro, mas com CT-e.
+  var dica = form.querySelector('.nf__hcte');
+  if (dica){
+    dica.textContent = (temPl && pl === 0)
+      ? 'Frete zero é posto da casa — o CT-e costuma sair a 0,130/L assim mesmo.'
+      : 'Acompanha o frete. Só mexa se o CT-e sair por outro valor.';
+  }
+
+  var conta = form.querySelector('.nf__conta');
+  if (!litros || !temPl){ if (conta) conta.hidden = true; return; }
+  conta.hidden = false;
+
+  var frete = Math.round(litros * pl * 100) / 100;
+  var temFrete = frete > 0;
+  var comis = temFrete ? Math.round(litros * 0.01 * 100) / 100 : 0;
+  var cte = Math.round(litros * pc * 100) / 100;
+  var ccte = Math.round(cte * 0.08 * 100) / 100;
+  form.querySelector('.nf__nf').textContent = pfnMoeda(litros * pm);
+  form.querySelector('.nf__vf').textContent = pfnMoeda(frete) +
+    (temFrete ? '' : ' · não cobra');
+  form.querySelector('.nf__cm').textContent = pfnMoeda(comis);
+  form.querySelector('.nf__cc').textContent = pfnMoeda(cte) + ' · ' + pfnMoeda(ccte);
+  form.querySelector('.nf__lu').textContent = pfnMoeda(temFrete ? frete - comis - ccte : 0);
+
+  // Cabe na carreta? É a pergunta que hoje só se responde depois de salvar.
+  var cap = parseFloat(form.getAttribute('data-capacidade')) || 0;
+  var ocup = parseFloat(form.getAttribute('data-ocupado')) || 0;
+  var aviso = form.querySelector('.nf__cabe');
+  if (!cap){ aviso.textContent = ''; return; }
+  var livre = cap - ocup;
+  if (litros <= livre){
+    aviso.className = 'nf__cabe nf__cabe--ok';
+    aviso.textContent = '✓ Cabe — ficam ' + pfnLitros(ocup + litros) +
+      ' de ' + pfnLitros(cap) + ', sobrando ' + pfnLitros(livre - litros) + '.';
+  } else {
+    aviso.className = 'nf__cabe nf__cabe--al';
+    aviso.textContent = '⚠️ Passa ' + pfnLitros(litros - livre) +
+      ' da carreta. O maior que entra aqui é ' + pfnLitros(livre) +
+      '. Dá pra salvar assim mesmo.';
+  }
+}
+
+function pfnLancar(botao){
+  var form = botao.closest('.novo__f');
+  if (!form) return;
+  function val(cls){ var e = form.querySelector(cls); return e ? e.value : ''; }
+  var qtd = form.querySelector('.nf__qtd');
+  var opQ = qtd ? qtd.options[qtd.selectedIndex] : null;
+  var litros = opQ ? parseFloat(opQ.getAttribute('data-litros')) || 0 : 0;
+
+  if (!val('.nf__cli')){ alert('Escolha o posto.'); return; }
+  if (!val('.nf__ori')){ alert('Escolha a origem.'); return; }
+  if (!val('.nf__forn')){ alert('Escolha o fornecedor.'); return; }
+  if (!val('.nf__prod')){ alert('Escolha o produto.'); return; }
+  if (!litros){ alert('Escolha a quantidade.'); return; }
+  if (val('.nf__pl') === ''){
+    alert('Digite o frete por litro. Se esse posto não paga frete, digite 0.');
+    return;
+  }
+
+  pfnEnvia(botao, '/ped-frete-novo/lancar', {
+    data: form.getAttribute('data-data'),
+    veiculo_id: parseInt(form.getAttribute('data-veiculo'), 10),
+    motorista_id: parseInt(form.getAttribute('data-motorista'), 10),
+    cliente_id: parseInt(val('.nf__cli'), 10),
+    fornecedor_id: parseInt(val('.nf__forn'), 10),
+    produto_id: parseInt(val('.nf__prod'), 10),
+    origem_id: parseInt(val('.nf__ori'), 10),
+    base_id: val('.nf__base') ? parseInt(val('.nf__base'), 10) : 0,
+    quantidade_id: parseInt(val('.nf__qtd'), 10),
+    litros: litros,
+    preco_mercadoria: parseFloat(val('.nf__pm')) || 0,
+    preco_litro: val('.nf__pl'),
+    preco_cte: val('.nf__pc')
+  });
 }
 
 // ─── emissao de boleto ──────────────────────────────────────────────────
