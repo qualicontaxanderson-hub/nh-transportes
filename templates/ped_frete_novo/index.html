@@ -1773,9 +1773,10 @@ function pfnSalvarEd(botao, freteId){
   });
 }
 function pfnExcluir(botao, freteId){
-  if (!confirm('Tirar este frete da carga?
-
-O item do pedido sai junto.')) return;
+  // Mensagem numa linha só, sem escape: um "\n" que virou quebra de linha de
+  // verdade aqui dentro já derrubou o bloco de JS inteiro por SyntaxError —
+  // e com ele a tela toda parou de responder.
+  if (!confirm('Tirar este frete da carga? O item do pedido sai junto.')) return;
   pfnEnvia(botao, '/ped-frete-novo/excluir', {frete_id: freteId});
 }
 
