@@ -198,9 +198,40 @@ body > .container-fluid:has(#pfn){
 
   /* lancamento de posto na carga */
   #pfn .novo{ margin-bottom:.55rem; }
-  #pfn .novo__abre{ width:100%; padding:.5rem .7rem; font-size:.8rem; }
+  /* Botao junto dos outros na faixa de estado — a barra marrom de largura
+     cheia gritava mais que o conteudo da carga. */
+  #pfn .bd__b--novo{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #pfn .bd__b--novo:hover{ background:var(--blue-deep); }
   #pfn .novo__f{ border:1px solid #cddff0; background:#f4f8fc; border-radius:11px;
-    padding:.6rem .7rem; margin-top:.5rem; }
+    padding:.6rem .7rem; margin-bottom:.55rem; }
+
+  /* uma caixinha por produto do mesmo posto */
+  #pfn .nf__i{ border:1px solid var(--borda); background:#fff; border-radius:10px;
+    padding:.5rem .6rem; margin-top:.5rem; }
+  #pfn .nf__ih{ display:flex; align-items:center; gap:.4rem; margin-bottom:.4rem; }
+  #pfn .nf__in{ font-size:.68rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--blue-deep); }
+  #pfn .nf__ix{ margin-left:auto; border:1px solid #f0c8c8; background:#fbe9e9;
+    color:var(--danger); border-radius:7px; padding:.1rem .45rem;
+    font-size:.75rem; font-weight:800; font-family:inherit; cursor:pointer; }
+  #pfn .nf__i:only-child .nf__ix{ display:none; }
+  #pfn .nf__mais{ width:100%; margin-top:.5rem; }
+  #pfn .nf__conta{ margin-top:.5rem; }
+
+  /* mover frete de caminhao */
+  #pfn .fr__mv{ border:1px solid var(--borda); background:#fff; color:var(--blue);
+    border-radius:7px; padding:.12rem .4rem; font-size:.75rem; cursor:pointer;
+    font-family:inherit; flex:0 0 auto; }
+  #pfn .fr__mv:hover{ background:#eaf1f9; }
+  #pfn .mv{ display:flex; gap:.4rem; align-items:center; flex-wrap:wrap;
+    background:#eaf1f9; border-radius:9px; padding:.45rem .55rem;
+    margin:.1rem 0 .4rem; }
+  #pfn .mv[hidden]{ display:none; }
+  #pfn .mv__t{ font-size:.74rem; font-weight:800; color:var(--blue-deep);
+    flex:1 1 100%; }
+  #pfn .mv__d{ flex:1 1 160px; min-width:0; border:1px solid var(--borda);
+    border-radius:8px; padding:.35rem .5rem; font-size:.8rem; font-family:inherit;
+    background:#fff; }
   #pfn .nf__t{ font-size:.8rem; font-weight:800; color:var(--blue-deep);
     margin-bottom:.55rem; }
   #pfn .nf__g{ display:grid; grid-template-columns:1fr; gap:.5rem; }
@@ -562,6 +593,9 @@ body > .container-fluid:has(#pfn){
               {%- elif v.capacidade %} · cabem mais
                 {{ fmtl.format(v.livre).replace(',', '.') }} L{% endif -%}
             </span>
+            <button type="button" class="bd__b bd__b--novo novo__abre"
+                    onclick="pfnAbreNovo(this)">
+              <i class="bi bi-plus-lg"></i> Adicionar Carga</button>
             {% if v.candidatos and not v.bordo %}
             <button type="button" class="bd__b" onclick="pfnPainelBordo(this, 'bordo')">
               <i class="bi bi-box-seam"></i> Já tem carga a bordo?</button>
@@ -574,10 +608,6 @@ body > .container-fluid:has(#pfn){
 
           {% if not v.fechada %}
           <div class="novo">
-            <button type="button" class="bd__b bd__b--sim novo__abre"
-                    onclick="pfnAbreNovo(this)">
-              <i class="bi bi-plus-circle"></i> Adicionar posto à carga</button>
-
             <div class="novo__f" hidden
                  data-data="{{ v.data.isoformat() }}"
                  data-veiculo="{{ v.veiculo_id }}"
@@ -607,57 +637,71 @@ body > .container-fluid:has(#pfn){
                     <option value="">— escolha —</option>
                     {% for o in op.origens %}<option value="{{ o.id }}">{{ o.nome }}</option>{% endfor %}
                   </select></label>
-                <label class="nf__c nf__c--w">Fornecedor
-                  <select class="nf__forn">
-                    <option value="">— escolha —</option>
-                    {% for fo in op.fornecedores %}<option value="{{ fo.id }}">{{ fo.razao_social }}</option>{% endfor %}
-                  </select></label>
-                <label class="nf__c">Produto
-                  <select class="nf__prod">
-                    <option value="">— escolha —</option>
-                    {% for pr in op.produtos %}<option value="{{ pr.id }}">{{ pr.nome }}</option>{% endfor %}
-                  </select></label>
-                <label class="nf__c">Base <span class="nf__op">opcional</span>
-                  <select class="nf__base">
-                    <option value="">—</option>
-                    {% for ba in op.bases %}<option value="{{ ba.id }}">{{ ba.nome }}</option>{% endfor %}
-                  </select></label>
-                <label class="nf__c">Quantidade
-                  <select class="nf__qtd" onchange="pfnConta(this)">
-                    <option value="">— escolha —</option>
-                    {% for q in op.quantidades %}
-                    <option value="{{ q.id }}" data-litros="{{ '%.0f' | format(q.valor) }}">
-                      {{ '{:,.0f}'.format(q.valor).replace(',', '.') }} litros</option>
-                    {% endfor %}
-                  </select></label>
-                <label class="nf__c">Preço da mercadoria
-                  <input type="number" step="0.001" min="0" class="nf__pm"
-                         placeholder="0,000" oninput="pfnConta(this)"></label>
-                <label class="nf__c nf__c--manual">Frete por litro
-                  <input type="number" step="0.001" min="0" class="nf__pl"
-                         placeholder="0,000" oninput="pfnConta(this)">
-                  <span class="nf__hist"></span></label>
-                <label class="nf__c">CT-e por litro
-                  <input type="number" step="0.001" min="0" class="nf__pc"
-                         placeholder="0,000" oninput="pfnCteManual(this)">
-                  <span class="nf__hist nf__hcte">Acompanha o frete. Só mexa se
-                    o CT-e sair por outro valor.</span></label>
               </div>
 
-              <div class="nf__conta" hidden>
-                <div class="nf__ct">⚡ o resto é conta</div>
-                <div class="cl"><span class="k">Mercadoria</span>
-                  <span class="v nf__nf">—</span></div>
-                <div class="cl"><span class="k">Frete</span>
-                  <span class="v nf__vf">—</span></div>
-                <div class="cl"><span class="k">Comissão do motorista · R$ 0,01/L</span>
-                  <span class="v nf__cm">—</span></div>
-                <div class="cl"><span class="k">CT-e · comissão 8%</span>
-                  <span class="v nf__cc">—</span></div>
-                <div class="cl cl--tot"><span class="k">Lucro</span>
-                  <span class="v nf__lu">—</span></div>
-                <div class="nf__cabe"></div>
-              </div>
+              {# Um posto, quantos produtos precisar — cada linha vira um frete. #}
+              <div class="nf__itens"></div>
+
+              <template class="nf__molde">
+                <div class="nf__i">
+                  <div class="nf__ih"><span class="nf__in">produto</span>
+                    <button type="button" class="nf__ix" onclick="pfnTiraItem(this)"
+                            title="tirar">✕</button></div>
+                  <div class="nf__g">
+                    <label class="nf__c nf__c--w">Fornecedor
+                      <select class="nf__forn">
+                        <option value="">— escolha —</option>
+                        {% for fo in op.fornecedores %}<option value="{{ fo.id }}">{{ fo.razao_social }}</option>{% endfor %}
+                      </select></label>
+                    <label class="nf__c">Produto
+                      <select class="nf__prod">
+                        <option value="">— escolha —</option>
+                        {% for pr in op.produtos %}<option value="{{ pr.id }}">{{ pr.nome }}</option>{% endfor %}
+                      </select></label>
+                    <label class="nf__c">Base <span class="nf__op">opcional</span>
+                      <select class="nf__base">
+                        <option value="">—</option>
+                        {% for ba in op.bases %}<option value="{{ ba.id }}">{{ ba.nome }}</option>{% endfor %}
+                      </select></label>
+                    <label class="nf__c">Quantidade
+                      <select class="nf__qtd" onchange="pfnConta(this)">
+                        <option value="">— escolha —</option>
+                        {% for q in op.quantidades %}
+                        <option value="{{ q.id }}" data-litros="{{ '%.0f' | format(q.valor) }}">
+                          {{ '{:,.0f}'.format(q.valor).replace(',', '.') }} litros</option>
+                        {% endfor %}
+                      </select></label>
+                    <label class="nf__c">Preço da mercadoria
+                      <input type="text" inputmode="numeric" class="nf__pm nf__mask"
+                             placeholder="0,000" oninput="pfnMascara(this)"></label>
+                    <label class="nf__c nf__c--manual">Frete por litro
+                      <input type="text" inputmode="numeric" class="nf__pl nf__mask"
+                             placeholder="0,000" oninput="pfnMascara(this)">
+                      <span class="nf__hist nf__hpl"></span></label>
+                    <label class="nf__c">CT-e por litro
+                      <input type="text" inputmode="numeric" class="nf__pc nf__mask"
+                             placeholder="0,000" oninput="pfnMascara(this, true)">
+                      <span class="nf__hist nf__hcte">Acompanha o frete.</span></label>
+                  </div>
+                  <div class="nf__conta" hidden>
+                    <div class="cl"><span class="k">Mercadoria</span>
+                      <span class="v nf__nf">—</span></div>
+                    <div class="cl"><span class="k">Frete</span>
+                      <span class="v nf__vf">—</span></div>
+                    <div class="cl"><span class="k">Comissão · R$ 0,01/L</span>
+                      <span class="v nf__cm">—</span></div>
+                    <div class="cl"><span class="k">CT-e · comissão 8%</span>
+                      <span class="v nf__cc">—</span></div>
+                    <div class="cl cl--tot"><span class="k">Lucro</span>
+                      <span class="v nf__lu">—</span></div>
+                  </div>
+                </div>
+              </template>
+
+              <button type="button" class="bd__b nf__mais" onclick="pfnMaisItem(this)">
+                ＋ outro produto para este posto</button>
+
+              <div class="nf__cabe"></div>
 
               <div class="bd__rod">
                 <button type="button" class="bd__b bd__b--sim"
@@ -784,12 +828,33 @@ body > .container-fluid:has(#pfn){
                   {%- if f.fornecedor %} <span class="fr__f">·
                     {{ f.fornecedor }}</span>{% endif -%}
                 </span>
+                {% if not v.fechada and destinos|length > 1 %}
+                <button type="button" class="fr__mv" title="mover de caminhão"
+                        onclick="pfnAbreMover(this, {{ f.id }})">
+                  <i class="bi bi-arrow-left-right"></i></button>
+                {% endif %}
                 {% if f.estado == 'zero' %}
                   <span class="selo selo--zero">R$ 0,00</span>
                 {% else %}
                   <span class="fr__v">{{ f.valor | formatar_moeda }}</span>
                 {% endif %}
               </div>
+              {% if not v.fechada and destinos|length > 1 %}
+              <div class="mv" hidden>
+                <span class="mv__t">Mover {{ f.produto or '' }}
+                  {{ fmtl.format(f.litros).replace(',', '.') }} L para:</span>
+                <select class="mv__d">
+                  {% for d in destinos %}
+                  {% if not (d.veiculo_id == v.veiculo_id and d.motorista_id == (v.motorista_id or 0)) %}
+                  <option value="{{ d.veiculo_id }}:{{ d.motorista_id }}">{{ d.label }}</option>
+                  {% endif %}
+                  {% endfor %}
+                </select>
+                <button type="button" class="bd__b bd__b--sim"
+                        onclick="pfnMover(this, {{ f.id }})">Mover</button>
+                <button type="button" class="bd__b" onclick="pfnFechaMover(this)">✕</button>
+              </div>
+              {% endif %}
               {% endfor %}
               <div class="cli__r">
                 <span>{{ fmtl.format(p.litros).replace(',', '.') }} L
@@ -1052,20 +1117,70 @@ var PFN_BRL = {style:'currency', currency:'BRL'};
 function pfnMoeda(v){ return (v || 0).toLocaleString('pt-BR', PFN_BRL); }
 function pfnLitros(v){ return (v || 0).toLocaleString('pt-BR') + ' L'; }
 
+// Mascara igual a do lançamento de frete: só dígitos, divididos por 1000.
+// Digitar 90 vira 0,090 e 125 vira 0,125 — tem preço com 3 casas, então o
+// campo tem que aceitar os dois sem a pessoa pensar em vírgula.
+function pfnMascara(campo, ehCte){
+  var so = String(campo.value || '').replace(/\D/g, '');
+  if (so === ''){ campo.value = ''; }
+  else {
+    var n = (parseInt(so, 10) / 1000).toFixed(3).split('.');
+    campo.value = n[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + n[1];
+    try { campo.setSelectionRange(campo.value.length, campo.value.length); }
+    catch(e){}
+  }
+  if (ehCte) campo.setAttribute('data-tocado', '1');
+  pfnConta(campo);
+}
+
+function pfnNum(campo){
+  if (!campo || campo.value === '') return null;
+  return parseFloat(String(campo.value).replace(/\./g, '').replace(',', '.')) || 0;
+}
+
 function pfnAbreNovo(botao){
-  var caixa = botao.closest('.novo');
-  var form = caixa ? caixa.querySelector('.novo__f') : null;
+  var corpo = botao.closest('.vg__c2');
+  var form = corpo ? corpo.querySelector('.novo__f') : null;
+  var faixa = botao.closest('.fechou');
   if (!form) return;
   form.hidden = false;
-  botao.hidden = true;
+  if (faixa) faixa.hidden = true;
+  if (!form.querySelector('.nf__i')) pfnMaisItem(form.querySelector('.nf__mais'));
 }
 
 function pfnFechaNovo(botao){
-  var caixa = botao.closest('.novo');
-  var form = caixa ? caixa.querySelector('.novo__f') : null;
-  var abre = caixa ? caixa.querySelector('.novo__abre') : null;
+  var corpo = botao.closest('.vg__c2');
+  var form = corpo ? corpo.querySelector('.novo__f') : null;
+  var faixa = corpo ? corpo.querySelector('.fechou') : null;
   if (form) form.hidden = true;
-  if (abre) abre.hidden = false;
+  if (faixa) faixa.hidden = false;
+}
+
+// Um posto, vários produtos: cada caixinha vira um frete no mesmo pedido.
+function pfnMaisItem(botao){
+  var form = botao.closest('.novo__f');
+  var molde = form.querySelector('.nf__molde');
+  var caixa = form.querySelector('.nf__itens');
+  caixa.appendChild(molde.content.cloneNode(true));
+  pfnNumeraItens(form);
+  var novos = caixa.querySelectorAll('.nf__i');
+  pfnDicaPreco(form, novos[novos.length - 1]);
+}
+
+function pfnTiraItem(botao){
+  var form = botao.closest('.novo__f');
+  var item = botao.closest('.nf__i');
+  if (item) item.parentNode.removeChild(item);
+  pfnNumeraItens(form);
+  pfnCabe(form);
+}
+
+function pfnNumeraItens(form){
+  var itens = form.querySelectorAll('.nf__i');
+  for (var i = 0; i < itens.length; i++){
+    itens[i].querySelector('.nf__in').textContent =
+      itens.length > 1 ? ('produto ' + (i + 1)) : 'produto';
+  }
 }
 
 // Ao escolher o posto: destino vem do cadastro, e o historico de preco aparece
@@ -1077,12 +1192,21 @@ function pfnPosto(sel){
   var dest = form.querySelector('.nf__dest');
   if (dest) dest.value = (op && op.getAttribute('data-destino')) || '';
 
+  var itens = form.querySelectorAll('.nf__i');
+  for (var k = 0; k < itens.length; k++) pfnDicaPreco(form, itens[k]);
+}
+
+// Histórico de preço do posto: consulta ao lado do campo, nunca preenchendo.
+function pfnDicaPreco(form, item){
+  var sel = form.querySelector('.nf__cli');
+  var op = sel ? sel.options[sel.selectedIndex] : null;
+  var alvo = item ? item.querySelector('.nf__hpl') : null;
+  if (!alvo) return;
   var precos = ((op && op.getAttribute('data-hist')) || '').split('|').filter(Boolean);
   var origens = ((op && op.getAttribute('data-histori')) || '').split('|');
-  var alvo = form.querySelector('.nf__hist');
-  if (!alvo) return;
   if (!precos.length){
-    alvo.textContent = 'Sem frete cobrado desse posto nos últimos 120 dias.';
+    alvo.textContent = op && op.value
+      ? 'Sem frete cobrado desse posto nos últimos 120 dias.' : '';
     return;
   }
   var partes = [];
@@ -1093,40 +1217,40 @@ function pfnPosto(sel){
   alvo.innerHTML = 'Já cobrado: ' + partes.join(' · ');
 }
 
-// O CT-e acompanha o frete ate alguem mexer nele. E preciso poder separar: o
-// Posto Novo Horizonte tem frete R$ 0,00 e CT-e a R$ 0,130/L nos 240 fretes.
-function pfnCteManual(campo){
-  campo.setAttribute('data-tocado', '1');
-  pfnConta(campo);
-}
-
-// Recalcula a conta e diz se cabe na carreta, enquanto ela digita.
+// Recalcula a conta da linha e o "cabe na carreta?" do conjunto.
 function pfnConta(el){
+  var item = el.closest('.nf__i');
   var form = el.closest('.novo__f');
   if (!form) return;
-  var qtd = form.querySelector('.nf__qtd');
+  if (item) pfnContaItem(item);
+  pfnCabe(form);
+}
+
+function pfnContaItem(item){
+  var qtd = item.querySelector('.nf__qtd');
   var opQ = qtd ? qtd.options[qtd.selectedIndex] : null;
   var litros = opQ ? parseFloat(opQ.getAttribute('data-litros')) || 0 : 0;
-  var pm = parseFloat((form.querySelector('.nf__pm') || {}).value) || 0;
-  var plCampo = form.querySelector('.nf__pl');
+  var pm = pfnNum(item.querySelector('.nf__pm')) || 0;
+  var plCampo = item.querySelector('.nf__pl');
   var temPl = plCampo && plCampo.value !== '';
-  var pl = parseFloat((plCampo || {}).value) || 0;
+  var pl = pfnNum(plCampo) || 0;
 
-  var pcCampo = form.querySelector('.nf__pc');
+  // O CT-e acompanha o frete até alguém mexer nele. Precisa poder separar: o
+  // Posto Novo Horizonte tem frete R$ 0,00 e CT-e a R$ 0,130/L nos 240 fretes.
+  var pcCampo = item.querySelector('.nf__pc');
   if (pcCampo && !pcCampo.getAttribute('data-tocado')){
     pcCampo.value = temPl ? plCampo.value : '';
   }
-  var pc = pcCampo && pcCampo.value !== '' ? parseFloat(pcCampo.value) || 0 : pl;
+  var pc = (pcCampo && pcCampo.value !== '') ? (pfnNum(pcCampo) || 0) : pl;
 
-  // Frete zerado é o posto da casa: sem comissão e sem lucro, mas com CT-e.
-  var dica = form.querySelector('.nf__hcte');
+  var dica = item.querySelector('.nf__hcte');
   if (dica){
     dica.textContent = (temPl && pl === 0)
       ? 'Frete zero é posto da casa — o CT-e costuma sair a 0,130/L assim mesmo.'
-      : 'Acompanha o frete. Só mexa se o CT-e sair por outro valor.';
+      : 'Acompanha o frete.';
   }
 
-  var conta = form.querySelector('.nf__conta');
+  var conta = item.querySelector('.nf__conta');
   if (!litros || !temPl){ if (conta) conta.hidden = true; return; }
   conta.hidden = false;
 
@@ -1135,63 +1259,111 @@ function pfnConta(el){
   var comis = temFrete ? Math.round(litros * 0.01 * 100) / 100 : 0;
   var cte = Math.round(litros * pc * 100) / 100;
   var ccte = Math.round(cte * 0.08 * 100) / 100;
-  form.querySelector('.nf__nf').textContent = pfnMoeda(litros * pm);
-  form.querySelector('.nf__vf').textContent = pfnMoeda(frete) +
+  item.querySelector('.nf__nf').textContent = pfnMoeda(litros * pm);
+  item.querySelector('.nf__vf').textContent = pfnMoeda(frete) +
     (temFrete ? '' : ' · não cobra');
-  form.querySelector('.nf__cm').textContent = pfnMoeda(comis);
-  form.querySelector('.nf__cc').textContent = pfnMoeda(cte) + ' · ' + pfnMoeda(ccte);
-  form.querySelector('.nf__lu').textContent = pfnMoeda(temFrete ? frete - comis - ccte : 0);
+  item.querySelector('.nf__cm').textContent = pfnMoeda(comis);
+  item.querySelector('.nf__cc').textContent = pfnMoeda(cte) + ' · ' + pfnMoeda(ccte);
+  item.querySelector('.nf__lu').textContent = pfnMoeda(temFrete ? frete - comis - ccte : 0);
+}
 
-  // Cabe na carreta? É a pergunta que hoje só se responde depois de salvar.
+// Cabe na carreta? Soma TODOS os produtos do lançamento — é a pergunta que
+// hoje só se responde depois de salvar.
+function pfnCabe(form){
+  var aviso = form.querySelector('.nf__cabe');
+  if (!aviso) return;
   var cap = parseFloat(form.getAttribute('data-capacidade')) || 0;
   var ocup = parseFloat(form.getAttribute('data-ocupado')) || 0;
-  var aviso = form.querySelector('.nf__cabe');
-  if (!cap){ aviso.textContent = ''; return; }
+  var itens = form.querySelectorAll('.nf__i');
+  var total = 0;
+  for (var i = 0; i < itens.length; i++){
+    var q = itens[i].querySelector('.nf__qtd');
+    var o = q ? q.options[q.selectedIndex] : null;
+    total += o ? (parseFloat(o.getAttribute('data-litros')) || 0) : 0;
+  }
+  if (!cap || !total){ aviso.textContent = ''; return; }
   var livre = cap - ocup;
-  if (litros <= livre){
+  if (total <= livre){
     aviso.className = 'nf__cabe nf__cabe--ok';
-    aviso.textContent = '✓ Cabe — ficam ' + pfnLitros(ocup + litros) +
-      ' de ' + pfnLitros(cap) + ', sobrando ' + pfnLitros(livre - litros) + '.';
+    aviso.textContent = '✓ Cabe — ficam ' + pfnLitros(ocup + total) +
+      ' de ' + pfnLitros(cap) + ', sobrando ' + pfnLitros(livre - total) + '.';
   } else {
     aviso.className = 'nf__cabe nf__cabe--al';
-    aviso.textContent = '⚠️ Passa ' + pfnLitros(litros - livre) +
+    aviso.textContent = '⚠️ Passa ' + pfnLitros(total - livre) +
       ' da carreta. O maior que entra aqui é ' + pfnLitros(livre) +
       '. Dá pra salvar assim mesmo.';
   }
+}
+
+// ─── mover frete de caminhao ────────────────────────────────────────────
+// Na correria ela lança tudo num caminhão e divide depois. A troca leva junto
+// o item do pedido, então os dois lados continuam de acordo.
+function pfnAbreMover(botao, freteId){
+  var linha = botao.closest('.fr');
+  var cx = linha ? linha.nextElementSibling : null;
+  if (cx && cx.classList.contains('mv')) cx.hidden = !cx.hidden;
+}
+function pfnFechaMover(botao){
+  var cx = botao.closest('.mv');
+  if (cx) cx.hidden = true;
+}
+function pfnMover(botao, freteId){
+  var cx = botao.closest('.mv');
+  var sel = cx ? cx.querySelector('.mv__d') : null;
+  if (!sel || !sel.value){ alert('Escolha o caminhão.'); return; }
+  var partes = sel.value.split(':');
+  pfnEnvia(botao, '/ped-frete-novo/mover', {
+    frete_id: freteId,
+    veiculo_id: parseInt(partes[0], 10),
+    motorista_id: parseInt(partes[1], 10)
+  });
 }
 
 function pfnLancar(botao){
   var form = botao.closest('.novo__f');
   if (!form) return;
   function val(cls){ var e = form.querySelector(cls); return e ? e.value : ''; }
-  var qtd = form.querySelector('.nf__qtd');
-  var opQ = qtd ? qtd.options[qtd.selectedIndex] : null;
-  var litros = opQ ? parseFloat(opQ.getAttribute('data-litros')) || 0 : 0;
 
   if (!val('.nf__cli')){ alert('Escolha o posto.'); return; }
   if (!val('.nf__ori')){ alert('Escolha a origem.'); return; }
-  if (!val('.nf__forn')){ alert('Escolha o fornecedor.'); return; }
-  if (!val('.nf__prod')){ alert('Escolha o produto.'); return; }
-  if (!litros){ alert('Escolha a quantidade.'); return; }
-  if (val('.nf__pl') === ''){
-    alert('Digite o frete por litro. Se esse posto não paga frete, digite 0.');
-    return;
+
+  var itens = form.querySelectorAll('.nf__i');
+  var payload = [];
+  for (var i = 0; i < itens.length; i++){
+    var it = itens[i];
+    function v(cls){ var e = it.querySelector(cls); return e ? e.value : ''; }
+    var q = it.querySelector('.nf__qtd');
+    var o = q ? q.options[q.selectedIndex] : null;
+    var litros = o ? parseFloat(o.getAttribute('data-litros')) || 0 : 0;
+    var rot = itens.length > 1 ? ('Produto ' + (i + 1) + ': ') : '';
+    if (!v('.nf__forn')){ alert(rot + 'escolha o fornecedor.'); return; }
+    if (!v('.nf__prod')){ alert(rot + 'escolha o produto.'); return; }
+    if (!litros){ alert(rot + 'escolha a quantidade.'); return; }
+    if (v('.nf__pl') === ''){
+      alert(rot + 'digite o frete por litro. Se esse posto não paga frete, digite 0.');
+      return;
+    }
+    payload.push({
+      fornecedor_id: parseInt(v('.nf__forn'), 10),
+      produto_id: parseInt(v('.nf__prod'), 10),
+      base_id: v('.nf__base') ? parseInt(v('.nf__base'), 10) : 0,
+      quantidade_id: parseInt(v('.nf__qtd'), 10),
+      litros: litros,
+      preco_mercadoria: pfnNum(it.querySelector('.nf__pm')) || 0,
+      preco_litro: String(pfnNum(it.querySelector('.nf__pl'))),
+      preco_cte: it.querySelector('.nf__pc').value === ''
+        ? '' : String(pfnNum(it.querySelector('.nf__pc')))
+    });
   }
+  if (!payload.length){ alert('Adicione ao menos um produto.'); return; }
 
   pfnEnvia(botao, '/ped-frete-novo/lancar', {
     data: form.getAttribute('data-data'),
     veiculo_id: parseInt(form.getAttribute('data-veiculo'), 10),
     motorista_id: parseInt(form.getAttribute('data-motorista'), 10),
     cliente_id: parseInt(val('.nf__cli'), 10),
-    fornecedor_id: parseInt(val('.nf__forn'), 10),
-    produto_id: parseInt(val('.nf__prod'), 10),
     origem_id: parseInt(val('.nf__ori'), 10),
-    base_id: val('.nf__base') ? parseInt(val('.nf__base'), 10) : 0,
-    quantidade_id: parseInt(val('.nf__qtd'), 10),
-    litros: litros,
-    preco_mercadoria: parseFloat(val('.nf__pm')) || 0,
-    preco_litro: val('.nf__pl'),
-    preco_cte: val('.nf__pc')
+    itens: payload
   });
 }
 

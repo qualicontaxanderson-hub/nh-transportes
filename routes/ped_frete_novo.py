@@ -149,6 +149,10 @@ def _ensure_tabela():
             "ALTER TABLE frete_saldo_bordo ADD COLUMN carga_veiculo_id INT NOT NULL",
             "ALTER TABLE frete_saldo_bordo ADD COLUMN carga_motorista_id INT NOT NULL DEFAULT 0",
             "ALTER TABLE frete_saldo_bordo ADD COLUMN litros DECIMAL(12,3) NOT NULL DEFAULT 0",
+            # Liga o item do pedido ao frete que nasceu com ele. Nula e ignorada
+            # por todo o resto do sistema; existe pra que mover ou corrigir um
+            # frete leve o item junto, em vez de adivinhar por nome/quantidade.
+            "ALTER TABLE pedidos_itens ADD COLUMN frete_id INT NULL",
         ):
             try:
                 cur.execute(alter)
@@ -869,6 +873,108 @@ def _opcoes(cur):
             'quantidades': quantidades, 'historico': hist}
 
 
+def _carga_do_dia(cursor, dia, vid, mid, criar=True):
+    """Acha o pedido daquela carga (data + veiculo + motorista), ou cria um.
+
+    Nao fatia: se o caminhao ja tem carga naquela data, o item entra nela. O
+    pedido continua sendo a carga fisica.
+    """
+    cursor.execute("""SELECT id, numero FROM pedidos
+                       WHERE data_pedido=%s AND veiculo_id=%s
+                         AND COALESCE(motorista_id,0)=%s LIMIT 1""",
+                   (dia, vid, mid))
+    ped = cursor.fetchone()
+    if ped:
+        return ped['id'], ped['numero'], False
+    if not criar:
+        return None, None, False
+    cursor.execute("SELECT COALESCE(MAX(CAST(SUBSTRING(numero, 5) AS UNSIGNED)), 0) "
+                   "AS m FROM pedidos")
+    numero = 'PED-%05d' % (int((cursor.fetchone() or {}).get('m') or 0) + 1)
+    cursor.execute("""INSERT INTO pedidos (numero, data_pedido, status,
+                             observacoes, motorista_id, veiculo_id)
+                           VALUES (%s, %s, %s, %s, %s, %s)""",
+                   (numero, dia, 'Faturado', '', mid or None, vid))
+    return cursor.lastrowid, numero, True
+
+
+@bp.route('/ped-frete-novo/mover', methods=['POST'])
+@login_required
+def mover():
+    """Passa um frete para outro caminhao da mesma data.
+
+    Na correria a Monica lanca tudo num caminhao so e divide depois. Aqui a
+    troca leva junto o item do pedido e o vinculo com a carga de destino — que
+    e o que a tela de Pedidos nunca fez, e a origem das divergencias que a
+    gente consertou na mao duas vezes.
+    """
+    dados = request.get_json(silent=True) or {}
+    try:
+        frete_id = int(dados.get('frete_id') or 0)
+        vid = int(dados.get('veiculo_id') or 0)
+        mid = int(dados.get('motorista_id') or 0)
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'erro': 'dados inválidos'}), 400
+    if not frete_id or not vid:
+        return jsonify({'ok': False, 'erro': 'informe o frete e o caminhão'}), 400
+
+    _ensure_tabela()
+    conn = cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""SELECT f.id, f.data_frete, f.pedido_id, f.veiculos_id,
+                                 f.motoristas_id
+                            FROM fretes f WHERE f.id = %s""", (frete_id,))
+        fr = cursor.fetchone()
+        if not fr:
+            return jsonify({'ok': False, 'erro': 'frete não encontrado'}), 404
+        dia = fr['data_frete']
+
+        # Carga fechada, dos dois lados, nao aceita movimento sem reabrir.
+        for v_, m_, onde in ((fr['veiculos_id'], fr['motoristas_id'] or 0, 'de origem'),
+                             (vid, mid, 'de destino')):
+            cursor.execute("""SELECT id FROM carga_fechada
+                               WHERE data_frete=%s AND veiculo_id=%s AND motorista_id=%s""",
+                           (dia, v_, m_))
+            if cursor.fetchone():
+                return jsonify({'ok': False,
+                                'erro': 'a carga %s está fechada — reabra antes '
+                                        'de mover' % onde}), 409
+
+        pedido_id, numero, criou = _carga_do_dia(cursor, dia, vid, mid)
+        cursor.execute("""UPDATE fretes SET veiculos_id=%s, motoristas_id=%s,
+                                 pedido_id=%s, updated_at=NOW()
+                           WHERE id=%s""",
+                       (vid, mid or None, pedido_id, frete_id))
+        # O item do pedido vai junto — e o que mantem os dois lados de acordo.
+        cursor.execute("UPDATE pedidos_itens SET pedido_id=%s WHERE frete_id=%s",
+                       (pedido_id, frete_id))
+        itens = cursor.rowcount
+        conn.commit()
+        return jsonify({'ok': True, 'pedido': numero, 'pedido_novo': criou,
+                        'itens_movidos': itens})
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.getLogger(__name__).exception("[ped_frete_novo] mover")
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @bp.route('/ped-frete-novo/lancar', methods=['POST'])
 @login_required
 def lancar():
@@ -888,34 +994,52 @@ def lancar():
         return jsonify({'ok': False, 'erro': 'carga não informada'}), 400
     dia, vid, mid = carga
 
-    def _int(chave):
+    def _int(fonte, chave):
         try:
-            v = int(dados.get(chave) or 0)
+            return int((fonte or {}).get(chave) or 0)
         except (TypeError, ValueError):
             return 0
-        return v
 
-    cliente_id = _int('cliente_id')
-    fornecedor_id = _int('fornecedor_id')
-    produto_id = _int('produto_id')
-    origem_id = _int('origem_id')
-    base_id = _int('base_id') or None
-    quantidade_id = _int('quantidade_id') or None
-    litros = _f(dados.get('litros'))
-    preco_mercadoria = _f(dados.get('preco_mercadoria'))
-    # 0 e resposta valida: o Posto Novo Horizonte viaja com frete R$ 0,00.
-    # Por isso a checagem e "veio o campo?", nao "e maior que zero?".
-    if dados.get('preco_litro') in (None, ''):
-        return jsonify({'ok': False, 'erro': 'informe o frete por litro'}), 400
-    preco_litro = _f(dados.get('preco_litro'))
+    cliente_id = _int(dados, 'cliente_id')
+    origem_id = _int(dados, 'origem_id')
+    if not cliente_id:
+        return jsonify({'ok': False, 'erro': 'falta o posto'}), 400
+    if not origem_id:
+        return jsonify({'ok': False, 'erro': 'falta a origem'}), 400
 
-    faltando = [n for n, v in (('posto', cliente_id), ('fornecedor', fornecedor_id),
-                               ('produto', produto_id), ('origem', origem_id))
-                if not v]
-    if faltando:
-        return jsonify({'ok': False, 'erro': 'falta ' + ', '.join(faltando)}), 400
-    if litros <= 0:
-        return jsonify({'ok': False, 'erro': 'informe a quantidade'}), 400
+    # Um posto, varios produtos: e como a carga acontece de verdade. Fazer um
+    # lancamento por produto obrigava a reescolher posto e origem toda vez.
+    itens = dados.get('itens')
+    if not isinstance(itens, list) or not itens:
+        return jsonify({'ok': False, 'erro': 'nenhum produto informado'}), 400
+
+    linhas = []
+    for n, it in enumerate(itens, 1):
+        fornecedor_id = _int(it, 'fornecedor_id')
+        produto_id = _int(it, 'produto_id')
+        litros = _f((it or {}).get('litros'))
+        falta = [r for r, v in (('fornecedor', fornecedor_id),
+                                ('produto', produto_id)) if not v]
+        if falta:
+            return jsonify({'ok': False,
+                            'erro': 'produto %d: falta %s' % (n, ', '.join(falta))}), 400
+        if litros <= 0:
+            return jsonify({'ok': False,
+                            'erro': 'produto %d: informe a quantidade' % n}), 400
+        # 0 e resposta valida: o Posto Novo Horizonte viaja com frete R$ 0,00.
+        # Por isso a checagem e "veio o campo?", nao "e maior que zero?".
+        if (it or {}).get('preco_litro') in (None, ''):
+            return jsonify({'ok': False,
+                            'erro': 'produto %d: informe o frete por litro' % n}), 400
+        linhas.append({
+            'fornecedor_id': fornecedor_id, 'produto_id': produto_id,
+            'base_id': _int(it, 'base_id') or None,
+            'quantidade_id': _int(it, 'quantidade_id') or None,
+            'litros': litros,
+            'preco_mercadoria': _f(it.get('preco_mercadoria')),
+            'preco_litro': _f(it.get('preco_litro')),
+            'preco_cte': it.get('preco_cte'),
+        })
 
     _ensure_tabela()
     conn = cursor = None
@@ -943,64 +1067,50 @@ def lancar():
         mot = cursor.fetchone()
         paga = bool((mot or {}).get('paga_comissao', 1))
 
-        valores = _calcular_frete(litros, preco_litro, preco_mercadoria, paga,
-                                  dados.get('preco_cte'))
+        pedido_id, numero, criou_pedido = _carga_do_dia(cursor, dia, vid, mid)
 
-        # 1) a carga: entra na que existe, ou nasce uma.
-        cursor.execute("""SELECT id, numero FROM pedidos
-                           WHERE data_pedido=%s AND veiculo_id=%s
-                             AND COALESCE(motorista_id,0)=%s LIMIT 1""",
-                       (dia, vid, mid))
-        ped = cursor.fetchone()
-        if ped:
-            pedido_id, numero = ped['id'], ped['numero']
-            criou_pedido = False
-        else:
-            cursor.execute("SELECT COALESCE(MAX(CAST(SUBSTRING(numero, 5) AS UNSIGNED)), 0) "
-                           "AS m FROM pedidos")
-            numero = 'PED-%05d' % (int((cursor.fetchone() or {}).get('m') or 0) + 1)
-            cursor.execute("""INSERT INTO pedidos (numero, data_pedido, status,
-                                     observacoes, motorista_id, veiculo_id)
-                                   VALUES (%s, %s, %s, %s, %s, %s)""",
-                           (numero, dia, 'Faturado', '', mid or None, vid))
-            pedido_id = cursor.lastrowid
-            criou_pedido = True
+        criados = []
+        for ln in linhas:
+            valores = _calcular_frete(ln['litros'], ln['preco_litro'],
+                                      ln['preco_mercadoria'], paga, ln['preco_cte'])
 
-        # 2) a mercadoria
-        cursor.execute("""
-            INSERT INTO pedidos_itens
-                   (pedido_id, cliente_id, produto_id, fornecedor_id, origem_id,
-                    base_id, quantidade, quantidade_id, tipo_quantidade,
-                    preco_unitario, total_nf)
-                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        """, (pedido_id, cliente_id, produto_id, fornecedor_id, origem_id,
-              base_id, litros, quantidade_id,
-              'lista' if quantidade_id else 'manual',
-              preco_mercadoria, valores['total_nf']))
-        item_id = cursor.lastrowid
+            # o transporte — mesmo caminhao, motorista e quantidade do item
+            cursor.execute("""
+                INSERT INTO fretes
+                       (data_frete, status, observacoes, clientes_id, fornecedores_id,
+                        produto_id, origem_id, destino_id, motoristas_id, veiculos_id,
+                        quantidade_id, quantidade_manual, preco_produto_unitario,
+                        preco_por_litro, total_nf_compra, valor_total_frete,
+                        comissao_motorista, valor_cte, comissao_cte, lucro,
+                        pedido_id, boleto_emitido)
+                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,0)
+            """, (dia, 'Pendente', dados.get('observacoes') or '', cliente_id,
+                  ln['fornecedor_id'], ln['produto_id'], origem_id, destino_id,
+                  mid or None, vid, ln['quantidade_id'], ln['litros'],
+                  ln['preco_mercadoria'], ln['preco_litro'], valores['total_nf'],
+                  valores['valor_total_frete'], valores['comissao_motorista'],
+                  valores['valor_cte'], valores['comissao_cte'], valores['lucro'],
+                  pedido_id))
+            frete_id = cursor.lastrowid
 
-        # 3) o transporte — mesmo caminhao, motorista e quantidade do item
-        cursor.execute("""
-            INSERT INTO fretes
-                   (data_frete, status, observacoes, clientes_id, fornecedores_id,
-                    produto_id, origem_id, destino_id, motoristas_id, veiculos_id,
-                    quantidade_id, quantidade_manual, preco_produto_unitario,
-                    preco_por_litro, total_nf_compra, valor_total_frete,
-                    comissao_motorista, valor_cte, comissao_cte, lucro,
-                    pedido_id, boleto_emitido)
-                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,0)
-        """, (dia, 'Pendente', dados.get('observacoes') or '', cliente_id,
-              fornecedor_id, produto_id, origem_id, destino_id, mid or None, vid,
-              quantidade_id, litros, preco_mercadoria, preco_litro,
-              valores['total_nf'], valores['valor_total_frete'],
-              valores['comissao_motorista'], valores['valor_cte'],
-              valores['comissao_cte'], valores['lucro'], pedido_id))
-        frete_id = cursor.lastrowid
+            # a mercadoria — ja apontando pro frete que nasceu com ela, pra que
+            # mover ou corrigir depois leve os dois juntos
+            cursor.execute("""
+                INSERT INTO pedidos_itens
+                       (pedido_id, cliente_id, produto_id, fornecedor_id, origem_id,
+                        base_id, quantidade, quantidade_id, tipo_quantidade,
+                        preco_unitario, total_nf, frete_id)
+                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (pedido_id, cliente_id, ln['produto_id'], ln['fornecedor_id'],
+                  origem_id, ln['base_id'], ln['litros'], ln['quantidade_id'],
+                  'lista' if ln['quantidade_id'] else 'manual',
+                  ln['preco_mercadoria'], valores['total_nf'], frete_id))
+            criados.append({'frete_id': frete_id, 'item_id': cursor.lastrowid,
+                            'litros': ln['litros'], 'valores': valores})
 
         conn.commit()
         return jsonify({'ok': True, 'pedido': numero, 'pedido_novo': criou_pedido,
-                        'item_id': item_id, 'frete_id': frete_id,
-                        'valores': valores})
+                        'criados': criados, 'quantos': len(criados)})
     except Exception as e:
         if conn:
             try:
@@ -1203,7 +1313,7 @@ def index():
            # todo cliente fica entre +2,7 e +3,0. Vem preenchido, da pra mudar.
            'vencimento_padrao': (hoje + timedelta(days=3)).isoformat(),
            'viagens': [], 'ociosos': [], 'dias': [], 'veiculos': [],
-           'cobrar': [], 'divergencias': [], 'erro': None,
+           'cobrar': [], 'divergencias': [], 'erro': None, 'destinos': [],
            'op': {'clientes': [], 'fornecedores': [], 'produtos': [],
                   'origens': [], 'bases': [], 'quantidades': [], 'historico': {}},
            'ontem': dia - timedelta(days=1), 'amanha': dia + timedelta(days=1),
@@ -1259,6 +1369,34 @@ def index():
                             _fechadas(cursor, dia),
                             _bordo_registrado(cursor, dia),
                             _candidatos_bordo(cursor, dia, vids))
+            # Para onde da pra mover um frete: as outras cargas do dia (que ja
+            # tem motorista definido) e os caminhoes parados, com o motorista
+            # do cadastro. Na correria ela lanca tudo num caminhao e divide
+            # depois — esse e o momento.
+            cursor.execute("""SELECT veiculo_id, id, nome FROM motoristas
+                               WHERE ativo = 1 AND veiculo_id IS NOT NULL""")
+            padrao = {r['veiculo_id']: r for r in cursor.fetchall()}
+            destinos, vistos = [], set()
+            for v in viagens:
+                ch = (v['veiculo_id'], v['motorista_id'] or 0)
+                if ch in vistos:
+                    continue
+                vistos.add(ch)
+                destinos.append({'veiculo_id': v['veiculo_id'],
+                                 'motorista_id': v['motorista_id'] or 0,
+                                 'label': '%s · %s' % (v['placa'], v['motorista'])})
+            for vc in veiculos:
+                m = padrao.get(vc['id'])
+                ch = (vc['id'], (m or {}).get('id') or 0)
+                if ch in vistos:
+                    continue
+                vistos.add(ch)
+                destinos.append({'veiculo_id': vc['id'],
+                                 'motorista_id': (m or {}).get('id') or 0,
+                                 'label': '%s · %s' % (vc['placa'],
+                                                       (m or {}).get('nome') or 'sem motorista')})
+            ctx['destinos'] = destinos
+
             cids = {fr['clientes_id'] for v in viagens for p in v['postos']
                     if p['estado'] == 'falta' for fr in p['fretes']
                     if fr.get('clientes_id')}
