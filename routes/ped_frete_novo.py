@@ -906,6 +906,25 @@ def _opcoes(cur):
     for q in quantidades:
         q['valor'] = _f(q['valor'])
 
+    # Quem nunca paga frete. O Posto Novo Horizonte e da casa: 625 dos 626
+    # fretes de 2026 estao em R$ 0,00 — e nenhum outro cliente tem um zerado
+    # sequer. Sem isso a tela deixava lancar cobranca pro proprio posto, que
+    # foi o que aconteceu no frete 2698.
+    # "Quase sempre zerado", nao "sempre": o Novo Horizonte tem 625 de 626 em
+    # R$ 0,00 — exigir zero absoluto deixava ele de fora por causa de um unico
+    # frete cobrado no ano. Os outros clientes tem 0% de zerados, entao 90% de
+    # corte separa os dois grupos sem chance de confusao.
+    cur.execute("""
+        SELECT f.clientes_id AS cid, COUNT(*) AS n,
+               SUM(f.valor_total_frete = 0) AS zerados
+          FROM fretes f
+         WHERE f.data_frete >= DATE_SUB(CURDATE(), INTERVAL 365 DAY)
+           AND f.clientes_id IS NOT NULL
+         GROUP BY f.clientes_id
+        HAVING n >= 10 AND zerados >= n * 0.9
+    """)
+    nao_cobram = {r['cid'] for r in cur.fetchall()}
+
     # Historico de preco por cliente: consulta, nunca sugestao preenchida.
     cur.execute("""
         SELECT f.clientes_id AS cid, o.nome AS origem,
@@ -929,6 +948,7 @@ def _opcoes(cur):
     js = {
         'clientes': [{'id': c['id'], 'nome': c['razao_social'],
                       'destino': c['destino'] or '',
+                      'nao_cobra': c['id'] in nao_cobram,
                       'hist': hist.get(c['id']) or []} for c in clientes],
         'fornecedores': [{'id': f['id'], 'nome': f['razao_social']} for f in fornecedores],
         'produtos': [{'id': p['id'], 'nome': p['nome']} for p in produtos],
