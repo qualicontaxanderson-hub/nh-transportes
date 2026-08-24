@@ -98,6 +98,7 @@ body > .container-fluid:has(#pfn){
     color:var(--blue-deep); white-space:nowrap; }
   #pfn .vg__c{ font-size:.7rem; color:var(--muted); font-weight:700;
     font-variant-numeric:tabular-nums; }
+  #pfn .vg__c--fal{ color:var(--ambar); font-weight:800; }
   #pfn .vg__seta{ flex:0 0 auto; color:var(--muted); transition:transform .15s; }
   #pfn .vg.aberta .vg__seta{ transform:rotate(90deg); }
 
@@ -570,7 +571,10 @@ body > .container-fluid:has(#pfn){
     </div>
 
     {% for v in viagens %}
-    <div class="vg aberta" id="vg{{ loop.index }}">
+    {#- Fechado por padrao: o dia com varios caminhoes virava uma parede de
+        texto, e o cabecalho ja diz placa, motorista, litros e quanto falta
+        cobrar. Quem quer o detalhe toca. -#}
+    <div class="vg" id="vg{{ loop.index }}">
       <div class="vg__h" onclick="pfnAbre(this)">
         <span class="vg__ic"><i class="bi bi-truck-front-fill"></i></span>
         <div class="vg__t">
@@ -599,6 +603,12 @@ body > .container-fluid:has(#pfn){
           {% if v.bordo_confirmado %}
           <div class="vg__c" style="color:var(--ambar)">inclui
             {{ fmtl.format(v.bordo_confirmado).replace(',', '.') }} L de antes</div>
+          {% endif %}
+          {#- Com o cartao fechado, e daqui que ela sabe se falta cobrar
+              alguma coisa nesse caminhao sem precisar abrir. -#}
+          {% if v.a_cobrar %}
+          <div class="vg__c vg__c--fal">falta cobrar
+            {{ v.a_cobrar | formatar_moeda }}</div>
           {% endif %}
         </div>
         <span class="vg__seta"><i class="bi bi-chevron-right"></i></span>
