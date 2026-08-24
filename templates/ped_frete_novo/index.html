@@ -489,6 +489,22 @@ body > .container-fluid:has(#pfn){
                       <span class="v nf__lu">—</span></div>
                   </div>
                 </div>
+              </template>
+
+              <button type="button" class="bd__b nf__mais" onclick="pfnMaisItem(this)">
+                ＋ outro produto para este posto</button>
+
+              <div class="nf__cabe"></div>
+
+              <div class="bd__rod">
+                <button type="button" class="bd__b bd__b--sim"
+                        onclick="pfnLancar(this)">
+                  <i class="bi bi-check-lg"></i> Adicionar à carga</button>
+                <button type="button" class="bd__b" onclick="pfnFechaNovo(this)">
+                  Cancelar</button>
+              </div>
+            </div>
+          </div>
 {% endmacro %}
 <div id="pfn">
 
@@ -734,22 +750,6 @@ body > .container-fluid:has(#pfn){
           {% if not v.fechada %}
           {{ form_carga(v.data, v.veiculo_id, v.motorista_id or 0, v.placa,
                         v.semana, v.capacidade, v.ocupado, v.motorista) }}
-              </template>
-
-              <button type="button" class="bd__b nf__mais" onclick="pfnMaisItem(this)">
-                ＋ outro produto para este posto</button>
-
-              <div class="nf__cabe"></div>
-
-              <div class="bd__rod">
-                <button type="button" class="bd__b bd__b--sim"
-                        onclick="pfnLancar(this)">
-                  <i class="bi bi-check-lg"></i> Adicionar à carga</button>
-                <button type="button" class="bd__b" onclick="pfnFechaNovo(this)">
-                  Cancelar</button>
-              </div>
-            </div>
-          </div>
           {% endif %}
 
           {% if v.bordo %}
