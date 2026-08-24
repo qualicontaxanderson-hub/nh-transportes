@@ -679,13 +679,22 @@ def _marcar_viagens_do_dia(viagens):
             v['viagem_de'] = 1
 
 
-def _dias_com_carga(cur, ate, quantos=14, veiculo_id=None):
-    """Ultimos dias que tiveram frete — a regua de datas do topo."""
+def _dias_com_carga(cur, dia, quantos=14, veiculo_id=None):
+    """A regua de datas do topo: dias que tiveram frete, e o dia em que se esta.
+
+    Vai ate `dia` + 7 de propósito. A carga de amanha e montada hoje, entao
+    parar a regua no dia de hoje deixava o amanha fora dela — e o botao `>`
+    levava pra um dia que a regua nao mostrava, o que parecia que a tela
+    tinha "voltado" pra outra data.
+
+    O dia visitado entra sempre, mesmo sem nenhum frete: e nele que ela vai
+    comecar a carga.
+    """
     sql = ("SELECT f.data_frete AS d, COUNT(*) AS n, "
            "COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor)),0) AS litros "
            "FROM fretes f LEFT JOIN quantidades q ON q.id = f.quantidade_id "
            "WHERE f.data_frete <= %s")
-    params = [ate]
+    params = [dia + timedelta(days=7)]
     if veiculo_id:
         sql += " AND f.veiculos_id = %s"
         params.append(veiculo_id)
@@ -695,8 +704,11 @@ def _dias_com_carga(cur, ate, quantos=14, veiculo_id=None):
     dias = cur.fetchall()
     for d in dias:
         d['litros'] = _f(d['litros'])
+    if not any(d['d'] == dia for d in dias):
+        dias.append({'d': dia, 'n': 0, 'litros': 0.0})
+    dias.sort(key=lambda d: d['d'])
+    for d in dias:
         d['semana'] = _semana(d['d'], curta=True)
-    dias.reverse()
     return dias
 
 
@@ -887,6 +899,8 @@ def _opcoes(cur):
     origens = cur.fetchall()
     cur.execute("SELECT id, nome FROM bases WHERE ativo = 1 ORDER BY nome")
     bases = cur.fetchall()
+    cur.execute("SELECT id, nome FROM motoristas WHERE ativo = 1 ORDER BY nome")
+    motoristas = cur.fetchall()
     cur.execute("SELECT id, valor, descricao FROM quantidades ORDER BY valor")
     quantidades = cur.fetchall()
     for q in quantidades:
@@ -919,6 +933,7 @@ def _opcoes(cur):
         'fornecedores': [{'id': f['id'], 'nome': f['razao_social']} for f in fornecedores],
         'produtos': [{'id': p['id'], 'nome': p['nome']} for p in produtos],
         'origens': [{'id': o['id'], 'nome': o['nome']} for o in origens],
+        'motoristas': [{'id': m['id'], 'nome': m['nome']} for m in motoristas],
         'bases': [{'id': b['id'], 'nome': b['nome']} for b in bases],
         'quantidades': [{'id': q['id'], 'litros': q['valor'],
                          'nome': '{:,.0f}'.format(q['valor']).replace(',', '.') + ' litros'}
@@ -926,7 +941,8 @@ def _opcoes(cur):
     }
     return {'clientes': clientes, 'fornecedores': fornecedores,
             'produtos': produtos, 'origens': origens, 'bases': bases,
-            'quantidades': quantidades, 'historico': hist, 'json': js}
+            'quantidades': quantidades, 'motoristas': motoristas,
+            'historico': hist, 'json': js}
 
 
 def _carga_do_dia(cursor, dia, vid, mid, criar=True):
@@ -1581,8 +1597,8 @@ def index():
            'viagens': [], 'ociosos': [], 'dias': [], 'veiculos': [],
            'cobrar': [], 'divergencias': [], 'erro': None, 'destinos': [],
            'op': {'clientes': [], 'fornecedores': [], 'produtos': [],
-                  'origens': [], 'bases': [], 'quantidades': [], 'historico': {},
-                  'json': {}},
+                  'origens': [], 'bases': [], 'quantidades': [],
+                  'motoristas': [], 'historico': {}, 'json': {}},
            'ontem': dia - timedelta(days=1), 'amanha': dia + timedelta(days=1),
            'totais': {'litros': 0.0, 'a_cobrar': 0.0, 'emitido': 0.0,
                       'viagens': 0, 'postos': 0}}
@@ -1627,7 +1643,7 @@ def index():
                 veiculo_id = ctx['veiculo_id'] = ordenados[0]['id']
 
             alvo = veiculo_id if modo == 'caminhao' else None
-            ctx['dias'] = _dias_com_carga(cursor, hoje, 14, alvo)
+            ctx['dias'] = _dias_com_carga(cursor, dia, 14, alvo)
             fretes = _fretes_do_periodo(cursor, dia, dia, alvo)
             viagens = _montar_viagens(fretes, cap)
             _marcar_viagens_do_dia(viagens)
@@ -1674,8 +1690,16 @@ def index():
             ctx['op'] = _opcoes(cursor)
 
             usados = {v['veiculo_id'] for v in viagens}
-            ctx['ociosos'] = [v for v in veiculos if v['id'] not in usados
-                              and (alvo is None or v['id'] == alvo)]
+            ociosos = [dict(v) for v in veiculos if v['id'] not in usados
+                       and (alvo is None or v['id'] == alvo)]
+            # O motorista do cadastro entra aqui pra que dê pra abrir a carga
+            # direto no caminhao parado — sem isso um dia vazio nao tinha por
+            # onde comecar, e lancar pra amanha era impossivel.
+            for oc in ociosos:
+                m = padrao.get(oc['id']) or {}
+                oc['motorista_id'] = m.get('id') or 0
+                oc['motorista'] = m.get('nome') or ''
+            ctx['ociosos'] = ociosos
 
             ctx['totais'] = {
                 'litros': sum(v['litros'] for v in viagens),

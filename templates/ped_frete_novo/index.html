@@ -406,6 +406,90 @@ body > .container-fluid:has(#pfn){
 {% endblock %}
 
 {% block content %}
+{% macro form_carga(dia, vid, mid, placa, sem, cap, ocup, mnome='') %}
+          <div class="novo">
+            <div class="novo__f" hidden
+                 data-data="{{ dia.isoformat() }}"
+                 data-veiculo="{{ vid }}"
+                 data-motorista="{{ mid }}"
+                 data-capacidade="{{ '%.0f' | format(cap or 0) }}"
+                 data-ocupado="{{ '%.0f' | format(ocup or 0) }}">
+              <div class="nf__t">Novo posto em {{ placa }} ·
+                {{ sem }} {{ dia.strftime('%d/%m') }}</div>
+              {#- O motorista vem do cadastro do caminhao, mas o do dia pode
+                  ser outro: sem poder trocar aqui, a carga nascia no nome
+                  errado e so dava pra consertar movendo depois. -#}
+              <div class="nf__g" style="margin-bottom:.5rem">
+                <div class="nf__c nf__c--w">Motorista
+                  <button type="button" class="esc esc--w {{ 'tem' if mid }} nf__mot"
+                          data-lista="motoristas" data-valor="{{ mid }}"
+                          onclick="pfnEscolher(this, 'Quem vai dirigir')">{{ mnome or '— escolha —' }}</button></div>
+              </div>
+
+              <div class="nf__g">
+                <div class="nf__c nf__c--w">Posto
+                  <button type="button" class="esc esc--w nf__cli"
+                          data-lista="clientes" data-valor=""
+                          onclick="pfnEscolher(this, 'Escolha o posto')">— escolha —</button></div>
+                <div class="nf__c">Destino
+                  <input class="nf__dest" readonly placeholder="—"></div>
+                <div class="nf__c">Origem
+                  <button type="button" class="esc nf__ori"
+                          data-lista="origens" data-valor=""
+                          onclick="pfnEscolher(this, 'Escolha a origem')">— escolha —</button></div>
+              </div>
+
+              {# Um posto, quantos produtos precisar — cada linha vira um frete. #}
+              <div class="nf__itens"></div>
+
+              <template class="nf__molde">
+                <div class="nf__i">
+                  <div class="nf__ih"><span class="nf__in">produto</span>
+                    <button type="button" class="nf__ix" onclick="pfnTiraItem(this)"
+                            title="tirar">✕</button></div>
+                  <div class="nf__g">
+                    <div class="nf__c nf__c--w">Fornecedor
+                      <button type="button" class="esc esc--w nf__forn"
+                              data-lista="fornecedores" data-valor=""
+                              onclick="pfnEscolher(this, 'Escolha a distribuidora')">— escolha —</button></div>
+                    <div class="nf__c">Produto
+                      <button type="button" class="esc nf__prod"
+                              data-lista="produtos" data-valor=""
+                              onclick="pfnEscolher(this, 'Escolha o produto')">— escolha —</button></div>
+                    <div class="nf__c">Base <span class="nf__op">opcional</span>
+                      <button type="button" class="esc nf__base"
+                              data-lista="bases" data-valor=""
+                              onclick="pfnEscolher(this, 'Escolha a base')">—</button></div>
+                    <div class="nf__c">Quantidade
+                      <button type="button" class="esc nf__qtd"
+                              data-lista="quantidades" data-valor="" data-litros=""
+                              onclick="pfnEscolher(this, 'Quantos litros')">— escolha —</button></div>
+                    <label class="nf__c">Preço da mercadoria
+                      <input type="text" inputmode="numeric" class="nf__pm nf__mask"
+                             placeholder="0,000" oninput="pfnMascara(this)"></label>
+                    <label class="nf__c nf__c--manual">Frete por litro
+                      <input type="text" inputmode="numeric" class="nf__pl nf__mask"
+                             placeholder="0,000" oninput="pfnMascara(this)">
+                      <span class="nf__hist nf__hpl"></span></label>
+                    <label class="nf__c">CT-e por litro
+                      <input type="text" inputmode="numeric" class="nf__pc nf__mask"
+                             placeholder="0,000" oninput="pfnMascara(this, true)">
+                      <span class="nf__hist nf__hcte">Acompanha o frete.</span></label>
+                  </div>
+                  <div class="nf__conta" hidden>
+                    <div class="cl"><span class="k">Mercadoria</span>
+                      <span class="v nf__nf">—</span></div>
+                    <div class="cl"><span class="k">Frete</span>
+                      <span class="v nf__vf">—</span></div>
+                    <div class="cl"><span class="k">Comissão · R$ 0,01/L</span>
+                      <span class="v nf__cm">—</span></div>
+                    <div class="cl"><span class="k">CT-e · comissão 8%</span>
+                      <span class="v nf__cc">—</span></div>
+                    <div class="cl cl--tot"><span class="k">Lucro</span>
+                      <span class="v nf__lu">—</span></div>
+                  </div>
+                </div>
+{% endmacro %}
 <div id="pfn">
 
   {% set fmtl = '{:,.0f}' %}
@@ -648,79 +732,8 @@ body > .container-fluid:has(#pfn){
           {% endif %}
 
           {% if not v.fechada %}
-          <div class="novo">
-            <div class="novo__f" hidden
-                 data-data="{{ v.data.isoformat() }}"
-                 data-veiculo="{{ v.veiculo_id }}"
-                 data-motorista="{{ v.motorista_id or 0 }}"
-                 data-capacidade="{{ '%.0f' | format(v.capacidade or 0) }}"
-                 data-ocupado="{{ '%.0f' | format(v.ocupado or 0) }}">
-              <div class="nf__t">Novo posto em {{ v.placa }} ·
-                {{ v.semana }} {{ v.data.strftime('%d/%m') }}</div>
-
-              <div class="nf__g">
-                <div class="nf__c nf__c--w">Posto
-                  <button type="button" class="esc esc--w nf__cli"
-                          data-lista="clientes" data-valor=""
-                          onclick="pfnEscolher(this, 'Escolha o posto')">— escolha —</button></div>
-                <div class="nf__c">Destino
-                  <input class="nf__dest" readonly placeholder="—"></div>
-                <div class="nf__c">Origem
-                  <button type="button" class="esc nf__ori"
-                          data-lista="origens" data-valor=""
-                          onclick="pfnEscolher(this, 'Escolha a origem')">— escolha —</button></div>
-              </div>
-
-              {# Um posto, quantos produtos precisar — cada linha vira um frete. #}
-              <div class="nf__itens"></div>
-
-              <template class="nf__molde">
-                <div class="nf__i">
-                  <div class="nf__ih"><span class="nf__in">produto</span>
-                    <button type="button" class="nf__ix" onclick="pfnTiraItem(this)"
-                            title="tirar">✕</button></div>
-                  <div class="nf__g">
-                    <div class="nf__c nf__c--w">Fornecedor
-                      <button type="button" class="esc esc--w nf__forn"
-                              data-lista="fornecedores" data-valor=""
-                              onclick="pfnEscolher(this, 'Escolha a distribuidora')">— escolha —</button></div>
-                    <div class="nf__c">Produto
-                      <button type="button" class="esc nf__prod"
-                              data-lista="produtos" data-valor=""
-                              onclick="pfnEscolher(this, 'Escolha o produto')">— escolha —</button></div>
-                    <div class="nf__c">Base <span class="nf__op">opcional</span>
-                      <button type="button" class="esc nf__base"
-                              data-lista="bases" data-valor=""
-                              onclick="pfnEscolher(this, 'Escolha a base')">—</button></div>
-                    <div class="nf__c">Quantidade
-                      <button type="button" class="esc nf__qtd"
-                              data-lista="quantidades" data-valor="" data-litros=""
-                              onclick="pfnEscolher(this, 'Quantos litros')">— escolha —</button></div>
-                    <label class="nf__c">Preço da mercadoria
-                      <input type="text" inputmode="numeric" class="nf__pm nf__mask"
-                             placeholder="0,000" oninput="pfnMascara(this)"></label>
-                    <label class="nf__c nf__c--manual">Frete por litro
-                      <input type="text" inputmode="numeric" class="nf__pl nf__mask"
-                             placeholder="0,000" oninput="pfnMascara(this)">
-                      <span class="nf__hist nf__hpl"></span></label>
-                    <label class="nf__c">CT-e por litro
-                      <input type="text" inputmode="numeric" class="nf__pc nf__mask"
-                             placeholder="0,000" oninput="pfnMascara(this, true)">
-                      <span class="nf__hist nf__hcte">Acompanha o frete.</span></label>
-                  </div>
-                  <div class="nf__conta" hidden>
-                    <div class="cl"><span class="k">Mercadoria</span>
-                      <span class="v nf__nf">—</span></div>
-                    <div class="cl"><span class="k">Frete</span>
-                      <span class="v nf__vf">—</span></div>
-                    <div class="cl"><span class="k">Comissão · R$ 0,01/L</span>
-                      <span class="v nf__cm">—</span></div>
-                    <div class="cl"><span class="k">CT-e · comissão 8%</span>
-                      <span class="v nf__cc">—</span></div>
-                    <div class="cl cl--tot"><span class="k">Lucro</span>
-                      <span class="v nf__lu">—</span></div>
-                  </div>
-                </div>
+          {{ form_carga(v.data, v.veiculo_id, v.motorista_id or 0, v.placa,
+                        v.semana, v.capacidade, v.ocupado, v.motorista) }}
               </template>
 
               <button type="button" class="bd__b nf__mais" onclick="pfnMaisItem(this)">
@@ -1001,15 +1014,19 @@ body > .container-fluid:has(#pfn){
       {%- if modo == 'caminhao' %} nesse caminhão{% endif %}.</div>
     {% endfor %}
 
+    {#- Caminhao parado tambem abre carga: sem isso nao havia como comecar a
+        carga de um dia vazio — e era justamente o caso de lancar amanha. -#}
     {% if ociosos and modo == 'dia' %}
     {% for v in ociosos %}
     <div class="vg vg--ocioso">
-      <div class="vg__h" style="cursor:default">
+      <div class="vg__h" onclick="pfnAbre(this)">
         <span class="vg__ic" style="background:#f2f5f8;color:#9aa5b1">
           <i class="bi bi-truck"></i></span>
         <div class="vg__t">
           <div class="vg__p">{{ v.placa }}</div>
-          <div class="vg__d">{{ v.caminhao }} · sem carga nesse dia</div>
+          <div class="vg__d">{{ v.caminhao }}
+            {%- if v.motorista %} · {{ v.motorista }}{% endif %} ·
+            sem carga nesse dia</div>
         </div>
         <div class="vg__n">
           <div class="vg__c">
@@ -1018,8 +1035,22 @@ body > .container-fluid:has(#pfn){
             {%- else -%}livre{%- endif -%}
           </div>
         </div>
+        <span class="vg__seta"><i class="bi bi-chevron-right"></i></span>
       </div>
       <div class="barra barra--vazia"></div>
+      <div class="vg__corpo">
+        <div class="vg__c2">
+          <div class="fechou fechou--abre">
+            <span><i class="bi bi-truck"></i> Nenhuma carga nesse caminhão
+              {{ semana }}, {{ dia.strftime('%d/%m') }}</span>
+            <button type="button" class="bd__b bd__b--novo novo__abre"
+                    onclick="pfnAbreNovo(this)">
+              <i class="bi bi-plus-lg"></i> Adicionar Carga</button>
+          </div>
+          {{ form_carga(dia, v.id, v.motorista_id or 0, v.placa, semana,
+                        v.capacidade, 0, v.motorista) }}
+        </div>
+      </div>
     </div>
     {% endfor %}
     {% endif %}
@@ -1818,6 +1849,7 @@ function pfnLancar(botao){
     return e.hasAttribute('data-valor') ? e.getAttribute('data-valor') : e.value;
   }
 
+  if (!val('.nf__mot')){ alert('Escolha o motorista.'); return; }
   if (!val('.nf__cli')){ alert('Escolha o posto.'); return; }
   if (!val('.nf__ori')){ alert('Escolha a origem.'); return; }
 
@@ -1857,7 +1889,7 @@ function pfnLancar(botao){
   pfnEnvia(botao, '/ped-frete-novo/lancar', {
     data: form.getAttribute('data-data'),
     veiculo_id: parseInt(form.getAttribute('data-veiculo'), 10),
-    motorista_id: parseInt(form.getAttribute('data-motorista'), 10),
+    motorista_id: parseInt(val('.nf__mot') || form.getAttribute('data-motorista'), 10),
     cliente_id: parseInt(val('.nf__cli'), 10),
     origem_id: parseInt(val('.nf__ori'), 10),
     itens: payload
