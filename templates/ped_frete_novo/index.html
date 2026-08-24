@@ -48,9 +48,6 @@ body > .container-fluid:has(#pfn){
     color:#fff; text-decoration:none; white-space:nowrap; }
   #pfn .fam a.on{ background:#fff; color:var(--blue-deep); }
 
-  #pfn .piloto{ display:flex; align-items:flex-start; gap:.45rem;
-    background:#efecf7; color:#4a3f75; border-radius:10px; padding:.5rem .7rem;
-    font-size:.78rem; line-height:1.5; margin-bottom:.7rem; font-weight:600; }
   #pfn .aviso{ display:flex; align-items:flex-start; gap:.45rem;
     background:#fdf0d6; color:var(--ambar); border-radius:10px;
     padding:.5rem .7rem; font-size:.79rem; line-height:1.5;
@@ -441,16 +438,7 @@ body > .container-fluid:has(#pfn){
     </div>
   </div>
 
-  <div class="piloto">
-    <i class="bi bi-eye"></i>
-    <span>Esta tela lê os mesmos pedidos e fretes de sempre e junta a carga
-    pela chave física <b>data + caminhão + motorista</b>. <b>Não altera frete
-    nem pedido.</b> Enquanto a carga está <i>montando</i>, “sobram 5.000 L”
-    quer dizer que ainda cabe; depois de <i>fechada</i>, quer dizer que saiu
-    com esse espaço vazio. A cobrança sai daqui pelo mesmo caminho da tela de
-    Fretes — um boleto pode juntar fretes de caminhões e dias diferentes.
-    As telas de Pedidos e Fretes continuam valendo.</span>
-  </div>
+  
 
   {% if erro %}
   <div class="aviso aviso--erro"><i class="bi bi-exclamation-octagon-fill"></i>
