@@ -241,6 +241,33 @@ body > .container-fluid:has(#pfn){
   }
   #pfn .nf__c{ display:block; font-size:.72rem; font-weight:800;
     color:var(--muted); }
+  /* Botao que abre a folha de escolha. Select nativo com centenas de postos e
+     impossivel de usar no celular — a gaveta do financeiro tem busca. */
+  #pfn .esc{ display:block; width:100%; margin-top:.2rem; text-align:left;
+    border:1px solid var(--borda); border-radius:9px; padding:.45rem .55rem;
+    font-size:.85rem; font-family:inherit; background:#fff; color:var(--muted);
+    font-weight:700; cursor:pointer; position:relative; padding-right:1.6rem;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #pfn .esc::after{ content:'⌄'; position:absolute; right:.55rem; top:.3rem;
+    color:var(--muted); font-size:.9rem; }
+  #pfn .esc.tem{ color:var(--ink); border-color:#a8c4de; background:#fbfdff; }
+  #pfn .esc--w{ white-space:normal; }
+  #pfn .gr__c{ display:flex; align-items:center; gap:.5rem; margin-bottom:.35rem; }
+  #pfn .gr__a{ margin-left:auto; border:0; background:none; color:var(--blue);
+    font-size:.76rem; font-weight:800; font-family:inherit; cursor:pointer; }
+  #pfn .dica{ font-size:.74rem; color:var(--muted); margin-top:.4rem; }
+  #pfn .zapl{ margin-bottom:.55rem; }
+  #pfn .bd__b--zap{ width:100%; background:#16a34a; border-color:#16a34a;
+    color:#fff; padding:.5rem .7rem; font-size:.8rem; }
+  #pfn .bd__b--zap:hover{ background:#15803d; }
+  #pfn .opc.on{ border-color:var(--blue); background:#eaf1f9; }
+  #pfn .opc small{ display:block; font-weight:600; font-size:.72rem;
+    color:var(--muted); margin-top:.1rem; }
+  #pfn .zap{ white-space:pre-wrap; font-size:.74rem; line-height:1.5;
+    background:#f7f9fc; border:1px solid var(--borda); border-radius:10px;
+    padding:.6rem .7rem; max-height:44vh; overflow-y:auto; margin:0;
+    font-family:inherit; color:var(--ink); }
+
   #pfn .nf__c select, #pfn .nf__c input{ display:block; width:100%; margin-top:.2rem;
     border:1px solid var(--borda); border-radius:9px; padding:.45rem .55rem;
     font-size:.85rem; font-family:inherit; background:#fff; color:var(--ink);
@@ -573,6 +600,12 @@ body > .container-fluid:has(#pfn){
 
       <div class="vg__corpo">
         <div class="vg__c2">
+          <script type="application/json" class="pfn-carga">{{ v.json | tojson }}</script>
+          <div class="zapl">
+            <button type="button" class="bd__b bd__b--zap" onclick="pfnZapAbre(this)">
+              <i class="bi bi-whatsapp"></i> Mandar pedido no WhatsApp</button>
+          </div>
+
 
           {% if v.fechada %}
           <div class="fechou">
@@ -618,25 +651,16 @@ body > .container-fluid:has(#pfn){
                 {{ v.semana }} {{ v.data.strftime('%d/%m') }}</div>
 
               <div class="nf__g">
-                <label class="nf__c nf__c--w">Posto
-                  <select class="nf__cli" onchange="pfnPosto(this)">
-                    <option value="">— escolha —</option>
-                    {% for cl in op.clientes %}
-                    <option value="{{ cl.id }}"
-                            data-destino="{{ cl.destino or '' }}"
-                            data-hist="{{ (op.historico.get(cl.id) or [])
-                              | map(attribute='preco') | join('|') }}"
-                            data-histori="{{ (op.historico.get(cl.id) or [])
-                              | map(attribute='origem') | join('|') }}">{{ cl.razao_social }}</option>
-                    {% endfor %}
-                  </select></label>
-                <label class="nf__c">Destino
-                  <input class="nf__dest" readonly placeholder="—"></label>
-                <label class="nf__c">Origem
-                  <select class="nf__ori">
-                    <option value="">— escolha —</option>
-                    {% for o in op.origens %}<option value="{{ o.id }}">{{ o.nome }}</option>{% endfor %}
-                  </select></label>
+                <div class="nf__c nf__c--w">Posto
+                  <button type="button" class="esc esc--w nf__cli"
+                          data-lista="clientes" data-valor=""
+                          onclick="pfnEscolher(this, 'Escolha o posto')">— escolha —</button></div>
+                <div class="nf__c">Destino
+                  <input class="nf__dest" readonly placeholder="—"></div>
+                <div class="nf__c">Origem
+                  <button type="button" class="esc nf__ori"
+                          data-lista="origens" data-valor=""
+                          onclick="pfnEscolher(this, 'Escolha a origem')">— escolha —</button></div>
               </div>
 
               {# Um posto, quantos produtos precisar — cada linha vira um frete. #}
@@ -648,29 +672,22 @@ body > .container-fluid:has(#pfn){
                     <button type="button" class="nf__ix" onclick="pfnTiraItem(this)"
                             title="tirar">✕</button></div>
                   <div class="nf__g">
-                    <label class="nf__c nf__c--w">Fornecedor
-                      <select class="nf__forn">
-                        <option value="">— escolha —</option>
-                        {% for fo in op.fornecedores %}<option value="{{ fo.id }}">{{ fo.razao_social }}</option>{% endfor %}
-                      </select></label>
-                    <label class="nf__c">Produto
-                      <select class="nf__prod">
-                        <option value="">— escolha —</option>
-                        {% for pr in op.produtos %}<option value="{{ pr.id }}">{{ pr.nome }}</option>{% endfor %}
-                      </select></label>
-                    <label class="nf__c">Base <span class="nf__op">opcional</span>
-                      <select class="nf__base">
-                        <option value="">—</option>
-                        {% for ba in op.bases %}<option value="{{ ba.id }}">{{ ba.nome }}</option>{% endfor %}
-                      </select></label>
-                    <label class="nf__c">Quantidade
-                      <select class="nf__qtd" onchange="pfnConta(this)">
-                        <option value="">— escolha —</option>
-                        {% for q in op.quantidades %}
-                        <option value="{{ q.id }}" data-litros="{{ '%.0f' | format(q.valor) }}">
-                          {{ '{:,.0f}'.format(q.valor).replace(',', '.') }} litros</option>
-                        {% endfor %}
-                      </select></label>
+                    <div class="nf__c nf__c--w">Fornecedor
+                      <button type="button" class="esc esc--w nf__forn"
+                              data-lista="fornecedores" data-valor=""
+                              onclick="pfnEscolher(this, 'Escolha a distribuidora')">— escolha —</button></div>
+                    <div class="nf__c">Produto
+                      <button type="button" class="esc nf__prod"
+                              data-lista="produtos" data-valor=""
+                              onclick="pfnEscolher(this, 'Escolha o produto')">— escolha —</button></div>
+                    <div class="nf__c">Base <span class="nf__op">opcional</span>
+                      <button type="button" class="esc nf__base"
+                              data-lista="bases" data-valor=""
+                              onclick="pfnEscolher(this, 'Escolha a base')">—</button></div>
+                    <div class="nf__c">Quantidade
+                      <button type="button" class="esc nf__qtd"
+                              data-lista="quantidades" data-valor="" data-litros=""
+                              onclick="pfnEscolher(this, 'Quantos litros')">— escolha —</button></div>
                     <label class="nf__c">Preço da mercadoria
                       <input type="text" inputmode="numeric" class="nf__pm nf__mask"
                              placeholder="0,000" oninput="pfnMascara(this)"></label>
@@ -942,7 +959,79 @@ body > .container-fluid:has(#pfn){
     {% endfor %}
     {% endif %}
 
-    {# Caixa que abre depois de emitir: PDF renomeado ou WhatsApp com o resumo.
+    {#- As listas saem UMA vez na pagina, nao uma por carga: repetidas em cada
+      cartao elas sozinhas dobravam o tamanho da tela. -#}
+  <script type="application/json" id="pfn-op">{{ op.json | tojson }}</script>
+
+  {# Folha de escolha — mesma gaveta do financeiro, com busca. #}
+  <div class="escuro" id="pfn-esc" onclick="pfnEscFecha()"></div>
+  <div class="gav" id="pfn-gav" role="dialog">
+    <div class="gav__pega"></div>
+    <div class="pnome" id="pfn-gav-t">Escolha</div>
+    <div class="gav__b">
+      <input type="search" class="campo" id="pfn-gav-q" placeholder="Buscar…"
+             oninput="pfnGavFiltra()" autocomplete="off">
+      <div class="opcs" id="pfn-gav-l"></div>
+    </div>
+    <div class="gav__f">
+      <button type="button" class="bt-g bt-g--ca" onclick="pfnEscFecha()">Cancelar</button>
+    </div>
+  </div>
+
+  {# Pedido no WhatsApp, em passos: escopo → quem → produtos → texto. #}
+  <div class="gav" id="pfn-zap" role="dialog">
+    <div class="gav__pega"></div>
+    <div class="passos" id="pfn-zap-passos">
+      <button type="button" class="passo on" onclick="pfnZapIr(1)"><i></i><span>Escopo</span></button>
+      <button type="button" class="passo" onclick="pfnZapIr(2)"><i></i><span>Quem</span></button>
+      <button type="button" class="passo" onclick="pfnZapIr(3)"><i></i><span>Produtos</span></button>
+      <button type="button" class="passo" onclick="pfnZapIr(4)"><i></i><span>Texto</span></button>
+    </div>
+    <div class="pnome">Passo <span id="pfn-zap-n">1</span> de 4 —
+      <b id="pfn-zap-t">Escopo</b></div>
+    <div class="gav__b">
+      <div class="etapa" id="pfn-zap-e1">
+        <div class="gr">
+          <span class="gr__t">O que mandar</span>
+          <div class="opcs">
+            <label class="opc" onclick="pfnZapEscopo('integral')">
+              <span>Pedido integral<small>tudo da carga, agrupado por distribuidora</small></span></label>
+            <label class="opc" onclick="pfnZapEscopo('cliente')">
+              <span>Por posto<small>escolhe um ou mais postos</small></span></label>
+            <label class="opc" onclick="pfnZapEscopo('fornecedor')">
+              <span>Por distribuidora<small>escolhe uma ou mais distribuidoras</small></span></label>
+          </div>
+        </div>
+      </div>
+      <div class="etapa" id="pfn-zap-e2" hidden>
+        <div class="gr">
+          <div class="gr__c"><span class="gr__t" id="pfn-zap-qt">Quem</span>
+            <button type="button" class="gr__a" onclick="pfnZapTodas('pfn-zap-quem')">marcar todas</button></div>
+          <div class="opcs" id="pfn-zap-quem"></div>
+          <div class="dica">Sem marcar nenhuma, vêm todas.</div>
+        </div>
+      </div>
+      <div class="etapa" id="pfn-zap-e3" hidden>
+        <div class="gr">
+          <div class="gr__c"><span class="gr__t">Produtos</span>
+            <button type="button" class="gr__a" onclick="pfnZapTodas('pfn-zap-prod')">marcar todas</button></div>
+          <div class="opcs" id="pfn-zap-prod"></div>
+          <div class="dica">Sem marcar nenhum, vêm todos.</div>
+        </div>
+      </div>
+      <div class="etapa" id="pfn-zap-e4" hidden>
+        <pre class="zap" id="pfn-zap-txt"></pre>
+      </div>
+    </div>
+    <div class="gav__f">
+      <button type="button" class="bt-g bt-g--ca" onclick="pfnZapFecha()">Cancelar</button>
+      <button type="button" class="bt-g" id="pfn-zap-volta" onclick="pfnZapIr(0)" hidden>Voltar</button>
+      <button type="button" class="bt-g bt-g--ok" id="pfn-zap-ok"
+              onclick="pfnZapAvanca()">Continuar</button>
+    </div>
+  </div>
+
+  {# Caixa que abre depois de emitir: PDF renomeado ou WhatsApp com o resumo.
      Mesmo caminho da tela de Fretes, com o resumo dos fretes que faltava lá. #}
   <div class="cx" id="pfn-share" hidden>
     <div class="cx__c">
@@ -1117,6 +1206,227 @@ var PFN_BRL = {style:'currency', currency:'BRL'};
 function pfnMoeda(v){ return (v || 0).toLocaleString('pt-BR', PFN_BRL); }
 function pfnLitros(v){ return (v || 0).toLocaleString('pt-BR') + ' L'; }
 
+// ─── pedido no WhatsApp ─────────────────────────────────────────────────
+// Mesmo texto que a tela antiga de Pedidos manda, com um filtro em passos por
+// cima: integral, por posto ou por distribuidora. O formato é o que o pessoal
+// já está acostumado a receber — não invento outro.
+var PFN_ZAP = {carga: null, escopo: 'integral', passo: 1};
+
+function pfnZapAbre(botao){
+  var corpo = botao.closest('.vg__c2');
+  var tag = corpo ? corpo.querySelector('script.pfn-carga') : null;
+  try { PFN_ZAP.carga = JSON.parse(tag.textContent); }
+  catch(e){ alert('Não consegui ler a carga.'); return; }
+  if (!PFN_ZAP.carga.itens.length){ alert('Essa carga está vazia.'); return; }
+  PFN_ZAP.escopo = 'integral';
+  pfnZapIr(1);
+  document.getElementById('pfn-esc').classList.add('on');
+  document.getElementById('pfn-zap').classList.add('on');
+}
+
+function pfnZapFecha(){
+  document.getElementById('pfn-esc').classList.remove('on');
+  document.getElementById('pfn-zap').classList.remove('on');
+}
+
+function pfnZapEscopo(qual){
+  PFN_ZAP.escopo = qual;
+  var opcs = document.querySelectorAll('#pfn-zap-e1 .opc');
+  for (var i = 0; i < opcs.length; i++) opcs[i].classList.remove('on');
+  var idx = qual === 'integral' ? 0 : (qual === 'cliente' ? 1 : 2);
+  opcs[idx].classList.add('on');
+}
+
+function pfnZapIr(n){
+  if (n === 0) n = Math.max(1, PFN_ZAP.passo - (PFN_ZAP.escopo === 'integral' && PFN_ZAP.passo === 4 ? 3 : 1));
+  PFN_ZAP.passo = n;
+  var nomes = ['', 'Escopo', PFN_ZAP.escopo === 'fornecedor' ? 'Distribuidora' : 'Posto',
+               'Produtos', 'Texto'];
+  for (var i = 1; i <= 4; i++){
+    document.getElementById('pfn-zap-e' + i).hidden = (i !== n);
+  }
+  var ps = document.querySelectorAll('#pfn-zap-passos .passo');
+  for (var j = 0; j < ps.length; j++) ps[j].classList.toggle('on', j === n - 1);
+  document.getElementById('pfn-zap-n').textContent = n;
+  document.getElementById('pfn-zap-t').textContent = nomes[n];
+  document.getElementById('pfn-zap-volta').hidden = (n === 1);
+  document.getElementById('pfn-zap-ok').textContent = (n === 4) ? 'Enviar' : 'Continuar';
+  if (n === 2) pfnZapQuem();
+  if (n === 3) pfnZapProdutos();
+  if (n === 4) pfnZapTexto();
+}
+
+function pfnZapLista(alvo, valores, rotulo){
+  var html = '';
+  for (var i = 0; i < valores.length; i++){
+    html += '<label class="opc"><input type="checkbox" value="' +
+            String(valores[i]).replace(/"/g, '&quot;') + '"><span>' +
+            valores[i] + '</span></label>';
+  }
+  document.getElementById(alvo).innerHTML = html ||
+    '<div class="dica">Nada nesta carga.</div>';
+}
+
+function pfnZapQuem(){
+  var campo = PFN_ZAP.escopo === 'fornecedor' ? 'fornecedor' : 'cliente';
+  document.getElementById('pfn-zap-qt').textContent =
+    campo === 'fornecedor' ? 'Distribuidora' : 'Posto';
+  var vistos = [], it = PFN_ZAP.carga.itens;
+  for (var i = 0; i < it.length; i++){
+    if (vistos.indexOf(it[i][campo]) < 0) vistos.push(it[i][campo]);
+  }
+  pfnZapLista('pfn-zap-quem', vistos.sort());
+}
+
+function pfnZapProdutos(){
+  var vistos = [], it = pfnZapFiltrados(true);
+  for (var i = 0; i < it.length; i++){
+    if (vistos.indexOf(it[i].produto) < 0) vistos.push(it[i].produto);
+  }
+  pfnZapLista('pfn-zap-prod', vistos.sort());
+}
+
+function pfnZapMarcados(id){
+  var cks = document.querySelectorAll('#' + id + ' input:checked');
+  var out = [];
+  for (var i = 0; i < cks.length; i++) out.push(cks[i].value);
+  return out;
+}
+
+function pfnZapTodas(id){
+  var cks = document.querySelectorAll('#' + id + ' input');
+  var todas = true;
+  for (var i = 0; i < cks.length; i++){ if (!cks[i].checked) todas = false; }
+  for (var j = 0; j < cks.length; j++) cks[j].checked = !todas;
+}
+
+// Sem marcar nada, vêm todos — é a mesma regra dos filtros do financeiro.
+function pfnZapFiltrados(soQuem){
+  var it = PFN_ZAP.carga.itens.slice();
+  if (PFN_ZAP.escopo !== 'integral'){
+    var campo = PFN_ZAP.escopo === 'fornecedor' ? 'fornecedor' : 'cliente';
+    var quem = pfnZapMarcados('pfn-zap-quem');
+    if (quem.length) it = it.filter(function(x){ return quem.indexOf(x[campo]) >= 0; });
+  }
+  if (soQuem) return it;
+  var prods = pfnZapMarcados('pfn-zap-prod');
+  if (prods.length) it = it.filter(function(x){ return prods.indexOf(x.produto) >= 0; });
+  return it;
+}
+
+function pfnN(v, casas){
+  return (v || 0).toLocaleString('pt-BR', {minimumFractionDigits: casas || 2,
+                                           maximumFractionDigits: casas || 2});
+}
+
+function pfnZapTexto(){
+  var c = PFN_ZAP.carga, itens = pfnZapFiltrados(false);
+  var t = '*PEDIDO ' + c.pedido + '*\n' + 'Data: ' + c.data + '\n' +
+          'Motorista: ' + c.motorista + '\n\n';
+  var porForn = {}, ordem = [];
+  for (var i = 0; i < itens.length; i++){
+    var f = itens[i].fornecedor;
+    if (!porForn[f]){ porForn[f] = []; ordem.push(f); }
+    porForn[f].push(itens[i]);
+  }
+  var totQ = 0, totV = 0;
+  for (var k = 0; k < ordem.length; k++){
+    var nome = ordem[k], lst = porForn[nome], sq = 0, sv = 0;
+    t += '*' + nome + '*\n━━━━━━━━━━━━━━━━━━\n';
+    for (var j = 0; j < lst.length; j++){
+      var x = lst[j];
+      t += '📍 *' + x.cliente + '*\n';
+      if (x.cnpj) t += '   CNPJ: ' + x.cnpj + '\n';
+      t += '   Produto: ' + x.produto + '\n';
+      if (x.origem) t += '   Origem: ' + x.origem + '\n';
+      if (x.base) t += '   Base: ' + x.base + '\n';
+      t += '   Qtd: ' + pfnN(x.qtd) + ' | R$ ' + pfnN(x.preco, 3) + '\n';
+      t += '   Total: R$ ' + pfnN(x.total) + '\n\n';
+      sq += x.qtd; sv += x.total;
+    }
+    t += '*Subtotal ' + nome + ':*\nQtd: ' + pfnN(sq) + ' | Valor: R$ ' + pfnN(sv) + '\n\n';
+    totQ += sq; totV += sv;
+  }
+  t += '━━━━━━━━━━━━━━━━━━\n*TOTAL GERAL:*\nQuantidade: ' + pfnN(totQ) +
+       ' m³\nValor: R$ ' + pfnN(totV);
+  document.getElementById('pfn-zap-txt').textContent = t;
+  PFN_ZAP.texto = t;
+}
+
+function pfnZapAvanca(){
+  var p = PFN_ZAP.passo;
+  if (p === 1){ pfnZapIr(PFN_ZAP.escopo === 'integral' ? 4 : 2); return; }
+  if (p === 2){ pfnZapIr(3); return; }
+  if (p === 3){ pfnZapIr(4); return; }
+  window.open('https://wa.me/?text=' + encodeURIComponent(PFN_ZAP.texto || ''), '_blank');
+  pfnZapFecha();
+}
+
+// ─── folha de escolha ───────────────────────────────────────────────────
+// Select nativo com 60 postos é intragável no celular. Esta é a mesma gaveta
+// do financeiro/recebimentos, com busca — as listas vêm em JSON uma vez só.
+var PFN_OP = {};
+try { PFN_OP = JSON.parse(document.getElementById('pfn-op').textContent || '{}'); }
+catch(e){ console.error('listas:', e); }
+
+var pfnAlvo = null;
+
+function pfnEscolher(botao, titulo){
+  pfnAlvo = botao;
+  document.getElementById('pfn-gav-t').textContent = titulo;
+  var q = document.getElementById('pfn-gav-q');
+  q.value = '';
+  pfnGavPinta(botao.getAttribute('data-lista'), '');
+  document.getElementById('pfn-esc').classList.add('on');
+  document.getElementById('pfn-gav').classList.add('on');
+  setTimeout(function(){ q.focus(); }, 60);
+}
+
+function pfnGavPinta(lista, busca){
+  var itens = PFN_OP[lista] || [];
+  var alvo = document.getElementById('pfn-gav-l');
+  var b = (busca || '').toLowerCase();
+  var html = '';
+  var atual = pfnAlvo ? pfnAlvo.getAttribute('data-valor') : '';
+  if (lista === 'bases'){
+    html += '<label class="opc" onclick="pfnGavPega(\'\',\'—\',\'\')">' +
+            '<span>— sem base —</span></label>';
+  }
+  for (var i = 0; i < itens.length; i++){
+    var it = itens[i];
+    if (b && it.nome.toLowerCase().indexOf(b) < 0) continue;
+    var lit = it.litros != null ? it.litros : '';
+    html += '<label class="opc' + (String(it.id) === atual ? ' on' : '') +
+            '" onclick="pfnGavPega(' + it.id + ',' +
+            JSON.stringify(it.nome).replace(/"/g, '&quot;') + ',' +
+            JSON.stringify(String(lit)) + ')"><span>' + it.nome + '</span></label>';
+  }
+  alvo.innerHTML = html || '<div class="dica">Nada encontrado.</div>';
+}
+
+function pfnGavFiltra(){
+  if (!pfnAlvo) return;
+  pfnGavPinta(pfnAlvo.getAttribute('data-lista'),
+              document.getElementById('pfn-gav-q').value);
+}
+
+function pfnGavPega(id, nome, litros){
+  if (!pfnAlvo) return;
+  pfnAlvo.setAttribute('data-valor', id === '' ? '' : String(id));
+  if (litros !== '') pfnAlvo.setAttribute('data-litros', litros);
+  pfnAlvo.textContent = nome;
+  pfnAlvo.classList.toggle('tem', id !== '');
+  var campo = pfnAlvo;
+  pfnEscFecha();
+  if (campo.classList.contains('nf__cli')) pfnPosto(campo);
+  else pfnConta(campo);
+}
+
+function pfnEscFecha(){
+  document.getElementById('pfn-esc').classList.remove('on');
+  document.getElementById('pfn-gav').classList.remove('on');
+}
+
 // Mascara igual a do lançamento de frete: só dígitos, divididos por 1000.
 // Digitar 90 vira 0,090 e 125 vira 0,125 — tem preço com 3 casas, então o
 // campo tem que aceitar os dois sem a pessoa pensar em vírgula.
@@ -1188,31 +1498,37 @@ function pfnNumeraItens(form){
 function pfnPosto(sel){
   var form = sel.closest('.novo__f');
   if (!form) return;
-  var op = sel.options[sel.selectedIndex];
   var dest = form.querySelector('.nf__dest');
-  if (dest) dest.value = (op && op.getAttribute('data-destino')) || '';
+  if (dest) dest.value = pfnCliente(sel).destino || '';
 
   var itens = form.querySelectorAll('.nf__i');
   for (var k = 0; k < itens.length; k++) pfnDicaPreco(form, itens[k]);
 }
 
+function pfnCliente(botao){
+  var id = botao ? botao.getAttribute('data-valor') : '';
+  var lista = PFN_OP.clientes || [];
+  for (var i = 0; i < lista.length; i++){
+    if (String(lista[i].id) === String(id)) return lista[i];
+  }
+  return {};
+}
+
 // Histórico de preço do posto: consulta ao lado do campo, nunca preenchendo.
 function pfnDicaPreco(form, item){
-  var sel = form.querySelector('.nf__cli');
-  var op = sel ? sel.options[sel.selectedIndex] : null;
+  var cli = pfnCliente(form.querySelector('.nf__cli'));
   var alvo = item ? item.querySelector('.nf__hpl') : null;
   if (!alvo) return;
-  var precos = ((op && op.getAttribute('data-hist')) || '').split('|').filter(Boolean);
-  var origens = ((op && op.getAttribute('data-histori')) || '').split('|');
-  if (!precos.length){
-    alvo.textContent = op && op.value
+  var h = cli.hist || [];
+  if (!h.length){
+    alvo.textContent = cli.id
       ? 'Sem frete cobrado desse posto nos últimos 120 dias.' : '';
     return;
   }
   var partes = [];
-  for (var i = 0; i < precos.length; i++){
-    partes.push('<b>' + parseFloat(precos[i]).toFixed(3).replace('.', ',') + '</b> ' +
-                (origens[i] || ''));
+  for (var i = 0; i < h.length; i++){
+    partes.push('<b>' + parseFloat(h[i].preco).toFixed(3).replace('.', ',') +
+                '</b> ' + (h[i].origem || ''));
   }
   alvo.innerHTML = 'Já cobrado: ' + partes.join(' · ');
 }
@@ -1228,8 +1544,7 @@ function pfnConta(el){
 
 function pfnContaItem(item){
   var qtd = item.querySelector('.nf__qtd');
-  var opQ = qtd ? qtd.options[qtd.selectedIndex] : null;
-  var litros = opQ ? parseFloat(opQ.getAttribute('data-litros')) || 0 : 0;
+  var litros = qtd ? parseFloat(qtd.getAttribute('data-litros')) || 0 : 0;
   var pm = pfnNum(item.querySelector('.nf__pm')) || 0;
   var plCampo = item.querySelector('.nf__pl');
   var temPl = plCampo && plCampo.value !== '';
@@ -1278,8 +1593,7 @@ function pfnCabe(form){
   var total = 0;
   for (var i = 0; i < itens.length; i++){
     var q = itens[i].querySelector('.nf__qtd');
-    var o = q ? q.options[q.selectedIndex] : null;
-    total += o ? (parseFloat(o.getAttribute('data-litros')) || 0) : 0;
+    total += q ? (parseFloat(q.getAttribute('data-litros')) || 0) : 0;
   }
   if (!cap || !total){ aviso.textContent = ''; return; }
   var livre = cap - ocup;
@@ -1322,7 +1636,11 @@ function pfnMover(botao, freteId){
 function pfnLancar(botao){
   var form = botao.closest('.novo__f');
   if (!form) return;
-  function val(cls){ var e = form.querySelector(cls); return e ? e.value : ''; }
+  function val(cls){
+    var e = form.querySelector(cls);
+    if (!e) return '';
+    return e.hasAttribute('data-valor') ? e.getAttribute('data-valor') : e.value;
+  }
 
   if (!val('.nf__cli')){ alert('Escolha o posto.'); return; }
   if (!val('.nf__ori')){ alert('Escolha a origem.'); return; }
@@ -1331,10 +1649,13 @@ function pfnLancar(botao){
   var payload = [];
   for (var i = 0; i < itens.length; i++){
     var it = itens[i];
-    function v(cls){ var e = it.querySelector(cls); return e ? e.value : ''; }
+    function v(cls){
+      var e = it.querySelector(cls);
+      if (!e) return '';
+      return e.hasAttribute('data-valor') ? e.getAttribute('data-valor') : e.value;
+    }
     var q = it.querySelector('.nf__qtd');
-    var o = q ? q.options[q.selectedIndex] : null;
-    var litros = o ? parseFloat(o.getAttribute('data-litros')) || 0 : 0;
+    var litros = q ? parseFloat(q.getAttribute('data-litros')) || 0 : 0;
     var rot = itens.length > 1 ? ('Produto ' + (i + 1) + ': ') : '';
     if (!v('.nf__forn')){ alert(rot + 'escolha o fornecedor.'); return; }
     if (!v('.nf__prod')){ alert(rot + 'escolha o produto.'); return; }

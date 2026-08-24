@@ -445,6 +445,8 @@ def _fretes_do_periodo(cur, ini, fim, veiculo_id=None):
                m.nome AS motorista,
                p.numero AS pedido,
                fo.razao_social AS fornecedor,
+               cl.cnpj AS cnpj, o.nome AS origem, ba.nome AS base,
+               f.preco_produto_unitario AS preco_unit, f.total_nf_compra AS total_nf,
                COALESCE(cob.n, 0) AS cob_n, COALESCE(cob.pago, 0) AS cob_pago
           FROM fretes f
           LEFT JOIN quantidades q ON q.id = f.quantidade_id
@@ -454,6 +456,9 @@ def _fretes_do_periodo(cur, ini, fim, veiculo_id=None):
           LEFT JOIN motoristas m  ON m.id  = f.motoristas_id
           LEFT JOIN pedidos p     ON p.id  = f.pedido_id
           LEFT JOIN fornecedores fo ON fo.id = f.fornecedores_id
+          LEFT JOIN origens o     ON o.id  = f.origem_id
+          LEFT JOIN pedidos_itens pi ON pi.frete_id = f.id
+          LEFT JOIN bases ba      ON ba.id = pi.base_id
           """ + _COBERTURA + """
          WHERE f.data_frete >= %s AND f.data_frete <= %s
     """
@@ -559,6 +564,8 @@ def _montar_viagens(fretes, cap):
         v['tem_espaco'] = bool(v['capacidade'] and v['livre'] > 0.01)
         v['candidatos'] = []
         v['semana'] = _semana(v['data'])
+        v['json'] = {'pedido': '—', 'data': '', 'motorista': '', 'placa': '',
+                     'itens': []}
         saida.append(v)
 
     saida.sort(key=lambda v: (v['data'], -v['litros'], v['placa']))
@@ -615,6 +622,26 @@ def _aplicar_estado(viagens, fechadas, bordo, candidatos):
         v['candidatos'] = list(candidatos.get(v['veiculo_id']) or []) \
             if not v['fechada'] else []
         v['semana'] = _semana(v['data'])
+        # O que o texto do WhatsApp precisa. Mesmo conteudo que a tela antiga
+        # de Pedidos manda hoje — agrupado por distribuidora, com CNPJ, origem,
+        # base, quantidade, preco e total.
+        v['json'] = {
+            'pedido': ', '.join(v['pedidos']) or '—',
+            'data': v['data'].strftime('%d/%m/%Y'),
+            'motorista': v['motorista'],
+            'placa': v['placa'],
+            'itens': [{
+                'cliente': fr['cliente'] or '—',
+                'cnpj': fr.get('cnpj') or '',
+                'fornecedor': fr.get('fornecedor') or '—',
+                'produto': fr['produto'] or '—',
+                'origem': fr.get('origem') or '',
+                'base': fr.get('base') or '',
+                'qtd': fr['litros'],
+                'preco': _f(fr.get('preco_unit')),
+                'total': _f(fr.get('total_nf')),
+            } for fr in v['fretes']],
+        }
 
 
 def _marcar_viagens_do_dia(viagens):
@@ -868,9 +895,24 @@ def _opcoes(cur):
         if len(linhas) < 4:
             linhas.append({'preco': _f(r['preco']), 'origem': r['origem'] or '—',
                            'n': int(r['n'])})
+    # Vai pra tela como JSON unico, nao como <option> repetido em cada cartao
+    # de carga: no celular a lista de postos sozinha ja e enorme, e repetida
+    # por caminhao ela dobrava o tamanho da pagina.
+    js = {
+        'clientes': [{'id': c['id'], 'nome': c['razao_social'],
+                      'destino': c['destino'] or '',
+                      'hist': hist.get(c['id']) or []} for c in clientes],
+        'fornecedores': [{'id': f['id'], 'nome': f['razao_social']} for f in fornecedores],
+        'produtos': [{'id': p['id'], 'nome': p['nome']} for p in produtos],
+        'origens': [{'id': o['id'], 'nome': o['nome']} for o in origens],
+        'bases': [{'id': b['id'], 'nome': b['nome']} for b in bases],
+        'quantidades': [{'id': q['id'], 'litros': q['valor'],
+                         'nome': '{:,.0f}'.format(q['valor']).replace(',', '.') + ' litros'}
+                        for q in quantidades],
+    }
     return {'clientes': clientes, 'fornecedores': fornecedores,
             'produtos': produtos, 'origens': origens, 'bases': bases,
-            'quantidades': quantidades, 'historico': hist}
+            'quantidades': quantidades, 'historico': hist, 'json': js}
 
 
 def _carga_do_dia(cursor, dia, vid, mid, criar=True):
@@ -1315,7 +1357,8 @@ def index():
            'viagens': [], 'ociosos': [], 'dias': [], 'veiculos': [],
            'cobrar': [], 'divergencias': [], 'erro': None, 'destinos': [],
            'op': {'clientes': [], 'fornecedores': [], 'produtos': [],
-                  'origens': [], 'bases': [], 'quantidades': [], 'historico': {}},
+                  'origens': [], 'bases': [], 'quantidades': [], 'historico': {},
+                  'json': {}},
            'ontem': dia - timedelta(days=1), 'amanha': dia + timedelta(days=1),
            'totais': {'litros': 0.0, 'a_cobrar': 0.0, 'emitido': 0.0,
                       'viagens': 0, 'postos': 0}}
