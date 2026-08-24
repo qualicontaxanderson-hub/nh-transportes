@@ -236,11 +236,41 @@ body > .container-fluid:has(#pfn){
   #pfn .nf__cabe--ok{ color:#1c6b34; }
   #pfn .nf__cabe--al{ color:var(--ambar); }
 
+  /* caixa de compartilhar, depois de emitir */
+  #pfn .cx{ position:fixed; inset:0; background:rgba(10,20,35,.55); z-index:1080;
+    display:flex; align-items:center; justify-content:center; padding:1rem; }
+  #pfn .cx[hidden]{ display:none; }
+  #pfn .cx__c{ background:#fff; border-radius:15px; width:100%; max-width:430px;
+    max-height:92vh; overflow-y:auto; padding:1rem;
+    box-shadow:0 18px 50px rgba(10,20,35,.35); }
+  #pfn .cx__t{ font-size:1.02rem; font-weight:800; color:#1c6b34;
+    margin-bottom:.25rem; }
+  #pfn .cx__d{ font-size:.83rem; color:var(--muted); font-weight:700;
+    line-height:1.5; margin-bottom:.8rem; }
+  #pfn .cx__b{ display:flex; gap:.45rem; flex-wrap:wrap; margin-bottom:.7rem; }
+  #pfn .cx__b button{ flex:1 1 auto; border:0; border-radius:10px;
+    padding:.6rem .8rem; font-size:.85rem; font-weight:800; font-family:inherit;
+    cursor:pointer; color:#fff; display:inline-flex; gap:.35rem;
+    align-items:center; justify-content:center; }
+  #pfn .cx__wa{ background:#16a34a; }
+  #pfn .cx__pdf{ background:var(--blue); }
+  #pfn .cx__ver{ background:#5c6bc0; }
+  #pfn .cx__copy{ background:#6b7684; }
+  #pfn .cx__fim{ background:#f2f5f8 !important; color:var(--muted) !important;
+    border:1px solid var(--borda) !important; }
+  #pfn .cx__msg{ width:100%; border:1px solid var(--borda); border-radius:10px;
+    padding:.55rem .65rem; font-size:.76rem; font-family:inherit;
+    line-height:1.5; color:var(--ink); background:#f7f9fc; resize:vertical;
+    margin-bottom:.7rem; }
+
   /* faixa de estado da carga */
   #pfn .fechou{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
     background:#e4f4e8; color:#1c6b34; border-radius:11px; padding:.5rem .65rem;
     font-size:.78rem; margin-bottom:.55rem; line-height:1.45; }
-  #pfn .fechou > span{ flex:1; min-width:0; }
+  /* No celular o texto ocupa a linha toda e os botoes descem — espremido numa
+     coluna estreita ele quebrava em quatro linhas. */
+  #pfn .fechou > span{ flex:1 1 100%; min-width:0; }
+  @media (min-width:560px){ #pfn .fechou > span{ flex:1 1 auto; } }
   #pfn .fechou--abre{ background:#f2f5f8; color:var(--muted); }
   #pfn .selo--fech{ background:#e4f4e8; color:#1c6b34; }
   #pfn .selo--abre{ background:#f2f5f8; color:var(--muted); }
@@ -392,7 +422,10 @@ body > .container-fluid:has(#pfn){
           {% for f in c.fretes %}
           <label class="ef ef--daqui">
             <input type="checkbox" class="ef__ck" value="{{ f.id }}"
-                   data-valor="{{ '%.2f' | format(f.valor) }}" checked
+                   data-valor="{{ '%.2f' | format(f.valor) }}"
+                   data-dia="{{ f.data_frete.strftime('%d/%m') }}"
+                   data-produto="{{ f.produto or '—' }}"
+                   data-litros="{{ '%.0f' | format(f.litros) }}" checked
                    onchange="pfnSoma(this)">
             <span class="ef__n">{{ f.semana }} {{ f.data_frete.strftime('%d/%m') }}
               · {{ f.placa or '—' }}
@@ -522,14 +555,19 @@ body > .container-fluid:has(#pfn){
                     onclick="pfnReabrir(this, '{{ v.data.isoformat() }}',
                              {{ v.veiculo_id }}, {{ v.motorista_id or 0 }})">reabrir</button>
           </div>
-          {% elif not v.pergunta_bordo %}
+          {% else %}
           <div class="fechou fechou--abre">
             <span><i class="bi bi-pencil"></i> Carga em montagem
-              {%- if v.capacidade and v.livre <= 0.01 %} · a carreta encheu{% endif -%}
+              {%- if not v.tem_espaco and v.capacidade %} · a carreta encheu
+              {%- elif v.capacidade %} · cabem mais
+                {{ fmtl.format(v.livre).replace(',', '.') }} L{% endif -%}
             </span>
+            {% if v.candidatos and not v.bordo %}
+            <button type="button" class="bd__b" onclick="pfnPainelBordo(this, 'bordo')">
+              <i class="bi bi-box-seam"></i> Já tem carga a bordo?</button>
+            {% endif %}
             <button type="button" class="bd__b bd__b--sim"
-                    onclick="pfnFechar(this, '{{ v.data.isoformat() }}',
-                             {{ v.veiculo_id }}, {{ v.motorista_id or 0 }}, false)">
+                    onclick="pfnPainelBordo(this, 'fechar')">
               <i class="bi bi-lock-fill"></i> Fechar carga</button>
           </div>
           {% endif %}
@@ -648,16 +686,18 @@ body > .container-fluid:has(#pfn){
           </div>
           {% endif %}
 
-          {% if v.pergunta_bordo %}
-          <div class="bordo" id="fech{{ loop.index }}">
+          {% if not v.fechada and v.candidatos %}
+          <div class="bordo pnl-bordo" hidden
+               data-data="{{ v.data.isoformat() }}"
+               data-veiculo="{{ v.veiculo_id }}"
+               data-motorista="{{ v.motorista_id or 0 }}"
+               data-espaco="{{ '1' if v.tem_espaco else '0' }}">
             <div class="bordo__t"><i class="bi bi-box-seam"></i>
-              Fechar a carga: sobram
-              {{ fmtl.format(v.livre).replace(',', '.') }} L de espaço</div>
-            {% if v.candidatos %}
+              <span class="pnl__t">O que ficou no caminhão</span></div>
             <div class="bordo__c" style="margin:0 0 .5rem">
-              Ficou alguma mercadoria da viagem de
-              {{ v.candidatos[0].data_frete.strftime('%d/%m') }} no caminhão?
-              Marque o que não desceu.
+              Mercadoria da viagem de
+              {{ v.candidatos[0].data_frete.strftime('%d/%m') }} nesse caminhão.
+              Marque o que <b>não desceu</b> — a quantidade dá pra ajustar.
             </div>
             {% for b in v.candidatos %}
             <label class="bd bd--esc">
@@ -673,21 +713,14 @@ body > .container-fluid:has(#pfn){
               </span>
             </label>
             {% endfor %}
-            {% else %}
-            <div class="bordo__c" style="margin:0 0 .5rem">
-              Não achei viagem anterior desse caminhão nos últimos 7 dias — então
-              é fechar e pronto.
-            </div>
-            {% endif %}
             <div class="bd__rod">
-              <button type="button" class="bd__b bd__b--sim"
-                      onclick="pfnFechar(this, '{{ v.data.isoformat() }}',
-                               {{ v.veiculo_id }}, {{ v.motorista_id or 0 }}, true)">
-                <i class="bi bi-lock-fill"></i> Fechar com o que marquei</button>
-              <button type="button" class="bd__b"
-                      onclick="pfnFechar(this, '{{ v.data.isoformat() }}',
-                               {{ v.veiculo_id }}, {{ v.motorista_id or 0 }}, false)">
-                Nada ficou — saiu com boca vazia</button>
+              <button type="button" class="bd__b bd__b--sim pnl__ok"
+                      onclick="pfnConfirmaBordo(this, true)">Salvar</button>
+              <button type="button" class="bd__b pnl__nada" hidden
+                      onclick="pfnConfirmaBordo(this, false)">
+                Nada ficou — fechar assim</button>
+              <button type="button" class="bd__b" onclick="pfnFechaPainel(this)">
+                Cancelar</button>
             </div>
           </div>
           {% endif %}
@@ -781,6 +814,9 @@ body > .container-fluid:has(#pfn){
                 <label class="ef {{ 'ef--daqui' if a.desta_carga }}">
                   <input type="checkbox" class="ef__ck" value="{{ a.id }}"
                          data-valor="{{ '%.2f' | format(a.valor) }}"
+                         data-dia="{{ a.data_frete.strftime('%d/%m') }}"
+                         data-produto="{{ a.produto or '—' }}"
+                         data-litros="{{ '%.0f' | format(a.litros) }}"
                          {{ 'checked' if a.desta_carga }} onchange="pfnSoma(this)">
                   <span class="ef__n">{{ a.semana }} {{ a.data_frete.strftime('%d/%m') }}
                     · {{ a.placa or '—' }}
@@ -841,7 +877,30 @@ body > .container-fluid:has(#pfn){
     {% endfor %}
     {% endif %}
 
-    <p class="rod">A carga é agrupada por <b>data + caminhão + motorista</b>.
+    {# Caixa que abre depois de emitir: PDF renomeado ou WhatsApp com o resumo.
+     Mesmo caminho da tela de Fretes, com o resumo dos fretes que faltava lá. #}
+  <div class="cx" id="pfn-share" hidden>
+    <div class="cx__c">
+      <div class="cx__t">✅ Boleto emitido</div>
+      <div class="cx__d" id="pfn-share-desc"></div>
+      <div class="cx__b">
+        <button type="button" class="cx__wa" id="pfn-share-wa">
+          <i class="bi bi-whatsapp"></i> Enviar no WhatsApp</button>
+        <button type="button" class="cx__pdf" id="pfn-share-pdf">
+          <i class="bi bi-file-earmark-pdf"></i> Baixar PDF</button>
+        <button type="button" class="cx__ver" id="pfn-share-ver">
+          <i class="bi bi-eye"></i> Abrir boleto</button>
+      </div>
+      <textarea class="cx__msg" id="pfn-share-msg" readonly rows="9"></textarea>
+      <div class="cx__b">
+        <button type="button" class="cx__copy" id="pfn-share-copy">
+          <i class="bi bi-clipboard"></i> Copiar texto</button>
+        <button type="button" class="cx__fim" id="pfn-share-fim">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="rod">A carga é agrupada por <b>data + caminhão + motorista</b>.
     Quando a mesma placa sai duas vezes no mesmo dia, os cartões vêm marcados
     1ª e 2ª viagem. As bocas vêm do cadastro da carreta
     (<i>veiculo_compartimentos</i>), ligada ao cavalo por
@@ -896,14 +955,65 @@ function pfnMarca(ck){
   if (campo) campo.disabled = !ck.checked;
 }
 
-// Fecha a carga. E a unica escrita desta tela, e vai so pras tabelas dela
-// (carga_fechada e frete_saldo_bordo) — nao altera frete, pedido nem cobranca.
-// O fetch do base.html anexa o X-CSRFToken sozinho.
-function pfnFechar(botao, data, veiculoId, motoristaId, usarMarcados){
-  var caixa = botao.closest('.bordo') || botao.closest('.fechou');
+// O painel do que ficou a bordo tem duas portas, e o texto muda conforme a
+// porta. Ele NAO aparece sozinho: enquanto ela esta montando a carga, mostrar
+// a viagem anterior inteira so atrapalha.
+//
+//   'bordo'  — ela clicou "Já tem carga a bordo?" no comeco do carregamento.
+//              Grava o saldo e nao fecha nada; o painel de bocas ja passa a
+//              contar certo enquanto ela enche o caminhao.
+//   'fechar' — ela clicou "Fechar carga" numa carga que NAO encheu a carreta.
+//              Se encheu, nem abre: fecha direto, nao ha o que perguntar.
+function pfnPainelBordo(botao, modo){
+  var corpo = botao.closest('.vg__c2');
+  var painel = corpo ? corpo.querySelector('.pnl-bordo') : null;
+  var faixa = botao.closest('.fechou');
+
+  if (modo === 'fechar'){
+    var temEspaco = painel && painel.getAttribute('data-espaco') === '1';
+    if (!painel || !temEspaco){
+      // Carreta cheia (ou sem viagem anterior pra perguntar): fecha e pronto.
+      var d = painel || corpo.querySelector('.novo__f');
+      pfnEnvia(botao, '/ped-frete-novo/fechar', {
+        data: d.getAttribute('data-data'),
+        veiculo_id: parseInt(d.getAttribute('data-veiculo'), 10),
+        motorista_id: parseInt(d.getAttribute('data-motorista'), 10),
+        bordo: []
+      });
+      return;
+    }
+  }
+  if (!painel) return;
+
+  painel.setAttribute('data-modo', modo);
+  painel.querySelector('.pnl__t').textContent = (modo === 'fechar')
+    ? 'Fechar a carga: o que ficou no caminhão?'
+    : 'O que já está no caminhão de antes';
+  painel.querySelector('.pnl__ok').textContent = (modo === 'fechar')
+    ? 'Fechar com o que marquei' : 'Salvar o que marquei';
+  painel.querySelector('.pnl__nada').hidden = (modo !== 'fechar');
+  painel.hidden = false;
+  if (faixa) faixa.hidden = true;
+}
+
+function pfnFechaPainel(botao){
+  var corpo = botao.closest('.vg__c2');
+  var painel = botao.closest('.pnl-bordo');
+  if (painel) painel.hidden = true;
+  var faixa = corpo ? corpo.querySelector('.fechou') : null;
+  if (faixa) faixa.hidden = false;
+}
+
+// Grava. Vai so pras tabelas desta tela (carga_fechada e frete_saldo_bordo) —
+// nao altera frete, pedido nem cobranca. O fetch do base.html anexa o
+// X-CSRFToken sozinho.
+function pfnConfirmaBordo(botao, usarMarcados){
+  var painel = botao.closest('.pnl-bordo');
+  if (!painel) return;
+  var modo = painel.getAttribute('data-modo') || 'fechar';
   var bordo = [];
-  if (usarMarcados && caixa){
-    var cks = caixa.querySelectorAll('.bd__ck');
+  if (usarMarcados){
+    var cks = painel.querySelectorAll('.bd__ck');
     for (var i = 0; i < cks.length; i++){
       if (!cks[i].checked) continue;
       var linha = cks[i].closest('.bd');
@@ -913,12 +1023,19 @@ function pfnFechar(botao, data, veiculoId, motoristaId, usarMarcados){
       bordo.push({frete_id: parseInt(cks[i].value, 10), litros: litros});
     }
     if (!bordo.length){
-      alert('Marque o que ficou no caminhão, ou use "Nada ficou".');
+      alert(modo === 'fechar'
+        ? 'Marque o que ficou no caminhão, ou use "Nada ficou".'
+        : 'Marque o que já está no caminhão.');
       return;
     }
   }
-  pfnEnvia(botao, '/ped-frete-novo/fechar',
-           {data: data, veiculo_id: veiculoId, motorista_id: motoristaId, bordo: bordo});
+  pfnEnvia(botao, '/ped-frete-novo/fechar', {
+    data: painel.getAttribute('data-data'),
+    veiculo_id: parseInt(painel.getAttribute('data-veiculo'), 10),
+    motorista_id: parseInt(painel.getAttribute('data-motorista'), 10),
+    bordo: bordo,
+    apenas_bordo: (modo === 'bordo')
+  });
 }
 
 function pfnReabrir(botao, data, veiculoId, motoristaId){
@@ -1146,6 +1263,18 @@ function pfnEmitir(botao, cliente){
                'Valor: ' + brl + '\n' +
                'Vencimento: ' + vencBr + '\n\nConfirma?')) return;
 
+  // O resumo dos fretes vem das proprias linhas marcadas — e o que faltava na
+  // mensagem da tela de Fretes: o cliente recebia valor e vencimento, mas nao
+  // sabia de que dias e de que produtos era a cobranca.
+  var resumo = [];
+  for (var j = 0; j < cks.length; j++){
+    if (!cks[j].checked) continue;
+    var litros = parseFloat(cks[j].getAttribute('data-litros')) || 0;
+    resumo.push('• ' + cks[j].getAttribute('data-dia') + ' — ' +
+                cks[j].getAttribute('data-produto') + ' ' +
+                litros.toLocaleString('pt-BR') + ' L');
+  }
+
   var texto = botao.innerHTML;
   botao.disabled = true;
   botao.textContent = 'emitindo…';
@@ -1159,11 +1288,7 @@ function pfnEmitir(botao, cliente){
   .then(function(r){ return r.json(); })
   .then(function(d){
     if (!d || !d.success) throw new Error((d && d.error) || 'falhou');
-    var link = d.visualizar_url || d.boleto_url || d.pdf_boleto;
-    if (link && confirm('Boleto emitido: ' + brl + '\n\nAbrir agora?')){
-      window.open(link, '_blank');
-    }
-    window.location.reload();
+    pfnShare(d, cliente, brl, vencBr, resumo);
   })
   .catch(function(e){
     botao.disabled = false;
@@ -1171,6 +1296,72 @@ function pfnEmitir(botao, cliente){
     alert('Não deu pra emitir: ' + e.message);
     console.error('emitir:', e);
   });
+}
+
+// ─── caixa de compartilhar ──────────────────────────────────────────────
+function pfnShare(d, cliente, brl, vencBr, resumo){
+  var cx = document.getElementById('pfn-share');
+  if (!cx){ window.location.reload(); return; }
+  var chargeId = d.charge_id || '';
+  var nome = d.cliente_nome || cliente || '';
+  var venc = d.data_vencimento || vencBr || '';
+  var verUrl = d.visualizar_url || ('/financeiro/visualizar-boleto/' + chargeId + '/');
+  var link = window.location.origin + verUrl;
+
+  var msg = 'Olá' + (nome ? ', ' + nome : '') + '!\n\n' +
+            'Segue o boleto do frete:\n';
+  if (resumo && resumo.length) msg += resumo.join('\n') + '\n';
+  msg += '\nValor: ' + brl + '\nVencimento: ' + venc + '\n';
+  if (d.barcode)    msg += '\nCódigo de barras:\n' + d.barcode + '\n';
+  if (d.pix_qrcode) msg += '\nPix (copia e cola):\n' + d.pix_qrcode + '\n';
+  msg += '\nBoleto:\n' + link;
+
+  document.getElementById('pfn-share-desc').textContent =
+    nome + ' · ' + brl + ' · vence ' + venc +
+    (resumo.length ? ' · ' + resumo.length +
+      (resumo.length === 1 ? ' frete' : ' fretes') : '');
+  document.getElementById('pfn-share-msg').value = msg;
+
+  document.getElementById('pfn-share-wa').onclick = function(){
+    window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+  };
+  document.getElementById('pfn-share-ver').onclick = function(){
+    window.open(verUrl, '_blank');
+  };
+  // Nome do arquivo igual ao da tela de Fretes: CLIENTE_dd-mm-aaaa.pdf
+  document.getElementById('pfn-share-pdf').onclick = function(){
+    var seguro = nome.replace(/[^a-zA-Z0-9 À-ÿ]/g, '').trim()
+                     .replace(/\s+/g, '_') || 'boleto';
+    pfnBaixaPdf(chargeId, seguro + '_' + venc.replace(/\//g, '-') + '.pdf');
+  };
+  document.getElementById('pfn-share-copy').onclick = function(){
+    var campo = document.getElementById('pfn-share-msg');
+    campo.select();
+    try { document.execCommand('copy'); this.textContent = 'copiado!'; }
+    catch(e){ alert('Selecione e copie o texto.'); }
+  };
+  // Só recarrega ao fechar: sair antes perderia o código de barras e o Pix,
+  // que não ficam guardados em lugar nenhum depois desta tela.
+  document.getElementById('pfn-share-fim').onclick = function(){
+    window.location.reload();
+  };
+  cx.hidden = false;
+}
+
+function pfnBaixaPdf(chargeId, nomeArquivo){
+  fetch('/financeiro/download-boleto/' + chargeId + '/', {credentials: 'same-origin'})
+    .then(function(r){
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.blob();
+    })
+    .then(function(blob){
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = nomeArquivo;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+    })
+    .catch(function(e){ alert('Erro ao baixar o PDF: ' + e.message); });
 }
 
 function pfnEnvia(botao, url, corpo){

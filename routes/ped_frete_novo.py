@@ -552,7 +552,7 @@ def _montar_viagens(fretes, cap):
         v['bordo_litros'] = 0.0
         v['ocupado'] = v['litros']
         v['fechada'] = False
-        v['pergunta_bordo'] = False
+        v['tem_espaco'] = bool(v['capacidade'] and v['livre'] > 0.01)
         v['candidatos'] = []
         v['semana'] = _semana(v['data'])
         saida.append(v)
@@ -601,12 +601,15 @@ def _aplicar_estado(viagens, fechadas, bordo, candidatos):
         v['pct'] = round(100.0 * ocupado / v['capacidade'], 1) if v['capacidade'] else 0.0
         v['estoura'] = bool(v['capacidade']) and ocupado > v['capacidade'] + 0.01
 
-        # A pergunta so faz sentido quando ha carreta cadastrada, ainda sobra
-        # espaco e ninguem respondeu ainda. Carreta cheia fecha direto.
-        v['pergunta_bordo'] = bool(
-            v['capacidade'] and v['livre'] > 0.01 and not itens_bordo and not v['fechada'])
+        # A carreta ainda tem espaco? E o que decide se FECHAR precisa perguntar
+        # alguma coisa. Carreta cheia fecha direto, sem pergunta nenhuma.
+        v['tem_espaco'] = bool(v['capacidade'] and v['livre'] > 0.01)
+        # Os candidatos ficam disponiveis o tempo todo na carga aberta, mas o
+        # painel so aparece quando ela PEDE: ou clicando "carga a bordo" no
+        # comeco do carregamento, ou ao fechar uma carga que nao encheu.
+        # Mostrar sozinho, enquanto ela ainda esta montando, so atrapalhava.
         v['candidatos'] = list(candidatos.get(v['veiculo_id']) or []) \
-            if v['pergunta_bordo'] else []
+            if not v['fechada'] else []
         v['semana'] = _semana(v['data'])
 
 
@@ -1060,6 +1063,10 @@ def fechar():
     itens = dados.get('bordo') or []
     if not isinstance(itens, list):
         itens = []
+    # A Monica tambem marca o que ficou a bordo NO COMECO do carregamento, pra
+    # o painel de bocas ja contar certo enquanto ela enche o caminhao. Nesse
+    # caso grava o saldo e nao fecha nada.
+    so_bordo = bool(dados.get('apenas_bordo'))
 
     _ensure_tabela()
     conn = cursor = None
@@ -1091,15 +1098,16 @@ def fechar():
             """, (fid, dia, vid, mid, litros, _quem()))
             gravados += 1
 
-        cursor.execute("""
-            INSERT INTO carga_fechada (data_frete, veiculo_id, motorista_id,
-                                       fechada_por, fechada_em)
-                 VALUES (%s, %s, %s, %s, NOW())
-            ON DUPLICATE KEY UPDATE fechada_por = VALUES(fechada_por),
-                                    fechada_em = NOW()
-        """, (dia, vid, mid, _quem()))
+        if not so_bordo:
+            cursor.execute("""
+                INSERT INTO carga_fechada (data_frete, veiculo_id, motorista_id,
+                                           fechada_por, fechada_em)
+                     VALUES (%s, %s, %s, %s, NOW())
+                ON DUPLICATE KEY UPDATE fechada_por = VALUES(fechada_por),
+                                        fechada_em = NOW()
+            """, (dia, vid, mid, _quem()))
         conn.commit()
-        return jsonify({'ok': True, 'bordo': gravados})
+        return jsonify({'ok': True, 'bordo': gravados, 'fechou': not so_bordo})
     except Exception as e:
         if conn:
             try:
