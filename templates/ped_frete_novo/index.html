@@ -423,6 +423,9 @@ body > .container-fluid:has(#pfn){
   #pfn .cli--falta .cli__h{ background:#fffdf7; }
   #pfn .cli__n{ font-weight:800; font-size:.82rem; flex:1; min-width:0; }
   #pfn .cli__c{ padding:.45rem .6rem; }
+  #pfn .cli__mais{ width:100%; margin-top:.45rem; color:var(--blue);
+    border-color:#a8c4de; }
+  #pfn .cli__mais:hover{ background:#eaf1f9; }
   #pfn .cli__r{ display:flex; gap:.5rem; align-items:center; margin-top:.5rem;
     padding-top:.45rem; border-top:1px solid #eef1f5; flex-wrap:wrap;
     font-size:.82rem; font-weight:800; font-variant-numeric:tabular-nums; }
@@ -1049,6 +1052,15 @@ body > .container-fluid:has(#pfn){
               </div>
               {% endif %}
               {% endfor %}
+              {% if not v.fechada and p.cliente_id %}
+              <button type="button" class="bd__b cli__mais"
+                      data-cliente="{{ p.cliente_id }}"
+                      data-cliente-nome="{{ p.nome }}"
+                      data-origem="{{ p.origem_id or '' }}"
+                      data-origem-nome="{{ p.origem }}"
+                      onclick="pfnProdutoAqui(this)">
+                ＋ Adicionar produto neste posto</button>
+              {% endif %}
               <div class="cli__r">
                 <span>{{ fmtl.format(p.litros).replace(',', '.') }} L
                   {%- if p.valor %} · {{ p.valor | formatar_moeda }}{% endif -%}
@@ -1828,6 +1840,35 @@ function pfnDicaPreco(form, item){
                 '</b> ' + (h[i].origem || ''));
   }
   alvo.innerHTML = 'Já cobrado: ' + partes.join(' · ');
+}
+
+// "Mais um produto neste posto": ela ja escolheu o posto quando lancou a
+// primeira vez — obrigar a escolher de novo, no meio da lista de 39, e o tipo
+// de atrito que faz voltar pra tela antiga.
+function pfnProdutoAqui(botao){
+  var corpo = botao.closest('.vg__c2');
+  var form = corpo ? corpo.querySelector('.novo__f') : null;
+  if (!form) return;
+
+  var faixa = corpo.querySelector('.fechou');
+  if (faixa) faixa.hidden = true;
+  form.hidden = false;
+  if (!form.querySelector('.nf__i')) pfnMaisItem(form.querySelector('.nf__mais'));
+
+  var cli = form.querySelector('.nf__cli');
+  cli.setAttribute('data-valor', botao.getAttribute('data-cliente'));
+  cli.textContent = botao.getAttribute('data-cliente-nome');
+  cli.classList.add('tem');
+
+  var ori = form.querySelector('.nf__ori');
+  var oid = botao.getAttribute('data-origem');
+  if (oid){
+    ori.setAttribute('data-valor', oid);
+    ori.textContent = botao.getAttribute('data-origem-nome') || '— escolha —';
+    ori.classList.add('tem');
+  }
+  pfnPosto(cli);
+  form.scrollIntoView({block: 'nearest'});
 }
 
 function pfnMostraCte(link){

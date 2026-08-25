@@ -551,6 +551,12 @@ def _montar_viagens(fretes, cap):
     for v in viagens.values():
         postos = sorted(v['postos'].values(), key=lambda p: -p['litros'])
         for i, p in enumerate(postos):
+            # Quem e o posto e de onde ele carrega: e o que a tela precisa pra
+            # oferecer "mais um produto aqui" sem obrigar a reescolher tudo.
+            pri = p['fretes'][0] if p['fretes'] else {}
+            p['cliente_id'] = pri.get('clientes_id')
+            p['origem_id'] = pri.get('origem_id')
+            p['origem'] = pri.get('origem') or ''
             p['cor'] = _CORES[i % len(_CORES)]
             p['pct'] = round(100.0 * p['litros'] / v['litros'], 1) if v['litros'] else 0.0
             # A etiqueta do posto resume os fretes dele: se falta um, falta.
