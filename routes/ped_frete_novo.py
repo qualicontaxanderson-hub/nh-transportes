@@ -966,8 +966,10 @@ def _conferencia(cur, desde, cap):
             duplas.append(r)
     saida.append({'chave': 'duas_viagens',
                   'titulo': 'Caminhão passou de uma carreta no dia',
-                  'porque': 'Normalmente é o caminhão que saiu duas vezes — '
-                            'confira só se não bater com o que aconteceu.',
+                  'porque': 'Pode ser o caminhão que saiu duas vezes, ou um '
+                            'frete lançado com a data errada. O horário do '
+                            'lançamento não diz qual: ela lança quando dá, '
+                            'não quando o caminhão sai.',
                   'linhas': duplas[:40], 'n': len(duplas), 'carga': True,
                   'aviso': True})
     return saida
