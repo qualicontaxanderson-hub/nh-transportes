@@ -284,8 +284,6 @@ body > .container-fluid:has(#pfn){
   #pfn .nf__op{ font-weight:600; text-transform:none; opacity:.8; }
   /* o preco do frete e sempre digitado: e negociacao, nao regra */
   #pfn .nf__c--manual input{ border:2px solid var(--ambar); background:#fffdf7; }
-  #pfn .nf__c--manual input.travado{ border-color:var(--propria);
-    background:#f6f4fb; color:var(--propria); font-weight:800; }
   #pfn .nf__hist{ display:block; font-size:.69rem; font-weight:700;
     color:var(--muted); margin-top:.28rem; line-height:1.4; }
   #pfn .nf__hist b{ color:var(--ink); font-variant-numeric:tabular-nums; }
@@ -472,12 +470,13 @@ body > .container-fluid:has(#pfn){
                     <label class="nf__c nf__c--manual">Frete por litro
                       <input type="text" inputmode="numeric" class="nf__pl nf__mask"
                              placeholder="0,000" oninput="pfnMascara(this)">
-                      <span class="nf__hist nf__hpl"></span>
-                      <span class="nf__hist nf__casa" style="color:var(--propria)"></span></label>
+                      <span class="nf__hist nf__hpl"></span></label>
                     <label class="nf__c">CT-e por litro
                       <input type="text" inputmode="numeric" class="nf__pc nf__mask"
                              placeholder="0,000" oninput="pfnMascara(this, true)">
-                      <span class="nf__hist nf__hcte">Acompanha o frete.</span></label>
+                      <span class="nf__hist nf__hcte">Acompanha o frete.</span>
+                      <span class="nf__hist nf__casa"
+                            style="color:var(--propria);font-weight:700"></span></label>
                   </div>
                   <div class="nf__conta" hidden>
                     <div class="cl"><span class="k">Mercadoria</span>
@@ -1670,20 +1669,21 @@ function pfnPosto(sel){
   for (var k = 0; k < itens.length; k++){
     var pl = itens[k].querySelector('.nf__pl');
     var pc = itens[k].querySelector('.nf__pc');
+    // No posto da casa o frete nao existe — entao o campo some, em vez de
+    // ficar ali travado parecendo que falta preencher. O valor vai 0 assim
+    // mesmo. O CT-e continua, porque esse sai.
+    var rot = pl.closest('.nf__c');
     if (cli.nao_cobra){
       pl.value = '0,000';
-      pl.readOnly = true;
-      pl.classList.add('travado');
+      if (rot) rot.hidden = true;
       if (pc) pc.setAttribute('data-tocado', '1');   // para de espelhar o frete
-    } else if (pl.readOnly){
-      pl.value = '';
-      pl.readOnly = false;
-      pl.classList.remove('travado');
-      if (pc){ pc.removeAttribute('data-tocado'); pc.value = ''; }
+    } else {
+      if (rot && rot.hidden){ rot.hidden = false; pl.value = ''; }
+      if (pc && pl.value === ''){ pc.removeAttribute('data-tocado'); pc.value = ''; }
     }
     var av = itens[k].querySelector('.nf__casa');
     if (av) av.textContent = cli.nao_cobra
-      ? 'Posto da casa: não se cobra frete dele. O CT-e continua saindo — digite o valor dele abaixo.'
+      ? 'Posto da casa: não se cobra frete. Só o CT-e, que sai normalmente.'
       : '';
     pfnContaItem(itens[k]);
   }
