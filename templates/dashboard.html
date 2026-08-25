@@ -8,8 +8,16 @@
   body { background: #f0f2f5 !important; }
   .container-fluid { background: #f0f2f5; }
 
+  /* O layout base pinta todo body > .container-fluid de branco com 2rem de
+     padding. A inicial tentava escapar com -12px, mas 12px nao vencem 32px —
+     sobrava a faixa branca dos dois lados. Aqui a moldura e desligada por
+     inteiro, e SO nesta tela. */
+  body > .container-fluid:has(.dash-wrapper){
+    background: transparent; box-shadow: none; border-radius: 0;
+    padding: 0; margin: 0; max-width: none;
+  }
   .dash-wrapper {
-    margin: -1.5rem -12px 0;
+    margin: 0;
     background: #f0f2f5;
     min-height: 100vh;
   }
@@ -118,13 +126,30 @@
     color: #94a3b8;
     margin-bottom: 4px;
   }
+  /* "1.130.000" estourava a largura do cartao e vazava. */
+  /* A tela que a Monica abre o dia todo — vem primeira e ocupa a linha
+     inteira no celular. */
+  .btn-dash-pf {
+    background: linear-gradient(120deg,#2E6FB0,#0C4C86);
+    color: #fff; border: 0; border-radius: 10px;
+    padding: .6rem 1rem; font-size: .9rem; font-weight: 700;
+    text-decoration: none; display: inline-flex; align-items: center;
+    gap: .4rem; box-shadow: 0 2px 8px rgba(29,99,165,.32);
+  }
+  .btn-dash-pf:hover { background: #0C4C86; color: #fff; }
+  @media (max-width: 640px) { .btn-dash-pf { width: 100%; justify-content: center; } }
+
   .kpi-value {
-    font-size: 1.85rem;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(1.2rem, 6.2vw, 1.85rem);
     font-weight: 800;
     color: #1e293b;
     line-height: 1.15;
     letter-spacing: -0.5px;
   }
+  /* "R$ 1.234.567,89" e mais largo que qualquer outro numero da tela. */
+  .kpi-dinheiro { font-size: clamp(.98rem, 4.9vw, 1.45rem); letter-spacing: -.6px; }
   .kpi-sub {
     font-size: 0.72rem;
     color: #94a3b8;
@@ -287,7 +312,14 @@
     gap: 8px;
   }
   .breakdown-card .bk-title i { font-size: 0.85rem; }
-  .bk-table { width: 100%; border-collapse: collapse; }
+  /* A tabela pedia 453px num cartao de 381 — era ela que fazia a pagina
+     inteira andar de lado no celular. Agora o excesso rola aqui dentro. */
+  .bk-rolagem { overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; -ms-overflow-style: none; }
+  .bk-rolagem::-webkit-scrollbar { display: none; }
+  .bk-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .bk-table th:not(:first-child),
+  .bk-table td:not(:first-child) { width: 6.3rem; }
   .bk-table th {
     font-size: 0.63rem;
     font-weight: 700;
@@ -324,18 +356,29 @@
     margin-right: 6px;
     flex-shrink: 0;
   }
+  /* 60px ao lado do nome viravam um toco: todas as barras pareciam do mesmo
+     tamanho. Ocupando a linha inteira embaixo, a proporcao finalmente aparece
+     — da pra ver de relance quem responde pela maior fatia. */
   .bk-bar-wrap {
-    width: 60px;
-    height: 5px;
-    background: #f1f5f9;
-    border-radius: 3px;
-    display: inline-block;
+    display: block;
+    width: 100%;
+    height: 6px;
+    background: #eef2f7;
+    border-radius: 99px;
+    margin: 5px 0 1px;
+    overflow: hidden;
+  }
+  /* "POSTO NOVO HORIZONTE GOIATUBA LTDA" ocupava tres linhas em cada tabela. */
+  .bk-nome {
+    display: inline-block; max-width: calc(100% - 18px);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     vertical-align: middle;
-    margin-left: 8px;
   }
   .bk-bar-fill {
+    display: block;
     height: 100%;
-    border-radius: 3px;
+    border-radius: 99px;
+    min-width: 3px;
   }
   .bk-empty {
     font-size: 0.75rem;
@@ -440,6 +483,14 @@
     box-shadow: 0 2px 8px rgba(0,0,0,.12); cursor: pointer; z-index: 3; display: flex; align-items: center; justify-content: center; }
   .onda1-arrow:hover { background: #f8fafc; }
   .onda1-prev { left: -4px; } .onda1-next { right: -4px; }
+  @media (max-width: 640px) {
+    .bk-table th, .bk-table td { padding-left: 6px; padding-right: 0; }
+    .bk-table td:not(:first-child),
+    .bk-table th:not(:first-child) { padding-left: 6px; font-size: .74rem; }
+    .bk-nome { font-size: .8rem; }
+    .bk-table th:not(:first-child),
+    .bk-table td:not(:first-child) { width: 5.2rem; }
+  }
   .onda1-dots { display: none; justify-content: center; gap: 7px; margin-top: 6px; }
   .onda1-dot-btn { width: 8px; height: 8px; padding: 0; border: none; border-radius: 50%; background: #cbd5e1; cursor: pointer; transition: width .2s, background .2s; }
   .onda1-dot-btn.is-active { background: #2563eb; width: 20px; border-radius: 5px; }
@@ -475,6 +526,9 @@
       </div>
     </div>
     <div class="d-flex gap-2 flex-wrap">
+      <a href="/ped-frete-novo/" class="btn-dash-pf">
+        <i class="bi bi-truck-front-fill"></i> PED/FRETE — NOVO
+      </a>
       <a href="{{ pedidos_novo_url }}" class="btn-dash-success">
         <i class="bi bi-bag-plus-fill"></i> Novo Pedido
       </a>
@@ -674,6 +728,13 @@
     {# ===== fim Onda 1 ===== #}
 
     <!-- Product Breakdown Row -->
+    {#- Paleta conferida no validador: as cores antigas reprovavam — verde e
+        ambar ficavam indistinguiveis em protanopia. Ordem fixa, nunca ciclada
+        por rank, pra que a mesma empresa/produto mantenha a cor. -#}
+    {% set _COR = ['#2a78d6','#eb6834','#1baf7a','#eda100',
+                   '#e87ba4','#008300','#4a3aa7','#e34948'] %}
+    {% set max_emp = (fretes_por_empresa | map(attribute='qtd_frete') | max)
+                     if fretes_por_empresa else 0 %}
     <div class="section-label">Detalhamento por Produto — {{ mes_atual }}</div>
     <div class="row g-3 mb-4">
 
@@ -684,15 +745,15 @@
           {% if lucro_por_produto %}
             {% set max_luc = namespace(v=0) %}
             {% for p in lucro_por_produto %}{% if p.valor > max_luc.v %}{% set max_luc.v = p.valor %}{% endif %}{% endfor %}
-            <table class="bk-table">
+            <div class="bk-rolagem"><table class="bk-table">
               <thead><tr><th>Produto</th><th style="text-align:right">Vol. (L)</th><th style="text-align:right">Lucro (R$)</th></tr></thead>
               <tbody>
                 {% for p in lucro_por_produto %}
                 <tr>
                   <td>
-                    <span class="bk-product-dot" style="background:{{ ['#10b981','#2563eb','#f59e0b','#8b5cf6','#06b6d4','#ef4444','#64748b'][loop.index0 % 7] }}"></span>
-                    {{ p.nome }}
-                    <span class="bk-bar-wrap"><span class="bk-bar-fill" style="width:{{ (p.valor / max_luc.v * 100)|int if max_luc.v > 0 else 0 }}%;background:{{ ['#10b981','#2563eb','#f59e0b','#8b5cf6','#06b6d4','#ef4444','#64748b'][loop.index0 % 7] }}"></span></span>
+                    <span class="bk-product-dot" style="background:{{ _COR[loop.index0 % 8] }}"></span>
+                    <span class="bk-nome" title="{{ p.nome }}">{{ p.nome }}</span>
+                    <span class="bk-bar-wrap"><span class="bk-bar-fill" style="width:{{ (p.valor / max_luc.v * 100)|int if max_luc.v > 0 else 0 }}%;background:{{ _COR[loop.index0 % 8] }}"></span></span>
                   </td>
                   <td style="text-align:right;font-size:0.78rem;color:#64748b">{{ "{:,.0f}".format(p.qtde).replace(",", ".") }}</td>
                   <td style="text-align:right;color:{% if p.valor >= 0 %}#059669{% else %}#dc2626{% endif %}">
@@ -708,7 +769,7 @@
                   </td>
                 </tr>
               </tbody>
-            </table>
+            </table></div>
           {% elif volume_vendido_por_produto %}
             <div class="bk-empty" style="color:#94a3b8;font-size:0.75rem;padding:12px 0;">
               <i class="bi bi-clock-history"></i> Lucro FIFO disponível após o fechamento do mês
@@ -724,14 +785,15 @@
         <div class="breakdown-card">
           <div class="bk-title"><i class="bi bi-truck" style="color:#6366f1"></i> Vol. Transportado por Empresa</div>
           {% if fretes_por_empresa %}
-            <table class="bk-table">
+            <div class="bk-rolagem"><table class="bk-table">
               <thead><tr><th>Empresa</th><th style="text-align:right">Qtd (L)</th><th style="text-align:right">Frete (R$)</th></tr></thead>
               <tbody>
                 {% for e in fretes_por_empresa %}
                 <tr>
                   <td>
-                    <span class="bk-product-dot" style="background:{{ ['#6366f1','#2563eb','#10b981','#f59e0b','#ef4444','#8b5cf6','#64748b'][loop.index0 % 7] }}"></span>
-                    {{ e.empresa }}
+                    <span class="bk-product-dot" style="background:{{ _COR[loop.index0 % 8] }}"></span>
+                    <span class="bk-nome" title="{{ e.empresa }}">{{ e.empresa }}</span>
+                    <span class="bk-bar-wrap"><span class="bk-bar-fill" style="width:{{ (e.qtd_frete / max_emp * 100)|int if max_emp > 0 else 0 }}%;background:{{ _COR[loop.index0 % 8] }}"></span></span>
                   </td>
                   <td style="text-align:right;font-size:0.78rem;color:#64748b">{{ "{:,.0f}".format(e.qtd_frete).replace(",", ".") }} L</td>
                   <td style="text-align:right;color:#2563eb">
@@ -747,7 +809,7 @@
                   </td>
                 </tr>
               </tbody>
-            </table>
+            </table></div>
           {% else %}
             <div class="bk-empty"><i class="bi bi-inbox"></i> Sem dados no mês</div>
           {% endif %}
@@ -761,15 +823,15 @@
           {% if volume_transportado_por_produto %}
             {% set max_vol = namespace(v=0) %}
             {% for p in volume_transportado_por_produto %}{% if p.valor > max_vol.v %}{% set max_vol.v = p.valor %}{% endif %}{% endfor %}
-            <table class="bk-table">
+            <div class="bk-rolagem"><table class="bk-table">
               <thead><tr><th>Produto</th><th>Litros</th></tr></thead>
               <tbody>
                 {% for p in volume_transportado_por_produto %}
                 <tr>
                   <td>
-                    <span class="bk-product-dot" style="background:{{ ['#06b6d4','#2563eb','#8b5cf6','#f59e0b','#10b981','#ef4444','#64748b'][loop.index0 % 7] }}"></span>
-                    {{ p.nome }}
-                    <span class="bk-bar-wrap"><span class="bk-bar-fill" style="width:{{ (p.valor / max_vol.v * 100)|int if max_vol.v > 0 else 0 }}%;background:{{ ['#06b6d4','#2563eb','#8b5cf6','#f59e0b','#10b981','#ef4444','#64748b'][loop.index0 % 7] }}"></span></span>
+                    <span class="bk-product-dot" style="background:{{ _COR[loop.index0 % 8] }}"></span>
+                    <span class="bk-nome" title="{{ p.nome }}">{{ p.nome }}</span>
+                    <span class="bk-bar-wrap"><span class="bk-bar-fill" style="width:{{ (p.valor / max_vol.v * 100)|int if max_vol.v > 0 else 0 }}%;background:{{ _COR[loop.index0 % 8] }}"></span></span>
                   </td>
                   <td>{{ "{:,.0f}".format(p.valor).replace(",", ".") }}</td>
                 </tr>
@@ -779,7 +841,7 @@
                   <td>{{ "{:,.0f}".format(volume_transportado_mes).replace(",", ".") }}</td>
                 </tr>
               </tbody>
-            </table>
+            </table></div>
           {% else %}
             <div class="bk-empty"><i class="bi bi-inbox"></i> Sem dados no mês</div>
           {% endif %}
@@ -837,7 +899,7 @@
         <div class="kpi-card kpi-green">
           <div class="kpi-icon-wrap kpi-icon-green"><i class="bi bi-currency-dollar"></i></div>
           <div class="kpi-label">Receita Fretes</div>
-          <div class="kpi-value" style="font-size:1.45rem;">R$ {{ "{:,.2f}".format(receita_mes).replace(",", "X").replace(".", ",").replace("X", ".") }}</div>
+          <div class="kpi-value kpi-dinheiro">R$ {{ "{:,.2f}".format(receita_mes).replace(",", "X").replace(".", ",").replace("X", ".") }}</div>
           <div class="kpi-sub"><i class="bi bi-graph-up-arrow"></i> faturamento do mês</div>
         </div>
       </div>
@@ -849,7 +911,7 @@
             <i class="bi bi-graph-up-arrow"></i>
           </div>
           <div class="kpi-label" style="color:#6ee7b7;">Lucro Fretes</div>
-          <div class="kpi-value" style="font-size:1.45rem;">R$ {{ "{:,.2f}".format(lucro_fretes_mes).replace(",", "X").replace(".", ",").replace("X", ".") }}</div>
+          <div class="kpi-value kpi-dinheiro">R$ {{ "{:,.2f}".format(lucro_fretes_mes).replace(",", "X").replace(".", ",").replace("X", ".") }}</div>
           <div class="lucro-link-row">
             <i class="bi bi-box-arrow-up-right"></i> Ver Relatório de Lucro
           </div>
@@ -896,6 +958,43 @@
   const fretes  = {{ grafico.fretes | tojson }};
   const volume  = {{ grafico.volume | tojson }};
 
+  // Seis meses da mesma cor nao diziam onde a gente esta. O ultimo — o mes
+  // corrente — vem cheio; os anteriores ficam de apoio.
+  const ultimo = labels.length - 1;
+  const corForte = '#2a78d6', corFraca = 'rgba(42,120,214,.22)';
+  const corVol   = '#1baf7a';
+  const pintar = (forte, fraca) =>
+    labels.map((_, i) => (i === ultimo ? forte : fraca));
+
+  // Rotulo em cima do ponto/barra: sem isso e preciso medir contra a regua.
+  const rotulos = {
+    id: 'rotulos',
+    afterDatasetsDraw(c, a, opcoes) {
+      const {ctx} = c;
+      ctx.save();
+      ctx.font = '700 10px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      c.data.datasets.forEach((ds, di) => {
+        const meta = c.getDatasetMeta(di);
+        meta.data.forEach((ponto, i) => {
+          // so o primeiro, o maior e o ultimo — numero em tudo vira poluicao
+          const v = ds.data[i];
+          const maior = Math.max(...ds.data);
+          if (i !== 0 && i !== ultimo && v !== maior) return;
+          ctx.fillStyle = (i === ultimo) ? (opcoes.corForte || corForte) : '#64748b';
+          const txt = opcoes.fmt ? opcoes.fmt(v) : String(v);
+          // encosta no canto sem vazar: o ultimo alinha a direita, o primeiro a esquerda
+          const meia = ctx.measureText(txt).width / 2;
+          let x = ponto.x;
+          if (x - meia < c.chartArea.left)  x = c.chartArea.left + meia;
+          if (x + meia > c.chartArea.right) x = c.chartArea.right - meia;
+          ctx.fillText(txt, x, Math.max(ponto.y - (opcoes.alto || 7), 10));
+        });
+      });
+      ctx.restore();
+    }
+  };
+
   const tooltipDefaults = {
     backgroundColor: '#1e293b',
     titleColor: '#94a3b8',
@@ -913,17 +1012,21 @@
       datasets: [{
         label: 'Fretes',
         data: fretes,
-        backgroundColor: 'rgba(37,99,235,0.15)',
-        borderColor: '#2563eb',
+        backgroundColor: pintar(corForte, corFraca),
+        borderColor: pintar(corForte, corForte),
         borderWidth: 2,
         borderRadius: 7,
         borderSkipped: false,
-        hoverBackgroundColor: 'rgba(37,99,235,0.30)',
+        hoverBackgroundColor: 'rgba(42,120,214,0.45)',
       }]
     },
+    plugins: [rotulos],
     options: {
       responsive: true,
+      layout: { padding: { top: 18 } },
       plugins: {
+        rotulos: { corForte: corForte,
+                   fmt: v => v.toLocaleString('pt-BR') },
         legend: { display: false },
         tooltip: Object.assign({ borderColor: '#2563eb', borderWidth: 1 }, tooltipDefaults),
       },
@@ -937,8 +1040,8 @@
   // Area chart – Volume transportado por mês
   const ctxV = document.getElementById('chartVolume').getContext('2d');
   const grad = ctxV.createLinearGradient(0, 0, 0, 220);
-  grad.addColorStop(0, 'rgba(6,182,212,0.25)');
-  grad.addColorStop(1, 'rgba(6,182,212,0.02)');
+  grad.addColorStop(0, 'rgba(27,175,122,0.26)');
+  grad.addColorStop(1, 'rgba(27,175,122,0.02)');
   new Chart(ctxV, {
     type: 'line',
     data: {
@@ -946,23 +1049,29 @@
       datasets: [{
         label: 'Volume (L)',
         data: volume,
-        borderColor: '#06b6d4',
+        borderColor: corVol,
         backgroundColor: grad,
         borderWidth: 2.5,
         pointBackgroundColor: '#fff',
-        pointBorderColor: '#06b6d4',
+        pointBorderColor: corVol,
         pointBorderWidth: 2,
-        pointRadius: 5,
-        pointHoverRadius: 7,
+        // o ponto do mes corrente maior que os outros
+        pointRadius: labels.map((_, i) => (i === ultimo ? 7 : 4)),
+        pointHoverRadius: 9,
         fill: true,
         tension: 0.4,
       }]
     },
+    plugins: [rotulos],
     options: {
       responsive: true,
+      layout: { padding: { top: 20 } },
       plugins: {
+        rotulos: { corForte: corVol, alto: 15,
+                   fmt: v => (v >= 1000 ? (v/1000).toFixed(0) + ' mil L'
+                                        : Math.round(v) + ' L') },
         legend: { display: false },
-        tooltip: Object.assign({ borderColor: '#06b6d4', borderWidth: 1 }, tooltipDefaults),
+        tooltip: Object.assign({ borderColor: corVol, borderWidth: 1 }, tooltipDefaults),
       },
       scales: {
         x: { grid: { color: '#f1f5f9' }, ticks: { color: '#94a3b8' } },
