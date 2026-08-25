@@ -284,6 +284,14 @@ body > .container-fluid:has(#pfn){
   #pfn .nf__op{ font-weight:600; text-transform:none; opacity:.8; }
   /* o preco do frete e sempre digitado: e negociacao, nao regra */
   #pfn .nf__c--manual input{ border:2px solid var(--ambar); background:#fffdf7; }
+  /* O CT-e acompanha o frete em 85% dos casos — dois campos de preco lado a
+     lado so confundiam. Fica atras deste link, e aparece sozinho no posto da
+     casa, onde ele e o unico valor que existe. */
+  #pfn .nf__cte-link{ border:0; background:none; color:var(--blue);
+    font-size:.73rem; font-weight:800; font-family:inherit; cursor:pointer;
+    padding:.2rem 0; text-align:left; text-decoration:underline; }
+  #pfn .nf__cte-link[hidden]{ display:none; }
+  #pfn .nf__c--cte[hidden]{ display:none; }
   #pfn .nf__hist{ display:block; font-size:.69rem; font-weight:700;
     color:var(--muted); margin-top:.28rem; line-height:1.4; }
   #pfn .nf__hist b{ color:var(--ink); font-variant-numeric:tabular-nums; }
@@ -328,6 +336,28 @@ body > .container-fluid:has(#pfn){
     padding:.55rem .65rem; font-size:.76rem; font-family:inherit;
     line-height:1.5; color:var(--ink); background:#f7f9fc; resize:vertical;
     margin-bottom:.7rem; }
+
+  /* conferencia */
+  #pfn .cf{ background:#fff; border:1px solid #f0d8a8; border-radius:12px;
+    padding:.6rem .7rem; margin-bottom:.6rem;
+    box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #pfn .cf--ok{ border-color:var(--borda); background:#fafbfd; }
+  #pfn .cf__h{ display:flex; gap:.5rem; align-items:flex-start; }
+  #pfn .cf__t{ flex:1; min-width:0; font-size:.86rem; font-weight:800;
+    line-height:1.35; }
+  #pfn .cf--ok .cf__t{ color:var(--muted); }
+  #pfn .cf__p{ font-size:.75rem; color:var(--muted); line-height:1.5;
+    margin-top:.2rem; }
+  #pfn .cf__l{ margin-top:.55rem; border-top:1px solid #f0e2c4;
+    padding-top:.45rem; }
+  #pfn .cf__i{ display:flex; gap:.5rem; align-items:flex-start;
+    padding:.35rem 0; border-bottom:1px dashed #f2f5f8; font-size:.78rem; }
+  #pfn .cf__i:last-child{ border-bottom:0; }
+  #pfn .cf__n{ flex:1; min-width:0; font-weight:700; line-height:1.4; }
+  #pfn .cf__n small, #pfn .cf__v small{ display:block; font-weight:600;
+    font-size:.71rem; color:var(--muted); }
+  #pfn .cf__v{ text-align:right; font-weight:800; white-space:nowrap;
+    font-variant-numeric:tabular-nums; }
 
   /* faixa de estado da carga */
   #pfn .fechou{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
@@ -471,7 +501,9 @@ body > .container-fluid:has(#pfn){
                       <input type="text" inputmode="numeric" class="nf__pl nf__mask"
                              placeholder="0,000" oninput="pfnMascara(this)">
                       <span class="nf__hist nf__hpl"></span></label>
-                    <label class="nf__c">CT-e por litro
+                    <button type="button" class="nf__cte-link"
+                            onclick="pfnMostraCte(this)">CT-e sai diferente do frete?</button>
+                    <label class="nf__c nf__c--cte" hidden>CT-e por litro
                       <input type="text" inputmode="numeric" class="nf__pc nf__mask"
                              placeholder="0,000" oninput="pfnMascara(this, true)">
                       <span class="nf__hist nf__hcte">Acompanha o frete.</span>
@@ -520,7 +552,11 @@ body > .container-fluid:has(#pfn){
       {% endif %}
     </div>
     <div class="topo__s">
-      {%- if modo == 'cobrar' -%}
+      {%- if modo == 'conferir' -%}
+        últimos 60 dias ·
+        {%- if achados %} <b>{{ achados }} para olhar</b>
+        {%- else %} <b>nada fora do lugar</b>{% endif -%}
+      {%- elif modo == 'cobrar' -%}
         {{ totais.postos }} cliente(s) · {{ totais.a_cobrar | formatar_moeda }} sem boleto
       {%- elif modo == 'caminhao' -%}
         {{ semana }}, {{ dia.strftime('%d/%m/%Y') }} · linha do tempo do caminhão
@@ -537,6 +573,8 @@ body > .container-fluid:has(#pfn){
          class="{{ 'on' if modo == 'caminhao' }}">Por caminhão</a>
       <a href="{{ url_for('ped_frete_novo.index', modo='cobrar') }}"
          class="{{ 'on' if modo == 'cobrar' }}">A cobrar</a>
+      <a href="{{ url_for('ped_frete_novo.index', modo='conferir') }}"
+         class="{{ 'on' if modo == 'conferir' }}">Conferência</a>
     </div>
   </div>
 
@@ -557,8 +595,66 @@ body > .container-fluid:has(#pfn){
       em comissão e CT-e. A carga abaixo aparece pelo <b>frete</b>.</span></div>
   {% endif %}
 
+  {# ══════════════ MODO: CONFERÊNCIA ══════════════ #}
+  {% if modo == 'conferir' %}
+
+    {% if not achados %}
+    <div class="vazio"><i class="bi bi-check2-circle" style="font-size:1.6rem;color:var(--ok)"></i><br>
+      <b>Nada fora do lugar nos últimos 60 dias.</b><br>
+      <span style="font-weight:600">As {{ conferencia|length }} regras da casa
+        foram conferidas frete a frete.</span></div>
+    {% endif %}
+
+    {% for g in conferencia %}
+    <div class="cf {{ 'cf--ok' if not g.n }}">
+      <div class="cf__h">
+        <span class="cf__t">{{ g.titulo }}</span>
+        <span class="selo {{ 'selo--pago' if not g.n else 'selo--falta' }}">
+          {{ g.n if g.n else '✓' }}</span>
+      </div>
+      <div class="cf__p">{{ g.porque }}</div>
+      {% if g.n %}
+      <div class="cf__l">
+        {% for r in g.linhas %}
+        {% if g.carga %}
+        <div class="cf__i">
+          <span class="cf__n">{{ r.d.strftime('%d/%m') }} · {{ r.placa }} ·
+            {{ (r.motorista or '—')|truncate(20, True, '…') }}
+            <small>{{ r.n }} frete(s)</small></span>
+          <span class="cf__v">{{ fmtl.format(r.litros).replace(',', '.') }} L
+            <small>de {{ fmtl.format(r.capacidade).replace(',', '.') }}</small></span>
+        </div>
+        {% else %}
+        <div class="cf__i">
+          <span class="cf__n">#{{ r.id }} · {{ r.data_frete.strftime('%d/%m') }} ·
+            {{ (r.cliente or '—')|truncate(26, True, '…') }}
+            <small>{{ r.produto or '—' }}
+              {{ fmtl.format(r.litros).replace(',', '.') }} L ·
+              {{ r.placa or 'sem caminhão' }}
+              {%- if r.pedido %} · {{ r.pedido }}{% endif -%}
+            </small></span>
+          <span class="cf__v">{{ r.valor_total_frete | formatar_moeda }}
+            <small>comis {{ r.comissao_motorista | formatar_moeda }} ·
+              CT-e {{ r.valor_cte | formatar_moeda }}</small></span>
+        </div>
+        {% endif %}
+        {% endfor %}
+        {% if g.n >= 40 %}
+        <div class="dica">Mostrando os 40 mais recentes.</div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    <p class="rod">A conferência olha os últimos 60 dias e checa as regras que
+    os seus próprios fretes seguem — comissão de R$ 0,01/L, comissão do CT-e de
+    8%, lucro igual a frete menos as duas, o posto da casa sem frete, pedido e
+    frete no mesmo caminhão, e carga que caiba na carreta. Ela só aponta:
+    nenhum número é alterado aqui.</p>
+
   {# ══════════════ MODO: A COBRAR ══════════════ #}
-  {% if modo == 'cobrar' %}
+  {% elif modo == 'cobrar' %}
 
     <div class="g-nums duas">
       <div class="n n--ambar"><div class="r">Falta cobrar</div>
@@ -1673,13 +1769,22 @@ function pfnPosto(sel){
     // ficar ali travado parecendo que falta preencher. O valor vai 0 assim
     // mesmo. O CT-e continua, porque esse sai.
     var rot = pl.closest('.nf__c');
+    var rotCte = itens[k].querySelector('.nf__c--cte');
+    var link = itens[k].querySelector('.nf__cte-link');
     if (cli.nao_cobra){
       pl.value = '0,000';
       if (rot) rot.hidden = true;
+      // aqui o CT-e e o unico valor que existe, entao abre sozinho
+      if (rotCte) rotCte.hidden = false;
+      if (link) link.hidden = true;
       if (pc) pc.setAttribute('data-tocado', '1');   // para de espelhar o frete
     } else {
       if (rot && rot.hidden){ rot.hidden = false; pl.value = ''; }
       if (pc && pl.value === ''){ pc.removeAttribute('data-tocado'); pc.value = ''; }
+      if (rotCte && !pc.getAttribute('data-tocado')){
+        rotCte.hidden = true;
+        if (link) link.hidden = false;
+      }
     }
     var av = itens[k].querySelector('.nf__casa');
     if (av) av.textContent = cli.nao_cobra
@@ -1719,6 +1824,15 @@ function pfnDicaPreco(form, item){
                 '</b> ' + (h[i].origem || ''));
   }
   alvo.innerHTML = 'Já cobrado: ' + partes.join(' · ');
+}
+
+function pfnMostraCte(link){
+  var item = link.closest('.nf__i');
+  var campo = item.querySelector('.nf__c--cte');
+  if (campo) campo.hidden = false;
+  link.hidden = true;
+  var pc = item.querySelector('.nf__pc');
+  if (pc) pc.focus();
 }
 
 // Recalcula a conta da linha e o "cabe na carreta?" do conjunto.

@@ -820,6 +820,121 @@ def _anexar_abertos(viagens, abertos):
             p['cliente_id'] = cid
 
 
+# As regras que a casa segue, viradas em pergunta. Todas medidas no banco
+# antes de virar tela: nos ultimos 60 dias, nenhuma tinha violacao — entao o
+# que aparecer aqui e coisa nova, nao ruido historico.
+_REGRAS = [
+    ('comissao', 'Comissão fora de R$ 0,01/L',
+     'A comissão do motorista é 1 centavo por litro em todos os fretes cobrados.',
+     "f.valor_total_frete > 0 AND ABS(f.comissao_motorista - {L}*0.01) > 0.01"),
+    ('comissao_zero', 'Comissão em frete sem cobrança',
+     'Frete R$ 0,00 é posto da casa: não paga comissão.',
+     "f.valor_total_frete = 0 AND f.comissao_motorista <> 0"),
+    ('casa', 'Posto da casa com frete cobrado',
+     'O Posto Novo Horizonte Goiatuba não paga frete — só o CT-e.',
+     "f.valor_total_frete > 0 AND cl.razao_social LIKE 'POSTO NOVO HORIZONTE GOIATUBA%'"),
+    ('frete_conta', 'Frete não bate com litros × preço',
+     'O valor do frete tem que ser a quantidade vezes o preço por litro.',
+     "ABS(f.valor_total_frete - {L}*f.preco_por_litro) > 0.02"),
+    ('lucro', 'Lucro não bate com a conta',
+     'Lucro é frete menos comissão do motorista menos comissão do CT-e.',
+     "f.valor_total_frete > 0 AND ABS(f.lucro - (f.valor_total_frete - "
+     "f.comissao_motorista - f.comissao_cte)) > 0.01"),
+    ('cte', 'Comissão do CT-e fora de 8%',
+     'A comissão do CT-e é 8% do valor dele.',
+     "f.valor_cte > 0 AND ABS(f.comissao_cte - f.valor_cte*0.08) > 0.01"),
+    ('divergencia', 'Pedido e frete em caminhões diferentes',
+     'Editar o veículo do pedido não muda o frete — e é o frete que manda em '
+     'comissão e CT-e.',
+     "p.id IS NOT NULL AND f.veiculos_id <> p.veiculo_id"),
+    ('sem_veiculo', 'Frete sem caminhão ou sem motorista',
+     'Sem isso o frete não aparece em nenhuma carga.',
+     "f.veiculos_id IS NULL OR f.motoristas_id IS NULL"),
+    ('qtd', 'Quantidade zerada',
+     'Frete sem litros não tem como estar certo.',
+     "COALESCE({L}, 0) <= 0"),
+    ('flag', 'Marcado como faturado, sem boleto vivo',
+     'A marca boleto_emitido diz que já foi cobrado, mas não existe cobrança '
+     'apontando pro frete. Costuma ser boleto cancelado.',
+     """f.boleto_emitido = 1 AND NOT (
+          EXISTS(SELECT 1 FROM cobrancas cb WHERE cb.frete_id = f.id
+                   AND (cb.status IS NULL OR cb.status <> 'cancelado'))
+       OR EXISTS(SELECT 1 FROM cobrancas_freites cf
+                   JOIN cobrancas cb ON cb.id = cf.cobranca_id
+                  WHERE cf.frete_id = f.id
+                    AND (cb.status IS NULL OR cb.status <> 'cancelado')))"""),
+]
+
+
+def _conferencia(cur, desde, cap):
+    """Roda cada regra e devolve o que nao bate, com o frete inteiro.
+
+    A tela existe pra responder "estou fazendo besteira?" — entao ela mostra a
+    linha que falhou, nao so o numero. Numero sozinho nao conserta nada.
+    """
+    litros = "COALESCE(f.quantidade_manual, q.valor)"
+    base = """
+        SELECT f.id, f.data_frete, cl.razao_social AS cliente, pr.nome AS produto,
+               v.placa, m.nome AS motorista, p.numero AS pedido,
+               COALESCE(f.quantidade_manual, q.valor) AS litros,
+               f.preco_por_litro, f.valor_total_frete, f.comissao_motorista,
+               f.valor_cte, f.comissao_cte, f.lucro, f.boleto_emitido
+          FROM fretes f
+          LEFT JOIN quantidades q ON q.id = f.quantidade_id
+          LEFT JOIN clientes cl   ON cl.id = f.clientes_id
+          LEFT JOIN produto pr    ON pr.id = f.produto_id
+          LEFT JOIN veiculos v    ON v.id  = f.veiculos_id
+          LEFT JOIN motoristas m  ON m.id  = f.motoristas_id
+          LEFT JOIN pedidos p     ON p.id  = f.pedido_id
+         WHERE f.data_frete >= %s AND ({cond})
+         ORDER BY f.data_frete DESC, f.id DESC
+         LIMIT 40
+    """
+    saida = []
+    for chave, titulo, porque, cond in _REGRAS:
+        try:
+            cur.execute(base.format(cond=cond.format(L=litros)), (desde,))
+            linhas = cur.fetchall()
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "[ped_frete_novo] regra %s", chave)
+            linhas = []
+        for r in linhas:
+            for k in ('litros', 'preco_por_litro', 'valor_total_frete',
+                      'comissao_motorista', 'valor_cte', 'comissao_cte', 'lucro'):
+                r[k] = _f(r[k])
+        saida.append({'chave': chave, 'titulo': titulo, 'porque': porque,
+                      'linhas': linhas, 'n': len(linhas)})
+
+    # A carreta e regra tambem: carga que passa da capacidade nao existe na
+    # estrada, entao ou o veiculo esta errado ou a quantidade esta.
+    cur.execute("""
+        SELECT f.data_frete AS d, f.veiculos_id AS vid, v.placa,
+               m.nome AS motorista, f.motoristas_id AS mid,
+               SUM(COALESCE(f.quantidade_manual, q.valor)) AS litros,
+               COUNT(*) AS n
+          FROM fretes f
+          LEFT JOIN quantidades q ON q.id = f.quantidade_id
+          LEFT JOIN veiculos v    ON v.id = f.veiculos_id
+          LEFT JOIN motoristas m  ON m.id = f.motoristas_id
+         WHERE f.data_frete >= %s AND f.veiculos_id IS NOT NULL
+         GROUP BY f.data_frete, f.veiculos_id, v.placa, m.nome, f.motoristas_id
+         ORDER BY f.data_frete DESC
+    """, (desde,))
+    estouros = []
+    for r in cur.fetchall():
+        c = (cap.get(r['vid']) or {}).get('total') or 0
+        r['litros'] = _f(r['litros'])
+        r['capacidade'] = c
+        if c and r['litros'] > c + 0.01:
+            estouros.append(r)
+    saida.append({'chave': 'estouro', 'titulo': 'Carga maior que a carreta',
+                  'porque': 'Ou o caminhão do frete está errado, ou a '
+                            'quantidade está — na estrada isso não cabe.',
+                  'linhas': estouros[:40], 'n': len(estouros), 'carga': True})
+    return saida
+
+
 def _divergencias(cur, desde):
     """Pedido e frete apontando pra veiculos diferentes.
 
@@ -1595,7 +1710,7 @@ def index():
     _ensure_tabela()
     hoje = hoje_brasilia()
     modo = (request.args.get('modo') or 'dia').lower()
-    if modo not in ('dia', 'caminhao', 'cobrar'):
+    if modo not in ('dia', 'caminhao', 'cobrar', 'conferir'):
         modo = 'dia'
 
     try:
@@ -1616,6 +1731,7 @@ def index():
            'vencimento_padrao': (hoje + timedelta(days=3)).isoformat(),
            'viagens': [], 'ociosos': [], 'dias': [], 'veiculos': [],
            'cobrar': [], 'divergencias': [], 'erro': None, 'destinos': [],
+           'conferencia': [], 'achados': 0,
            'op': {'clientes': [], 'fornecedores': [], 'produtos': [],
                   'origens': [], 'bases': [], 'quantidades': [],
                   'motoristas': [], 'historico': {}, 'json': {}},
@@ -1644,7 +1760,10 @@ def index():
             v['carreta'] = c.get('carreta')
         ctx['veiculos'] = veiculos
 
-        if modo == 'cobrar':
+        if modo == 'conferir':
+            ctx['conferencia'] = _conferencia(cursor, hoje - timedelta(days=60), cap)
+            ctx['achados'] = sum(g['n'] for g in ctx['conferencia'])
+        elif modo == 'cobrar':
             ctx['cobrar'] = _a_cobrar(cursor, hoje - timedelta(days=120))
             ctx['totais']['a_cobrar'] = sum(c['valor'] for c in ctx['cobrar'])
             ctx['totais']['postos'] = len(ctx['cobrar'])
