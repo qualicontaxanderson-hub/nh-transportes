@@ -342,6 +342,9 @@ body > .container-fluid:has(#pfn){
     padding:.6rem .7rem; margin-bottom:.6rem;
     box-shadow:0 2px 10px rgba(20,35,60,.06); }
   #pfn .cf--ok{ border-color:var(--borda); background:#fafbfd; }
+  /* aviso nao e erro: nao pode gritar igual */
+  #pfn .cf--aviso{ border-color:var(--borda); background:#fafbfd; }
+  #pfn .cf--aviso .cf__t{ color:var(--muted); }
   #pfn .cf__h{ display:flex; gap:.5rem; align-items:flex-start; }
   #pfn .cf__t{ flex:1; min-width:0; font-size:.86rem; font-weight:800;
     line-height:1.35; }
@@ -606,10 +609,11 @@ body > .container-fluid:has(#pfn){
     {% endif %}
 
     {% for g in conferencia %}
-    <div class="cf {{ 'cf--ok' if not g.n }}">
+    <div class="cf {{ 'cf--ok' if not g.n }} {{ 'cf--aviso' if g.aviso and g.n }}">
       <div class="cf__h">
         <span class="cf__t">{{ g.titulo }}</span>
-        <span class="selo {{ 'selo--pago' if not g.n else 'selo--falta' }}">
+        <span class="selo {{ 'selo--pago' if not g.n else
+                              ('selo--vg' if g.aviso else 'selo--falta') }}">
           {{ g.n if g.n else '✓' }}</span>
       </div>
       <div class="cf__p">{{ g.porque }}</div>

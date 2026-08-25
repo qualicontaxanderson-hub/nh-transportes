@@ -906,19 +906,27 @@ def _conferencia(cur, desde, cap):
         saida.append({'chave': chave, 'titulo': titulo, 'porque': porque,
                       'linhas': linhas, 'n': len(linhas)})
 
-    # A carreta e regra tambem: carga que passa da capacidade nao existe na
-    # estrada, entao ou o veiculo esta errado ou a quantidade esta.
+    # A carreta e regra, mas o que ela mede e o PEDIDO, nao o dia.
+    #
+    # Somar o dia inteiro acusava coisa certa: em 10/08 o Wellington saiu com
+    # 30.000 (PED-00347, carreta cheia) e voltou pra levar mais 5.000 duas
+    # horas depois (PED-00348). Sao duas viagens, nao carga impossivel — e
+    # cada pedido cabe na carreta sozinho.
+    #
+    # Um PEDIDO que passa da carreta e outra historia: foi o caso do PED-00371,
+    # com 35.000 L num caminhao de 30.000, onde o veiculo estava mesmo errado.
     cur.execute("""
-        SELECT f.data_frete AS d, f.veiculos_id AS vid, v.placa,
-               m.nome AS motorista, f.motoristas_id AS mid,
+        SELECT p.numero, f.data_frete AS d, f.veiculos_id AS vid, v.placa,
+               m.nome AS motorista,
                SUM(COALESCE(f.quantidade_manual, q.valor)) AS litros,
                COUNT(*) AS n
           FROM fretes f
+          JOIN pedidos p          ON p.id = f.pedido_id
           LEFT JOIN quantidades q ON q.id = f.quantidade_id
           LEFT JOIN veiculos v    ON v.id = f.veiculos_id
           LEFT JOIN motoristas m  ON m.id = f.motoristas_id
          WHERE f.data_frete >= %s AND f.veiculos_id IS NOT NULL
-         GROUP BY f.data_frete, f.veiculos_id, v.placa, m.nome, f.motoristas_id
+         GROUP BY p.numero, f.data_frete, f.veiculos_id, v.placa, m.nome
          ORDER BY f.data_frete DESC
     """, (desde,))
     estouros = []
@@ -928,10 +936,40 @@ def _conferencia(cur, desde, cap):
         r['capacidade'] = c
         if c and r['litros'] > c + 0.01:
             estouros.append(r)
-    saida.append({'chave': 'estouro', 'titulo': 'Carga maior que a carreta',
-                  'porque': 'Ou o caminhão do frete está errado, ou a '
-                            'quantidade está — na estrada isso não cabe.',
+    saida.append({'chave': 'estouro', 'titulo': 'Pedido maior que a carreta',
+                  'porque': 'Um pedido é uma carga só. Se ele passa da '
+                            'carreta, ou o caminhão está errado ou a '
+                            'quantidade está.',
                   'linhas': estouros[:40], 'n': len(estouros), 'carga': True})
+
+    # E o dia com mais de uma carreta vira aviso, nao erro: quase sempre e o
+    # caminhao que saiu duas vezes.
+    cur.execute("""
+        SELECT f.data_frete AS d, f.veiculos_id AS vid, v.placa,
+               m.nome AS motorista,
+               SUM(COALESCE(f.quantidade_manual, q.valor)) AS litros,
+               COUNT(DISTINCT f.pedido_id) AS pedidos, COUNT(*) AS n
+          FROM fretes f
+          LEFT JOIN quantidades q ON q.id = f.quantidade_id
+          LEFT JOIN veiculos v    ON v.id = f.veiculos_id
+          LEFT JOIN motoristas m  ON m.id = f.motoristas_id
+         WHERE f.data_frete >= %s AND f.veiculos_id IS NOT NULL
+         GROUP BY f.data_frete, f.veiculos_id, v.placa, m.nome
+         ORDER BY f.data_frete DESC
+    """, (desde,))
+    duplas = []
+    for r in cur.fetchall():
+        c = (cap.get(r['vid']) or {}).get('total') or 0
+        r['litros'] = _f(r['litros'])
+        r['capacidade'] = c
+        if c and r['litros'] > c + 0.01:
+            duplas.append(r)
+    saida.append({'chave': 'duas_viagens',
+                  'titulo': 'Caminhão passou de uma carreta no dia',
+                  'porque': 'Normalmente é o caminhão que saiu duas vezes — '
+                            'confira só se não bater com o que aconteceu.',
+                  'linhas': duplas[:40], 'n': len(duplas), 'carga': True,
+                  'aviso': True})
     return saida
 
 
@@ -1762,7 +1800,10 @@ def index():
 
         if modo == 'conferir':
             ctx['conferencia'] = _conferencia(cursor, hoje - timedelta(days=60), cap)
-            ctx['achados'] = sum(g['n'] for g in ctx['conferencia'])
+            # Aviso nao entra na conta: o topo tem que dizer quantos
+            # PROBLEMAS existem, senao o numero perde o sentido.
+            ctx['achados'] = sum(g['n'] for g in ctx['conferencia']
+                                 if not g.get('aviso'))
         elif modo == 'cobrar':
             ctx['cobrar'] = _a_cobrar(cursor, hoje - timedelta(days=120))
             ctx['totais']['a_cobrar'] = sum(c['valor'] for c in ctx['cobrar'])
