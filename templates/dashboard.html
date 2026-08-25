@@ -26,13 +26,16 @@
   .dash-header {
     background: #fff;
     border-bottom: 1px solid #e2e8f0;
-    padding: 14px 28px;
+    padding: 12px 10px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 12px;
     box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  @media (min-width: 992px) {
+    .dash-header { padding: 14px 28px; }
   }
   .dash-header-left {
     display: flex;
@@ -63,8 +66,9 @@
 
   /* Body */
   .dash-body {
-    padding: 22px 26px;
+    padding: 14px 6px;
   }
+  @media (min-width: 992px) { .dash-body { padding: 22px 26px; } }
 
   /* Section label */
   .section-label {
