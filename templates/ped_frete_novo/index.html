@@ -1241,6 +1241,15 @@ body > .container-fluid:has(#pfn){
     </div>
   </div>
 
+
+  <p class="rod">A carga é agrupada por <b>data + caminhão + motorista</b>.
+    Quando a mesma placa sai duas vezes no mesmo dia, os cartões vêm marcados
+    1ª e 2ª viagem. As bocas vêm do cadastro da carreta
+    (<i>veiculo_compartimentos</i>), ligada ao cavalo por
+    <i>conjuntos_veiculos</i> — a tela só lê.</p>
+
+  {% endif %}
+
   {# Caixa que abre depois de emitir: PDF renomeado ou WhatsApp com o resumo.
      Mesmo caminho da tela de Fretes, com o resumo dos fretes que faltava lá. #}
   <div class="cx" id="pfn-share" hidden>
@@ -1263,14 +1272,6 @@ body > .container-fluid:has(#pfn){
       </div>
     </div>
   </div>
-
-  <p class="rod">A carga é agrupada por <b>data + caminhão + motorista</b>.
-    Quando a mesma placa sai duas vezes no mesmo dia, os cartões vêm marcados
-    1ª e 2ª viagem. As bocas vêm do cadastro da carreta
-    (<i>veiculo_compartimentos</i>), ligada ao cavalo por
-    <i>conjuntos_veiculos</i> — a tela só lê.</p>
-
-  {% endif %}
 
 </div>
 {% endblock %}
