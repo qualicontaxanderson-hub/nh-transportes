@@ -1535,6 +1535,51 @@ def reconciliar_efi():
         return jsonify({"success": False, "error": "Erro interno na reconciliação."}), 500
 
 
+def _pix_do_charge(data):
+    """O Pix copia-e-cola dentro da resposta da EFI, no mesmo formato que
+    utils.boletos._safe_get_charge_fields procura."""
+    try:
+        pix = (data or {}).get("pix") or {}
+        if isinstance(pix, dict):
+            return pix.get("qrcode") or pix.get("chave") or pix.get("qr_code")
+    except Exception:
+        pass
+    return None
+
+
+def _guardar_barcode_pix(charge_id, barcode, pix_qrcode):
+    """Preenche barcode/pix_qrcode da cobranca quando ainda estiverem vazios.
+
+    Nunca sobrescreve o que ja esta gravado e nunca deixa a excecao subir: e
+    um extra em cima de uma consulta que existe por outro motivo.
+    """
+    if not charge_id or not (barcode or pix_qrcode):
+        return
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """UPDATE cobrancas
+                  SET barcode    = COALESCE(barcode, %s),
+                      pix_qrcode = COALESCE(pix_qrcode, %s)
+                WHERE charge_id  = %s""",
+            (barcode, pix_qrcode, str(charge_id)),
+        )
+        conn.commit()
+    except Exception:
+        current_app.logger.debug("[efi] barcode/pix nao guardados para charge %s", charge_id)
+    finally:
+        try:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+
 @financeiro_bp.route('/consultar-status-efi/<int:charge_id>/', methods=['GET'])
 @login_required
 def consultar_status_efi(charge_id):
@@ -1660,7 +1705,12 @@ def consultar_status_efi(charge_id):
             "expired": "Expirado"
         }
         result["status_label"] = status_translation.get(status.lower(), status)
-        
+
+        # A consulta ja trouxe o codigo de barras e o Pix; guardar o que veio
+        # custa um UPDATE e evita ter que perguntar de novo. Isolado: se falhar,
+        # a resposta da rota sai igual.
+        _guardar_barcode_pix(charge_id, barcode, _pix_do_charge(data))
+
         return jsonify(result), 200
         
     except Exception as e:
