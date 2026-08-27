@@ -269,9 +269,9 @@ body > .container-fluid:has(#pfn){
   #pfn .gr__a{ margin-left:auto; border:0; background:none; color:var(--blue);
     font-size:.76rem; font-weight:800; font-family:inherit; cursor:pointer; }
   #pfn .dica{ font-size:.74rem; color:var(--muted); margin-top:.4rem; }
-  #pfn .zapl{ margin-bottom:.55rem; }
-  #pfn .bd__b--zap{ width:100%; background:#16a34a; border-color:#16a34a;
-    color:#fff; padding:.5rem .7rem; font-size:.8rem; }
+  /* Era uma faixa verde de ponta a ponta acima da barra. Agora e um botao
+     como os vizinhos — so a cor o distingue. */
+  #pfn .bd__b--zap{ background:#16a34a; border-color:#16a34a; color:#fff; }
   #pfn .bd__b--zap:hover{ background:#15803d; }
   #pfn .opc.on{ border-color:var(--blue); background:#eaf1f9; }
   #pfn .opc small{ display:block; font-weight:600; font-size:.72rem;
@@ -850,11 +850,6 @@ body > .container-fluid:has(#pfn){
       <div class="vg__corpo">
         <div class="vg__c2">
           <script type="application/json" class="pfn-carga">{{ v.json | tojson }}</script>
-          <div class="zapl">
-            <button type="button" class="bd__b bd__b--zap" onclick="pfnZapAbre(this)">
-              <i class="bi bi-whatsapp"></i> Mandar pedido no WhatsApp</button>
-          </div>
-
 
           {% if v.fechada %}
           <div class="fechou">
@@ -864,6 +859,8 @@ body > .container-fluid:has(#pfn){
               {%- if v.livre > 0.01 and v.capacidade %} · saiu com
                 {{ fmtl.format(v.livre).replace(',', '.') }} L de espaço{% endif -%}
             </span>
+            <button type="button" class="bd__b bd__b--zap" onclick="pfnZapAbre(this)">
+              <i class="bi bi-whatsapp"></i> Mandar pedido no WhatsApp</button>
             <button type="button" class="bd__b"
                     onclick="pfnReabrir(this, '{{ v.data.isoformat() }}',
                              {{ v.veiculo_id }}, {{ v.motorista_id or 0 }})">reabrir</button>
@@ -875,6 +872,8 @@ body > .container-fluid:has(#pfn){
               {%- elif v.capacidade %} · cabem mais
                 {{ fmtl.format(v.livre).replace(',', '.') }} L{% endif -%}
             </span>
+            <button type="button" class="bd__b bd__b--zap" onclick="pfnZapAbre(this)">
+              <i class="bi bi-whatsapp"></i> Mandar pedido no WhatsApp</button>
             <button type="button" class="bd__b bd__b--novo novo__abre"
                     onclick="pfnAbreNovo(this)">
               <i class="bi bi-plus-lg"></i> Adicionar Carga</button>
