@@ -21,6 +21,11 @@ body > .container-fluid:has(#pfn){
 @media (min-width:992px){
   body > .container-fluid:has(#pfn){ padding:.7rem 1rem 0; }
 }
+/* Sem teto nenhum, num monitor de 1900px a linha do produto punha o nome
+   numa ponta e o valor na outra, com 1.500px de vazio no meio. */
+@media (min-width:1200px){
+  body > .container-fluid:has(#pfn){ max-width:1560px; margin:0 auto; }
+}
 #pfn.container-fluid{ padding-left:0; padding-right:0; }
 </style>
 {% with esc = '#pfn' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
@@ -438,6 +443,22 @@ body > .container-fluid:has(#pfn){
     border-radius:13px; font-weight:700; }
   #pfn .rod{ font-size:.73rem; color:var(--muted); margin:1rem 0 .5rem;
     line-height:1.55; }
+
+  /* Do 1200 pra cima os numeros ganham coluna fixa: ficam um debaixo do
+     outro, da pra somar de olho, e param de fugir pra borda. Abaixo disso
+     nada muda — no celular ja estava bom. */
+  @media (min-width:1200px){
+    #pfn .fr{ justify-content:flex-start; }
+    #pfn .fr__n{ flex:0 1 640px; }
+    #pfn .fr__v{ flex:0 0 auto; width:118px; text-align:right; }
+    #pfn .ef{ justify-content:flex-start; }
+    #pfn .ef__n{ flex:0 1 600px; }
+    #pfn .ef__v{ flex:0 0 auto; width:118px; text-align:right; }
+  
+  /* deixava de ser botao e virava uma faixa de ponta a ponta */
+    #pfn .cli__mais{ width:auto; }
+  }
+
 </style>
 {% endblock %}
 
