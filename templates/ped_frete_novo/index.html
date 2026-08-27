@@ -409,6 +409,18 @@ body > .container-fluid:has(#pfn){
     #pfn .leg{ grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); }
   }
 
+  /* Duas colunas so a partir de 1400px. Abaixo disso a grade nem existe e
+     tudo volta a ser uma coluna, igual ao celular. */
+  @media (min-width:1400px){
+    #pfn .grade{ display:grid; grid-template-columns:1fr 1fr; gap:0 .65rem;
+      align-items:start; }
+    /* Cartao aberto ocupa a linha inteira: em duas colunas, expandir um
+       deixaria um buraco do lado e a leitura pularia de um pro outro. */
+    #pfn .grade > .vg.aberta,
+    #pfn .grade > .vazio,
+    #pfn .grade > .rod{ grid-column:1 / -1; }
+  }
+
   #pfn .fr{ display:flex; gap:.45rem; align-items:center; padding:.28rem 0;
     font-size:.76rem; border-bottom:1px dashed #f2f5f8; }
   #pfn .fr:last-child{ border-bottom:0; }
@@ -691,6 +703,7 @@ body > .container-fluid:has(#pfn){
         <div class="v">{{ totais.postos }}</div></div>
     </div>
 
+    <div class="grade">
     {% for c in cobrar %}
     <div class="cli cli--falta">
       <div class="cli__h">
@@ -735,6 +748,7 @@ body > .container-fluid:has(#pfn){
     <div class="vazio"><i class="bi bi-check2-circle"></i><br>
       Nenhum frete com valor esperando boleto nos últimos 120 dias.</div>
     {% endfor %}
+    </div>
 
     <p class="rod">Esta aba junta os fretes do mesmo cliente mesmo que estejam
     em dias e caminhões diferentes — e o mesmo seletor existe dentro da carga,
@@ -784,6 +798,7 @@ body > .container-fluid:has(#pfn){
         <div class="v">{{ totais.a_cobrar | formatar_moeda }}</div></div>
     </div>
 
+    <div class="grade">
     {% for v in viagens %}
     {#- Fechado por padrao: o dia com varios caminhoes virava uma parede de
         texto, e o cabecalho ja diz placa, motorista, litros e quanto falta
@@ -969,6 +984,7 @@ body > .container-fluid:has(#pfn){
           </div>
           {% endif %}
 
+          <div class="grade">
           {% for p in v.postos %}
           <div class="cli {{ 'cli--falta' if p.estado == 'falta' }}">
             <div class="cli__h">
@@ -1139,6 +1155,7 @@ body > .container-fluid:has(#pfn){
             </div>
           </div>
           {% endfor %}
+          </div>
 
         </div>
       </div>
@@ -1189,6 +1206,7 @@ body > .container-fluid:has(#pfn){
     </div>
     {% endfor %}
     {% endif %}
+    </div>
 
     {#- As listas saem UMA vez na pagina, nao uma por carga: repetidas em cada
       cartao elas sozinhas dobravam o tamanho da tela. -#}
