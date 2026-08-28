@@ -1,0 +1,559 @@
+{% extends "base.html" %}
+{% block title %}Prazo{% endblock %}
+
+{#- PRAZO — Fase 1: leitura + o de-para que o usuario arruma aos poucos.
+    Mesma linguagem visual da tela PED/FRETE, de proposito: quem usa uma
+    reconhece a outra sem reaprender. -#}
+
+{% block head %}
+<style>
+/* O layout base pinta todo body > .container-fluid de branco com 2rem de
+   padding; no celular vira moldura e a tela nao enche. */
+body > .container-fluid:has(#prz){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#prz){ padding:.7rem 1rem 0; }
+}
+@media (min-width:1200px){
+  body > .container-fluid:has(#prz){ max-width:1560px; margin:0 auto; }
+}
+#prz.container-fluid{ padding-left:0; padding-right:0; }
+</style>
+{% with esc = '#prz' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
+<style>
+  #prz{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#6b7684; --ink:#151d27; --borda:#d9e0e8;
+        --grupo:#7a6bab; color:var(--ink); max-width:100%; }
+
+  #prz .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:13px; padding:.6rem .8rem; margin-bottom:.6rem; }
+  #prz .topo__l{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  #prz .topo__t{ font-weight:800; font-size:.98rem; flex:1; min-width:0; }
+  #prz .topo__s{ font-size:.76rem; opacity:.92; font-weight:700; margin-top:.1rem; }
+  #prz .fam{ display:flex; gap:.35rem; margin-top:.5rem; flex-wrap:wrap; }
+  #prz .fama{ font-size:.76rem; font-weight:800; border-radius:99px;
+    padding:.26rem .75rem; background:rgba(255,255,255,.18); color:#fff;
+    text-decoration:none; }
+  #prz .fama:hover{ background:rgba(255,255,255,.3); color:#fff; }
+  #prz .fama.on{ background:#fff; color:var(--blue-deep); }
+
+  #prz .per{ display:flex; gap:.4rem; align-items:center; flex-wrap:wrap;
+    font-size:.75rem; font-weight:700; color:var(--muted); margin-bottom:.6rem; }
+  #prz .per input{ border:1px solid var(--borda); border-radius:8px;
+    padding:.28rem .45rem; font-size:.78rem; font-family:inherit; }
+  #prz .per button{ border:1px solid var(--blue); background:var(--blue);
+    color:#fff; border-radius:8px; padding:.3rem .7rem; font-size:.75rem;
+    font-weight:800; font-family:inherit; cursor:pointer; }
+
+  #prz .cli{ border:1px solid var(--borda); border-radius:11px; background:#fff;
+    margin-bottom:.5rem; overflow:hidden; }
+  #prz .cli--dev{ border-color:#f0d8a8; }
+  #prz .cli--grp{ border-color:#d5cdeb; }
+  #prz .cli__h{ display:flex; gap:.5rem; align-items:flex-start; flex-wrap:wrap;
+    padding:.45rem .6rem; background:#f7f9fc; border-bottom:1px solid #eef1f5;
+    cursor:pointer; }
+  #prz .cli--dev .cli__h{ background:#fffdf7; }
+  #prz .cli--grp .cli__h{ background:#faf8fe; }
+  #prz .cli__n{ font-weight:800; font-size:.83rem; flex:1; min-width:0;
+    line-height:1.35; }
+  #prz .cli__n small{ display:block; font-weight:600; font-size:.71rem;
+    color:var(--muted); }
+  #prz .cli__c{ padding:.45rem .6rem; }
+  #prz .po__p{ width:10px; height:10px; border-radius:3px; flex:0 0 auto;
+    margin-top:.25rem; }
+
+  #prz .selo{ font-size:.7rem; font-weight:800; border-radius:99px;
+    padding:.2rem .55rem; white-space:nowrap; }
+  #prz .selo--dev{ background:#fdf3dd; color:#7a4f00; }
+  #prz .selo--ok{ background:#e4f4e8; color:#1c6b34; }
+  #prz .selo--sem{ background:#fbe6e6; color:#8f2626; }
+  #prz .selo--grp{ background:#ede9f7; color:#4a3aa7; }
+  #prz .selo--cz{ background:#eef1f5; color:var(--muted); }
+
+  #prz .lin{ display:flex; gap:.45rem; align-items:center; padding:.3rem 0;
+    font-size:.78rem; border-bottom:1px dashed #f2f5f8; }
+  #prz .lin:last-child{ border-bottom:0; }
+  #prz .lin__a{ flex:1 1 300px; min-width:0; }
+  #prz .lin__a small{ color:var(--muted); font-weight:600; }
+  #prz .lin__q{ color:var(--muted); font-weight:700;
+    font-variant-numeric:tabular-nums; white-space:nowrap; }
+  #prz .lin__v{ font-weight:800; font-variant-numeric:tabular-nums;
+    white-space:nowrap; }
+  @media (min-width:1200px){
+    #prz .lin{ justify-content:flex-start; }
+    #prz .lin__a{ flex:0 1 560px; }
+    #prz .lin__q{ width:120px; text-align:right; flex:0 0 auto; }
+    #prz .lin__v{ width:130px; text-align:right; flex:0 0 auto; }
+  }
+
+  #prz .barra{ height:7px; background:#eef1f5; border-radius:99px;
+    overflow:hidden; display:block; margin:.3rem 0 .1rem; }
+  #prz .barra i{ display:block; height:100%; border-radius:99px; }
+
+  #prz .rod{ display:flex; gap:.4rem; align-items:center; flex-wrap:wrap;
+    margin-top:.5rem; padding-top:.45rem; border-top:1px solid #eef1f5;
+    font-size:.8rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  #prz .rod .dir{ margin-left:auto; }
+
+  #prz .bt{ border:1px solid var(--borda); background:#fff; color:#3a4655;
+    border-radius:9px; padding:.34rem .65rem; font-size:.75rem; font-weight:800;
+    font-family:inherit; cursor:pointer; white-space:nowrap; }
+  #prz .bt:hover{ background:#f7f9fc; }
+  #prz .bt--sim{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #prz .bt--sim:hover{ background:var(--blue-deep); }
+  #prz .bt--ouro{ background:var(--ambar); border-color:var(--ambar); color:#fff; }
+  #prz .bt[disabled]{ opacity:.55; cursor:default; }
+
+  #prz .vazio{ text-align:center; color:var(--muted); font-size:.85rem;
+    padding:2rem 1rem; background:#fff; border:1px dashed var(--borda);
+    border-radius:11px; }
+  #prz .rod-txt{ font-size:.75rem; color:var(--muted); line-height:1.55;
+    margin:.9rem 0 0; }
+  #prz .rod-txt i{ font-style:italic; }
+
+  #prz .grade{ display:grid; grid-template-columns:1fr; gap:0; }
+  @media (min-width:1400px){
+    #prz .grade{ grid-template-columns:1fr 1fr; gap:0 .65rem; align-items:start; }
+  }
+
+  /* conferencia */
+  #prz .pt{ border:1px solid var(--borda); border-radius:11px; background:#fff;
+    margin-bottom:.55rem; overflow:hidden; }
+  #prz .pt--al{ border-color:#f0d8a8; }
+  #prz .pt__h{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
+    padding:.5rem .65rem; background:#f7f9fc; border-bottom:1px solid #eef1f5; }
+  #prz .pt--al .pt__h{ background:#fffdf7; }
+  #prz .pt__t{ font-weight:800; font-size:.82rem; flex:1; min-width:0; }
+  #prz .pt__p{ font-size:.75rem; color:var(--muted); padding:.45rem .65rem;
+    line-height:1.5; border-bottom:1px solid #eef1f5; }
+
+  /* aviso do periodo */
+  #prz .aviso{ background:#fff8e8; border:1px solid #f0d8a8; border-left:4px solid
+    var(--ambar); border-radius:0 10px 10px 0; padding:.6rem .8rem;
+    font-size:.78rem; color:#5a4300; margin-bottom:.6rem; line-height:1.5; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid" id="prz">
+
+  {% set fmtl = '{:,.0f}' %}
+  {% macro moeda(v) %}{{ v | formatar_moeda }}{% endmacro %}
+  {% macro litros(v) %}{{ fmtl.format(v).replace(',', '.') }}{% endmacro %}
+
+  <div class="topo">
+    <div class="topo__l">
+      <div class="topo__t"><i class="bi bi-receipt-cutoff"></i> PRAZO</div>
+    </div>
+    <div class="topo__s">
+      {%- if modo == 'frota' -%}
+        {{ frota|length }} placa(s) · {{ litros(totais.frota_litros) }} L ·
+        {{ moeda(totais.frota_valor) }}
+      {%- elif modo == 'conferir' -%}
+        {{ pontos|length }} ponto(s) para olhar
+      {%- else -%}
+        {{ totais.clientes }} cliente(s) · {{ moeda(totais.saldo) }} em aberto
+      {%- endif -%}
+      · {{ de.strftime('%d/%m/%Y') }} a {{ ate.strftime('%d/%m/%Y') }}
+    </div>
+    <div class="fam">
+      <a class="fama {{ 'on' if modo == 'clientes' }}"
+         href="{{ url_for('prazo.index', modo='clientes', de=de.isoformat(), ate=ate.isoformat()) }}">Clientes</a>
+      <a class="fama {{ 'on' if modo == 'frota' }}"
+         href="{{ url_for('prazo.index', modo='frota', de=de.isoformat(), ate=ate.isoformat()) }}">Frota</a>
+      <a class="fama {{ 'on' if modo == 'conferir' }}"
+         href="{{ url_for('prazo.index', modo='conferir', de=de.isoformat(), ate=ate.isoformat()) }}">Conferência</a>
+    </div>
+  </div>
+
+  <form class="per" method="get" action="{{ url_for('prazo.index') }}">
+    <input type="hidden" name="modo" value="{{ modo }}">
+    <span>Período</span>
+    <input type="date" name="de" value="{{ de.isoformat() }}">
+    <span>a</span>
+    <input type="date" name="ate" value="{{ ate.isoformat() }}">
+    <button type="submit">Ver</button>
+  </form>
+
+  {% if erro %}
+  <div class="aviso"><b>Não consegui montar a tela:</b> {{ erro }}</div>
+  {% endif %}
+
+  {% if de <= inicio_venda %}
+  <div class="aviso">
+    A venda migrada começa em <b>{{ inicio_venda.strftime('%d/%m/%Y') }}</b>.
+    O que o cliente devia antes disso não está no banco — se houver saldo
+    anterior, ele não aparece aqui.
+  </div>
+  {% endif %}
+
+  {# ══════════════════ CLIENTES ══════════════════ #}
+  {% if modo == 'clientes' %}
+
+    <div class="g-nums">
+      <div class="n n--ambar"><div class="r">Em aberto</div>
+        <div class="v">{{ moeda(totais.saldo) }}</div></div>
+      <div class="n n--azul"><div class="r">Clientes</div>
+        <div class="v">{{ totais.clientes }}</div></div>
+      <div class="n n--verde"><div class="r">Recebido no período</div>
+        <div class="v">{{ moeda(totais.recebeu) }}</div></div>
+      <div class="n n--cinza"><div class="r">Sem vínculo</div>
+        <div class="v">{{ totais.sem_vinculo }}</div></div>
+    </div>
+
+    {% if not clientes %}
+      <div class="vazio"><i class="bi bi-inbox"></i><br>
+        Nenhuma venda a prazo nesse período.</div>
+    {% endif %}
+
+    <div class="grade">
+    {% for c in clientes %}
+    <div class="cli {{ 'cli--grp' if c.eh_grupo else ('cli--dev' if c.estado in ('devendo','sem_vinculo')) }}">
+      <div class="cli__h" onclick="przAbre(this)">
+        <span class="po__p" style="background:{{ c.cor }}"></span>
+        <span class="cli__n">{{ c.nome }}
+          <small>{{ c.doc_fmt }}
+            {%- if c.forma_nome %} · {{ c.forma_nome }}{% endif -%}
+          </small></span>
+        {% if c.eh_grupo %}
+          <span class="selo selo--grp">do grupo · não cobra</span>
+        {% elif c.estado == 'sem_vinculo' %}
+          <span class="selo selo--sem">sem vínculo</span>
+        {% elif c.estado == 'quitado' %}
+          <span class="selo selo--ok">quitado</span>
+        {% else %}
+          <span class="selo selo--dev">deve {{ moeda(c.saldo) }}</span>
+        {% endif %}
+      </div>
+      <div class="cli__c">
+        <div class="lin">
+          <div class="lin__a">Comprou · {{ c.notas }} nota(s)
+            <small>{{ c.primeira.strftime('%d/%m') }} a {{ c.ultima.strftime('%d/%m/%Y') }}
+              {%- if c.placas %} · {{ c.placas }} placa(s){% endif -%}</small></div>
+          <div class="lin__q">{{ litros(c.litros) }} L</div>
+          <div class="lin__v">{{ moeda(c.comprou) }}</div>
+        </div>
+
+        {% if c.eh_grupo %}
+          <div class="lin">
+            <div class="lin__a" style="color:var(--grupo)">Consumo do próprio grupo
+              <small>não gera cobrança — o número que vale é o custo, na aba Frota</small></div>
+            <div class="lin__q"></div><div class="lin__v"></div>
+          </div>
+        {% elif c.forma_id %}
+          <div class="lin">
+            <div class="lin__a">Recebido · {{ c.recebimentos }} crédito(s)
+              <small>{% if c.ultimo_receb %}último em
+                {{ c.ultimo_receb.strftime('%d/%m/%Y') }}{% else %}nada no período{% endif %}</small></div>
+            <div class="lin__q"></div>
+            <div class="lin__v" style="color:var(--ok)">{{ moeda(c.recebeu) }}</div>
+          </div>
+          <span class="barra"><i style="width:{{ 100 if c.comprou <= 0 else ((c.recebeu / c.comprou * 100) | round | int if c.recebeu < c.comprou else 100) }}%;background:{{ '#17963C' if c.saldo <= 0.01 else '#8a5a00' }}"></i></span>
+        {% else %}
+          <div class="lin">
+            <div class="lin__a" style="color:var(--danger)">Sem forma de recebimento vinculada
+              <small>enquanto não vincular, não dá pra saber quanto já foi pago</small></div>
+            <div class="lin__q"></div><div class="lin__v"></div>
+          </div>
+        {% endif %}
+
+        <div class="rod">
+          <button type="button" class="bt bt--sim"
+                  data-doc="{{ c.doc }}" data-nome="{{ c.nome }}"
+                  data-forma="{{ c.forma_id or '' }}"
+                  data-grupo="{{ 1 if c.eh_grupo else 0 }}"
+                  data-obs="{{ c.observacao or '' }}"
+                  onclick="event.stopPropagation(); przVincula(this)">
+            <i class="bi bi-link-45deg"></i>
+            {{ 'Trocar vínculo' if c.forma_id or c.eh_grupo else 'Vincular' }}</button>
+          <button type="button" class="bt"
+                  data-doc="{{ c.doc }}" data-nome="{{ c.nome }}"
+                  onclick="event.stopPropagation(); przNotas(this)">
+            <i class="bi bi-list-ul"></i> Ver notas</button>
+          {% if not c.eh_grupo and c.saldo > 0.01 %}
+          <span class="dir" style="color:var(--ambar)">falta {{ moeda(c.saldo) }}</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+    </div>
+
+    {% if totais.grupo_n %}
+    <p class="rod-txt">
+      Fora da conta acima: <b>{{ totais.grupo_n }}</b> empresa(s) marcada(s) como
+      do grupo, somando <b>{{ moeda(totais.grupo_valor) }}</b>. Não entram em
+      &ldquo;em aberto&rdquo; porque não se cobra boleto de si mesmo — viram custo
+      na aba Frota.
+    </p>
+    {% endif %}
+
+    <p class="rod-txt">
+      O saldo compara a compra e o recebimento <b>no mesmo período</b>. O
+      recebimento vem de <i>bank_transactions</i>, pela forma de recebimento que
+      você vincular aqui — o mesmo lugar onde o OFX já cai hoje. A tela não
+      inventa o vínculo sozinha: casar por nome pega homônimo, e em cima de
+      dinheiro isso não serve.
+    </p>
+
+  {# ══════════════════ FROTA ══════════════════ #}
+  {% elif modo == 'frota' %}
+
+    <div class="g-nums">
+      <div class="n n--cinza"><div class="r">Custo no período</div>
+        <div class="v">{{ moeda(totais.frota_valor) }}</div></div>
+      <div class="n n--azul"><div class="r">Litros</div>
+        <div class="v">{{ litros(totais.frota_litros) }}</div></div>
+      <div class="n n--verde"><div class="r">Km medidos</div>
+        <div class="v">{{ litros(totais.frota_km) }}</div></div>
+      <div class="n n--ambar"><div class="r">Placas</div>
+        <div class="v">{{ frota|length }}</div></div>
+    </div>
+
+    {% if not frota %}
+      <div class="vazio"><i class="bi bi-truck"></i><br>
+        Nenhum abastecimento a prazo com placa nesse período.</div>
+    {% endif %}
+
+    <div class="grade">
+    {% for p in frota %}
+    <div class="cli">
+      <div class="cli__h" onclick="przAbre(this)">
+        <span class="po__p" style="background:{{ p.cor }}"></span>
+        <span class="cli__n">{{ p.placa }}
+          <small>{{ p.cliente }}</small></span>
+        {% if p.na_frota %}
+          <span class="selo selo--ok">na frota</span>
+        {% else %}
+          <span class="selo selo--cz">fora do cadastro</span>
+        {% endif %}
+      </div>
+      <div class="cli__c">
+        <div class="lin">
+          <div class="lin__a">{{ p.abastecimentos }} abastecimento(s)
+            <small>{{ p.primeiro.strftime('%d/%m') }} a {{ p.ultimo.strftime('%d/%m/%Y') }}
+              {%- if p.preco_litro %} · {{ moeda(p.preco_litro) }}/L{% endif -%}</small></div>
+          <div class="lin__q">{{ litros(p.litros) }} L</div>
+          <div class="lin__v">{{ moeda(p.valor) }}</div>
+        </div>
+        {% if p.km_litro %}
+        <div class="lin">
+          <div class="lin__a">{{ litros(p.km_rodado) }} km medidos
+            <small>{{ p.leituras }} leitura(s)
+              {%- if p.descartadas %} · <b style="color:var(--ambar)">{{ p.descartadas }}
+                descartada(s)</b>{% endif -%}</small></div>
+          <div class="lin__q">{{ '%.2f'|format(p.km_litro) }} km/L</div>
+          <div class="lin__v">{{ moeda(p.custo_km) }}/km</div>
+        </div>
+        {% else %}
+        <div class="lin">
+          <div class="lin__a" style="color:var(--muted)">Sem km utilizável
+            <small>{% if p.leituras %}{{ p.leituras }} leitura(s), nenhuma formou
+              intervalo válido{% else %}nenhuma leitura de hodômetro{% endif %}</small></div>
+          <div class="lin__q"></div><div class="lin__v"></div>
+        </div>
+        {% endif %}
+        <span class="barra"><i style="width:{{ p.pct }}%;background:{{ p.cor }}"></i></span>
+        <div class="rod">
+          <span class="dir" style="color:var(--muted);font-weight:700">
+            {{ p.pct }}% do custo do período</span>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+    </div>
+
+    <p class="rod-txt">
+      O <b>km/L</b> sai de leituras seguidas do mesmo veículo. Intervalo que anda
+      para trás ou pula mais de 5.000 km entre dois abastecimentos é erro de
+      digitação e fica de fora da média — mas o valor em reais continua contando,
+      e a leitura descartada aparece na Conferência.
+    </p>
+
+  {# ══════════════════ CONFERÊNCIA ══════════════════ #}
+  {% else %}
+
+    {% if not pontos %}
+      <div class="vazio"><i class="bi bi-check2-circle"></i><br>
+        Nada estranho nesse período.</div>
+    {% endif %}
+
+    {% for pt in pontos %}
+    <div class="pt {{ 'pt--al' if pt.gravidade == 'alerta' }}">
+      <div class="pt__h">
+        <span class="pt__t">{{ pt.titulo }}</span>
+        <span class="selo {{ 'selo--dev' if pt.gravidade == 'alerta' else 'selo--cz' }}">{{ pt.n }}</span>
+      </div>
+      <div class="pt__p">{{ pt.porque }}</div>
+      <div class="cli__c">
+        {% for it in pt.itens %}
+        <div class="lin">
+          <div class="lin__a">{{ it.texto }}<small>{{ it.detalhe }}</small></div>
+          <div class="lin__q"></div>
+          <div class="lin__v">{{ moeda(it.valor) }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+
+  {% endif %}
+
+  {# ─────────── gaveta de vínculo ─────────── #}
+  <div class="escuro" id="prz-esc" onclick="przFecha()"></div>
+  <div class="gav" id="prz-gav" role="dialog">
+    <div class="gav__pega"></div>
+    <div class="pnome" id="prz-gav-t">Vincular cliente</div>
+    <div class="gav__b" id="prz-gav-b"></div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Lista de formas de recebimento — sai UMA vez na pagina, nao uma por cliente.
+var PRZ_FORMAS = {{ formas | map(attribute='id') | list | tojson }};
+var PRZ_FORMAS_NOME = {{ formas | map(attribute='nome') | list | tojson }};
+var PRZ_DE = {{ de.isoformat() | tojson }};
+var PRZ_ATE = {{ ate.isoformat() | tojson }};
+
+function przAbre(cab){
+  var c = cab.parentElement.querySelector('.cli__c');
+  if (c) c.style.display = (c.style.display === 'none') ? '' : 'none';
+}
+
+function przFecha(){
+  document.getElementById('prz-esc').classList.remove('on');
+  document.getElementById('prz-gav').classList.remove('on');
+}
+
+function przMostra(titulo, html){
+  document.getElementById('prz-gav-t').textContent = titulo;
+  document.getElementById('prz-gav-b').innerHTML = html;
+  document.getElementById('prz-esc').classList.add('on');
+  document.getElementById('prz-gav').classList.add('on');
+}
+
+function przEscapa(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ─── vinculo: o de-para que o usuario arruma aos poucos ───────────────
+function przVincula(botao){
+  var doc   = botao.getAttribute('data-doc');
+  var nome  = botao.getAttribute('data-nome');
+  var forma = botao.getAttribute('data-forma');
+  var grupo = botao.getAttribute('data-grupo') === '1';
+  var obs   = botao.getAttribute('data-obs') || '';
+
+  var op = '<option value="">— nenhuma —</option>';
+  for (var i = 0; i < PRZ_FORMAS.length; i++){
+    var sel = (String(PRZ_FORMAS[i]) === String(forma)) ? ' selected' : '';
+    op += '<option value="' + PRZ_FORMAS[i] + '"' + sel + '>'
+        + przEscapa(PRZ_FORMAS_NOME[i]) + '</option>';
+  }
+
+  przMostra('Vincular ' + nome,
+    '<div class="campo"><label>Forma de recebimento</label>'
+    + '<select id="prz-f" class="opc">' + op + '</select>'
+    + '<div class="dica" style="font-size:.73rem;color:#6b7684;margin-top:.3rem">'
+    + 'É por aqui que o dinheiro do extrato encontra este cliente. '
+    + 'Escolher a forma errada mistura o saldo de duas pessoas.</div></div>'
+    + '<div class="campo" style="margin-top:.7rem">'
+    + '<label style="display:flex;gap:.5rem;align-items:flex-start;cursor:pointer">'
+    + '<input type="checkbox" id="prz-g" style="width:20px;height:20px;margin-top:.1rem"'
+    + (grupo ? ' checked' : '') + '>'
+    + '<span style="font-size:.8rem">É empresa do nosso grupo<br>'
+    + '<span style="font-size:.73rem;color:#6b7684;font-weight:600">'
+    + 'Não vai pagar: o consumo vira custo da frota, não conta a receber.</span>'
+    + '</span></label></div>'
+    + '<div class="campo" style="margin-top:.7rem"><label>Observação</label>'
+    + '<input type="text" id="prz-o" class="opc" maxlength="200" value="'
+    + przEscapa(obs) + '" placeholder="opcional"></div>'
+    + '<div style="display:flex;gap:.4rem;margin-top:1rem;flex-wrap:wrap">'
+    + '<button type="button" class="bt bt--sim" id="prz-salva">Salvar</button>'
+    + '<button type="button" class="bt" onclick="przFecha()">Cancelar</button>'
+    + '</div>');
+
+  document.getElementById('prz-salva').onclick = function(){
+    var b = this;
+    b.disabled = true;
+    b.textContent = 'salvando...';
+    fetch('/prazo/vincular', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        doc: doc,
+        forma_id: document.getElementById('prz-f').value,
+        eh_grupo: document.getElementById('prz-g').checked ? 1 : 0,
+        observacao: document.getElementById('prz-o').value
+      })
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d || !d.ok) throw new Error((d && d.erro) || 'falhou');
+      window.location.reload();
+    })
+    .catch(function(e){
+      b.disabled = false;
+      b.textContent = 'Salvar';
+      alert('Não deu pra salvar: ' + e.message);
+    });
+  };
+}
+
+// ─── as notas de um cliente ───────────────────────────────────────────
+function przNotas(botao){
+  var doc  = botao.getAttribute('data-doc');
+  var nome = botao.getAttribute('data-nome');
+  przMostra(nome, '<div style="padding:1rem;color:#6b7684">carregando...</div>');
+
+  fetch('/prazo/notas?doc=' + encodeURIComponent(doc)
+        + '&de=' + PRZ_DE + '&ate=' + PRZ_ATE, {credentials: 'same-origin'})
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (!d || !d.ok) throw new Error((d && d.erro) || 'falhou');
+    if (!d.notas.length){
+      przMostra(nome, '<div style="padding:1rem;color:#6b7684">Nenhuma nota no período.</div>');
+      return;
+    }
+    var h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.76rem">'
+          + '<thead><tr>'
+          + '<th style="text-align:left;padding:.3rem;color:#6b7684">Nota</th>'
+          + '<th style="text-align:left;padding:.3rem;color:#6b7684">Data</th>'
+          + '<th style="text-align:left;padding:.3rem;color:#6b7684">Placa</th>'
+          + '<th style="text-align:right;padding:.3rem;color:#6b7684">Litros</th>'
+          + '<th style="text-align:right;padding:.3rem;color:#6b7684">Valor</th>'
+          + '</tr></thead><tbody>';
+    for (var i = 0; i < d.notas.length; i++){
+      var n = d.notas[i];
+      h += '<tr style="border-top:1px dashed #f2f5f8">'
+         + '<td style="padding:.3rem">' + przEscapa(n.numero) + '</td>'
+         + '<td style="padding:.3rem">' + przEscapa(n.dia) + '</td>'
+         + '<td style="padding:.3rem">' + przEscapa(n.placa || '—') + '</td>'
+         + '<td style="padding:.3rem;text-align:right">'
+         + n.litros.toLocaleString('pt-BR', {maximumFractionDigits: 0}) + '</td>'
+         + '<td style="padding:.3rem;text-align:right;font-weight:800">'
+         + n.valor.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})
+         + '</td></tr>';
+    }
+    h += '</tbody></table></div>'
+       + '<div style="margin-top:.7rem;font-weight:800;text-align:right">Total: '
+       + d.total.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})
+       + ' · ' + d.notas.length + ' nota(s)</div>'
+       + '<div style="margin-top:.9rem"><button type="button" class="bt" onclick="przFecha()">Fechar</button></div>';
+    przMostra(nome, h);
+  })
+  .catch(function(e){
+    przMostra(nome, '<div style="padding:1rem;color:#a32d2d">Erro: '
+      + przEscapa(e.message) + '</div>');
+  });
+}
+</script>
+{% endblock %}
