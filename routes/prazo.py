@@ -186,15 +186,59 @@ def _recebido(cur, formas, de, ate):
     return {r['fid']: r for r in cur.fetchall()}
 
 
-def _formas_disponiveis(cur):
-    """As formas de recebimento que servem de destino do vinculo.
+def _formas_disponiveis(cur, de, ate):
+    """As formas de recebimento que servem de destino do vinculo, COM a prova.
 
-    Vem todas as ativas, nao so as que tem PRAZO no nome: um cliente pode ser
-    pago por boleto do banco, e essa forma se chama outra coisa.
+    Vem todas, e nao so as que tem PRAZO no nome: um cliente pode ser pago por
+    boleto do banco, e essa forma se chama outra coisa.
+
+    Cada forma vem acompanhada de quanto ela recebeu no periodo. Isso nao e
+    enfeite: sao 93 formas no cadastro, 28 delas duplicatas desativadas, e o
+    nome sozinho ja escolheu errado nesta base. O dinheiro e a evidencia que
+    confirma o nome -- o cliente comprou R$ 132 mil e a forma recebeu R$ 89
+    mil, entao e essa. Sem esse numero a escolha e um chute.
     """
-    cur.execute("""SELECT id, nome, ativo FROM formas_recebimento
-                    ORDER BY (nome LIKE '%PRAZO%') DESC, ativo DESC, nome""")
+    cur.execute("""
+        SELECT f.id, f.nome, f.ativo,
+               COUNT(b.id)                        AS creditos,
+               ROUND(COALESCE(SUM(b.valor), 0), 2) AS valor,
+               MAX(DATE(b.data_transacao))        AS ultimo
+          FROM formas_recebimento f
+          LEFT JOIN bank_transactions b
+                 ON b.forma_recebimento_id = f.id
+                AND b.valor > 0
+                AND DATE(b.data_transacao) BETWEEN %s AND %s
+         GROUP BY f.id, f.nome, f.ativo
+         ORDER BY (f.nome LIKE '%%PRAZO%%') DESC, f.ativo DESC, f.nome
+    """, (de, ate))
     return cur.fetchall()
+
+
+def _formas_para_tela(formas, clientes):
+    """Empacota as formas para o JavaScript da gaveta.
+
+    Junta o dono: se a forma ja e de outro cliente, a gaveta avisa em vermelho.
+    Dois clientes na mesma forma misturam o saldo dos dois -- e a tela existe
+    justamente para impedir esse erro, entao ela precisa saber quem ja tem.
+    """
+    dono = {}
+    for c in clientes:
+        if c.get('forma_id'):
+            dono[c['forma_id']] = c
+    saida = []
+    for f in formas:
+        d = dono.get(f['id'])
+        saida.append({
+            'id': f['id'],
+            'nome': f['nome'],
+            'ativo': int(f['ativo'] or 0),
+            'valor': _f(f['valor']),
+            'creditos': int(f['creditos'] or 0),
+            'ultimo': f['ultimo'].strftime('%d/%m/%Y') if f['ultimo'] else None,
+            'dono_doc': d['doc'] if d else None,
+            'dono_nome': d['nome'] if d else None,
+        })
+    return saida
 
 
 def _monta_clientes(cur, de, ate):
@@ -449,7 +493,8 @@ def index():
         frota = _frota(cur, de, ate)
         ctx['clientes'] = clientes
         ctx['frota'] = frota
-        ctx['formas'] = _formas_disponiveis(cur)
+        ctx['formas'] = _formas_para_tela(_formas_disponiveis(cur, de, ate),
+                                          clientes)
         ctx['pontos'] = _conferencia(cur, de, ate, clientes, frota)
 
         externos = [c for c in clientes if not c['eh_grupo']]

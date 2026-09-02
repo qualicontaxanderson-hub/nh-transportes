@@ -133,6 +133,53 @@ body > .container-fluid:has(#prz){
   #prz .aviso{ background:#fff8e8; border:1px solid #f0d8a8; border-left:4px solid
     var(--ambar); border-radius:0 10px 10px 0; padding:.6rem .8rem;
     font-size:.78rem; color:#5a4300; margin-bottom:.6rem; line-height:1.5; }
+
+  /* ── gaveta do vinculo (prefixo v-, para nao colidir com .aviso acima) ──
+     A lista, os chips e o rodape sao os de includes/gaveta_css.html; aqui so
+     mora o que e proprio desta decisao: a sugestao, a conta do efeito e os
+     dois avisos de perigo. */
+  #prz .v-rot{ font-size:.7rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); display:block; margin-bottom:.3rem; }
+  #prz .v-dica{ font-size:.73rem; color:var(--muted); margin:.35rem 0 0;
+    line-height:1.45; }
+  #prz .v-sug{ border:1px solid #bfe0c8; background:#f2fbf5; border-radius:10px;
+    padding:.15rem .1rem; }
+  #prz .v-sug .opc{ border-bottom:0; background:transparent; }
+  #prz .v-por{ font-size:.71rem; color:var(--ok); font-weight:700;
+    padding:0 .6rem .45rem 2.05rem; margin-top:-.25rem; }
+  #prz .v-por u{ text-decoration-color:#8ecfa2; text-underline-offset:2px; }
+  #prz .v-mais{ display:block; width:100%; text-align:left;
+    border:1px solid var(--borda); background:#fff; border-radius:10px;
+    padding:.5rem .6rem; font-size:.8rem; font-weight:700; color:#3a4655;
+    cursor:pointer; font-family:inherit; margin-top:.35rem; }
+  /* Grudada no fim da area que rola: a conta e a conclusao, e precisa estar a
+     vista na hora de apertar Salvar. Por isso ela e o ULTIMO elemento — assim
+     nao encobre nada quando gruda. */
+  #prz .v-ef{ border:1px solid var(--borda); border-radius:10px; background:#f7f9fc;
+    padding:.5rem .65rem; margin-top:.8rem; position:sticky; bottom:0;
+    box-shadow:0 -8px 12px -6px rgba(12,25,42,.14); }
+  #prz .v-ef .t{ font-size:.69rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); margin-bottom:.3rem; }
+  #prz .v-ef .l{ display:flex; justify-content:space-between; gap:.6rem;
+    font-size:.82rem; padding:.12rem 0; font-variant-numeric:tabular-nums; }
+  #prz .v-ef .l b{ font-weight:800; }
+  #prz .v-ef .l--f{ border-top:1px solid var(--borda); margin-top:.25rem;
+    padding-top:.3rem; color:var(--ambar); font-weight:800; }
+  #prz .v-ef .l--ok{ border-top:1px solid var(--borda); margin-top:.25rem;
+    padding-top:.3rem; color:var(--ok); font-weight:800; }
+  #prz .v-ef .l--pe{ color:var(--muted); font-size:.73rem; padding-top:.35rem; }
+  #prz .v-av{ border-radius:10px; padding:.5rem .65rem; font-size:.78rem;
+    font-weight:700; margin-top:.8rem; line-height:1.45; display:flex;
+    gap:.45rem; align-items:flex-start; }
+  #prz .v-av--verm{ background:#fdf2f2; border:1px solid #f0c8c8; color:var(--danger); }
+  #prz .v-av--amb{ background:#fffbeb; border:1px solid #f0d8a8; color:var(--ambar); }
+  #prz .v-av--grp{ background:#faf8fe; border:1px solid #d5cdeb; color:#5b4d8a; }
+  #prz .chip--grp.on{ background:var(--grupo); border-color:var(--grupo); }
+  /* No celular o dedo precisa de alvo: linha de 44px de altura util. */
+  @media (max-width:991px){
+    #prz .gav .opc{ padding:.6rem; }
+  }
+  #prz .bt-g--al{ flex:1; background:#B8791C; color:#fff; }
 </style>
 {% endblock %}
 
@@ -262,9 +309,12 @@ body > .container-fluid:has(#prz){
         <div class="rod">
           <button type="button" class="bt bt--sim"
                   data-doc="{{ c.doc }}" data-nome="{{ c.nome }}"
+                  data-docfmt="{{ c.doc_fmt }}"
                   data-forma="{{ c.forma_id or '' }}"
                   data-grupo="{{ 1 if c.eh_grupo else 0 }}"
                   data-obs="{{ c.observacao or '' }}"
+                  data-comprou="{{ c.comprou }}" data-saldo="{{ c.saldo }}"
+                  data-notas="{{ c.notas }}"
                   onclick="event.stopPropagation(); przVincula(this)">
             <i class="bi bi-link-45deg"></i>
             {{ 'Trocar vínculo' if c.forma_id or c.eh_grupo else 'Vincular' }}</button>
@@ -407,6 +457,8 @@ body > .container-fluid:has(#prz){
     <div class="gav__pega"></div>
     <div class="pnome" id="prz-gav-t">Vincular cliente</div>
     <div class="gav__b" id="prz-gav-b"></div>
+    {# Rodape FIXO: rolar a lista das 24 formas nao pode esconder o Salvar. #}
+    <div class="gav__f" id="prz-gav-f" hidden></div>
   </div>
 
 </div>
@@ -414,11 +466,17 @@ body > .container-fluid:has(#prz){
 
 {% block scripts %}
 <script>
-// Lista de formas de recebimento — sai UMA vez na pagina, nao uma por cliente.
-var PRZ_FORMAS = {{ formas | map(attribute='id') | list | tojson }};
-var PRZ_FORMAS_NOME = {{ formas | map(attribute='nome') | list | tojson }};
+// As formas de recebimento com a prova junto (quanto cada uma recebeu no
+// periodo e de quem ja e). Sai UMA vez na pagina, nao uma por cliente.
+var PRZ_FORMAS = {{ formas | tojson }};
+// `or 0`: quando a tela falha ao montar, `totais` vem vazio e um
+// Undefined aqui quebraria a pagina inteira em vez de so faltar o numero.
+var PRZ_ABERTO = {{ (totais.saldo or 0) | tojson }};
 var PRZ_DE = {{ de.isoformat() | tojson }};
 var PRZ_ATE = {{ ate.isoformat() | tojson }};
+
+// Estado da gaveta de vinculo enquanto ela esta aberta.
+var PRZ_V = null;
 
 function przAbre(cab){
   var c = cab.parentElement.querySelector('.cli__c');
@@ -428,11 +486,17 @@ function przAbre(cab){
 function przFecha(){
   document.getElementById('prz-esc').classList.remove('on');
   document.getElementById('prz-gav').classList.remove('on');
+  PRZ_V = null;
 }
 
-function przMostra(titulo, html){
-  document.getElementById('prz-gav-t').textContent = titulo;
+// `titulo` e `rodape` entram como HTML: quem chama escapa o que vier de dado.
+function przMostra(titulo, html, rodape){
+  document.getElementById('prz-gav-t').innerHTML = titulo;
   document.getElementById('prz-gav-b').innerHTML = html;
+  var f = document.getElementById('prz-gav-f');
+  f.innerHTML = rodape || '';
+  f.hidden = !rodape;
+  document.getElementById('prz-gav-b').scrollTop = 0;
   document.getElementById('prz-esc').classList.add('on');
   document.getElementById('prz-gav').classList.add('on');
 }
@@ -444,44 +508,309 @@ function przEscapa(s){
 }
 
 // ─── vinculo: o de-para que o usuario arruma aos poucos ───────────────
-function przVincula(botao){
-  var doc   = botao.getAttribute('data-doc');
-  var nome  = botao.getAttribute('data-nome');
-  var forma = botao.getAttribute('data-forma');
-  var grupo = botao.getAttribute('data-grupo') === '1';
-  var obs   = botao.getAttribute('data-obs') || '';
+// Sao 93 formas no cadastro, 28 delas duplicatas desativadas, e a errada
+// mistura o saldo de duas pessoas. Entao a gaveta nao pergunta e pronto: ela
+// mostra quanto cada forma recebeu, avisa de quem ela ja e, e faz a conta do
+// resultado ANTES de salvar. A escolha continua sendo da pessoa.
 
-  var op = '<option value="">— nenhuma —</option>';
+// Palavras que aparecem em quase todo nome de empresa e nao identificam
+// ninguem. Sem esta lista "TRANSPORTES TREMEA" casaria com qualquer forma que
+// tivesse "TRANSPORTES" no nome.
+var PRZ_VAZIAS = {
+  LTDA:1, EIRELI:1, EPP:1, MEI:1, COMERCIAL:1, COMERCIO:1, INDUSTRIA:1,
+  TRANSPORTE:1, TRANSPORTES:1, LOGISTICA:1, AGRONEGOCIO:1, AGRONEGOCIOS:1,
+  SERVICO:1, SERVICOS:1, DISTRIBUIDORA:1, EMPREENDIMENTOS:1, PARTICIPACOES:1,
+  CLIENTE:1, CLIENTES:1, PRAZO:1, POSTO:1, AUTO:1, FILIAL:1, MATRIZ:1,
+  GERAL:1, RECEBIMENTO:1, CARTAO:1, DEPOSITO:1
+};
+
+function przSemAcento(s){
+  return String(s == null ? '' : s).toUpperCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function przPalavras(nome){
+  var cru = przSemAcento(nome).replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/);
+  var out = [];
+  for (var i = 0; i < cru.length; i++){
+    if (cru[i].length >= 4 && !PRZ_VAZIAS[cru[i]]) out.push(cru[i]);
+  }
+  return out;
+}
+
+function przMoeda(v){
+  var n = Number(v || 0), neg = n < 0;
+  var p = Math.abs(n).toFixed(2).split('.');
+  p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return (neg ? '− ' : '') + 'R$ ' + p[0] + ',' + p[1];
+}
+
+// Sugere, nunca decide: casar por nome JA ERROU nesta base (pegou IRON BRAZ
+// PARREIRA no lugar da COMERCIAL E LOGISTICA BRAZ). Por isso a sugestao vem
+// com a palavra que casou a mostra, exige um clique, e nunca aponta para uma
+// forma desativada nem para uma que ja e de outro cliente.
+function przSugere(){
+  var alvo = przPalavras(PRZ_V.nome);
+  if (!alvo.length) return null;
+  var melhor = null;
   for (var i = 0; i < PRZ_FORMAS.length; i++){
-    var sel = (String(PRZ_FORMAS[i]) === String(forma)) ? ' selected' : '';
-    op += '<option value="' + PRZ_FORMAS[i] + '"' + sel + '>'
-        + przEscapa(PRZ_FORMAS_NOME[i]) + '</option>';
+    var f = PRZ_FORMAS[i];
+    if (!f.ativo) continue;
+    if (f.dono_doc && f.dono_doc !== PRZ_V.doc) continue;
+    if (przSemAcento(f.nome).indexOf('PRAZO') < 0) continue;
+    var pf = przPalavras(f.nome), casou = [];
+    for (var j = 0; j < pf.length; j++){
+      for (var k = 0; k < alvo.length; k++){
+        // prefixo tambem vale: a forma "LUCRI" e o cliente "LUCRIARMAZEM".
+        if (pf[j] === alvo[k] || alvo[k].indexOf(pf[j]) === 0){
+          casou.push(pf[j]); break;
+        }
+      }
+    }
+    if (!casou.length) continue;
+    var nota = casou.length * 10 + (f.creditos ? 5 : 0);
+    if (!melhor || nota > melhor.nota) melhor = {f: f, nota: nota, palavras: casou};
+  }
+  return melhor;
+}
+
+function przLinha(f, marcada){
+  var ev = f.creditos
+    ? przMoeda(f.valor) + ' em ' + f.creditos + ' crédito(s)'
+      + (f.ultimo ? ' · último em ' + f.ultimo : '')
+    : 'nada recebido no período';
+  var dono = (f.dono_doc && f.dono_doc !== PRZ_V.doc)
+    ? '<small style="color:var(--danger)">já vinculada a '
+      + przEscapa(f.dono_nome) + '</small>' : '';
+  return '<label class="opc" data-b="' + przEscapa(przSemAcento(f.nome)) + '">'
+    + '<input type="radio" name="prz-f" value="' + f.id + '"'
+    + (marcada ? ' checked' : '') + ' onchange="przEscolhe()">'
+    + '<span>' + przEscapa(f.nome) + '<small>' + ev + '</small>' + dono
+    + '</span></label>';
+}
+
+function przBloco(id, rotulo, lista, idFora){
+  var h = '';
+  for (var i = 0; i < lista.length; i++){
+    if (lista[i].id === idFora) continue;
+    h += przLinha(lista[i], String(lista[i].id) === String(PRZ_V.forma));
+  }
+  return '<button type="button" class="v-mais" id="prz-m-' + id + '"'
+    + ' data-rot=" ' + rotulo + ' (' + lista.length + ')"'
+    + ' onclick="przAbreGrupo(\'' + id + '\')">▸ ' + rotulo
+    + ' (' + lista.length + ')</button>'
+    + '<div class="opcs" id="prz-l-' + id + '" hidden>' + h + '</div>';
+}
+
+// `abrir` ausente = alterna; true/false = manda.
+function przAbreGrupo(id, abrir){
+  var l = document.getElementById('prz-l-' + id);
+  var b = document.getElementById('prz-m-' + id);
+  if (!l || !b) return;
+  var aberto = (abrir === undefined) ? l.hidden : !!abrir;
+  l.hidden = !aberto;
+  b.innerHTML = (aberto ? '▾' : '▸') + b.getAttribute('data-rot');
+}
+
+function przFiltra(){
+  var t = przSemAcento(document.getElementById('prz-busca').value).trim();
+  var linhas = document.querySelectorAll('#prz-bl-f .opc');
+  for (var i = 0; i < linhas.length; i++){
+    var b = linhas[i].getAttribute('data-b') || '';
+    linhas[i].hidden = t ? (b.indexOf(t) < 0) : false;
   }
 
-  przMostra('Vincular ' + nome,
-    '<div class="campo"><label>Forma de recebimento</label>'
-    + '<select id="prz-f" class="opc">' + op + '</select>'
-    + '<div class="dica" style="font-size:.73rem;color:#6b7684;margin-top:.3rem">'
-    + 'É por aqui que o dinheiro do extrato encontra este cliente. '
-    + 'Escolher a forma errada mistura o saldo de duas pessoas.</div></div>'
-    + '<div class="campo" style="margin-top:.7rem">'
-    + '<label style="display:flex;gap:.5rem;align-items:flex-start;cursor:pointer">'
-    + '<input type="checkbox" id="prz-g" style="width:20px;height:20px;margin-top:.1rem"'
-    + (grupo ? ' checked' : '') + '>'
-    + '<span style="font-size:.8rem">É empresa do nosso grupo<br>'
-    + '<span style="font-size:.73rem;color:#6b7684;font-weight:600">'
-    + 'Não vai pagar: o consumo vira custo da frota, não conta a receber.</span>'
-    + '</span></label></div>'
-    + '<div class="campo" style="margin-top:.7rem"><label>Observação</label>'
-    + '<input type="text" id="prz-o" class="opc" maxlength="200" value="'
-    + przEscapa(obs) + '" placeholder="opcional"></div>'
-    + '<div style="display:flex;gap:.4rem;margin-top:1rem;flex-wrap:wrap">'
-    + '<button type="button" class="bt bt--sim" id="prz-salva">Salvar</button>'
-    + '<button type="button" class="bt" onclick="przFecha()">Cancelar</button>'
-    + '</div>');
+  // A sugestao e uma caixa com a linha MAIS a explicacao. Escondendo so a
+  // linha, a frase verde ficava orfa, falando de uma opcao que sumiu da tela.
+  var sug = document.getElementById('prz-sug');
+  if (sug){
+    var ln = sug.querySelector('.opc');
+    sug.hidden = !!(ln && ln.hidden);
+  }
+
+  // Buscar abre os grupos fechados (senao o resultado ficaria escondido
+  // dentro deles); apagar a busca devolve tudo ao estado inicial.
+  if (t.length >= 2){ przAbreGrupo('o', true); przAbreGrupo('d', true); }
+  else if (!t){ przAbreGrupo('o', false); przAbreGrupo('d', false); }
+
+  // Caixa sem nenhuma linha visivel vira um retangulo vazio com borda.
+  var ids = ['p', 'o', 'd'];
+  for (var j = 0; j < ids.length; j++){
+    var cx = document.getElementById('prz-l-' + ids[j]);
+    if (!cx) continue;
+    if (ids[j] !== 'p' && cx.hidden) continue;   // grupo fechado fica fechado
+    cx.hidden = (cx.querySelectorAll('.opc:not([hidden])').length === 0);
+  }
+}
+
+function przFormaSel(){
+  var r = document.querySelector('#prz-gav input[name="prz-f"]:checked');
+  if (!r || !r.value) return null;
+  for (var i = 0; i < PRZ_FORMAS.length; i++){
+    if (String(PRZ_FORMAS[i].id) === String(r.value)) return PRZ_FORMAS[i];
+  }
+  return null;
+}
+
+// "Vai pagar" e "e do grupo" sao a MESMA pergunta, entao viraram uma escolha
+// entre dois. Antes eram um select e um checkbox soltos, e dava pra salvar uma
+// empresa do grupo COM forma de recebimento — que e uma contradicao: o posto
+// nao cobra boleto de si mesmo.
+function przModo(g){
+  PRZ_V.grupo = !!g;
+  document.getElementById('prz-c-p').classList.toggle('on', !g);
+  document.getElementById('prz-c-g').classList.toggle('on', !!g);
+  document.getElementById('prz-bl-f').hidden = !!g;
+  document.getElementById('prz-bl-g').hidden = !g;
+  przEscolhe();
+}
+
+function przEscolhe(){
+  var f = PRZ_V.grupo ? null : przFormaSel();
+  var perigo = false, av = '';
+
+  if (f){
+    if (f.dono_doc && f.dono_doc !== PRZ_V.doc){
+      perigo = true;
+      av += '<div class="v-av v-av--verm"><i class="bi bi-exclamation-octagon-fill"></i>'
+          + '<span>Esta forma já está vinculada a <b>' + przEscapa(f.dono_nome)
+          + '</b>. Dois clientes na mesma forma misturam o saldo dos dois.</span></div>';
+    }
+    if (!f.ativo){
+      perigo = true;
+      av += '<div class="v-av v-av--amb"><i class="bi bi-exclamation-triangle-fill"></i>'
+          + '<span><b>' + przEscapa(f.nome) + '</b> está desativada. Vinculado a ela, '
+          + 'este cliente nunca vai receber baixa nenhuma.</span></div>';
+    }
+  }
+  var cx = document.getElementById('prz-av');
+  if (cx) cx.innerHTML = av;
+
+  var ef = document.getElementById('prz-ef');
+  var t = '<div class="t">O que muda ao salvar</div>';
+  if (PRZ_V.grupo){
+    var sai = Math.max(PRZ_V.saldo, 0);
+    ef.innerHTML = t
+      + '<div class="l"><span>Em aberto hoje</span><b>' + przMoeda(PRZ_ABERTO) + '</b></div>'
+      + '<div class="l"><span>Sai da cobrança</span><b>− ' + przMoeda(sai) + '</b></div>'
+      + '<div class="l l--ok"><span>Em aberto fica</span><span>'
+      + przMoeda(PRZ_ABERTO - sai) + '</span></div>'
+      + '<div class="l l--pe">e ' + przMoeda(PRZ_V.comprou)
+      + ' passam a aparecer como custo na aba Frota</div>';
+  } else if (f){
+    var falta = PRZ_V.comprou - Number(f.valor || 0);
+    ef.innerHTML = t
+      + '<div class="l"><span>Comprou no período</span><b>'
+      + przMoeda(PRZ_V.comprou) + '</b></div>'
+      + '<div class="l"><span>Já recebido por esta forma</span>'
+      + '<b style="color:var(--ok)">' + przMoeda(f.valor) + '</b></div>'
+      + (falta > 0.01
+         ? '<div class="l l--f"><span>Passa a faltar</span><span>'
+           + przMoeda(falta) + '</span></div>'
+         : '<div class="l l--ok"><span>Fica quitado no período</span><span>'
+           + przMoeda(0) + '</span></div>');
+  } else {
+    ef.innerHTML = t + '<div class="l l--pe">Sem forma escolhida este cliente fica '
+      + 'sem vínculo: não dá pra saber quanto ele já pagou.</div>';
+  }
+
+  var b = document.getElementById('prz-salva');
+  b.textContent = perigo ? 'Salvar mesmo assim' : 'Salvar vínculo';
+  b.className = 'bt-g ' + (perigo ? 'bt-g--al' : 'bt-g--ok');
+}
+
+function przVincula(botao){
+  PRZ_V = {
+    doc:     botao.getAttribute('data-doc'),
+    nome:    botao.getAttribute('data-nome'),
+    docfmt:  botao.getAttribute('data-docfmt') || '',
+    forma:   botao.getAttribute('data-forma') || '',
+    grupo:   botao.getAttribute('data-grupo') === '1',
+    obs:     botao.getAttribute('data-obs') || '',
+    comprou: Number(botao.getAttribute('data-comprou') || 0),
+    saldo:   Number(botao.getAttribute('data-saldo') || 0),
+    notas:   botao.getAttribute('data-notas') || '0'
+  };
+
+  var prazo = [], outras = [], mortas = [];
+  for (var i = 0; i < PRZ_FORMAS.length; i++){
+    var f = PRZ_FORMAS[i];
+    if (!f.ativo) mortas.push(f);
+    else if (przSemAcento(f.nome).indexOf('PRAZO') >= 0) prazo.push(f);
+    else outras.push(f);
+  }
+
+  var sug = przSugere();
+  var idSug = sug ? sug.f.id : null;
+  var blocoSug = '';
+  if (sug){
+    var pal = [];
+    for (var q = 0; q < sug.palavras.length; q++){
+      pal.push('<u>' + przEscapa(sug.palavras[q]) + '</u>');
+    }
+    blocoSug = '<div class="v-sug" id="prz-sug">'
+      + przLinha(sug.f, String(sug.f.id) === String(PRZ_V.forma))
+      + '<div class="v-por"><i class="bi bi-lightbulb"></i> Talvez seja esta: '
+      + pal.join(', ') + (pal.length > 1 ? ' aparecem' : ' aparece')
+      + ' no nome do cliente. Confira antes de salvar.</div></div>';
+  }
+
+  var listaPrazo = '<label class="opc" data-b="NENHUMA">'
+    + '<input type="radio" name="prz-f" value=""'
+    + (PRZ_V.forma ? '' : ' checked') + ' onchange="przEscolhe()">'
+    + '<span>— nenhuma —<small>deixa este cliente sem vínculo</small></span></label>';
+  for (var j = 0; j < prazo.length; j++){
+    if (prazo[j].id === idSug) continue;
+    listaPrazo += przLinha(prazo[j], String(prazo[j].id) === String(PRZ_V.forma));
+  }
+
+  var corpo =
+      '<span class="v-rot">Este cliente</span>'
+    + '<div class="chips">'
+    + '<button type="button" class="chip" id="prz-c-p" onclick="przModo(0)">Vai pagar</button>'
+    + '<button type="button" class="chip chip--grp" id="prz-c-g" onclick="przModo(1)">'
+    + 'É do nosso grupo</button></div>'
+
+    + '<div id="prz-bl-f">'
+    + '<p class="v-dica">É por aqui que o dinheiro do extrato encontra este cliente. '
+    + 'Escolher a forma errada mistura o saldo de duas pessoas.</p>'
+    + '<span class="gr__t">Forma de recebimento</span>'
+    + '<input class="campo" id="prz-busca" placeholder="buscar pelo nome…" '
+    + 'autocomplete="off" oninput="przFiltra()">'
+    + blocoSug
+    + '<span class="gr__t">Clientes a prazo (' + prazo.length + ')</span>'
+    + '<div class="opcs" id="prz-l-p">' + listaPrazo + '</div>'
+    + przBloco('o', 'Outras formas', outras, null)
+    + przBloco('d', 'Formas desativadas', mortas, null)
+    + '<div id="prz-av"></div>'
+    + '</div>'
+
+    + '<div id="prz-bl-g" hidden>'
+    + '<div class="v-av v-av--grp"><i class="bi bi-info-circle-fill"></i>'
+    + '<span>Empresa do grupo não paga. O consumo vira <b>custo da frota</b> e sai '
+    + 'do “em aberto”. Por isso a forma de recebimento não se aplica aqui.</span>'
+    + '</div></div>'
+
+    + '<span class="gr__t">Observação (opcional)</span>'
+    + '<input class="campo" id="prz-o" maxlength="200" value="'
+    + przEscapa(PRZ_V.obs) + '" placeholder="ex.: confirmado por telefone">'
+    // A conta fica por ULTIMO e grudada no rodape: e a conclusao, e tem que
+    // estar a vista na hora de apertar Salvar. Rolando a lista das 24 formas
+    // ela sumia embaixo, que e onde ela menos serve.
+    + '<div class="v-ef" id="prz-ef"></div>';
+
+  przMostra(
+    '<b>' + przEscapa(PRZ_V.nome) + '</b>' + przEscapa(PRZ_V.docfmt)
+      + ' · comprou ' + przMoeda(PRZ_V.comprou) + ' em ' + PRZ_V.notas + ' nota(s)',
+    corpo,
+    '<button type="button" class="bt-g bt-g--ok" id="prz-salva">Salvar vínculo</button>'
+      + '<button type="button" class="bt-g bt-g--ca" onclick="przFecha()">Cancelar</button>');
+
+  przModo(PRZ_V.grupo ? 1 : 0);
 
   document.getElementById('prz-salva').onclick = function(){
     var b = this;
+    var f = PRZ_V.grupo ? null : przFormaSel();
     b.disabled = true;
     b.textContent = 'salvando...';
     fetch('/prazo/vincular', {
@@ -489,9 +818,10 @@ function przVincula(botao){
       credentials: 'same-origin',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
-        doc: doc,
-        forma_id: document.getElementById('prz-f').value,
-        eh_grupo: document.getElementById('prz-g').checked ? 1 : 0,
+        doc: PRZ_V.doc,
+        // Grupo nao paga: salva SEM forma, em vez de guardar as duas coisas.
+        forma_id: f ? f.id : '',
+        eh_grupo: PRZ_V.grupo ? 1 : 0,
         observacao: document.getElementById('prz-o').value
       })
     })
@@ -502,7 +832,7 @@ function przVincula(botao){
     })
     .catch(function(e){
       b.disabled = false;
-      b.textContent = 'Salvar';
+      przEscolhe();
       alert('Não deu pra salvar: ' + e.message);
     });
   };
@@ -512,7 +842,7 @@ function przVincula(botao){
 function przNotas(botao){
   var doc  = botao.getAttribute('data-doc');
   var nome = botao.getAttribute('data-nome');
-  przMostra(nome, '<div style="padding:1rem;color:#6b7684">carregando...</div>');
+  przMostra(przEscapa(nome), '<div style="padding:1rem;color:#6b7684">carregando...</div>');
 
   fetch('/prazo/notas?doc=' + encodeURIComponent(doc)
         + '&de=' + PRZ_DE + '&ate=' + PRZ_ATE, {credentials: 'same-origin'})
@@ -520,7 +850,7 @@ function przNotas(botao){
   .then(function(d){
     if (!d || !d.ok) throw new Error((d && d.erro) || 'falhou');
     if (!d.notas.length){
-      przMostra(nome, '<div style="padding:1rem;color:#6b7684">Nenhuma nota no período.</div>');
+      przMostra(przEscapa(nome), '<div style="padding:1rem;color:#6b7684">Nenhuma nota no período.</div>');
       return;
     }
     var h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.76rem">'
@@ -548,10 +878,10 @@ function przNotas(botao){
        + d.total.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})
        + ' · ' + d.notas.length + ' nota(s)</div>'
        + '<div style="margin-top:.9rem"><button type="button" class="bt" onclick="przFecha()">Fechar</button></div>';
-    przMostra(nome, h);
+    przMostra(przEscapa(nome), h);
   })
   .catch(function(e){
-    przMostra(nome, '<div style="padding:1rem;color:#a32d2d">Erro: '
+    przMostra(przEscapa(nome), '<div style="padding:1rem;color:#a32d2d">Erro: '
       + przEscapa(e.message) + '</div>');
   });
 }
