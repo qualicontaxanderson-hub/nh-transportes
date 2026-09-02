@@ -881,21 +881,33 @@ def index():
         current_app.logger.exception('[home] card de estoque (onda1) falhou')
     context['tempo_real_cards'] = tempo_real_cards
 
-    # Card do backup na nuvem. Fica na inicial, e nao numa tela de manutencao,
+    # Faixa do backup na nuvem. Fica na inicial, e nao numa tela de manutencao,
     # porque a exigencia e que a falha tenha TESTEMUNHA: uma rodada que nao
     # acontece nao deixa registro de erro, e quem tem que abrir uma tela para
     # descobrir isso descobre tarde -- foi assim que quatro dias sem backup
-    # passaram batido. ISOLADO: qualquer erro -> sem card, nunca derruba a home.
+    # passaram batido.
+    #
+    # MAS ela CALA no dia normal (02/09/2026, a pedido do Anderson): faixa verde
+    # todo dia vira paisagem, e paisagem atrapalha quem so quer lancar frete.
+    # So aparece quando ha o que dizer -- amarela, vermelha ou sem registro.
+    # O custo dessa escolha: no dia em que estiver tudo bem, a tela nao prova
+    # que o backup existe; ela so promete que avisaria se nao existisse.
+    #
+    # ISOLADO: qualquer erro -> sem faixa, nunca derruba a home.
     backup_card = None
     try:
         from utils.backup_bd import ler_status, status_para_card
-        backup_card = status_para_card(ler_status())
+        _card = status_para_card(ler_status())
+        if _card['estado'] != 'em_dia':
+            backup_card = _card
     except Exception:
-        current_app.logger.exception('[home] card do backup falhou')
+        current_app.logger.exception('[home] faixa do backup falhou')
     context['backup_card'] = backup_card
 
     # Estados forjados para conferir os quatro visuais sem esperar um dia ruim:
     # /?backup_demo=falhou | atrasado | sem_registro | em_dia
+    # De proposito IGNORA o silencio do dia normal: e por aqui que se confere o
+    # visual dos quatro estados sem precisar de um dia ruim de verdade.
     _demo = (request.args.get('backup_demo') or '').strip()
     if _demo:
         try:
