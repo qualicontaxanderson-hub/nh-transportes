@@ -881,6 +881,45 @@ def index():
         current_app.logger.exception('[home] card de estoque (onda1) falhou')
     context['tempo_real_cards'] = tempo_real_cards
 
+    # Card do backup na nuvem. Fica na inicial, e nao numa tela de manutencao,
+    # porque a exigencia e que a falha tenha TESTEMUNHA: uma rodada que nao
+    # acontece nao deixa registro de erro, e quem tem que abrir uma tela para
+    # descobrir isso descobre tarde -- foi assim que quatro dias sem backup
+    # passaram batido. ISOLADO: qualquer erro -> sem card, nunca derruba a home.
+    backup_card = None
+    try:
+        from utils.backup_bd import ler_status, status_para_card
+        backup_card = status_para_card(ler_status())
+    except Exception:
+        current_app.logger.exception('[home] card do backup falhou')
+    context['backup_card'] = backup_card
+
+    # Estados forjados para conferir os quatro visuais sem esperar um dia ruim:
+    # /?backup_demo=falhou | atrasado | sem_registro | em_dia
+    _demo = (request.args.get('backup_demo') or '').strip()
+    if _demo:
+        try:
+            from utils.backup_bd import status_para_card as _para_card
+            _forjados = {
+                'em_dia': {'ok': True, 'arquivo': 'railway_2026-09-02_0300.sql.gz',
+                           'bytes_gz': 11 * 1024 * 1024, 'duracao_s': 47.2,
+                           'quando': '02/09/2026 03:00', 'idade_s': 3600,
+                           'aviso': None},
+                'atrasado': {'ok': True, 'arquivo': 'railway_2026-08-29_0300.sql.gz',
+                             'bytes_gz': 11 * 1024 * 1024, 'duracao_s': 45.0,
+                             'quando': '29/08/2026 03:00', 'idade_s': 4 * 24 * 3600,
+                             'aviso': None},
+                'falhou': {'ok': False, 'etapa': 'verificacao',
+                           'erro': 'falta o marcador "Dump completed on" no fim '
+                                   'do dump -- ele foi interrompido.',
+                           'quando': '02/09/2026 03:00', 'idade_s': 3600},
+                'sem_registro': None,
+            }
+            if _demo in _forjados:
+                context['backup_card'] = _para_card(_forjados[_demo])
+        except Exception:
+            current_app.logger.exception('[home] backup_demo falhou')
+
     return render_template('dashboard.html', **context)
 
 

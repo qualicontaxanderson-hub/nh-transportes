@@ -505,6 +505,31 @@
     .onda1-dots { display: flex; }
     .onda1-track { gap: 0; }
   }
+
+  /* ===== Faixa do backup na nuvem (prefixo bkp-; isolada dos cards acima) =====
+     Fina e no topo do corpo: ela existe para ser vista sem ninguém procurar.
+     A cor fala da PROTEÇÃO, não do último resultado — o amarelo denuncia a
+     rodada que não aconteceu, que é justamente a falha que não deixa erro. */
+  .bkp-faixa {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.6rem 0.9rem; margin-bottom: 1rem;
+    border: 1px solid; border-left-width: 4px; border-radius: 10px;
+    font-size: 0.82rem; line-height: 1.35;
+  }
+  .bkp-faixa i.bkp-icone { font-size: 1.15rem; flex: 0 0 auto; }
+  .bkp-texto { min-width: 0; }
+  .bkp-titulo { font-weight: 700; letter-spacing: 0.02em; }
+  .bkp-detalhe { opacity: 0.85; word-break: break-word; }
+  .bkp-aviso { margin-top: 0.15rem; font-weight: 600; opacity: 0.9; }
+
+  .bkp-verde    { background: #ecfdf5; border-color: #a7f3d0; border-left-color: #10b981; color: #065f46; }
+  .bkp-amarelo  { background: #fffbeb; border-color: #fde68a; border-left-color: #f59e0b; color: #92400e; }
+  .bkp-vermelho { background: #fef2f2; border-color: #fecaca; border-left-color: #ef4444; color: #991b1b; }
+  .bkp-cinza    { background: #f8fafc; border-color: #e2e8f0; border-left-color: #94a3b8; color: #475569; }
+
+  @media (max-width: 640px) {
+    .bkp-faixa { align-items: flex-start; font-size: 0.78rem; }
+  }
 </style>
 {% endblock %}
 
@@ -550,6 +575,20 @@
 
   <!-- ── Body ── -->
   <div class="dash-body">
+
+    {# ===== Backup na nuvem — a testemunha da falha (ADITIVO) ===== #}
+    {% if backup_card %}
+    <div class="bkp-faixa bkp-{{ backup_card.cor }}">
+      <i class="bi {{ backup_card.icone }} bkp-icone"></i>
+      <div class="bkp-texto">
+        <div class="bkp-titulo">{{ backup_card.titulo }}</div>
+        <div class="bkp-detalhe">{{ backup_card.detalhe }}</div>
+        {% if backup_card.aviso %}
+        <div class="bkp-aviso"><i class="bi bi-exclamation-circle"></i> {{ backup_card.aviso }}</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
 
     {# ===== Onda 1 — carrossel (ADITIVO; não altera os cards existentes) ===== #}
     {% macro fmt_moeda(v) %}R$ {{ "{:,.2f}".format(v|float).replace(",","X").replace(".",",").replace("X",".") }}{% endmacro %}
