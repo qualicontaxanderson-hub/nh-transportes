@@ -37,7 +37,7 @@ estarem cadastrados em `clientes` (hoje 2 de 31 estao).
 
 import logging
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required, current_user
@@ -79,6 +79,29 @@ def _f(v):
 
 def _so_digitos(s):
     return re.sub(r'\D', '', s or '')
+
+
+_MES_CURTO = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set',
+              'Out', 'Nov', 'Dez']
+
+
+def _meses(inicio, hoje):
+    """Os meses clicaveis, do primeiro mes com venda ate o mes corrente.
+
+    O mes corrente termina HOJE, e nao no ultimo dia do mes: o chip tem que
+    corresponder ao que a tela mostra, senao ele nunca acende.
+    """
+    saida = []
+    ano, mes = inicio.year, inicio.month
+    mostra_ano = inicio.year != hoje.year
+    while (ano, mes) <= (hoje.year, hoje.month):
+        primeiro = date(ano, mes, 1)
+        prox = date(ano + 1, 1, 1) if mes == 12 else date(ano, mes + 1, 1)
+        ultimo = hoje if (ano, mes) == (hoje.year, hoje.month) else prox - timedelta(days=1)
+        rotulo = _MES_CURTO[mes - 1] + (('/%02d' % (ano % 100)) if mostra_ano else '')
+        saida.append({'de': primeiro, 'ate': ultimo, 'rotulo': rotulo})
+        ano, mes = prox.year, prox.month
+    return saida
 
 
 def _garante_tabela():
@@ -392,6 +415,94 @@ def _frota(cur, de, ate):
     return saida
 
 
+def _empresas_da_frota(frota, clientes):
+    """As empresas que aparecem na aba Frota, para os chips do filtro.
+
+    Sai daqui e nao de uma consulta nova de proposito: a lista tem que ser
+    exatamente a das placas que estao na tela, senao o filtro oferece uma
+    empresa que nao existe no periodo.
+    """
+    grupo = set(c['doc'] for c in clientes if c.get('eh_grupo'))
+    por_doc = {}
+    for p in frota:
+        d = por_doc.setdefault(p['doc'], {
+            'doc': p['doc'], 'nome': p['cliente'], 'placas': 0, 'valor': 0.0,
+            'eh_grupo': p['doc'] in grupo,
+        })
+        d['placas'] += 1
+        d['valor'] += p['valor']
+    saida = sorted(por_doc.values(), key=lambda x: -x['valor'])
+    for d in saida:
+        d['valor'] = round(d['valor'], 2)
+    return saida
+
+
+def _filtra_frota(frota, clientes, escolhidas, so_grupo):
+    """Aplica o filtro de empresa da aba Frota.
+
+    `so_grupo` ganha das empresas marcadas a dedo: e um atalho, e atalho que
+    convive com selecao manual so gera duvida sobre o que esta valendo.
+    """
+    if so_grupo:
+        do_grupo = set(c['doc'] for c in clientes if c.get('eh_grupo'))
+        return [p for p in frota if p['doc'] in do_grupo]
+    if escolhidas:
+        alvo = set(escolhidas)
+        return [p for p in frota if p['doc'] in alvo]
+    return frota
+
+
+def _frota_detalhe(cur, placa, de, ate):
+    """Abastecimento por abastecimento de UMA placa, com o km/L de cada trecho.
+
+    O km/L de um abastecimento so existe se houver leitura ANTERIOR plausivel:
+    a conta e (hodometro de agora - hodometro anterior) / litros de agora. Por
+    isso o primeiro abastecimento nunca tem km/L, e isso nao e erro.
+    """
+    placa = re.sub(r'[^A-Z0-9]', '', (placa or '').upper())
+    cur.execute("""
+        SELECT v.id, DATE(v.dh_emissao) AS dia, v.dh_emissao, v.numero,
+               v.cliente_nome, v.cliente_doc, v.km, v.valor_total,
+               (SELECT SUM(i.quantidade) FROM vendas_xml_itens i
+                 WHERE i.venda_id = v.id AND i.eh_combustivel = 1) AS litros
+          FROM vendas_xml v
+         WHERE """ + _ONDE_PRAZO + """
+           AND DATE(v.dh_emissao) BETWEEN %s AND %s
+           AND UPPER(REPLACE(REPLACE(v.placa,'-',''),' ','')) = %s
+         ORDER BY v.dh_emissao, v.id
+    """, (de, ate, placa))
+
+    linhas = []
+    km_ant = None
+    for r in cur.fetchall():
+        km = _f(r['km']) if r['km'] else None
+        litros = _f(r['litros'])
+        rodou = None
+        kml = None
+        descartada = False
+        if km and km_ant:
+            dif = km - km_ant
+            if _KM_MIN_INTERVALO <= dif <= _KM_MAX_INTERVALO and litros:
+                rodou = dif
+                kml = round(dif / litros, 2)
+            else:
+                descartada = True
+        linhas.append({
+            'dia': r['dia'],
+            'numero': r['numero'],
+            'litros': litros,
+            'valor': _f(r['valor_total']),
+            'preco': round(_f(r['valor_total']) / litros, 3) if litros else None,
+            'km': km,
+            'rodou': rodou,
+            'km_litro': kml,
+            'descartada': descartada,
+        })
+        if km:
+            km_ant = km
+    return linhas
+
+
 def _conferencia(cur, de, ate, clientes, frota):
     """O que esta estranho. Mostra e deixa a pessoa julgar — nao corrige nada."""
     pontos = []
@@ -482,20 +593,38 @@ def index():
     except ValueError:
         ate = hoje
 
+    # Filtro de empresa da aba Frota: docs repetidos na URL. `so_grupo` usa a
+    # marcacao da aba Clientes, entao o card "Custo no periodo" pode finalmente
+    # mostrar custo de verdade -- sem ele, ele soma o diesel dos CLIENTES junto.
+    escolhidas = [_so_digitos(d) for d in request.args.getlist('empresa')]
+    escolhidas = [d for d in escolhidas if d]
+    so_grupo = request.args.get('so_grupo') == '1'
+
     conn = cur = None
     ctx = {'modo': modo, 'de': de, 'ate': ate, 'hoje': hoje,
            'inicio_venda': _INICIO_VENDA, 'clientes': [], 'frota': [],
-           'pontos': [], 'formas': [], 'totais': {}, 'erro': None}
+           'pontos': [], 'formas': [], 'totais': {}, 'erro': None,
+           'empresas': [], 'escolhidas': escolhidas, 'so_grupo': so_grupo,
+           'meses': _meses(_INICIO_VENDA, hoje)}
     try:
         conn = get_db_connection()
         cur = conn.cursor(dictionary=True)
         clientes = _monta_clientes(cur, de, ate)
         frota = _frota(cur, de, ate)
+
+        # A lista de chips vem da frota INTEIRA: filtrar nao pode fazer as
+        # outras empresas sumirem do filtro, senao nao ha como voltar.
+        frota_toda = frota
+        ctx['empresas'] = _empresas_da_frota(frota_toda, clientes)
+        frota = _filtra_frota(frota_toda, clientes, escolhidas, so_grupo)
+
         ctx['clientes'] = clientes
         ctx['frota'] = frota
         ctx['formas'] = _formas_para_tela(_formas_disponiveis(cur, de, ate),
                                           clientes)
-        ctx['pontos'] = _conferencia(cur, de, ate, clientes, frota)
+        # Conferencia olha a frota TODA de proposito: e a aba de achar problema,
+        # e um filtro de outra aba nao pode esconder um km impossivel.
+        ctx['pontos'] = _conferencia(cur, de, ate, clientes, frota_toda)
 
         externos = [c for c in clientes if not c['eh_grupo']]
         grupo = [c for c in clientes if c['eh_grupo']]
@@ -626,6 +755,122 @@ def notas():
     except Exception as exc:
         logging.getLogger(__name__).exception('[prazo] falha listando notas de %s', doc)
         return jsonify({'ok': False, 'erro': str(exc)}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+# ── os dois PDF ───────────────────────────────────────────────────────────────
+# Sao duas saidas do MESMO gerador, e as duas leem os mesmos filtros da tela:
+# o que sai no papel tem que ser exatamente o que esta na tela, senao o PDF
+# vira uma segunda verdade.
+
+def _periodo_da_url():
+    hoje = hoje_brasilia()
+    try:
+        de = datetime.strptime(request.args.get('de', ''), '%Y-%m-%d').date()
+    except ValueError:
+        de = _INICIO_VENDA
+    try:
+        ate = datetime.strptime(request.args.get('ate', ''), '%Y-%m-%d').date()
+    except ValueError:
+        ate = hoje
+    return de, ate
+
+
+def _pdf_resposta(pdf, nome):
+    from flask import Response
+    from urllib.parse import quote
+    sem_acento = re.sub(r'[^A-Za-z0-9 ._-]', '_', nome)
+    return Response(pdf, mimetype='application/pdf', headers={
+        'Content-Disposition': "inline; filename=\"%s\"; filename*=UTF-8''%s"
+                               % (sem_acento, quote(nome)),
+    })
+
+
+@bp.route('/prazo/frota.pdf', methods=['GET'])
+@login_required
+def frota_pdf():
+    """Uma linha por placa, com o resumo — o que esta na tela, no papel."""
+    import os
+    from flask import current_app, flash, redirect, url_for
+    from utils.relatorio_frota import gerar_frota
+
+    de, ate = _periodo_da_url()
+    escolhidas = [d for d in (_so_digitos(x) for x in request.args.getlist('empresa')) if d]
+    so_grupo = request.args.get('so_grupo') == '1'
+
+    conn = cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        clientes = _monta_clientes(cur, de, ate)
+        frota = _filtra_frota(_frota(cur, de, ate), clientes, escolhidas, so_grupo)
+
+        if so_grupo:
+            filtro = 'Somente empresas do grupo'
+        elif escolhidas:
+            nomes = sorted(set(p['cliente'] for p in frota))
+            filtro = ', '.join(nomes) if nomes else 'Nenhuma empresa'
+        else:
+            filtro = 'Todas as empresas'
+
+        logo = os.path.join(current_app.root_path, 'static', 'logo-nh.png')
+        pdf = gerar_frota(frota, de=de, ate=ate, filtro=filtro,
+                          usuario=getattr(current_user, 'nome_completo', '') or '',
+                          logo=logo if os.path.exists(logo) else None)
+        return _pdf_resposta(pdf, 'Frota %s a %s.pdf'
+                             % (de.strftime('%d.%m.%Y'), ate.strftime('%d.%m.%Y')))
+    except Exception as exc:
+        logging.getLogger(__name__).exception('[prazo] falha no PDF da frota')
+        flash('Não foi possível gerar o relatório: %s' % exc, 'danger')
+        return redirect(url_for('prazo.index', modo='frota',
+                                de=de.isoformat(), ate=ate.isoformat()))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@bp.route('/prazo/placa.pdf', methods=['GET'])
+@login_required
+def placa_pdf():
+    """Uma placa, abastecimento por abastecimento, com km e km/L de cada trecho."""
+    import os
+    from flask import current_app, flash, redirect, url_for
+    from utils.relatorio_frota import gerar_placa
+
+    de, ate = _periodo_da_url()
+    placa = re.sub(r'[^A-Z0-9]', '', (request.args.get('placa') or '').upper())
+    if not placa:
+        return redirect(url_for('prazo.index', modo='frota'))
+
+    conn = cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        resumo = None
+        for p in _frota(cur, de, ate):
+            if p['placa'] == placa:
+                resumo = p
+                break
+        linhas = _frota_detalhe(cur, placa, de, ate)
+
+        logo = os.path.join(current_app.root_path, 'static', 'logo-nh.png')
+        pdf = gerar_placa(placa, resumo, linhas, de=de, ate=ate,
+                          usuario=getattr(current_user, 'nome_completo', '') or '',
+                          logo=logo if os.path.exists(logo) else None)
+        return _pdf_resposta(pdf, 'Placa %s %s a %s.pdf'
+                             % (placa, de.strftime('%d.%m.%Y'),
+                                ate.strftime('%d.%m.%Y')))
+    except Exception as exc:
+        logging.getLogger(__name__).exception('[prazo] falha no PDF da placa %s', placa)
+        flash('Não foi possível gerar o relatório: %s' % exc, 'danger')
+        return redirect(url_for('prazo.index', modo='frota',
+                                de=de.isoformat(), ate=ate.isoformat()))
     finally:
         if cur:
             cur.close()

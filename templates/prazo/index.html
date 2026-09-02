@@ -129,6 +129,44 @@ body > .container-fluid:has(#prz){
   #prz .pt__p{ font-size:.75rem; color:var(--muted); padding:.45rem .65rem;
     line-height:1.5; border-bottom:1px solid #eef1f5; }
 
+  /* atalhos de mes e filtro de empresa da aba Frota */
+  #prz .mes{ display:flex; gap:.3rem; flex-wrap:wrap; margin-bottom:.6rem; }
+  #prz .mes__c{ font-size:.73rem; font-weight:800; border-radius:99px;
+    padding:.24rem .7rem; background:#fff; border:1px solid var(--borda);
+    color:#3a4655; text-decoration:none; white-space:nowrap; }
+  #prz .mes__c:hover{ background:#f0f4f9; color:var(--blue-deep); }
+  #prz .mes__c.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+
+  #prz .emp{ display:flex; gap:.3rem; flex-wrap:wrap; align-items:center;
+    margin-bottom:.6rem; }
+  #prz .emp__l{ display:flex; gap:.3rem; flex-wrap:wrap; min-width:0; }
+  #prz .emp__r{ font-size:.68rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); margin-right:.15rem; }
+  #prz .emp__c{ font-size:.72rem; font-weight:700; border-radius:99px;
+    padding:.24rem .65rem; background:#fff; border:1px solid var(--borda);
+    color:#3a4655; text-decoration:none; white-space:nowrap; }
+  #prz .emp__c b{ font-weight:800; }
+  #prz .emp__c small{ color:var(--muted); font-weight:600; }
+  #prz .emp__c:hover{ background:#f0f4f9; color:var(--blue-deep); }
+  #prz .emp__c.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #prz .emp__c.on small{ color:rgba(255,255,255,.8); }
+  #prz .emp__c--grp.on{ background:var(--grupo); border-color:var(--grupo); }
+  #prz .pdf{ margin-left:auto; display:flex; gap:.3rem; }
+  /* No celular 16 empresas em chips empilhados empurravam os numeros oito
+     linhas para baixo. Uma fileira que desliza de lado resolve sem esconder
+     nenhuma empresa nem exigir mais um toque. */
+  @media (max-width:640px){
+    /* `flex:1 1 100%` e o que faz a fileira ocupar a linha inteira e o botao
+       do PDF cair na linha de baixo sozinho. */
+    #prz .emp__l{ flex:1 1 100%; flex-wrap:nowrap; overflow-x:auto;
+      padding-bottom:.15rem; -webkit-overflow-scrolling:touch;
+      scrollbar-width:none; }
+    #prz .emp__l::-webkit-scrollbar{ display:none; }
+    #prz .emp__c{ flex:0 0 auto; }
+    #prz .pdf{ margin-left:0; width:100%; margin-top:.35rem; }
+    #prz .pdf .bt{ width:100%; text-align:center; }
+  }
+
   /* aviso do periodo */
   #prz .aviso{ background:#fff8e8; border:1px solid #f0d8a8; border-left:4px solid
     var(--ambar); border-radius:0 10px 10px 0; padding:.6rem .8rem;
@@ -217,12 +255,30 @@ body > .container-fluid:has(#prz){
 
   <form class="per" method="get" action="{{ url_for('prazo.index') }}">
     <input type="hidden" name="modo" value="{{ modo }}">
+    {%- for d in escolhidas %}<input type="hidden" name="empresa" value="{{ d }}">{% endfor -%}
+    {%- if so_grupo %}<input type="hidden" name="so_grupo" value="1">{% endif -%}
     <span>Período</span>
     <input type="date" name="de" value="{{ de.isoformat() }}">
     <span>a</span>
     <input type="date" name="ate" value="{{ ate.isoformat() }}">
     <button type="submit">Ver</button>
   </form>
+
+  {# ─── atalhos de mês: um clique para o caso comum, sem tirar o intervalo
+       livre de quem precisa dele. O chip só fica aceso quando o período bate
+       EXATAMENTE com o mês — meio mês aceso mentiria sobre o que está na tela. #}
+  <div class="mes">
+    <a class="mes__c {{ 'on' if de == inicio_venda and ate == hoje }}"
+       href="{{ url_for('prazo.index', modo=modo, de=inicio_venda.isoformat(),
+                        ate=hoje.isoformat(), empresa=escolhidas,
+                        so_grupo='1' if so_grupo else none) }}">Tudo</a>
+    {% for m in meses %}
+    <a class="mes__c {{ 'on' if de == m.de and ate == m.ate }}"
+       href="{{ url_for('prazo.index', modo=modo, de=m.de.isoformat(),
+                        ate=m.ate.isoformat(), empresa=escolhidas,
+                        so_grupo='1' if so_grupo else none) }}">{{ m.rotulo }}</a>
+    {% endfor %}
+  </div>
 
   {% if erro %}
   <div class="aviso"><b>Não consegui montar a tela:</b> {{ erro }}</div>
@@ -351,6 +407,44 @@ body > .container-fluid:has(#prz){
   {# ══════════════════ FROTA ══════════════════ #}
   {% elif modo == 'frota' %}
 
+    {# ─── filtro de empresa + os dois PDF ───────────────────────────────
+         A aba mistura a frota do grupo com as placas dos CLIENTES, e sem
+         separar o card "Custo no período" chama de custo o diesel que a
+         empresa vai receber de volta. "Só do grupo" usa a marcação da aba
+         Clientes; enquanto ninguém marcar ninguém, ele fica apagado. #}
+    {% set _grupo_marcado = clientes | selectattr('eh_grupo') | list | length %}
+    {% if empresas %}
+    <div class="emp">
+      <span class="emp__r">Empresa</span>
+      <div class="emp__l">
+      <a class="emp__c {{ 'on' if not escolhidas and not so_grupo }}"
+         href="{{ url_for('prazo.index', modo='frota', de=de.isoformat(), ate=ate.isoformat()) }}">
+        Todas <small>{{ empresas|length }}</small></a>
+      {% if _grupo_marcado %}
+      <a class="emp__c emp__c--grp {{ 'on' if so_grupo }}"
+         href="{{ url_for('prazo.index', modo='frota', de=de.isoformat(),
+                          ate=ate.isoformat(), so_grupo=none if so_grupo else '1') }}">
+        Só do nosso grupo <small>{{ _grupo_marcado }}</small></a>
+      {% endif %}
+      {% for e in empresas %}
+      <a class="emp__c {{ 'on' if e.doc in escolhidas }}"
+         href="{{ url_for('prazo.index', modo='frota', de=de.isoformat(), ate=ate.isoformat(),
+                          empresa=(escolhidas | reject('equalto', e.doc) | list)
+                                  if e.doc in escolhidas
+                                  else (escolhidas + [e.doc])) }}">
+        {{ e.nome[:26] }}{% if e.nome|length > 26 %}…{% endif %}
+        <small>{{ e.placas }}</small></a>
+      {% endfor %}
+      </div>
+      <span class="pdf">
+        <a class="bt bt--sim" target="_blank"
+           href="{{ url_for('prazo.frota_pdf', de=de.isoformat(), ate=ate.isoformat(),
+                            empresa=escolhidas, so_grupo='1' if so_grupo else none) }}">
+          <i class="bi bi-file-earmark-pdf"></i> PDF da frota</a>
+      </span>
+    </div>
+    {% endif %}
+
     <div class="g-nums">
       <div class="n n--cinza"><div class="r">Custo no período</div>
         <div class="v">{{ moeda(totais.frota_valor) }}</div></div>
@@ -407,6 +501,10 @@ body > .container-fluid:has(#prz){
         {% endif %}
         <span class="barra"><i style="width:{{ p.pct }}%;background:{{ p.cor }}"></i></span>
         <div class="rod">
+          <a class="bt" target="_blank"
+             href="{{ url_for('prazo.placa_pdf', placa=p.placa,
+                              de=de.isoformat(), ate=ate.isoformat()) }}">
+            <i class="bi bi-file-earmark-pdf"></i> PDF desta placa</a>
           <span class="dir" style="color:var(--muted);font-weight:700">
             {{ p.pct }}% do custo do período</span>
         </div>
