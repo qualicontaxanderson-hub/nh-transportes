@@ -18,7 +18,9 @@ class Frete(db.Model):
     origem_id = db.Column(db.Integer, nullable=True)
     destino_id = db.Column(db.Integer, nullable=False)
 
-    preco_produto_unitario = db.Column(db.Numeric(10, 2), nullable=False)
+    # 4 casas: a distribuidora pratica precos como 5,3629 e a coluna do
+    # banco virou DECIMAL(10,4) em 03/09/2026.
+    preco_produto_unitario = db.Column(db.Numeric(10, 4), nullable=False)
     total_nf_compra = db.Column(db.Numeric(10, 2), nullable=False)
     preco_por_litro = db.Column(db.Numeric(10, 3), nullable=False)
     valor_total_frete = db.Column(db.Numeric(10, 2), nullable=False)

@@ -535,7 +535,8 @@ body > .container-fluid:has(#pfn){
                               onclick="pfnEscolher(this, 'Quantos litros')">— escolha —</button></div>
                     <label class="nf__c">Preço da mercadoria
                       <input type="text" inputmode="numeric" class="nf__pm nf__mask"
-                             placeholder="0,000" oninput="pfnMascara(this)"></label>
+                             data-casas="4" placeholder="0,0000"
+                             oninput="pfnMascara(this)"></label>
                     <label class="nf__c nf__c--manual">Frete por litro
                       <input type="text" inputmode="numeric" class="nf__pl nf__mask"
                              placeholder="0,000" oninput="pfnMascara(this)">
@@ -1043,7 +1044,8 @@ body > .container-fluid:has(#pfn){
                             onclick="pfnEscolher(this, 'Quantos litros')">{{ fmtl.format(f.litros).replace(',', '.') }} litros</button></div>
                   <label class="nf__c">Preço da mercadoria
                     <input type="text" inputmode="numeric" class="ed__pm nf__mask"
-                           value="{{ '%.3f' | format(f.preco_unit or 0) | replace('.', ',') }}"
+                           data-casas="4"
+                           value="{{ '%.4f' | format(f.preco_unit or 0) | replace('.', ',') }}"
                            oninput="pfnMascara(this)"></label>
                   <label class="nf__c nf__c--manual">Frete por litro
                     <input type="text" inputmode="numeric" class="ed__pl nf__mask"
@@ -1737,11 +1739,23 @@ function pfnEscFecha(){
 // Mascara igual a do lançamento de frete: só dígitos, divididos por 1000.
 // Digitar 90 vira 0,090 e 125 vira 0,125 — tem preço com 3 casas, então o
 // campo tem que aceitar os dois sem a pessoa pensar em vírgula.
+// Quantas casas o campo aceita. Tres por padrao (frete e CT-e por litro, que
+// sao DECIMAL(10,3) no banco); o PRECO DA MERCADORIA pede quatro, porque a
+// distribuidora pratica coisas como 5,3629 — e ate 02/09/2026 a quarta e ate a
+// terceira casa se perdiam calada, com o total deixando de bater com preco x
+// litros. Quem manda e o data-casas do proprio input, e nao um numero solto
+// aqui, para a tela e a coluna nunca discordarem.
+function pfnCasas(campo){
+  var n = parseInt(campo.getAttribute('data-casas'), 10);
+  return (n >= 1 && n <= 6) ? n : 3;
+}
+
 function pfnMascara(campo, ehCte){
+  var casas = pfnCasas(campo);
   var so = String(campo.value || '').replace(/\D/g, '');
   if (so === ''){ campo.value = ''; }
   else {
-    var n = (parseInt(so, 10) / 1000).toFixed(3).split('.');
+    var n = (parseInt(so, 10) / Math.pow(10, casas)).toFixed(casas).split('.');
     campo.value = n[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + n[1];
     try { campo.setSelectionRange(campo.value.length, campo.value.length); }
     catch(e){}

@@ -252,7 +252,9 @@
             <label for="preco_produto_unitario" class="form-label">Preço Produto Unitário (R$)</label>
             <input type="text" id="preco_produto_unitario" name="preco_produto_unitario"
                    class="form-control form-control-sm"
-                   value="{{ 'R$ {:.3f}'.format(frete.preco_produto_unitario).replace('.', ',') if frete and frete.preco_produto_unitario else 'R$ 0,000' }}"
+                   {# 4 casas desde 03/09/2026: a coluna virou DECIMAL(10,4) e com 3 aqui
+                      esta tela mostraria 5,363 no lugar de 5,3629. #}
+                   value="{{ 'R$ {:.4f}'.format(frete.preco_produto_unitario).replace('.', ',') if frete and frete.preco_produto_unitario else 'R$ 0,0000' }}"
                    required>
             <input type="hidden" id="preco_produto_unitario_raw" name="preco_produto_unitario_raw"
                    value="{{ frete.preco_produto_unitario if frete and frete.preco_produto_unitario else 0 }}">
