@@ -1023,7 +1023,12 @@ body > .container-fluid:has(#pfn){
                 {% endif %}
               </div>
               {% if not v.fechada %}
-              <div class="ed" hidden data-frete="{{ f.id }}">
+              {# cliente e origem viajam no proprio bloco: a edicao precisa da
+                 MESMA regra do formulario novo, e ate 05/09/2026 nao tinha
+                 nenhuma — os dois campos vinham abertos e em 0,000. #}
+              <div class="ed" hidden data-frete="{{ f.id }}"
+                   data-cliente="{{ p.cliente_id or '' }}"
+                   data-origem="{{ f.origem_id or '' }}">
                 <div class="nf__g">
                   <div class="nf__c nf__c--w">Fornecedor
                     <button type="button" class="esc esc--w tem ed__forn"
@@ -1056,6 +1061,10 @@ body > .container-fluid:has(#pfn){
                            value="{{ '%.3f' | format(f.preco_cte_litro) | replace('.', ',') }}"
                            oninput="pfnMascara(this)"></label>
                 </div>
+                {# Quando o campo do CT-e fica escondido (posto da casa), e aqui
+                   que o valor aparece — escondido E mudo seria o mesmo buraco
+                   que zerou 25 fretes. #}
+                <div class="dica ed__casa" style="color:var(--propria);font-weight:700"></div>
                 {% if f.estado in ('emitido', 'pago') %}
                 <div class="dica" style="color:var(--ambar);font-weight:700">
                   Esse frete já tem boleto. Fornecedor, produto e base mudam
@@ -1728,6 +1737,9 @@ function pfnGavPega(id, nome, litros){
   var campo = pfnAlvo;
   pfnEscFecha();
   if (campo.classList.contains('nf__cli')) pfnPosto(campo);
+  // Trocar a ORIGEM muda a rota, e o CT-e e por rota: sem isto o campo ficava
+  // com o valor da origem anterior.
+  else if (campo.classList.contains('nf__ori')) pfnRegraFrete(campo.closest('.novo__f'));
   else pfnConta(campo);
 }
 
@@ -1761,6 +1773,8 @@ function pfnMascara(campo, ehCte){
     catch(e){}
   }
   if (ehCte) campo.setAttribute('data-tocado', '1');
+  // Digitou: o numero passa a ser da pessoa, e a tela nao sobrescreve mais.
+  campo.removeAttribute('data-auto');
   pfnConta(campo);
 }
 
@@ -1830,41 +1844,109 @@ function pfnPosto(sel){
   // em R$ 0,00, e nenhum outro cliente tem um zerado sequer. O campo ia em
   // branco e obrigatorio — qualquer numero digitado ali virava cobranca pro
   // proprio posto. O CT-e continua livre, porque esse SAI (0,130/L de praxe).
+  pfnRegraFrete(form);
+
   var itens = form.querySelectorAll('.nf__i');
+  for (var k = 0; k < itens.length; k++) pfnDicaPreco(form, itens[k]);
+}
+
+// O CT-e do ULTIMO frete daquela rota (cliente + origem), ou null quando a
+// rota nunca teve CT-e. Vem pronto do servidor em cli.cte.
+function pfnCteDaRota(form){
+  var cli = pfnCliente(form.querySelector('.nf__cli'));
+  var ori = form.querySelector('.nf__ori');
+  var oid = ori ? ori.getAttribute('data-valor') : '';
+  var tab = cli.cte || {};
+  return (oid && tab[oid] != null) ? tab[oid] : null;
+}
+
+function pfnFmtCte(v){
+  return Number(v).toFixed(3).replace('.', ',');
+}
+
+// `data-auto` marca que o numero no campo foi a TELA que pos, e nao a pessoa.
+// Sem essa distincao, trocar a origem para uma rota sem historico deixava o
+// valor da rota anterior parado no campo — a dica dizia "esta rota nao tem
+// CT-e anterior" com 0,130 escrito ao lado. Limpar sempre seria pior: apagaria
+// o que alguem digitou. `pfnMascara` apaga a marca ao primeiro toque.
+function pfnPreencheCte(pc, valor){
+  if (!pc) return;
+  if (pc.value !== '' && !pc.getAttribute('data-auto')) return;  // digitado: nao mexe
+  pc.value = pfnFmtCte(valor);
+  pc.setAttribute('data-tocado', '1');
+  pc.setAttribute('data-auto', '1');
+}
+
+function pfnLimpaCteAuto(pc){
+  if (!pc) return;
+  if (pc.getAttribute('data-auto')){
+    pc.value = '';
+    pc.removeAttribute('data-auto');
+    pc.removeAttribute('data-tocado');
+  }
+}
+
+// Quem manda nos dois campos de preco por litro. Sai daqui e nao de dentro do
+// pfnPosto porque trocar a ORIGEM tambem muda a resposta: o CT-e depende da
+// rota, nao so do posto.
+function pfnRegraFrete(form){
+  if (!form) return;
+  var cli = pfnCliente(form.querySelector('.nf__cli'));
+  var doHist = pfnCteDaRota(form);
+  var itens = form.querySelectorAll('.nf__i');
+
   for (var k = 0; k < itens.length; k++){
     var pl = itens[k].querySelector('.nf__pl');
     var pc = itens[k].querySelector('.nf__pc');
-    // No posto da casa o frete nao existe — entao o campo some, em vez de
-    // ficar ali travado parecendo que falta preencher. O valor vai 0 assim
-    // mesmo. O CT-e continua, porque esse sai.
+    if (!pl) continue;
     var rot = pl.closest('.nf__c');
     var rotCte = itens[k].querySelector('.nf__c--cte');
     var link = itens[k].querySelector('.nf__cte-link');
+
     if (cli.nao_cobra){
+      // Posto da casa: frete nao existe, entao o campo some em vez de ficar
+      // travado parecendo que falta preencher.
       pl.value = '0,000';
       if (rot) rot.hidden = true;
-      // aqui o CT-e e o unico valor que existe, entao abre sozinho
-      if (rotCte) rotCte.hidden = false;
-      if (link) link.hidden = true;
-      if (pc) pc.setAttribute('data-tocado', '1');   // para de espelhar o frete
+      if (pc) pc.setAttribute('data-tocado', '1');   // para de espelhar o zero
+      if (doHist !== null){
+        // Com historico a rota se preenche sozinha e o valor aparece no
+        // resumo, junto com a comissao — igual aos terceiros. O campo fica
+        // fechado, e o link continua ali para quem precisar corrigir.
+        pfnPreencheCte(pc, doHist);
+        if (rotCte) rotCte.hidden = true;
+        if (link) link.hidden = false;
+      } else {
+        // Sem historico nao ha o que preencher. Campo ESCONDIDO aqui gravaria
+        // CT-e zero calado — foi assim que sairam 25 fretes zerados ate
+        // 03/09/2026. Entao ele abre, vazio, pedindo o numero.
+        pfnLimpaCteAuto(pc);
+        // `data-tocado` DEPOIS de limpar: sem ele o espelho copiaria o frete
+        // zerado para ca, que e o zero que estamos tentando evitar.
+        if (pc) pc.setAttribute('data-tocado', '1');
+        if (rotCte) rotCte.hidden = false;
+        if (link) link.hidden = true;
+      }
     } else {
       if (rot && rot.hidden){ rot.hidden = false; pl.value = ''; }
-      if (pc && pl.value === ''){ pc.removeAttribute('data-tocado'); pc.value = ''; }
-      if (rotCte && !pc.getAttribute('data-tocado')){
-        rotCte.hidden = true;
-        if (link) link.hidden = false;
+      // Terceiro: o CT-e fica sempre a vista e ja preenchido.
+      if (rotCte) rotCte.hidden = false;
+      if (link) link.hidden = true;
+      if (doHist !== null){
+        pfnPreencheCte(pc, doHist);
+      } else {
+        // Sem historico vale a regra de sempre: acompanha a cobranca.
+        pfnLimpaCteAuto(pc);
       }
     }
+
     var av = itens[k].querySelector('.nf__casa');
     if (av) av.textContent = cli.nao_cobra
-      ? 'Posto da casa: não se cobra frete. Só o CT-e, que sai normalmente.'
+      ? 'Posto da casa: não se cobra frete. O CT-e sai normalmente e está no resumo abaixo.'
       : '';
     pfnContaItem(itens[k]);
   }
   pfnCabe(form);
-
-  var itens = form.querySelectorAll('.nf__i');
-  for (var k = 0; k < itens.length; k++) pfnDicaPreco(form, itens[k]);
 }
 
 function pfnCliente(botao){
@@ -1960,9 +2042,16 @@ function pfnContaItem(item){
 
   var dica = item.querySelector('.nf__hcte');
   if (dica){
-    dica.textContent = (temPl && pl === 0)
-      ? 'Frete zero é posto da casa — o CT-e costuma sair a 0,130/L assim mesmo.'
-      : 'Acompanha o frete.';
+    // O comentario antigo dizia "0,130/L de praxe". Nao e: nos fretes zerados
+    // o CT-e saiu a 0,0800 em Senador Canedo ate maio e 0,1300 depois, 0,1000
+    // em Goiatuba e Itumbiara, 0,1300 em Goiania. Entao a dica diz o numero da
+    // ROTA, ou avisa que nao ha um.
+    var h = pfnCteDaRota(item.closest('.novo__f'));
+    dica.textContent = (h !== null)
+      ? ('Último CT-e desta rota: ' + pfnFmtCte(h) + '/L.')
+      : ((temPl && pl === 0)
+         ? 'Esta rota não tem CT-e anterior — digite o valor, senão ele vai zerado.'
+         : 'Acompanha o frete.');
   }
 
   var conta = item.querySelector('.nf__conta');
@@ -2025,9 +2114,64 @@ document.addEventListener('DOMContentLoaded', function(){
     if (!linha) return;
     var cx = linha.nextElementSibling;
     while (cx && !cx.classList.contains('ed')) cx = cx.nextElementSibling;
-    if (cx) cx.hidden = !cx.hidden;
+    if (cx){
+      cx.hidden = !cx.hidden;
+      if (!cx.hidden) pfnRegraEdicao(cx);
+    }
   });
 });
+
+// A mesma regra do formulario novo, aplicada ao bloco de edicao.
+//
+// Nao da pra reaproveitar pfnRegraFrete: la os campos sao .nf__* dentro de um
+// .novo__f, aqui sao .ed__* dentro de um .ed, e a origem nao e um botao e sim
+// um data-atributo do proprio bloco. A DECISAO e a mesma nos dois e esta
+// escrita duas vezes — se um dia mudar, muda nos dois.
+//
+// Uma diferenca de proposito: aqui o valor so e preenchido quando o campo esta
+// ZERADO. O frete ja existe, e sobrescrever um CT-e que alguem digitou seria
+// apagar trabalho feito.
+function pfnRegraEdicao(cx){
+  if (!cx) return;
+  var cid = cx.getAttribute('data-cliente');
+  var oid = cx.getAttribute('data-origem');
+  var cli = null;
+  var lista = PFN_OP.clientes || [];
+  for (var i = 0; i < lista.length; i++){
+    if (String(lista[i].id) === String(cid)){ cli = lista[i]; break; }
+  }
+  if (!cli) return;
+
+  var pl = cx.querySelector('.ed__pl');
+  var pc = cx.querySelector('.ed__pc');
+  var rot = pl ? pl.closest('.nf__c') : null;
+  var rotCte = pc ? pc.closest('.nf__c') : null;
+  var tab = cli.cte || {};
+  var doHist = (oid && tab[oid] != null) ? tab[oid] : null;
+
+  if (cli.nao_cobra){
+    if (pl) pl.value = '0,000';
+    if (rot) rot.hidden = true;
+    // Sem historico o campo TEM que aparecer, senao o CT-e vai zerado calado.
+    if (rotCte) rotCte.hidden = (doHist !== null);
+    if (doHist !== null && pc && pfnNum(pc) === 0) pc.value = pfnFmtCte(doHist);
+  } else {
+    if (rot) rot.hidden = false;
+    if (rotCte) rotCte.hidden = false;
+    if (doHist !== null && pc && pfnNum(pc) === 0) pc.value = pfnFmtCte(doHist);
+  }
+
+  var av = cx.querySelector('.ed__casa');
+  if (av){
+    av.textContent = cli.nao_cobra
+      ? ('Posto da casa: não se cobra frete. CT-e '
+         + (pc ? pc.value || '0,000' : '0,000') + '/L'
+         + (doHist !== null ? ' — o mesmo do último frete desta rota.'
+                            : ' — esta rota não tem CT-e anterior.'))
+      : (doHist !== null
+         ? ('Último CT-e desta rota: ' + pfnFmtCte(doHist) + '/L.') : '');
+  }
+}
 function pfnFechaEd(botao){
   var cx = botao.closest('.ed');
   if (cx) cx.hidden = true;

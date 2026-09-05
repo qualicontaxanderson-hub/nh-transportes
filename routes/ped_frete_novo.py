@@ -1103,6 +1103,35 @@ def _opcoes(cur):
         if len(linhas) < 4:
             linhas.append({'preco': _f(r['preco']), 'origem': r['origem'] or '—',
                            'n': int(r['n'])})
+
+    # Historico do CT-e por cliente e ORIGEM — este PREENCHE o campo, ao
+    # contrario do de cima, que so consulta.
+    #
+    # Precisa existir porque o CT-e nao e constante nem espelha o frete: no
+    # posto da casa (frete R$ 0,00) ele saiu a 0,0800/L em Senador Canedo ate
+    # 30/05/2026 e a 0,1300/L depois, 0,1000/L em Goiatuba e em Itumbiara,
+    # 0,1300/L em Goiania. Espelhar o frete zerado gravava CT-e ZERO — sao 25
+    # fretes assim so ate 03/09/2026, o ultimo do proprio dia.
+    #
+    # Vale o MAIS RECENTE, nao o mais frequente: o preco muda no tempo, e a
+    # moda ficaria presa no valor velho justamente onde ele mudou (Senador
+    # Canedo tem 230 fretes a 0,08 contra 198 a 0,13 — a moda diria 0,08, que
+    # esta errado desde junho).
+    cur.execute("""
+        SELECT f.clientes_id AS cid, f.origem_id AS oid,
+               f.valor_cte / NULLIF(COALESCE(f.quantidade_manual, q.valor), 0) AS cte,
+               f.data_frete
+          FROM fretes f
+          LEFT JOIN quantidades q ON q.id = f.quantidade_id
+         WHERE f.data_frete >= DATE_SUB(CURDATE(), INTERVAL 365 DAY)
+           AND f.valor_cte > 0
+           AND COALESCE(f.quantidade_manual, q.valor) > 0
+         ORDER BY f.data_frete DESC, f.id DESC
+    """)
+    cte_hist = {}
+    for r in cur.fetchall():
+        # Primeiro que chega vence: a consulta ja vem da data mais nova.
+        cte_hist.setdefault(r['cid'], {}).setdefault(r['oid'], round(_f(r['cte']), 4))
     # Vai pra tela como JSON unico, nao como <option> repetido em cada cartao
     # de carga: no celular a lista de postos sozinha ja e enorme, e repetida
     # por caminhao ela dobrava o tamanho da pagina.
@@ -1110,7 +1139,11 @@ def _opcoes(cur):
         'clientes': [{'id': c['id'], 'nome': c['razao_social'],
                       'destino': c['destino'] or '',
                       'nao_cobra': c['id'] in nao_cobram,
-                      'hist': hist.get(c['id']) or []} for c in clientes],
+                      'hist': hist.get(c['id']) or [],
+                      # {origem_id: cte_por_litro} do ultimo frete daquela rota
+                      'cte': {str(k): v for k, v in
+                              (cte_hist.get(c['id']) or {}).items() if k},
+                      } for c in clientes],
         'fornecedores': [{'id': f['id'], 'nome': f['razao_social']} for f in fornecedores],
         'produtos': [{'id': p['id'], 'nome': p['nome']} for p in produtos],
         'origens': [{'id': o['id'], 'nome': o['nome']} for o in origens],
