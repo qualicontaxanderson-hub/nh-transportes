@@ -28,7 +28,7 @@ import re
 from datetime import datetime
 
 from flask import (Blueprint, flash, jsonify, redirect, render_template,
-                   request, url_for)
+                   request, session, url_for)
 from flask_login import current_user, login_required
 
 from extensions import csrf
@@ -144,11 +144,21 @@ def api_enviar():
 
 # ── a tela ────────────────────────────────────────────────────────────────────
 
+# A chave em claro atravessa o redirect por AQUI, e nao por flash: o base.html
+# imprime todo flash automaticamente, entao o segredo saia cru no topo da pagina
+# antes da caixa que era para mostra-lo. A sessao e por usuario, some na leitura
+# (pop) e nao entra em log nem em historico do navegador.
+_SESSAO_CHAVE = 'nhrobo_chave_nova'
+
+
 @bp.route('/nh-robo/', methods=['GET'])
 @login_required
 @admin_required
 def painel():
+    # pop: a chave aparece na primeira tela depois de gerada e em nenhuma outra.
+    # Um F5 nao a traz de volta — e nem deveria.
     return render_template('nhrobo/painel.html',
+                           chave_nova=session.pop(_SESSAO_CHAVE, None),
                            pessoas=nhrobo.painel(),
                            recebidos=nhrobo.recebidos(),
                            destino=nhrobo.PASTA_DESTINO,
@@ -179,8 +189,9 @@ def gerar(uid):
               'funcionar na hora.', 'warning')
     elif token:
         # Aparece UMA vez. Depois daqui só existe o hash, e nem o administrador
-        # consegue ver de novo.
-        flash('CHAVE|%d|%s' % (uid, token), 'chave')
+        # consegue ver de novo. Só o par (uid, token) viaja: o nome da pessoa e a
+        # data de corte a tela já tem em mãos, e o que não viaja não vaza.
+        session[_SESSAO_CHAVE] = {'uid': uid, 'token': token}
     return redirect(url_for('nhrobo.painel'))
 
 

@@ -752,7 +752,14 @@ def rodar_gui():
     worker = Worker(estado)
     tray_icon = None
 
-    VERDE = "#15803d"      # títulos das seções e status — verde da marca (como o Q-Robô)
+    # As cores do app (Grupo NH), não as do Qualicontax: o agente é nosso, e o
+    # verde daqui saíra do template de onde ele foi copiado. O verde agora
+    # aparece só onde significa "deu certo" — não como cor de enfeite.
+    AZUL  = "#0C4C86"      # títulos das seções
+    INK   = "#3a4655"      # o texto do quadro de status
+    OK    = "#17963C"      # "deu certo" — o mesmo verde do app
+    AMBAR = "#8a5a00"      # atenção: dá para seguir, mas alguém precisa olhar
+    ERRO  = "#a32d2d"
     CINZA = "#64748b"
 
     cfg0 = carregar_config()
@@ -789,7 +796,7 @@ def rodar_gui():
         root.after(0, root.destroy)
 
     def _titulo(txt):
-        tk.Label(root, text=txt, font=("Segoe UI", 10, "bold"), fg=VERDE, bg="white",
+        tk.Label(root, text=txt, font=("Segoe UI", 10, "bold"), fg=AZUL, bg="white",
                  anchor="w").pack(fill="x", padx=16, pady=(12, 2))
 
     # ===== Cabeçalho: logo + "NH-Robô" + versão (igual ao Q-Robô) =====
@@ -845,17 +852,28 @@ def rodar_gui():
 
     # ===== Status (quadro embaixo) =====
     _titulo("Status")
-    quad = tk.Frame(root, bg="#f8fdfa", highlightbackground="#e5e7eb", highlightthickness=1)
+    FUNDO_STATUS = "#f7f9fc"
+    quad = tk.Frame(root, bg=FUNDO_STATUS, highlightbackground="#e3e8ef",
+                    highlightthickness=1)
     quad.pack(fill="x", padx=16, pady=(2, 14))
-    lbl_status = tk.Label(quad, text="", font=("Segoe UI", 9), fg=VERDE, bg="#f8fdfa",
-                          justify="left", anchor="w")
-    lbl_status.pack(fill="x", padx=12, pady=10)
+    # A conexão fica numa linha própria porque é a única que muda de cor: um
+    # Label só tem um fg, e antes isso pintava "Sem conexão" de verde.
+    linha1 = tk.Frame(quad, bg=FUNDO_STATUS)
+    linha1.pack(fill="x", padx=12, pady=(10, 0))
+    tk.Label(linha1, text="Conexão:", font=("Segoe UI", 9), fg=INK,
+             bg=FUNDO_STATUS).pack(side="left")
+    lbl_conexao = tk.Label(linha1, text="", font=("Segoe UI", 9, "bold"),
+                           fg=CINZA, bg=FUNDO_STATUS)
+    lbl_conexao.pack(side="left", padx=(4, 0))
+    lbl_status = tk.Label(quad, text="", font=("Segoe UI", 9), fg=INK,
+                          bg=FUNDO_STATUS, justify="left", anchor="w")
+    lbl_status.pack(fill="x", padx=12, pady=(0, 10))
 
     # ---- ação: Testar conexão (mostra o NOME do funcionário, como o Q-Robô a razão social) ----
     def _testar():
         chave = chave_var.get().strip()
         if not chave:
-            lbl_teste.config(text="Cole a chave primeiro.", fg="#b45309")
+            lbl_teste.config(text="Cole a chave primeiro.", fg=AMBAR)
             return
         lbl_teste.config(text="Testando…", fg=CINZA)
 
@@ -863,9 +881,9 @@ def rodar_gui():
             ok, msg = testar_conexao(cfg0["servidor"], chave)
             def _mostra():
                 if ok:
-                    lbl_teste.config(text="✓ Chave válida — funcionário: %s" % msg, fg=VERDE)
+                    lbl_teste.config(text="✓ Chave válida — funcionário: %s" % msg, fg=OK)
                 else:
-                    lbl_teste.config(text="✗ %s" % msg, fg="#b91c1c")
+                    lbl_teste.config(text="✗ %s" % msg, fg=ERRO)
             root.after(0, _mostra)
         threading.Thread(target=_bg, daemon=True).start()
 
@@ -888,12 +906,19 @@ def rodar_gui():
 
     ROT = {"conectado": "Conectado", "sem_conexao": "Sem conexão",
            "chave_invalida": "Atenção — verifique a chave", "iniciando": "Iniciando…"}
+    # Sem conexão é âmbar, não vermelho: uma queda de rede se resolve sozinha na
+    # próxima rodada, e pintar de vermelho o que passa sozinho ensina a ignorar
+    # o vermelho. Vermelho fica para o estado que ninguém previu.
+    COR_CONEXAO = {"conectado": OK, "sem_conexao": AMBAR,
+                   "chave_invalida": AMBAR, "iniciando": CINZA}
 
     def tick():
         s = estado.snapshot()
         aguard = s["aguardando"]
         ult = ("%s às %s" % (s["ultimo_nome"], s["ultimo_hora"])) if s["ultimo_nome"] else "—"
-        linhas = ["Conexão: %s" % ROT.get(s["conexao"], s["conexao"])]
+        lbl_conexao.config(text=ROT.get(s["conexao"], s["conexao"]),
+                           fg=COR_CONEXAO.get(s["conexao"], ERRO))
+        linhas = []
         if s["detalhe"]:
             linhas.append("   %s" % s["detalhe"])
         linhas += [
@@ -918,7 +943,7 @@ def rodar_gui():
                     return Image.open(p)
                 except Exception:
                     pass
-            return Image.new("RGBA", (64, 64), (46, 158, 46, 255))
+            return Image.new("RGBA", (64, 64), (29, 99, 165, 255))
         menu = pystray.Menu(
             pystray.MenuItem("Abrir", lambda i, it: _mostrar(), default=True),
             pystray.MenuItem("Configurar…", lambda i, it: _mostrar()),
