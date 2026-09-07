@@ -1,0 +1,255 @@
+
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manual de Instalação — NH-Robô — Grupo NH</title>
+<link rel="icon" type="image/svg+xml" href="/static/images/favicon.svg?v=1786627886">
+<style>
+:root { --verde:#16a34a; --verde-esc:#0f3d2e; --borda:#e3ece7; --texto:#0f172a; --suave:#475569; }
+* { box-sizing:border-box; }
+body { margin:0; background:#f1f5f9; color:var(--texto);
+       font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+       font-size:15px; line-height:1.65; }
+.folha { max-width:860px; margin:0 auto; background:#fff; padding:0 0 48px; }
+
+/* Cabeçalho: a marca sai do MESMO logo.png do sistema e do portal. É isto que
+   mantém os dois manuais idênticos no topo. */
+.capa { background:linear-gradient(135deg,#166534,#0f3d2e); color:#fff; padding:34px 44px 30px; }
+.capa-marca { display:flex; align-items:center; gap:14px; margin-bottom:20px; }
+.capa-logo { width:52px; height:52px; object-fit:contain; background:#fff;
+             border-radius:12px; padding:6px; }
+.capa-marca-txt { font-size:15px; font-weight:800; letter-spacing:.3px; }
+.capa h1 { margin:0 0 6px; font-size:29px; line-height:1.2; }
+.capa-sub { margin:0; opacity:.9; font-size:14px; }
+.capa-selo { display:inline-block; margin-top:16px; background:rgba(255,255,255,.14);
+             border:1px solid rgba(255,255,255,.25); border-radius:999px;
+             padding:5px 14px; font-size:12.5px; }
+
+.corpo { padding:30px 44px 0; }
+.bloco { border:1px solid var(--borda); border-radius:12px; padding:16px 20px; margin-bottom:18px; }
+.bloco.verde { background:#f0fdf4; border-color:#bbf7d0; }
+.bloco.azul  { background:#eff6ff; border-color:#bfdbfe; }
+.bloco.aviso { background:#fffbeb; border-color:#fde68a; }
+.bloco p:first-child { margin-top:0; } .bloco p:last-child { margin-bottom:0; }
+
+h2 { font-size:19px; margin:30px 0 12px; padding-bottom:8px; border-bottom:2px solid #eef2f0;
+     display:flex; align-items:center; gap:10px; }
+h2 .n { background:var(--verde); color:#fff; width:26px; height:26px; border-radius:7px;
+        display:inline-flex; align-items:center; justify-content:center;
+        font-size:14px; font-weight:800; flex-shrink:0; }
+h3 { font-size:15.5px; margin:20px 0 8px; }
+
+ol.passos { list-style:none; counter-reset:p; padding:0; margin:0; }
+ol.passos > li { counter-increment:p; position:relative; padding:9px 0 9px 40px;
+                 border-bottom:1px solid #f1f5f9; }
+ol.passos > li:last-child { border-bottom:0; }
+ol.passos > li::before { content:counter(p); position:absolute; left:0; top:9px;
+    width:24px; height:24px; border-radius:50%; background:#dcfce7; color:#15803d;
+    font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center; }
+ul.simples { padding-left:20px; margin:8px 0; } ul.simples li { margin:5px 0; }
+
+code, .cam { font-family:ui-monospace,'Cascadia Mono',Consolas,monospace; font-size:13px;
+             background:#f1f5f9; border:1px solid #e2e8f0; border-radius:5px; padding:1px 6px; }
+strong { font-weight:700; }
+.rodape { margin:34px 44px 0; padding-top:16px; border-top:1px solid var(--borda);
+          font-size:12.5px; color:var(--suave); display:flex; justify-content:space-between;
+          gap:12px; flex-wrap:wrap; }
+
+@media (max-width:640px) {
+    .capa { padding:26px 20px 24px; } .corpo { padding:22px 20px 0; }
+    .rodape { margin:26px 20px 0; } .capa h1 { font-size:24px; }
+}
+
+/* Impressão: cor de fundo preservada e nada de passo partido no meio. */
+@page { margin:14mm 12mm; }
+@media print {
+    body { background:#fff; font-size:12pt; }
+    .folha { max-width:none; }
+    .capa { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .bloco, ol.passos > li, h2 { break-inside:avoid; page-break-inside:avoid; }
+    h2 { break-after:avoid; page-break-after:avoid; }
+    .nao-imprime { display:none; }
+}
+</style>
+</head>
+<body>
+<div class="folha">
+
+    <div class="capa">
+        <div class="capa-marca">
+            <img src="/static/images/logo.png?v=1780580055"
+                 alt="Grupo NH" class="capa-logo">
+            <span class="capa-marca-txt">GRUPO NH</span>
+        </div>
+        <h1>Manual de Instalação — NH-Robô</h1>
+        <p class="capa-sub">Guia do colaborador · como instalar no seu computador</p>
+        
+<span class="capa-selo">
+    Versão do programa: <strong>0.4.0</strong> &nbsp;•&nbsp; 
+    Envio automático de arquivos para o escritório
+</span>
+
+    </div>
+
+    <div class="corpo">
+        
+
+<div class="bloco verde">
+    <p><strong>O que é o NH-Robô?</strong> Um programa pequeno que fica rodando no
+    <strong>seu</strong> computador, perto do relógio (na bandeja do Windows). Você escolhe
+    uma ou mais pastas para ele vigiar; quando aparece um arquivo novo, ele manda para o
+    Grupo NH sozinho — em segundo plano, sem atrapalhar o seu trabalho. Serve para XML de
+    nota, PDF, SPED, extrato bancário, planilha, documento do Word e foto de comprovante —
+    a lista completa está mais abaixo.</p>
+    <p><strong>Ele não mexe nos seus arquivos.</strong> Não move, não renomeia, não apaga.
+    Cada documento fica exatamente onde você salvou — inclusive dentro das suas subpastas
+    por empresa. O programa apenas lê e envia; do lado dele fica anotado o que já foi, para
+    não mandar duas vezes.</p>
+    <p>Isso vale mesmo se você <strong>renomear</strong> o arquivo ou <strong>mudar de
+    pasta</strong> depois: ele reconhece pelo conteúdo e não reenvia. Só manda de novo se o
+    documento for realmente alterado.</p>
+</div>
+
+<div class="bloco azul">
+    <p><strong>Antes de começar, tenha em mãos:</strong></p>
+    <ul class="simples">
+        <li><strong>A sua chave pessoal</strong> do NH-Robô — quem gera é o escritório.
+            Se ainda não tem, peça antes de começar.</li>
+        <li><strong>O programa</strong>, que você baixa pelo próprio sistema
+            (botão <em>Baixar o programa</em>) ou pelo link
+            que o escritório enviar. Não é preciso Dropbox nem nenhuma outra conta.</li>
+    </ul>
+</div>
+
+<h2><span class="n">1</span> Instalar o programa</h2>
+<ol class="passos">
+    <li><strong>Baixe o arquivo</strong> <code>nhrobo-0.4.0.zip</code>.</li>
+    <li><strong>Extraia.</strong> Clique com o botão direito no arquivo e escolha
+        <strong>“Extrair tudo…”</strong>. Mande extrair para <span class="cam">C:\nhrobo</span>
+        — basta digitar esse caminho na janela de extração. Assim o programa e os arquivos
+        dele ficam todos juntos.</li>
+    <li><strong>Abra.</strong> Entre na pasta <span class="cam">C:\nhrobo</span> e dê dois
+        cliques em <code>nhrobo.exe</code>.</li>
+</ol>
+
+<div class="bloco aviso">
+    <p><strong>Se aparecer a tela azul “O Windows protegeu o computador”</strong>, é normal —
+    <strong>não é vírus</strong>. Acontece porque o programa é novo e o Windows ainda não o
+    conhece. Clique em <strong>“Mais informações”</strong> e depois em
+    <strong>“Executar assim mesmo”</strong>. Isso só acontece na primeira vez.</p>
+</div>
+
+<div class="bloco">
+    <p><strong>Já tem uma versão anterior instalada?</strong> Antes de extrair, clique com o
+    botão direito no ícone perto do relógio e escolha <strong>Sair</strong> — com o programa
+    aberto, o Windows não deixa substituir o arquivo. Depois extraia por cima da mesma pasta,
+    mandando substituir, e abra o <code>nhrobo.exe</code> de novo.</p>
+    <p>A sua chave e as suas pastas continuam configuradas: não é preciso cadastrar nada
+    outra vez.</p>
+</div>
+
+<h2><span class="n">2</span> Configurar (só na primeira vez)</h2>
+<p>Ao abrir pela primeira vez, aparece uma janela pedindo três coisas:</p>
+<ol class="passos">
+    <li><strong>A chave de ativação.</strong> Cole a chave que o escritório gerou para você e
+        clique em <strong>“Testar conexão”</strong>. Ele mostra o <strong>seu nome</strong> se
+        a chave estiver certa — é assim que você confirma que é a chave certa.
+        Copie e cole, não digite: um caractere errado já invalida.</li>
+    <li><strong>As pastas monitoradas.</strong> Clique em <strong>“Adicionar…”</strong> e
+        escolha a pasta que o programa deve vigiar. Escolha as pastas onde você
+        <strong>já salva</strong> as coisas; não precisa mudar o seu jeito de trabalhar.
+        <br><strong>Basta apontar a pasta de cima.</strong> Se você organiza em subpastas por
+        empresa — <span class="cam">Grupo NH\158 - Auto Posto Fenix</span>,
+        <span class="cam">Grupo NH\170 - Auto Posto Nacional</span> — aponte só
+        <span class="cam">Grupo NH</span>: ele entra em todas as subpastas sozinho.</li>
+    <li><strong>Ativar.</strong> Deixe <strong>“Iniciar junto com o Windows”</strong> marcado,
+        para o programa voltar sozinho quando você ligar o computador, e clique em
+        <strong>“Ativar”</strong>.</li>
+</ol>
+<p>Pronto: o programa vai para a bandeja e trabalha sozinho.</p>
+
+<h2><span class="n">3</span> O dia a dia</h2>
+<h3>O ícone perto do relógio</h3>
+<ul class="simples">
+    <li>Um clique no ícone <strong>abre a janela</strong>.</li>
+    <li>Botão direito no ícone: <strong>Abrir</strong>, <strong>Configurar…</strong> e
+        <strong>Sair</strong>.</li>
+    <li>Fechar no <strong>X não encerra</strong> — só esconde na bandeja. Para encerrar de
+        verdade, use <strong>Sair</strong> no menu do botão direito.</li>
+</ul>
+
+<h3>O que a janela mostra</h3>
+<ul class="simples">
+    <li>se está <strong>conectado</strong>;</li>
+    <li>quantos arquivos <strong>enviou hoje</strong> e qual foi o último;</li>
+    <li>se algum arquivo <strong>não pôde ser enviado</strong>;</li>
+    <li>se o <strong>início automático</strong> está ativo.</li>
+</ul>
+
+<div class="bloco">
+    <p><strong>E se algum arquivo não puder ser enviado?</strong> Acontece por dois motivos:
+    o arquivo passa de <strong>200 MB</strong>, ou é de um <strong>tipo que não
+    recebemos</strong>. Nesse caso o programa avisa na janela e deixa uma
+    <strong>cópia</strong> na pasta <code>Nao enviados</code>, criada na raiz da pasta que
+    você escolheu, com um bilhete explicando o motivo.</p>
+    <p><strong>Os tipos que recebemos:</strong> XML, PDF, certificado <code>.pfx</code>,
+    texto e SPED (<code>.txt</code>), extrato <code>.ofx</code>, <code>.zip</code>,
+    <code>.dec</code>, <code>.rec</code>, imagem (<code>.jpg</code>, <code>.png</code>),
+    planilha (<code>.xlsx</code>, <code>.csv</code>) e Word (<code>.docx</code>). Fora dessa
+    lista não passa — arquivo de e-mail (<code>.msg</code>, <code>.eml</code>),
+    <code>.rar</code> e os formatos antigos do Office (<code>.doc</code>, <code>.xls</code>)
+    são os que mais aparecem em <code>Nao enviados</code>. Se precisar mandar algum deles,
+    fale com o escritório.</p>
+    <p>O nome da cópia mostra de qual subpasta ela veio. E vale repetir: é uma
+    <strong>cópia</strong> — o seu arquivo original continua onde estava, intocado.</p>
+</div>
+
+<div class="bloco">
+    <p>Ele aguenta ficar o dia todo de pé: se a internet cair ou o servidor sair do ar, ele
+    espera e tenta de novo sozinho, sem fechar. Só para de enviar se a <strong>chave</strong>
+    estiver inválida — e mesmo assim continua aberto, mostrando o aviso, para você colar a
+    chave nova em <strong>Configurar…</strong>.</p>
+</div>
+
+<h2><span class="n">4</span> Se o Windows Defender reclamar</h2>
+<p>Como o programa é novo, o Windows pode desconfiar dele na primeira vez. Se isso acontecer,
+libere a pasta onde ele foi extraído:</p>
+<ol class="passos">
+    <li>Abra <strong>“Segurança do Windows”</strong>.</li>
+    <li>Vá em <strong>“Proteção contra vírus e ameaças”</strong>.</li>
+    <li>Em “Configurações de proteção…”, clique em <strong>“Gerenciar configurações”</strong>.</li>
+    <li>Desça até <strong>“Exclusões”</strong> → <strong>“Adicionar ou remover exclusões”</strong>.</li>
+    <li><strong>“Adicionar uma exclusão”</strong> → <strong>“Pasta”</strong> → escolha a pasta
+        do programa (ex.: <span class="cam">C:\nhrobo</span>).</li>
+</ol>
+<p>Isso libera só este programa. Em dúvida, chame o escritório antes.</p>
+
+<div class="bloco aviso">
+    <p><strong>Importante</strong></p>
+    <ul class="simples">
+        <li>A sua chave é <strong>pessoal</strong>. Não passe para ninguém.</li>
+        <li>O programa <strong>não move, não renomeia e não apaga</strong> nenhum arquivo
+            seu. A única coisa que ele escreve na sua pasta é a cópia de aviso em
+            <code>Nao enviados</code>, e só quando algum arquivo não pôde ser enviado.</li>
+        <li>Ele só manda o que for <strong>a partir da data de corte</strong> combinada com o
+            escritório. Documento mais antigo que ela fica onde está e não é enviado — e essa
+            data o escritório pode ajustar a qualquer momento, sem mexer no seu computador.</li>
+    </ul>
+</div>
+
+<p style="margin:22px 0 0; color:#475569">Dúvidas? Fale com o Grupo NH.</p>
+
+
+    </div>
+
+    <div class="rodape">
+        <span>Grupo NH — manual do NH-Robô</span>
+        <span class="nao-imprime">Para salvar em PDF: <strong>Ctrl+P</strong> → Salvar como PDF</span>
+    </div>
+
+</div>
+</body>
+</html>
