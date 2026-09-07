@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}Q-Colabore{% endblock %}
+
+{#- Q-COLABORE — a tela que substitui o "me mandaram no WhatsApp".
+    Duas metades: as chaves (quem pode mandar) e o que chegou (a prova de que
+    chegou). A segunda e o motivo do projeto: sem ela, troca-se trabalho
+    manual por caixa-preta. -#}
+
+{% block head %}
+<style>
+  #qcol{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+         --ambar:#8a5a00; --muted:#6b7684; --ink:#151d27; --borda:#d9e0e8;
+         color:var(--ink); }
+  #qcol .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:13px; padding:.7rem .9rem; margin-bottom:.7rem; }
+  #qcol .topo h1{ font-size:1rem; font-weight:800; margin:0; }
+  #qcol .topo p{ font-size:.78rem; opacity:.93; margin:.15rem 0 0; font-weight:600; }
+  #qcol .cx{ border:1px solid var(--borda); border-radius:11px; background:#fff;
+    margin-bottom:.7rem; overflow:hidden; }
+  #qcol .cx__h{ padding:.5rem .7rem; background:#f7f9fc;
+    border-bottom:1px solid #eef1f5; font-weight:800; font-size:.85rem; }
+  #qcol table{ width:100%; border-collapse:collapse; font-size:.8rem; }
+  #qcol th{ text-align:left; font-size:.67rem; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); padding:.4rem .7rem;
+    border-bottom:1px solid var(--borda); white-space:nowrap; }
+  #qcol td{ padding:.45rem .7rem; border-bottom:1px solid #f2f5f8;
+    vertical-align:middle; }
+  #qcol tr:last-child td{ border-bottom:0; }
+  #qcol .nome{ font-weight:800; }
+  #qcol .nome small{ display:block; font-weight:600; color:var(--muted);
+    font-size:.71rem; }
+  #qcol .selo{ font-size:.69rem; font-weight:800; border-radius:99px;
+    padding:.18rem .55rem; white-space:nowrap; }
+  #qcol .selo--ok{ background:#e4f4e8; color:#1c6b34; }
+  #qcol .selo--rev{ background:#fbe6e6; color:#8f2626; }
+  #qcol .selo--sem{ background:#eef1f5; color:var(--muted); }
+  #qcol .bt{ border:1px solid var(--borda); background:#fff; color:#3a4655;
+    border-radius:8px; padding:.28rem .6rem; font-size:.73rem; font-weight:800;
+    font-family:inherit; cursor:pointer; white-space:nowrap; }
+  #qcol .bt:hover{ background:#f0f4f9; }
+  #qcol .bt--sim{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #qcol .bt--per{ background:#fff; border-color:#f0c8c8; color:var(--danger); }
+  #qcol .acoes{ display:flex; gap:.3rem; flex-wrap:wrap; align-items:center; }
+  #qcol .acoes form{ display:inline; margin:0; }
+  #qcol input[type=date]{ border:1px solid var(--borda); border-radius:8px;
+    padding:.22rem .4rem; font-size:.73rem; font-family:inherit; }
+  #qcol .num{ font-variant-numeric:tabular-nums; text-align:right;
+    white-space:nowrap; }
+  #qcol .vazio{ text-align:center; color:var(--muted); font-size:.85rem;
+    padding:1.6rem 1rem; }
+  #qcol .nota{ font-size:.75rem; color:var(--muted); line-height:1.55;
+    margin:.8rem 0 0; }
+  /* a chave em claro: aparece UMA vez */
+  #qcol .chave{ background:#0f1720; color:#7ef7a0; border-radius:11px;
+    padding:.8rem .9rem; margin-bottom:.7rem; }
+  #qcol .chave b{ color:#fff; display:block; margin-bottom:.35rem;
+    font-size:.85rem; }
+  #qcol .chave code{ display:block; background:rgba(255,255,255,.08);
+    padding:.5rem .6rem; border-radius:8px; font-size:.95rem;
+    word-break:break-all; color:#fff; margin:.3rem 0; }
+  #qcol .chave span{ font-size:.75rem; opacity:.85; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid" id="qcol">
+
+  <div class="topo">
+    <h1><i class="bi bi-robot"></i> Q-Colabore</h1>
+    <p>O que os colaboradores mandam cai em <b>{{ destino }}</b> ·
+       aceita {{ extensoes | join(', ') }} · até {{ limite_mb }} MB por arquivo</p>
+  </div>
+
+  {% with mensagens = get_flashed_messages(with_categories=true) %}
+    {% for categoria, texto in mensagens %}
+      {% if categoria == 'chave' %}
+        {% set partes = texto.split('|') %}
+        <div class="chave">
+          <b><i class="bi bi-key-fill"></i> Chave gerada — copie agora</b>
+          <code>{{ partes[2] }}</code>
+          <span>Ela aparece <b>uma única vez</b>. Depois desta tela só existe o
+            resumo criptográfico dela, e nem você consegue vê-la de novo — se
+            perder, é só regerar. Cole no campo <i>Chave</i> do agente na
+            máquina da pessoa.</span>
+        </div>
+      {% else %}
+        <div class="alert alert-{{ 'danger' if categoria == 'danger'
+                                   else ('warning' if categoria == 'warning' else 'success') }}
+                    py-2" style="font-size:.82rem">{{ texto }}</div>
+      {% endif %}
+    {% endfor %}
+  {% endwith %}
+
+  <div class="cx">
+    <div class="cx__h">Quem pode mandar</div>
+    <div style="overflow-x:auto">
+    <table>
+      <tr>
+        <th>Pessoa</th><th>Chave</th><th>Manda a partir de</th>
+        <th>Último sinal</th><th class="num">Arquivos</th><th>Ações</th>
+      </tr>
+      {% for p in pessoas %}
+      <tr>
+        <td class="nome">{{ p.nome_completo }}<small>{{ p.username }} ·
+          {{ p.nivel }}</small></td>
+        <td>
+          {% if not p.token_prefixo %}
+            <span class="selo selo--sem">sem chave</span>
+          {% elif p.chave_ativa %}
+            <span class="selo selo--ok">{{ p.token_prefixo }}…</span>
+          {% else %}
+            <span class="selo selo--rev">revogada</span>
+          {% endif %}
+        </td>
+        <td>
+          <form method="post" action="{{ url_for('colabore.corte', uid=p.id) }}"
+                class="acoes">
+            <input type="date" name="data_inicio"
+                   value="{{ p.data_inicio_captura.isoformat() if p.data_inicio_captura else '' }}">
+            <button class="bt" type="submit">Salvar</button>
+          </form>
+        </td>
+        <td>
+          {% if p.ultimo_contato %}
+            {{ p.ultimo_contato.strftime('%d/%m %H:%M') }}
+            <small style="color:var(--muted)">
+              {%- if p.min_sem_contato is not none %}
+                · há {{ p.min_sem_contato }} min
+              {%- endif -%}
+            </small>
+          {% else %}
+            <span style="color:var(--muted)">nunca falou</span>
+          {% endif %}
+        </td>
+        <td class="num">
+          {{ p.enviados or 0 }}
+          {%- if p.ultimo_envio %}<small style="display:block;color:var(--muted);font-weight:600">
+            {{ p.ultimo_envio.strftime('%d/%m') }}</small>{% endif -%}
+        </td>
+        <td>
+          <div class="acoes">
+            {% if not p.token_prefixo %}
+              <form method="post" action="{{ url_for('colabore.gerar', uid=p.id) }}">
+                <button class="bt bt--sim" type="submit">Gerar chave</button></form>
+            {% else %}
+              <form method="post" action="{{ url_for('colabore.gerar', uid=p.id) }}"
+                    onsubmit="return confirm('Regerar a chave de {{ p.nome_completo }}?\n\nA chave atual para de funcionar na hora, e a máquina dela vai parar de enviar até alguém colar a nova.')">
+                <input type="hidden" name="regerar" value="1">
+                <button class="bt" type="submit">Regerar</button></form>
+              {% if p.chave_ativa %}
+              <form method="post" action="{{ url_for('colabore.revogar', uid=p.id) }}"
+                    onsubmit="return confirm('Revogar a chave de {{ p.nome_completo }}?\n\nO agente para de enviar no próximo ciclo.')">
+                <button class="bt bt--per" type="submit">Revogar</button></form>
+              {% endif %}
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+  </div>
+
+  <div class="cx">
+    <div class="cx__h">O que chegou <small style="font-weight:600;color:var(--muted)">
+      — últimos {{ recebidos|length }}</small></div>
+    {% if not recebidos %}
+      <div class="vazio"><i class="bi bi-inbox"></i><br>
+        Nada chegou ainda. Assim que alguém largar um arquivo na pasta vigiada,
+        ele aparece aqui.</div>
+    {% else %}
+    <div style="overflow-x:auto">
+    <table>
+      <tr>
+        <th>Quando</th><th>Quem</th><th>Arquivo</th>
+        <th class="num">Tamanho</th><th>Origem</th>
+      </tr>
+      {% for r in recebidos %}
+      <tr>
+        <td style="white-space:nowrap">{{ r.recebido_em.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td class="nome">{{ r.nome_completo }}<small>{{ r.username }}</small></td>
+        <td>{{ r.nome_final }}
+          {%- if r.nome_final != r.nome_original %}
+          <small style="display:block;color:var(--ambar);font-weight:600">
+            chegou como {{ r.nome_original }} — o nome já estava ocupado</small>
+          {%- endif -%}
+        </td>
+        <td class="num">{{ '{:,.0f}'.format(r.tamanho_bytes / 1024).replace(',', '.') }} KB</td>
+        <td style="color:var(--muted)">{{ r.ip or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <p class="nota">
+    A <b>data de corte</b> vale para arquivos <b>criados</b> a partir dela —
+    é o que impede a primeira rodada de sugar anos de arquivo velho. Ela mora
+    aqui, não na máquina: mudar não exige visitar ninguém.<br>
+    <b>Revogar</b> não apaga nada: a linha fica, o histórico continua fazendo
+    sentido, e o agente daquela máquina para de enviar mostrando o aviso.<br>
+    <b>Último sinal</b> é o que separa &ldquo;máquina desligada&rdquo; de
+    &ldquo;agente parado&rdquo; — o agente carimba aqui a cada ciclo, mesmo com
+    a chave revogada.
+  </p>
+
+</div>
+{% endblock %}
