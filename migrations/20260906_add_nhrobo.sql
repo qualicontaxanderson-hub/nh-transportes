@@ -1,4 +1,4 @@
--- Q-COLABORE: os colaboradores largam o arquivo numa pasta da maquina deles e
+-- NH-ROBO: os colaboradores largam o arquivo numa pasta da maquina deles e
 -- o agente entrega direto no Dropbox, via este servidor.
 --
 -- Por que passa pelo servidor e nao vai direto ao Dropbox: as cinco maquinas
@@ -15,7 +15,7 @@
 -- CUIDADO ao editar: o runner divide este arquivo por PONTO-E-VIRGULA, e
 -- nao entende que um deles esta dentro de comentario. Um deles numa frase
 -- em portugues aqui parte a migration ao meio e ela falha com erro 1064.
-CREATE TABLE IF NOT EXISTS colabore_config (
+CREATE TABLE IF NOT EXISTS nhrobo_config (
     id                  INT AUTO_INCREMENT PRIMARY KEY,
     usuario_id          INT          NOT NULL,
     token_hash          VARCHAR(64)  NULL,
@@ -28,9 +28,9 @@ CREATE TABLE IF NOT EXISTS colabore_config (
     token_gerado_por    INT          NULL,
     criado_em           TIMESTAMP    NULL DEFAULT CURRENT_TIMESTAMP,
     atualizado_em       TIMESTAMP    NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_colabore_usuario (usuario_id),
-    UNIQUE KEY uk_colabore_hash (token_hash),
-    CONSTRAINT fk_colabore_usuario FOREIGN KEY (usuario_id)
+    UNIQUE KEY uk_nhrobo_usuario (usuario_id),
+    UNIQUE KEY uk_nhrobo_hash (token_hash),
+    CONSTRAINT fk_nhrobo_usuario FOREIGN KEY (usuario_id)
         REFERENCES usuarios(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS colabore_config (
 -- proposito porque nome de .pfx costuma carregar a senha do certificado. Neste
 -- app so entram OFX e planilha, onde o nome nao esconde segredo nenhum -- e e
 -- justamente o que se precisa ver na lista.
-CREATE TABLE IF NOT EXISTS colabore_recebidos (
+CREATE TABLE IF NOT EXISTS nhrobo_recebidos (
     id             INT AUTO_INCREMENT PRIMARY KEY,
     usuario_id     INT          NOT NULL,
     nome_original  VARCHAR(255) NOT NULL,
@@ -51,6 +51,6 @@ CREATE TABLE IF NOT EXISTS colabore_recebidos (
     destino        VARCHAR(255) NOT NULL,
     ip             VARCHAR(45)  NULL,
     recebido_em    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    KEY ix_colabore_recebidos_quando (recebido_em),
-    KEY ix_colabore_recebidos_usuario (usuario_id, recebido_em)
+    KEY ix_nhrobo_recebidos_quando (recebido_em),
+    KEY ix_nhrobo_recebidos_usuario (usuario_id, recebido_em)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Q-Colabore: chaves dos colaboradores e entrega do arquivo no Dropbox.
+"""NH-Robo: chaves dos colaboradores e entrega do arquivo no Dropbox.
 
 O agente que roda na maquina do colaborador e o mesmo do Qualicontax (Nuitka
 standalone, versao 0.4.0). Ele so sabe duas coisas: pedir a data de corte e
@@ -51,7 +51,7 @@ def hash_token(token):
 
 
 def _linha(cur, uid):
-    cur.execute("SELECT * FROM colabore_config WHERE usuario_id = %s", (uid,))
+    cur.execute("SELECT * FROM nhrobo_config WHERE usuario_id = %s", (uid,))
     return cur.fetchone()
 
 
@@ -72,7 +72,7 @@ def gerar_chave(usuario_id, admin_id, regerar=False, data_inicio=None):
         dados = (hash_token(token), token[:8], data_inicio, admin_id)
         if atual:
             cur.execute("""
-                UPDATE colabore_config
+                UPDATE nhrobo_config
                    SET token_hash = %s, token_prefixo = %s,
                        data_inicio_captura = COALESCE(%s, data_inicio_captura),
                        token_gerado_por = %s, token_gerado_em = NOW(),
@@ -81,7 +81,7 @@ def gerar_chave(usuario_id, admin_id, regerar=False, data_inicio=None):
             """, dados + (usuario_id,))
         else:
             cur.execute("""
-                INSERT INTO colabore_config
+                INSERT INTO nhrobo_config
                        (usuario_id, token_hash, token_prefixo,
                         data_inicio_captura, token_gerado_por, token_gerado_em,
                         versao, ativo)
@@ -103,7 +103,7 @@ def revogar_chave(usuario_id):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("UPDATE colabore_config SET ativo = 0 WHERE usuario_id = %s",
+        cur.execute("UPDATE nhrobo_config SET ativo = 0 WHERE usuario_id = %s",
                     (usuario_id,))
         conn.commit()
         return cur.rowcount > 0
@@ -123,7 +123,7 @@ def definir_corte(usuario_id, data_inicio):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("""UPDATE colabore_config SET data_inicio_captura = %s
+        cur.execute("""UPDATE nhrobo_config SET data_inicio_captura = %s
                         WHERE usuario_id = %s""", (data_inicio, usuario_id))
         conn.commit()
         return cur.rowcount > 0, None
@@ -144,7 +144,7 @@ def config_por_token(token):
     try:
         cur.execute("""
             SELECT c.*, u.nome_completo AS usuario_nome, u.username AS usuario_login
-              FROM colabore_config c
+              FROM nhrobo_config c
               JOIN usuarios u ON u.id = c.usuario_id
              WHERE c.token_hash = %s
         """, (hash_token(token),))
@@ -163,7 +163,7 @@ def marcar_contato(usuario_id):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("""UPDATE colabore_config SET ultimo_contato = NOW()
+        cur.execute("""UPDATE nhrobo_config SET ultimo_contato = NOW()
                         WHERE usuario_id = %s""", (usuario_id,))
         conn.commit()
     except Exception:
@@ -234,7 +234,7 @@ def registrar_recebido(usuario_id, nome_original, nome_final, ext, tamanho, ip):
     cur = conn.cursor()
     try:
         cur.execute("""
-            INSERT INTO colabore_recebidos
+            INSERT INTO nhrobo_recebidos
                    (usuario_id, nome_original, nome_final, ext, tamanho_bytes,
                     destino, ip)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -258,12 +258,12 @@ def painel():
                    c.token_prefixo, c.ativo AS chave_ativa, c.data_inicio_captura,
                    c.ultimo_contato, c.versao, c.token_gerado_em,
                    TIMESTAMPDIFF(MINUTE, c.ultimo_contato, NOW()) AS min_sem_contato,
-                   (SELECT COUNT(*) FROM colabore_recebidos r
+                   (SELECT COUNT(*) FROM nhrobo_recebidos r
                      WHERE r.usuario_id = u.id) AS enviados,
-                   (SELECT MAX(r.recebido_em) FROM colabore_recebidos r
+                   (SELECT MAX(r.recebido_em) FROM nhrobo_recebidos r
                      WHERE r.usuario_id = u.id) AS ultimo_envio
               FROM usuarios u
-              LEFT JOIN colabore_config c ON c.usuario_id = u.id
+              LEFT JOIN nhrobo_config c ON c.usuario_id = u.id
              WHERE u.ativo = 1
              ORDER BY (c.token_hash IS NULL), u.nome_completo
         """)
@@ -279,7 +279,7 @@ def recebidos(limite=200):
     try:
         cur.execute("""
             SELECT r.*, u.nome_completo, u.username
-              FROM colabore_recebidos r
+              FROM nhrobo_recebidos r
               JOIN usuarios u ON u.id = r.usuario_id
              ORDER BY r.recebido_em DESC
              LIMIT %s
