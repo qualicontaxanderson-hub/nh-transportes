@@ -69,6 +69,17 @@
     <h1><i class="bi bi-robot"></i> NH-Robô</h1>
     <p>O que os colaboradores mandam cai em <b>{{ destino }}</b> ·
        aceita {{ extensoes | join(', ') }} · até {{ limite_mb }} MB por arquivo</p>
+    {# O link que se manda para as cinco pessoas: elas baixam e instalam por
+       ali, sem nunca encostar no Dropbox. #}
+    <p style="margin-top:.45rem">
+      <a href="{{ url_for('nhrobo.instalar') }}" target="_blank"
+         style="background:rgba(255,255,255,.2);color:#fff;border-radius:99px;
+                padding:.26rem .8rem;font-size:.78rem;font-weight:800;
+                text-decoration:none">
+        <i class="bi bi-download"></i> Página de instalação</a>
+      <span style="font-size:.75rem;opacity:.85;margin-left:.4rem">
+        — mande este link para quem for instalar</span>
+    </p>
   </div>
 
   {% with mensagens = get_flashed_messages(with_categories=true) %}

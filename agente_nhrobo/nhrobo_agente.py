@@ -635,9 +635,19 @@ class Worker(threading.Thread):
                     # aqui. Vem ANTES do caderninho de propósito: numa pasta com
                     # anos de histórico, nem vale calcular hash do que é velho
                     # demais para mandar.
-                    if corte and _dt.date.fromtimestamp(st.st_mtime) < corte:
-                        if self._ignorados.get(caminho) != st.st_mtime:
-                            self._ignorados[caminho] = st.st_mtime
+                    #
+                    # Vale a data MAIS RECENTE entre modificação e criação, e
+                    # não só a modificação. O Windows PRESERVA a data de
+                    # modificação quando alguém copia um arquivo: um extrato de
+                    # agosto copiado para a pasta hoje continua marcado como
+                    # agosto e seria ignorado em silêncio — e a pessoa juraria
+                    # que colocou lá. Com a criação junto, vale quando o arquivo
+                    # APARECEU na pasta, que é o que se quer dizer com "manda
+                    # daqui para a frente".
+                    quando = max(st.st_mtime, st.st_ctime)
+                    if corte and _dt.date.fromtimestamp(quando) < corte:
+                        if self._ignorados.get(caminho) != quando:
+                            self._ignorados[caminho] = quando
                             log.info("Ignorado (anterior a %s): %s", corte, nome)
                         continue
 

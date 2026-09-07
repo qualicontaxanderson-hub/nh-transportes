@@ -229,6 +229,41 @@ def guardar(nome, conteudo):
     return meta.name
 
 
+# ── o instalador ──────────────────────────────────────────────────────────────
+
+#: Onde o .zip do agente fica. FORA de /BANCOS/OFX/NOVO de proposito: aquela
+#: pasta e varrida pelo importador de extrato, e um .zip la dentro so ia
+#: confundir. Publicar versao nova e largar o arquivo aqui -- o link que os
+#: colaboradores usam nao muda.
+PASTA_INSTALADOR = '/BANCOS/NHROBO'
+
+
+def instalador():
+    """(nome, bytes) do .zip mais novo, ou (None, None) quando nao ha nenhum.
+
+    O colaborador NUNCA toca no Dropbox: quem busca e o servidor, e ele entrega
+    pelo app, onde a pessoa ja entra. Se dependesse de um link do Dropbox, o
+    robo perderia o proprio sentido.
+    """
+    from dropbox.exceptions import ApiError
+    try:
+        entradas = _dbx().files_list_folder(PASTA_INSTALADOR).entries
+    except ApiError:
+        return None, None
+    zips = [e for e in entradas
+            if getattr(e, 'size', None) is not None
+            and e.name.lower().startswith('nhrobo')
+            and e.name.lower().endswith('.zip')]
+    if not zips:
+        return None, None
+    # O mais novo pelo carimbo do proprio Dropbox, e nao pelo nome: ordenar
+    # "1.10.0" por texto poria ele antes de "1.9.0".
+    zips.sort(key=lambda e: getattr(e, 'server_modified', None) or 0, reverse=True)
+    escolhido = zips[0]
+    _, resposta = _dbx().files_download('%s/%s' % (PASTA_INSTALADOR, escolhido.name))
+    return escolhido.name, resposta.content
+
+
 def registrar_recebido(usuario_id, nome_original, nome_final, ext, tamanho, ip):
     conn = get_db_connection()
     cur = conn.cursor()

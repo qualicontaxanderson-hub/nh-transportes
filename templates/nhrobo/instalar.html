@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Instalar o NH-Robô{% endblock %}
+
+{#- A pagina do COLABORADOR (login basta, nao precisa ser admin).
+    Ela existe para que ninguem precise de link do Dropbox nem de alguem
+    passando de mesa em mesa: a pessoa entra no app onde ja entra, baixa e
+    instala. -#}
+
+{% block head %}
+<style>
+  #nhi{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --ambar:#8a5a00;
+        --muted:#6b7684; --ink:#151d27; --borda:#d9e0e8; color:var(--ink);
+        max-width:820px; }
+  #nhi .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:13px; padding:.9rem 1rem; margin-bottom:.8rem; }
+  #nhi .topo h1{ font-size:1.05rem; font-weight:800; margin:0; }
+  #nhi .topo p{ font-size:.82rem; opacity:.93; margin:.2rem 0 0; font-weight:600;
+    line-height:1.5; }
+  #nhi .baixar{ display:inline-flex; align-items:center; gap:.5rem;
+    background:var(--blue); color:#fff; border:0; border-radius:11px;
+    padding:.7rem 1.2rem; font-size:.95rem; font-weight:800; cursor:pointer;
+    text-decoration:none; font-family:inherit; }
+  #nhi .baixar:hover{ background:var(--blue-deep); color:#fff; }
+  #nhi .secundario{ margin-left:.6rem; font-size:.82rem; font-weight:700;
+    color:var(--blue); text-decoration:none; }
+  #nhi .cx{ border:1px solid var(--borda); border-radius:11px; background:#fff;
+    padding:.8rem 1rem; margin-bottom:.7rem; }
+  #nhi ol{ margin:.3rem 0 0; padding-left:1.15rem; font-size:.85rem;
+    line-height:1.75; }
+  #nhi ol b{ color:var(--blue-deep); }
+  #nhi .aviso{ background:#fff8e8; border:1px solid #f0d8a8;
+    border-left:4px solid var(--ambar); border-radius:0 10px 10px 0;
+    padding:.7rem .9rem; font-size:.8rem; color:#5a4300; line-height:1.6;
+    margin-top:.7rem; }
+  #nhi .nota{ font-size:.78rem; color:var(--muted); line-height:1.6;
+    margin-top:.7rem; }
+  #nhi code{ background:#f2f5f8; padding:.1rem .35rem; border-radius:5px;
+    font-size:.85em; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid" id="nhi">
+
+  <div class="topo">
+    <h1><i class="bi bi-robot"></i> NH-Robô</h1>
+    <p>Você escolhe uma pasta no seu computador. Tudo que você salvar nela
+       chega sozinho ao sistema — sem mandar por mensagem, sem esperar
+       ninguém copiar.</p>
+  </div>
+
+  {% with mensagens = get_flashed_messages(with_categories=true) %}
+    {% for categoria, texto in mensagens %}
+      <div class="alert alert-{{ 'warning' if categoria == 'warning' else 'info' }} py-2"
+           style="font-size:.85rem">{{ texto }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="cx">
+    <a class="baixar" href="{{ url_for('nhrobo.instalador') }}">
+      <i class="bi bi-download"></i> Baixar o NH-Robô</a>
+    <a class="secundario" href="{{ url_for('nhrobo.manual') }}" target="_blank">
+      ver o passo a passo com imagens</a>
+
+    <ol>
+      <li>Baixe e <b>extraia a pasta inteira</b> num lugar fixo do seu
+        computador — a Área de Trabalho serve. Não rode de dentro do
+        <code>.zip</code>.</li>
+      <li>Abra o <code>nhrobo.exe</code>. Se o Windows perguntar, escolha
+        <b>Mais informações → Executar assim mesmo</b>.</li>
+      <li>Cole a <b>chave</b> que o Anderson te passou e clique em
+        <b>Testar conexão</b>. Tem que aparecer o seu nome.</li>
+      <li>Escolha a <b>pasta que ele vai vigiar</b>. Pode ser uma pasta nova,
+        só para isso.</li>
+      <li>Deixe marcado <b>iniciar com o Windows</b> e feche a janela. Ele
+        continua rodando ali no relógio, perto da hora.</li>
+    </ol>
+  </div>
+
+  <div class="cx">
+    <b style="font-size:.88rem">O que ele leva</b>
+    <p style="font-size:.85rem;margin:.3rem 0 0;line-height:1.6">
+      Só <b>{{ extensoes | join(', ') }}</b>, até {{ limite_mb }} MB por arquivo.
+      Qualquer outra coisa que estiver na pasta ele ignora — pode deixar PDF,
+      Word e fotos ali que não vão a lugar nenhum.
+    </p>
+    <div class="aviso">
+      <b>Ele nunca apaga nada seu.</b> Depois de mandar, o arquivo vai para a
+      subpasta <b>Enviados</b>, dentro da mesma pasta. Se algum for recusado,
+      vai para <b>Nao enviados</b> com um bilhete <code>.motivo.txt</code>
+      explicando por quê.
+    </div>
+  </div>
+
+  <p class="nota">
+    Se a janela disser <b>"Chave inválida ou revogada"</b>, fale com o Anderson —
+    a chave é sua e pessoal, e ele consegue gerar outra na hora.
+    O robô não precisa de você para funcionar: uma vez configurado, ele olha a
+    pasta sozinho de tempos em tempos, inclusive depois de reiniciar o
+    computador.
+  </p>
+
+</div>
+{% endblock %}

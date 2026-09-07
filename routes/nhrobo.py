@@ -23,6 +23,8 @@ HTTP abaixo sao contrato, nao escolha — ele decide pelo codigo, e trocar um
 deles muda o comportamento nas cinco maquinas sem ninguem tocar nelas.
 """
 import logging
+import os
+import re
 from datetime import datetime
 
 from flask import (Blueprint, flash, jsonify, redirect, render_template,
@@ -209,3 +211,52 @@ def corte(uid):
     else:
         flash('Essa pessoa ainda não tem chave.', 'warning')
     return redirect(url_for('nhrobo.painel'))
+
+
+# ── o instalador, para os cinco ───────────────────────────────────────────────
+# Estas tres rotas sao para o COLABORADOR, nao para o administrador: login
+# basta, nao precisa ser admin. E por elas que a pessoa instala o robo sem
+# nunca encostar no Dropbox — se ela precisasse de um link de la, o robo
+# perderia o proprio sentido.
+
+@bp.route('/nh-robo/instalar', methods=['GET'])
+@login_required
+def instalar():
+    """A pagina que o colaborador abre: baixar, e o manual ao lado."""
+    return render_template('nhrobo/instalar.html',
+                           destino=nhrobo.PASTA_DESTINO,
+                           extensoes=nhrobo.EXTENSOES_PERMITIDAS,
+                           limite_mb=nhrobo.TAMANHO_MAX_BYTES // (1024 * 1024))
+
+
+@bp.route('/nh-robo/instalador', methods=['GET'])
+@login_required
+def instalador():
+    """Entrega o .zip do agente. O servidor busca no Dropbox e repassa."""
+    from flask import Response
+    from urllib.parse import quote
+    try:
+        nome, conteudo = nhrobo.instalador()
+    except Exception:
+        _log.exception('[nhrobo] falha buscando o instalador')
+        nome, conteudo = None, None
+    if not conteudo:
+        flash('O instalador ainda não foi publicado. Ele precisa ser gerado '
+              '(build_nhrobo.ps1) e colocado em %s no Dropbox.'
+              % nhrobo.PASTA_INSTALADOR, 'warning')
+        return redirect(url_for('nhrobo.instalar'))
+    return Response(conteudo, mimetype='application/zip', headers={
+        'Content-Disposition': "attachment; filename=\"%s\"; filename*=UTF-8''%s"
+                               % (re.sub(r'[^A-Za-z0-9._-]', '_', nome), quote(nome)),
+        'Content-Length': str(len(conteudo)),
+    })
+
+
+@bp.route('/nh-robo/manual', methods=['GET'])
+@login_required
+def manual():
+    """O passo a passo da instalacao, entregue pelo proprio app."""
+    from flask import current_app, send_from_directory
+    return send_from_directory(
+        os.path.join(current_app.root_path, 'agente_nhrobo'),
+        'LEIA-ME-instalacao.html')
