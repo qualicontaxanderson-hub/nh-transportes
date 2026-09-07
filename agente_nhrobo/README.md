@@ -19,11 +19,13 @@ a inteligência fica no servidor; o agente é simples.
 3. Pergunta ao servidor a **data de corte** (`GET /api/nhrobo/config`) e
    **ignora** arquivo anterior a ela (essa data é sempre do servidor).
 4. Envia cada arquivo (`POST /api/nhrobo/enviar`, chave no `Bearer`).
-5. Pelo resultado:
+5. Pelo resultado (conferido no codigo em 06/09/2026 — a versao 0.4.0
+   parou de MOVER o arquivo do usuario, e `Enviados` sobrou so como
+   pasta a ser ignorada na varredura):
    | Resposta | O que o agente faz |
    |----------|--------------------|
-   | **200 / 409** | move para **`Enviados`** |
-   | **413 / 415** | move para **`Nao enviados`** + grava um `.motivo.txt` |
+   | **200 / 409** | anota no caderninho. **Nada é movido** — o arquivo fica onde a pessoa salvou |
+   | **413 / 415** | anota como recusado e deixa uma **cópia** em **`Nao enviados`** + um `.motivo.txt`. O original não sai do lugar |
    | **401 / 403** (chave inválida/revogada) | **para de enviar** e avisa na janela (o programa continua aberto para colar a chave nova) |
    | **5xx / sem rede** | deixa onde está e tenta de novo depois |
 

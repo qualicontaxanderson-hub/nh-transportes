@@ -84,11 +84,15 @@
       Qualquer outra coisa que estiver na pasta ele ignora — pode deixar PDF,
       Word e fotos ali que não vão a lugar nenhum.
     </p>
+    {# Conferido no codigo do agente: depois do "ok" NADA e movido — a pasta
+       "Enviados" so existe como legado, para ser ignorada na varredura. Dizer
+       que o arquivo muda de lugar faria a pessoa procurar onde nao esta. #}
     <div class="aviso">
-      <b>Ele nunca apaga nada seu.</b> Depois de mandar, o arquivo vai para a
-      subpasta <b>Enviados</b>, dentro da mesma pasta. Se algum for recusado,
-      vai para <b>Nao enviados</b> com um bilhete <code>.motivo.txt</code>
-      explicando por quê.
+      <b>Ele nunca apaga nem move nada seu.</b> Depois de mandar, o arquivo
+      continua exatamente onde você salvou — e ele não manda o mesmo arquivo
+      duas vezes. Se algum for recusado, uma <b>cópia</b> aparece na subpasta
+      <b>Nao enviados</b>, com um bilhete <code>.motivo.txt</code> explicando
+      por quê; o original fica no lugar.
     </div>
   </div>
 
