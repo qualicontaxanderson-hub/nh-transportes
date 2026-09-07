@@ -31,9 +31,20 @@ from utils.db import get_db_connection
 # pessoa: quem separa e o conteudo do arquivo, nao o lugar dele.
 PASTA_DESTINO = '/BANCOS/OFX/NOVO'
 
-#: O agente nao filtra nada — manda tudo e deixa o servidor recusar. A lista
-#: nasce completa de proposito (ver o 415 definitivo, no topo).
-EXTENSOES_PERMITIDAS = ('.ofx', '.xlsx', '.xls', '.xlsm', '.csv')
+#: O agente nao filtra nada — manda tudo e deixa o servidor recusar, entao esta
+#: linha e o unico lugar a mexer: acrescentar um tipo NAO exige tocar em maquina
+#: nenhuma.
+#:
+#: A lista nasce completa de proposito. O 415 e recusa DEFINITIVA: o agente
+#: anota no caderninho dele e nunca mais tenta aquele arquivo. Liberar um tipo
+#: depois so vale para arquivo NOVO — o que ja foi recusado exige a pessoa
+#: salvar de novo.
+#:
+#: `.pdf` entrou em 07/09/2026 por essa razao, antes de existir quem o consuma:
+#: hoje ele so se acumula em /BANCOS/OFX/NOVO esperando alguem pegar a mao. O
+#: preco de deixar de fora seria pedir a cinco pessoas que re-salvassem tudo no
+#: dia em que ele fosse liberado.
+EXTENSOES_PERMITIDAS = ('.ofx', '.xlsx', '.xls', '.xlsm', '.csv', '.pdf')
 
 #: 25 MB. O maior OFX que ja passou por aqui tem 85 KB, entao sobra folga de
 #: 300x — e fecha a porta para arquivo enorme atravessar a internet a toa.
