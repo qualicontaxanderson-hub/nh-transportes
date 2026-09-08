@@ -6,9 +6,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Manual de Instalação — NH-Robô — Grupo NH</title>
-<link rel="icon" type="image/svg+xml" href="/static/images/favicon.svg?v=1786627886">
+<link rel="icon" type="image/png" href="/static/icons/favicon-32.png">
 <style>
-:root { --verde:#16a34a; --verde-esc:#0f3d2e; --borda:#e3ece7; --texto:#0f172a; --suave:#475569; }
+:root { --azul:#1D63A5; --azul-esc:#0C4C86; --borda:#dde5ee; --texto:#151d27; --suave:#475569; }
 * { box-sizing:border-box; }
 body { margin:0; background:#f1f5f9; color:var(--texto);
        font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
@@ -17,7 +17,7 @@ body { margin:0; background:#f1f5f9; color:var(--texto);
 
 /* Cabeçalho: a marca sai do MESMO logo.png do sistema e do portal. É isto que
    mantém os dois manuais idênticos no topo. */
-.capa { background:linear-gradient(135deg,#166534,#0f3d2e); color:#fff; padding:34px 44px 30px; }
+.capa { background:linear-gradient(120deg,#0C4C86,#1D63A5); color:#fff; padding:34px 44px 30px; }
 .capa-marca { display:flex; align-items:center; gap:14px; margin-bottom:20px; }
 .capa-logo { width:52px; height:52px; object-fit:contain; background:#fff;
              border-radius:12px; padding:6px; }
@@ -30,14 +30,14 @@ body { margin:0; background:#f1f5f9; color:var(--texto);
 
 .corpo { padding:30px 44px 0; }
 .bloco { border:1px solid var(--borda); border-radius:12px; padding:16px 20px; margin-bottom:18px; }
-.bloco.verde { background:#f0fdf4; border-color:#bbf7d0; }
-.bloco.azul  { background:#eff6ff; border-color:#bfdbfe; }
+.bloco.destaque { background:#eaf1f9; border-color:#c6dbef; }
+.bloco.azul  { background:#f4f8fc; border-color:#cfe0f0; }
 .bloco.aviso { background:#fffbeb; border-color:#fde68a; }
 .bloco p:first-child { margin-top:0; } .bloco p:last-child { margin-bottom:0; }
 
-h2 { font-size:19px; margin:30px 0 12px; padding-bottom:8px; border-bottom:2px solid #eef2f0;
+h2 { font-size:19px; margin:30px 0 12px; padding-bottom:8px; border-bottom:2px solid #e7ebf1;
      display:flex; align-items:center; gap:10px; }
-h2 .n { background:var(--verde); color:#fff; width:26px; height:26px; border-radius:7px;
+h2 .n { background:var(--azul); color:#fff; width:26px; height:26px; border-radius:7px;
         display:inline-flex; align-items:center; justify-content:center;
         font-size:14px; font-weight:800; flex-shrink:0; }
 h3 { font-size:15.5px; margin:20px 0 8px; }
@@ -47,7 +47,7 @@ ol.passos > li { counter-increment:p; position:relative; padding:9px 0 9px 40px;
                  border-bottom:1px solid #f1f5f9; }
 ol.passos > li:last-child { border-bottom:0; }
 ol.passos > li::before { content:counter(p); position:absolute; left:0; top:9px;
-    width:24px; height:24px; border-radius:50%; background:#dcfce7; color:#15803d;
+    width:24px; height:24px; border-radius:50%; background:#eaf1f9; color:#0C4C86;
     font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center; }
 ul.simples { padding-left:20px; margin:8px 0; } ul.simples li { margin:5px 0; }
 
@@ -80,8 +80,7 @@ strong { font-weight:700; }
 
     <div class="capa">
         <div class="capa-marca">
-            <img src="/static/images/logo.png?v=1780580055"
-                 alt="Grupo NH" class="capa-logo">
+            <img src="/static/logo-nh.png" alt="Grupo NH" class="capa-logo">
             <span class="capa-marca-txt">GRUPO NH</span>
         </div>
         <h1>Manual de Instalação — NH-Robô</h1>
@@ -97,7 +96,7 @@ strong { font-weight:700; }
     <div class="corpo">
         
 
-<div class="bloco verde">
+<div class="bloco destaque">
     <p><strong>O que é o NH-Robô?</strong> Um programa pequeno que fica rodando no
     <strong>seu</strong> computador, perto do relógio (na bandeja do Windows). Você escolhe
     uma ou mais pastas para ele vigiar; quando aparece um arquivo novo, ele manda para o
