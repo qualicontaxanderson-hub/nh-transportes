@@ -40,14 +40,21 @@
 {% endblock %}
 
 {% block content %}
+{% with esc = '#nhi' %}{% include 'includes/abas_banco_css.html' %}{% endwith %}
 <div class="container-fluid" id="nhi">
 
-  <div class="topo">
-    <h1><i class="bi bi-robot"></i> NH-Robô</h1>
-    <p>Você escolhe uma pasta no seu computador. Tudo que você salvar nela
-       chega sozinho ao sistema — sem mandar por mensagem, sem esperar
-       ninguém copiar.</p>
+  <div id="nhi-topo">
+    <div class="topo__l1">
+      <h3><i class="bi bi-robot"></i> NH-Robô</h3>
+    </div>
+    <div class="abas">
+      {% with ativa = 'instalar' %}{% include 'includes/abas_nhrobo.html' %}{% endwith %}
+    </div>
   </div>
+
+  <p style="font-size:.85rem;color:#3a4655;line-height:1.6;margin:0 .2rem .7rem">
+    Você escolhe uma pasta no seu computador. Tudo que você salvar nela chega
+    sozinho ao sistema — sem mandar por mensagem, sem esperar ninguém copiar.</p>
 
   {% with mensagens = get_flashed_messages(with_categories=true) %}
     {% for categoria, texto in mensagens %}

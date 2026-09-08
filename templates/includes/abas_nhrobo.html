@@ -1,0 +1,34 @@
+{#- Abas da familia NH-ROBO — fonte unica, igual ao includes/abas_migracoes.
+
+    Uso, dentro do <div class="abas"> do topo azul:
+      {% with ativa = 'chaves' %}{% include 'includes/abas_nhrobo.html' %}{% endwith %}
+
+    A LISTA MUDA COM QUEM OLHA, de proposito. "Chaves" e "Histórico" sao de
+    administrador (as duas rotas exigem admin_required): mostrar a aba para o
+    colaborador seria oferecer uma porta que bate na cara dele com "acesso
+    negado" -- e ele nao tem como saber que a culpa nao e da chave dele.
+
+    O colaborador ve, no lugar delas, "Meus envios": a mesma pergunta ("chegou?")
+    respondida sobre os arquivos DELE.
+-#}
+{%- set _nv = (current_user.nivel | upper) if (current_user.is_authenticated
+      and current_user.nivel) else '' -%}
+{%- set _abas = ([('chaves',    'Chaves',      'nhrobo.painel'),
+                  ('instalar',  'Instalar',    'nhrobo.instalar'),
+                  ('historico', 'Histórico',   'nhrobo.historico')]
+                 if _nv in ['ADMIN', 'ADMINISTRADOR'] else
+                 [('instalar',  'Instalar',    'nhrobo.instalar'),
+                  ('meus',      'Meus envios', 'nhrobo.meus_envios')]) -%}
+{%- for chave, rotulo, destino in _abas %}
+<a class="aba{{ ' on' if ativa == chave }}" href="{{ url_for(destino) }}">{{ rotulo }}</a>
+{%- endfor %}
+<script>
+(function () {
+  /* A barra abre mostrando a aba DA TELA, nao o comeco da lista. */
+  var barra = document.currentScript.parentElement;
+  var atual = barra.querySelector('.aba.on');
+  if (!atual) return;
+  barra.scrollLeft = Math.max(0, atual.offsetLeft
+                                 - (barra.clientWidth - atual.offsetWidth) / 2);
+})();
+</script>

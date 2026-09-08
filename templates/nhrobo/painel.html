@@ -11,10 +11,20 @@
   #qcol{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
          --ambar:#8a5a00; --muted:#6b7684; --ink:#151d27; --borda:#d9e0e8;
          color:var(--ink); }
-  #qcol .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
-    color:#fff; border-radius:13px; padding:.7rem .9rem; margin-bottom:.7rem; }
-  #qcol .topo h1{ font-size:1rem; font-weight:800; margin:0; }
-  #qcol .topo p{ font-size:.78rem; opacity:.93; margin:.15rem 0 0; font-weight:600; }
+  /* Numeros em degrade — mesmos do /dfe/compras. */
+  #qcol .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem;
+    margin-bottom:.7rem; }
+  @media (min-width:768px){ #qcol .nums{ grid-template-columns:repeat(4,1fr); } }
+  #qcol .nums .n{ border-radius:13px; padding:.55rem .75rem; color:#fff;
+    box-shadow:0 2px 8px rgba(20,35,60,.12); }
+  #qcol .nums .r{ font-size:.66rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.06em; opacity:.92; }
+  #qcol .nums .v{ font-size:1.02rem; font-weight:800; letter-spacing:-.02em;
+    font-variant-numeric:tabular-nums; line-height:1.28; }
+  #qcol .n--com{ background:linear-gradient(135deg,#2E6FB0,#1D63A5); }
+  #qcol .n--sem{ background:linear-gradient(135deg,#5B6B7F,#465565); }
+  #qcol .n--arq{ background:linear-gradient(135deg,#22A24B,#17963C); }
+  #qcol .n--sinal{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
   #qcol .cx{ border:1px solid var(--borda); border-radius:11px; background:#fff;
     margin-bottom:.7rem; overflow:hidden; }
   #qcol .cx__h{ padding:.5rem .7rem; background:#f7f9fc;
@@ -94,23 +104,28 @@
 {% endblock %}
 
 {% block content %}
+{% with esc = '#qcol' %}{% include 'includes/abas_banco_css.html' %}{% endwith %}
 <div class="container-fluid" id="qcol">
 
-  <div class="topo">
-    <h1><i class="bi bi-robot"></i> NH-Robô</h1>
-    <p>O que os colaboradores mandam cai em <b>{{ destino }}</b> ·
-       aceita {{ extensoes | join(', ') }} · até {{ limite_mb }} MB por arquivo</p>
-    {# O link que se manda para as cinco pessoas: elas baixam e instalam por
-       ali, sem nunca encostar no Dropbox. #}
-    <p style="margin-top:.45rem">
-      <a href="{{ url_for('nhrobo.instalar') }}" target="_blank"
-         style="background:rgba(255,255,255,.2);color:#fff;border-radius:99px;
-                padding:.26rem .8rem;font-size:.78rem;font-weight:800;
-                text-decoration:none">
-        <i class="bi bi-download"></i> Página de instalação</a>
-      <span style="font-size:.75rem;opacity:.85;margin-left:.4rem">
-        — mande este link para quem for instalar</span>
-    </p>
+  <div id="qcol-topo">
+    <div class="topo__l1">
+      <h3><i class="bi bi-robot"></i> NH-Robô</h3>
+    </div>
+    <div class="abas">
+      {% with ativa = 'chaves' %}{% include 'includes/abas_nhrobo.html' %}{% endwith %}
+    </div>
+  </div>
+
+  <div class="nums">
+    <div class="n n--com"><div class="r">Com chave</div>
+      <div class="v">{{ com_chave }} pessoa{{ 's' if com_chave != 1 }}</div></div>
+    <div class="n n--sem"><div class="r">Sem chave</div>
+      <div class="v">{{ sem_chave }} pessoa{{ 's' if sem_chave != 1 }}</div></div>
+    <div class="n n--arq"><div class="r">Arquivos recebidos</div>
+      <div class="v">{{ total_arquivos }}</div></div>
+    <div class="n n--sinal"><div class="r">Último sinal</div>
+      <div class="v">{% if ultimo_sinal %}{{ ultimo_sinal.strftime('%d/%m %H:%M') }}
+        {%- else %}nenhum{% endif %}</div></div>
   </div>
 
   <div class="cx">
@@ -183,40 +198,15 @@
     </div>
   </div>
 
-  <div class="cx">
-    <div class="cx__h">O que chegou <small style="font-weight:600;color:var(--muted)">
-      — últimos {{ recebidos|length }}</small></div>
-    {% if not recebidos %}
-      <div class="vazio"><i class="bi bi-inbox"></i><br>
-        Nada chegou ainda. Assim que alguém largar um arquivo na pasta vigiada,
-        ele aparece aqui.</div>
-    {% else %}
-    <div style="overflow-x:auto">
-    <table>
-      <tr>
-        <th>Quando</th><th>Quem</th><th>Arquivo</th>
-        <th class="num">Tamanho</th><th>Origem</th>
-      </tr>
-      {% for r in recebidos %}
-      <tr>
-        <td style="white-space:nowrap">{{ r.recebido_em.strftime('%d/%m/%Y %H:%M') }}</td>
-        <td class="nome">{{ r.nome_completo }}<small>{{ r.username }}</small></td>
-        <td>{{ r.nome_final }}
-          {%- if r.nome_final != r.nome_original %}
-          <small style="display:block;color:var(--ambar);font-weight:600">
-            chegou como {{ r.nome_original }} — o nome já estava ocupado</small>
-          {%- endif -%}
-        </td>
-        <td class="num">{{ '{:,.0f}'.format(r.tamanho_bytes / 1024).replace(',', '.') }} KB</td>
-        <td style="color:var(--muted)">{{ r.ip or '—' }}</td>
-      </tr>
-      {% endfor %}
-    </table>
-    </div>
-    {% endif %}
-  </div>
+  {#- "O que chegou" saiu daqui e virou a aba Histórico: com filtro por período,
+      por pessoa e por tipo, e com a coluna de período do documento — coisas que
+      nao cabiam embaixo da lista de chaves. -#}
 
   <p class="nota">
+    O que os colaboradores mandam cai em <b>{{ destino }}</b> · aceita
+    {{ extensoes | join(', ') }} · até {{ limite_mb }} MB por arquivo.<br>
+    <b>Página de instalação:</b> a aba <i>Instalar</i> aqui em cima é o link que
+    se manda para quem for instalar — ela não exige ser administrador.<br>
     A <b>data de corte</b> vale para arquivos <b>criados</b> a partir dela —
     é o que impede a primeira rodada de sugar anos de arquivo velho. Ela mora
     aqui, não na máquina: mudar não exige visitar ninguém.<br>

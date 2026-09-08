@@ -1,0 +1,268 @@
+{% extends 'base.html' %}
+{% block title %}NH-Robô — Histórico{% endblock %}
+
+{#- A aba que responde "o extrato de agosto ja veio?" sem ninguem abrir o
+    Dropbox nem perguntar para o tecnico. Mesma casca do /dfe/compras: topo
+    azul com as abas da familia, numeros em degrade, lista por dia (cartao no
+    celular, colunas na web) e o filtro em gaveta. -#}
+
+{% block content %}
+{% with esc = '#nhh' %}{% include 'includes/abas_banco_css.html' %}{% endwith %}
+<div class="container-fluid" id="nhh">
+
+<div id="nhh-topo">
+  <div class="topo__l1">
+    <h3><i class="bi bi-robot"></i> NH-Robô</h3>
+    <button type="button" class="acao" onclick="nhhFiltro()">
+      <i class="bi bi-sliders"></i> Filtro
+      {%- if not filtro_padrao %}
+      <span style="background:#fff;color:#0C4C86;border-radius:99px;min-width:17px;
+                   height:17px;display:inline-grid;place-items:center;font-size:.66rem;">
+        {{ [filtros.data_ini or filtros.data_fim, filtros.usuario, filtros.tipo]
+           | select | list | length }}</span>
+      {%- endif %}
+    </button>
+  </div>
+  <div class="abas">
+    {% with ativa = 'historico' %}{% include 'includes/abas_nhrobo.html' %}{% endwith %}
+  </div>
+</div>
+
+<div class="nums">
+  <div class="n n--arq"><div class="r">Arquivos no período</div>
+    <div class="v">{{ total }}</div></div>
+  <div class="n n--gente"><div class="r">Pessoas que mandaram</div>
+    <div class="v">{{ pessoas_no_recorte }}</div></div>
+  <div class="n n--sem{{ ' tem' if sem_periodo }}"><div class="r">Sem período</div>
+    <div class="v">{{ sem_periodo }}{% if total %} de {{ total }}{% endif %}</div></div>
+  <div class="n n--ult"><div class="r">Último envio</div>
+    <div class="v">{% if ultimo %}{{ ultimo.strftime('%d/%m %H:%M') }}
+      {%- else %}—{% endif %}</div></div>
+</div>
+
+<div class="eco">
+  <i class="bi bi-funnel-fill"></i>
+  {%- if filtro_padrao %}
+    Últimos 30 dias · todas as pessoas
+  {%- else %}
+    {% if filtros.data_ini %}de {{ filtros.data_ini[8:10] }}/{{ filtros.data_ini[5:7] }}/{{ filtros.data_ini[0:4] }}{% endif %}
+    {% if filtros.data_fim %}até {{ filtros.data_fim[8:10] }}/{{ filtros.data_fim[5:7] }}/{{ filtros.data_fim[0:4] }}{% endif %}
+    {%- for p in quem %}{% if p.id|string == filtros.usuario %} · {{ p.nome_completo }}{% endif %}{% endfor %}
+    {%- if filtros.tipo == 'sem' %} · sem período identificado
+    {%- elif filtros.tipo %} · {{ rotulo_doc.get(filtros.tipo, filtros.tipo) }}{% endif %}
+    <a href="{{ url_for('nhrobo.historico') }}">Limpar</a>
+  {%- endif %}
+</div>
+
+<div class="lst">
+  {% if not dias %}
+    <div class="vazio"><b>Nada neste recorte.</b>
+      Ou ninguém mandou arquivo no período, ou o filtro está apertado demais.</div>
+  {% endif %}
+  {% for d in dias %}
+  <div class="banda"><i class="bi bi-calendar3"></i>
+    {{ d.dia.strftime('%d/%m/%Y') }}
+    <span class="tot">{{ d.linhas | length }} arquivo{{ 's' if d.linhas|length != 1 }}
+      · {{ (d.bytes / 1024) | round | int }} KB</span></div>
+    {% for r in d.linhas %}
+    <div class="lin h-lin">
+      <div class="h-hora">{{ r.recebido_em.strftime('%H:%M') }}</div>
+      <div class="h-quem" title="{{ r.username }}">{{ r.nome_completo }}</div>
+      <div class="h-doc" title="{{ r.nome_final }}">{{ r.nome_final }}</div>
+      <div class="h-selo">
+        {%- if r.rotulo_tipo %}
+        <span class="selo selo--{{ r.doc_tipo }}">{{ r.rotulo_tipo }}</span>
+        {%- else %}<span class="selo selo--ci">{{ r.ext }}</span>{% endif %}
+      </div>
+      {#- A fonte do periodo fica na tela e nao escondida no title: "do nome" e
+          a leitura que pode errar, e quem confere precisa saber disso sem
+          passar o mouse -- no celular nao ha mouse para passar. -#}
+      <div class="h-per">
+        {%- if r.periodo %}{{ r.periodo }}
+          <small>{{ 'do arquivo' if r.periodo_fonte == 'arquivo' else 'do nome' }}</small>
+        {%- else %}— <small>não identificado</small>{% endif %}
+      </div>
+      <div class="h-tam">{{ (r.tamanho_bytes / 1024) | round | int }} KB</div>
+    </div>
+    {% endfor %}
+  {% endfor %}
+</div>
+
+<p class="pe">
+  <b>Período</b> é lido de dentro do arquivo quando ele diz (extrato OFX, XML de
+  nota, SPED); do nome do arquivo quando o nome diz; e fica <b>—</b> quando ninguém
+  diz. Ele é gravado na hora em que o arquivo chega — arquivo recebido antes de
+  08/09/2026 não tem período, e isso não é defeito.
+</p>
+
+{# ======================= a gaveta do filtro ======================= #}
+<div class="escuro" id="nhhEscuro" onclick="nhhFiltro(false)"></div>
+<form class="gav" id="nhhGav" method="get" action="{{ url_for('nhrobo.historico') }}">
+  <div class="gav__pega"></div>
+  <div class="gav__h">Filtrar o histórico
+    <button type="button" class="x" onclick="nhhFiltro(false)">
+      <i class="bi bi-x-lg"></i></button></div>
+  <div class="gav__corpo">
+    <label>Período</label>
+    <div class="duplo">
+      <input class="campo" type="date" name="data_ini" value="{{ filtros.data_ini }}">
+      <input class="campo" type="date" name="data_fim" value="{{ filtros.data_fim }}">
+    </div>
+
+    <label>Pessoa</label>
+    <select class="campo" name="usuario">
+      <option value="">Todas</option>
+      {% for p in quem %}
+      <option value="{{ p.id }}"{{ ' selected' if p.id|string == filtros.usuario }}>
+        {{ p.nome_completo }} ({{ p.envios }})</option>
+      {% endfor %}
+    </select>
+
+    <label>Tipo de documento</label>
+    <select class="campo" name="tipo">
+      <option value="">Todos</option>
+      <option value="sem"{{ ' selected' if filtros.tipo == 'sem' }}>— sem período identificado</option>
+      {% for chave, rot in tipos %}
+      <option value="{{ chave }}"{{ ' selected' if filtros.tipo == chave }}>{{ rot }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="gav__pe">
+    <a class="bt" href="{{ url_for('nhrobo.historico') }}">Limpar</a>
+    <button class="bt bt--sim" type="submit">Ver</button>
+  </div>
+</form>
+
+<style>
+  #nhh{ --azul:#1D63A5; --azul-deep:#0C4C86; --azul-claro:#eaf1f9;
+    --ink:#151d27; --ink-2:#3a4655; --muted:#6b7684;
+    --line:#e7ebf1; --line-2:#d9e0e8; --surface:#f7f9fc;
+    --ok:#1c6b34; --ok-bg:#e4f4e8; --pend:#8a5a00; --pend-bg:#fdf0d6;
+    --ign:#4b5563; --ign-bg:#eceef1; --danger:#a32d2d; --danger-bg:#fbe9e9;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    color:var(--ink); }
+
+  #nhh .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:.7rem; }
+  @media (min-width:768px){ #nhh .nums{ grid-template-columns:repeat(4,1fr); } }
+  #nhh .nums .n{ border-radius:13px; padding:.55rem .75rem; color:#fff;
+    box-shadow:0 2px 8px rgba(20,35,60,.12); }
+  #nhh .nums .r{ font-size:.66rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.06em; opacity:.92; }
+  #nhh .nums .v{ font-size:1.02rem; font-weight:800; letter-spacing:-.02em;
+    font-variant-numeric:tabular-nums; line-height:1.28; }
+  #nhh .n--arq{ background:linear-gradient(135deg,#2E6FB0,#1D63A5); }
+  #nhh .n--gente{ background:linear-gradient(135deg,#22A24B,#17963C); }
+  #nhh .n--sem{ background:linear-gradient(135deg,#5B6B7F,#465565); }
+  #nhh .n--sem.tem{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
+  #nhh .n--ult{ background:linear-gradient(135deg,#5B6B7F,#465565); }
+
+  #nhh .eco{ display:flex; align-items:center; gap:.4rem; background:var(--azul-claro);
+    color:var(--azul-deep); border-radius:10px; padding:.5rem .7rem; font-size:.82rem;
+    font-weight:700; margin-bottom:.7rem; flex-wrap:wrap; }
+  #nhh .eco a{ margin-left:auto; background:var(--azul); color:#fff; border-radius:8px;
+    padding:.3rem .7rem; font-size:.78rem; font-weight:800; text-decoration:none; }
+
+  #nhh .lst{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+    overflow:hidden; }
+  #nhh .banda{ display:flex; align-items:center; gap:.5rem; padding:.45rem .8rem;
+    background:var(--azul-claro); color:var(--azul-deep); font-size:.79rem;
+    font-weight:800; border-bottom:1px solid var(--line-2); position:sticky;
+    top:0; z-index:3; }
+  #nhh .banda .tot{ margin-left:auto; font-variant-numeric:tabular-nums;
+    font-weight:700; font-size:.74rem; }
+  #nhh .lin{ display:grid; gap:.1rem .35rem; align-items:baseline;
+    padding:.5rem .7rem; border-bottom:1px solid var(--line); }
+  #nhh .lin:last-child{ border-bottom:0; }
+  #nhh .lin:hover{ background:var(--surface); }
+  #nhh .vazio{ text-align:center; color:var(--muted); padding:2.4rem 1rem; font-size:.85rem; }
+  #nhh .vazio b{ display:block; color:var(--ink); font-size:.95rem; margin-bottom:.25rem; }
+  #nhh .pe{ font-size:.78rem; color:var(--muted); margin:.6rem .2rem 0; line-height:1.6; }
+
+  #nhh .selo{ display:inline-block; font-size:.66rem; font-weight:800; border-radius:5px;
+    padding:.08rem .38rem; white-space:nowrap; }
+  #nhh .selo--ci, #nhh .selo--planilha, #nhh .selo--pdf, #nhh .selo--imagem,
+  #nhh .selo--zip, #nhh .selo--texto{ background:var(--ign-bg); color:var(--ign); }
+  #nhh .selo--extrato, #nhh .selo--xml{ background:var(--azul-claro); color:var(--azul-deep); }
+  #nhh .selo--nfe, #nhh .selo--nfce, #nhh .selo--cte{ background:var(--ok-bg); color:var(--ok); }
+  #nhh .selo--sped, #nhh .selo--declaracao, #nhh .selo--recibo{ background:var(--pend-bg); color:var(--pend); }
+  #nhh .selo--certificado{ background:var(--danger-bg); color:var(--danger); }
+
+  /* A linha: cartao no celular, colunas na web — mesma tecnica do /dfe/ctes. */
+  #nhh .h-lin{ grid-template-columns:auto minmax(0,1fr) auto;
+    grid-template-areas:"doc doc doc" "hora quem tam" "selo per per"; }
+  #nhh .h-doc{ grid-area:doc; font-size:.87rem; font-weight:800; letter-spacing:-.01em;
+    min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #nhh .h-hora{ grid-area:hora; font-family:var(--mono); font-size:.72rem;
+    color:var(--muted); font-weight:600; }
+  #nhh .h-quem{ grid-area:quem; font-size:.74rem; color:var(--muted); font-weight:700;
+    min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #nhh .h-quem::before{ content:"\00b7\00a0"; }
+  #nhh .h-tam{ grid-area:tam; justify-self:end; font-size:.72rem; color:var(--muted);
+    font-variant-numeric:tabular-nums; }
+  #nhh .h-selo{ grid-area:selo; justify-self:start; }
+  #nhh .h-per{ grid-area:per; justify-self:end; font-size:.74rem; color:var(--ink-2);
+    font-weight:700; font-variant-numeric:tabular-nums; }
+  #nhh .h-per small{ color:var(--muted); font-weight:600; }
+  @media (min-width:992px){
+    #nhh .h-lin{ grid-template-columns:62px minmax(176px,.9fr) minmax(200px,1.5fr)
+        104px 176px 82px;
+      grid-template-areas:"hora quem doc selo per tam"; gap:.15rem 1rem;
+      align-items:center; padding:.48rem .9rem; }
+    #nhh .h-quem::before{ content:''; }
+    #nhh .h-quem{ font-size:.79rem; color:var(--ink-2); }
+    #nhh .h-per{ justify-self:start; }
+  }
+
+  /* Gaveta de filtro — mesma das outras telas. */
+  #nhh .escuro{ position:fixed; inset:0; background:rgba(12,25,42,.45); z-index:1050;
+    opacity:0; pointer-events:none; transition:opacity .2s; }
+  #nhh .escuro.on{ opacity:1; pointer-events:auto; }
+  #nhh .gav{ position:fixed; left:0; right:0; bottom:0; z-index:1051; background:#fff;
+    border-radius:18px 18px 0 0; max-height:88vh; display:flex; flex-direction:column;
+    transform:translateY(101%); transition:transform .24s cubic-bezier(.22,.7,.3,1);
+    box-shadow:0 -10px 30px rgba(12,25,42,.3); }
+  #nhh .gav.on{ transform:translateY(0); }
+  @media (min-width:992px){
+    #nhh .gav{ left:50%; right:auto; bottom:auto; top:10vh; width:480px;
+      border-radius:16px; transform:translate(-50%,10px); opacity:0;
+      pointer-events:none; max-height:80vh; }
+    #nhh .gav.on{ transform:translate(-50%,0); opacity:1; pointer-events:auto; }
+    #nhh .gav__pega{ display:none; }
+  }
+  #nhh .gav__pega{ width:36px; height:4px; background:var(--line-2); border-radius:9px;
+    margin:.5rem auto .1rem; flex:0 0 auto; }
+  #nhh .gav__h{ display:flex; align-items:center; padding:.6rem .9rem .2rem;
+    font-size:.92rem; font-weight:800; color:var(--azul-deep); }
+  #nhh .gav__h .x{ margin-left:auto; border:0; background:none; color:var(--muted);
+    font-size:1rem; cursor:pointer; }
+  #nhh .gav__corpo{ padding:.4rem .9rem .8rem; overflow-y:auto; }
+  #nhh .gav__corpo label{ display:block; font-size:10.5px; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--muted); font-weight:800; margin:.7rem 0 .25rem; }
+  #nhh .campo{ width:100%; border:1px solid var(--line-2); border-radius:8px;
+    padding:.45rem .6rem; font-size:.85rem; font-family:inherit; color:var(--ink);
+    background:#fff; }
+  #nhh .duplo{ display:grid; grid-template-columns:1fr 1fr; gap:.4rem; }
+  #nhh .gav__pe{ display:flex; gap:.4rem; padding:.6rem .9rem;
+    border-top:1px solid var(--line); }
+  #nhh .bt{ flex:1; text-align:center; border:1px solid var(--line-2); background:#fff;
+    color:var(--ink-2); border-radius:9px; padding:.5rem .6rem; font-size:.85rem;
+    font-weight:800; cursor:pointer; font-family:inherit; text-decoration:none; }
+  #nhh .bt--sim{ background:var(--azul); border-color:var(--azul); color:#fff; }
+</style>
+
+<script>
+function nhhFiltro(abrir) {
+  var aberta = document.getElementById('nhhGav').classList.contains('on');
+  var vai = (abrir === undefined) ? !aberta : abrir;
+  document.getElementById('nhhGav').classList.toggle('on', vai);
+  document.getElementById('nhhEscuro').classList.toggle('on', vai);
+}
+/* Esc fecha: no computador a gaveta cobre a tela e o clique no escuro nem
+   sempre e obvio. */
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') nhhFiltro(false);
+});
+</script>
+
+</div>
+{% endblock %}

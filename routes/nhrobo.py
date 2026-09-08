@@ -25,14 +25,14 @@ deles muda o comportamento nas cinco maquinas sem ninguem tocar nelas.
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from flask import (Blueprint, flash, jsonify, redirect, render_template,
                    request, session, url_for)
 from flask_login import current_user, login_required
 
 from extensions import csrf
-from utils import nhrobo
+from utils import nhrobo, nhrobo_periodo
 from utils.decorators import admin_required
 
 bp = Blueprint('nhrobo', __name__)
@@ -133,7 +133,7 @@ def api_enviar():
 
     try:
         nhrobo.registrar_recebido(cfg['usuario_id'], arq.filename, nome_final,
-                                    ext, tamanho, _ip())
+                                    ext, tamanho, _ip(), conteudo)
     except Exception:
         # O arquivo JA esta no Dropbox. Falhar aqui e perder a linha da tela,
         # nao o arquivo — e devolver erro faria o agente reenviar e duplicar.
@@ -157,13 +157,73 @@ _SESSAO_CHAVE = 'nhrobo_chave_nova'
 def painel():
     # pop: a chave aparece na primeira tela depois de gerada e em nenhuma outra.
     # Um F5 nao a traz de volta — e nem deveria.
+    pessoas = nhrobo.painel()
+    com_chave = sum(1 for p in pessoas if p.get('token_prefixo'))
+    sinais = [p['ultimo_contato'] for p in pessoas if p.get('ultimo_contato')]
     return render_template('nhrobo/painel.html',
                            chave_nova=session.pop(_SESSAO_CHAVE, None),
-                           pessoas=nhrobo.painel(),
-                           recebidos=nhrobo.recebidos(),
+                           pessoas=pessoas,
+                           com_chave=com_chave,
+                           sem_chave=len(pessoas) - com_chave,
+                           total_arquivos=sum(p.get('enviados') or 0
+                                              for p in pessoas),
+                           ultimo_sinal=max(sinais) if sinais else None,
                            destino=nhrobo.PASTA_DESTINO,
                            extensoes=nhrobo.EXTENSOES_PERMITIDAS,
                            limite_mb=nhrobo.TAMANHO_MAX_BYTES // (1024 * 1024))
+
+
+@bp.route('/nh-robo/historico', methods=['GET'])
+@login_required
+@admin_required
+def historico():
+    """O que ja chegou, de todo mundo -- a aba que responde "o extrato de
+    agosto ja veio?" sem ninguem abrir o Dropbox.
+
+    A tela do colaborador (meus-envios) responde a mesma pergunta so que sobre
+    ele; esta e a do escritorio, sobre todos.
+    """
+    hoje = date.today()
+    d1 = (request.args.get('data_ini') or '').strip()
+    d2 = (request.args.get('data_fim') or '').strip()
+    uid = (request.args.get('usuario') or '').strip()
+    tipo = (request.args.get('tipo') or '').strip()
+    # Sem filtro nenhum a tela abre nos ultimos 30 dias, e nao em tudo: a
+    # pergunta de quem entra aqui e quase sempre sobre o mes corrente.
+    if not (d1 or d2 or uid or tipo):
+        d1 = (hoje - timedelta(days=30)).isoformat()
+        d2 = hoje.isoformat()
+        padrao = True
+    else:
+        padrao = False
+
+    linhas = nhrobo.historico(d1 or None, d2 or None, uid or None, tipo or None)
+    for r in linhas:
+        r['periodo'] = nhrobo_periodo.rotulo(r.get('periodo_ini'),
+                                             r.get('periodo_fim'))
+        r['rotulo_tipo'] = nhrobo.ROTULO_DOC.get(r.get('doc_tipo') or '', '')
+
+    # Por dia, do mais novo para o mais velho -- a lista das outras telas.
+    dias = []
+    for r in linhas:
+        d = r['recebido_em'].date()
+        if not dias or dias[-1]['dia'] != d:
+            dias.append({'dia': d, 'linhas': [], 'bytes': 0})
+        dias[-1]['linhas'].append(r)
+        dias[-1]['bytes'] += r['tamanho_bytes'] or 0
+
+    return render_template(
+        'nhrobo/historico.html',
+        dias=dias,
+        total=len(linhas),
+        pessoas_no_recorte=len({r['usuario_id'] for r in linhas}),
+        sem_periodo=sum(1 for r in linhas if not r['periodo']),
+        ultimo=linhas[0]['recebido_em'] if linhas else None,
+        filtros={'data_ini': d1, 'data_fim': d2, 'usuario': uid, 'tipo': tipo},
+        filtro_padrao=padrao,
+        quem=nhrobo.quem_ja_mandou(),
+        tipos=nhrobo.TIPOS_DOC,
+        rotulo_doc=nhrobo.ROTULO_DOC)
 
 
 def _data_do_form(campo='data_inicio'):

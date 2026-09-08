@@ -54,13 +54,21 @@
 {% endblock %}
 
 {% block content %}
+{% with esc = '#nhe' %}{% include 'includes/abas_banco_css.html' %}{% endwith %}
 <div class="container-fluid" id="nhe">
 
-  <div class="topo">
-    <h1><i class="bi bi-check2-square"></i> Meus envios</h1>
-    <p>Esta lista vem do sistema, não do seu computador. O que está aqui
-       chegou — não há o que conferir com mais ninguém.</p>
+  <div id="nhe-topo">
+    <div class="topo__l1">
+      <h3><i class="bi bi-robot"></i> NH-Robô</h3>
+    </div>
+    <div class="abas">
+      {% with ativa = 'meus' %}{% include 'includes/abas_nhrobo.html' %}{% endwith %}
+    </div>
   </div>
+
+  <p style="font-size:.85rem;color:#3a4655;line-height:1.6;margin:0 .2rem .7rem">
+    <b>Meus envios</b> — esta lista vem do sistema, não do seu computador. O que
+    está aqui chegou; não há o que conferir com mais ninguém.</p>
 
   {#- A situacao primeiro: sem ela, a lista mente por omissao. -#}
   {% if not estado %}

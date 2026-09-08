@@ -25,6 +25,7 @@ import secrets
 import unicodedata
 from datetime import date
 
+from utils import nhrobo_periodo
 from utils.db import get_db_connection
 
 # Pasta unica, a mesma que o importador de extrato ja varre. Sem subpasta por
@@ -275,17 +276,28 @@ def instalador():
     return escolhido.name, resposta.content
 
 
-def registrar_recebido(usuario_id, nome_original, nome_final, ext, tamanho, ip):
+def registrar_recebido(usuario_id, nome_original, nome_final, ext, tamanho, ip,
+                       conteudo=None):
+    """A linha do historico. O periodo e lido AQUI, com o arquivo ainda em maos.
+
+    Depois deste ponto o conteudo so existe no Dropbox: descobrir o periodo mais
+    tarde custaria baixar o arquivo de volta, um por um. O identificador nunca
+    levanta excecao -- sem periodo a linha entra do mesmo jeito, com travessao
+    na tela, porque perder a linha e pior do que nao saber o mes.
+    """
+    tipo, p_ini, p_fim, p_fonte = nhrobo_periodo.identificar(
+        nome_original or nome_final, conteudo, ext)
     conn = get_db_connection()
     cur = conn.cursor()
     try:
         cur.execute("""
             INSERT INTO nhrobo_recebidos
                    (usuario_id, nome_original, nome_final, ext, tamanho_bytes,
-                    destino, ip)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    destino, ip, doc_tipo, periodo_ini, periodo_fim, periodo_fonte)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (usuario_id, nome_original[:255], nome_final[:255], ext[:12],
-              tamanho, PASTA_DESTINO[:255], (ip or '')[:45]))
+              tamanho, PASTA_DESTINO[:255], (ip or '')[:45],
+              tipo, p_ini, p_fim, p_fonte))
         conn.commit()
     finally:
         cur.close()
@@ -377,6 +389,97 @@ def recebidos(limite=200):
              ORDER BY r.recebido_em DESC
              LIMIT %s
         """, (int(limite),))
+        return cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+
+#: Quem pode aparecer no filtro por tipo, e como cada um se chama na tela. A
+#: ordem e a da lista do filtro -- os que mais chegam primeiro.
+TIPOS_DOC = [
+    ('extrato',     'Extrato bancário'),
+    ('planilha',    'Planilha'),
+    ('nfe',         'NF-e'),
+    ('nfce',        'NFC-e'),
+    ('cte',         'CT-e'),
+    ('sped',        'SPED'),
+    ('xml',         'XML (outro)'),
+    ('pdf',         'PDF'),
+    ('texto',       'Texto'),
+    ('imagem',      'Imagem'),
+    ('zip',         'ZIP'),
+    ('certificado', 'Certificado'),
+    ('declaracao',  'Declaração'),
+    ('recibo',      'Recibo'),
+]
+ROTULO_DOC = dict(TIPOS_DOC)
+
+
+def historico(data_ini=None, data_fim=None, usuario_id=None, tipo=None,
+              limite=500):
+    """O que chegou, de quem, quando e de que periodo.
+
+    Uma lista so, sem paginacao, com teto: cinco pessoas mandando extrato e
+    planilha nao produzem volume que justifique paginar, e a lista inteira na
+    tela e o que deixa o Ctrl+F do navegador funcionar -- que e como a pessoa
+    procura o arquivo dela de verdade.
+    """
+    onde, args = ['1=1'], []
+    if data_ini:
+        onde.append('r.recebido_em >= %s')
+        args.append('%s 00:00:00' % data_ini)
+    if data_fim:
+        onde.append('r.recebido_em <= %s')
+        args.append('%s 23:59:59' % data_fim)
+    if usuario_id:
+        onde.append('r.usuario_id = %s')
+        args.append(int(usuario_id))
+    if tipo:
+        # 'sem' e uma escolha do filtro, nao um tipo: e como se pergunta "o que
+        # chegou que eu ainda nao sei o que e".
+        if tipo == 'sem':
+            onde.append('r.doc_tipo IS NULL')
+        else:
+            onde.append('r.doc_tipo = %s')
+            args.append(tipo)
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""
+            SELECT r.id, r.usuario_id, r.nome_original, r.nome_final, r.ext,
+                   r.tamanho_bytes, r.recebido_em, r.ip,
+                   r.doc_tipo, r.periodo_ini, r.periodo_fim, r.periodo_fonte,
+                   u.nome_completo, u.username
+              FROM nhrobo_recebidos r
+              JOIN usuarios u ON u.id = r.usuario_id
+             WHERE %s
+             ORDER BY r.recebido_em DESC
+             LIMIT %%s
+        """ % ' AND '.join(onde), tuple(args) + (int(limite),))
+        return cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+
+def quem_ja_mandou():
+    """As pessoas que aparecem no filtro: so quem tem envio, nao o cadastro todo.
+
+    Filtro que oferece oito nomes para dois que mandaram alguma coisa faz a
+    pessoa procurar onde nao ha nada.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""
+            SELECT u.id, u.nome_completo, u.username, COUNT(*) AS envios
+              FROM nhrobo_recebidos r
+              JOIN usuarios u ON u.id = r.usuario_id
+             GROUP BY u.id, u.nome_completo, u.username
+             ORDER BY u.nome_completo
+        """)
         return cur.fetchall()
     finally:
         cur.close()

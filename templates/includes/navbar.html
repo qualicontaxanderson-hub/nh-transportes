@@ -107,6 +107,13 @@
             <li><a class="dropdown-item" href="/tipos_receita_caixa/"><i class="bi bi-wallet-fill" style="color: #28a745;"></i> Formas Recebimento Caixa</a></li>
             <li><a class="dropdown-item" href="/lubrificantes/produtos"><i class="bi bi-droplet" style="color: #ff6b6b;"></i> Lubrificantes</a></li>
             <li><hr class="dropdown-divider"></li>
+            {#- NH-ROBO: familia propria, por isso entre dois riscos. O destino
+                muda com o nivel porque /nh-robo/ e admin_required: mandar o
+                colaborador para la seria oferecer uma porta que responde
+                "acesso negado", e ele nao teria como saber que a culpa nao e
+                da chave dele. -#}
+            <li><a class="dropdown-item" href="{{ '/nh-robo/' if nivel_usuario == 'ADMIN' else '/nh-robo/instalar' }}"><i class="bi bi-robot" style="color: #1D63A5;"></i> NH-Robô</a></li>
+            <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="/auth/usuarios/novo"><i class="bi bi-person-plus-fill" style="color: #dc3545;"></i> Novo Usuário</a></li>
             <li><a class="dropdown-item" href="/auth/usuarios"><i class="bi bi-people-fill" style="color: #6c757d;"></i> Gerenciar Usuários</a></li>
           </ul>
