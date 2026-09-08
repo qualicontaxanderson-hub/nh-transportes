@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Meus envios — NH-Robô{% endblock %}
+
+{#- A PROVA, para o proprio colaborador (login basta, nao precisa ser admin).
+
+    O robo ja deixa um recibo .txt na pasta da pessoa. Esta tela existe porque
+    aquele recibo e a palavra do robo, e esta le a tabela do servidor: e o que
+    de fato chegou. Quando os dois discordarem, esta ganha.
+
+    A caixa de situacao vem ANTES da lista de proposito. Uma lista de envios
+    sozinha piora a discussao: com o robo parado ela mostra um historico
+    completo e antigo, e a pessoa aponta para ele como prova de que o sistema
+    perdeu o arquivo dela. -#}
+
+{% block head %}
+<style>
+  #nhe{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#6b7684; --ink:#151d27; --borda:#d9e0e8;
+        color:var(--ink); max-width:900px; }
+  #nhe .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:13px; padding:.9rem 1rem; margin-bottom:.8rem; }
+  #nhe .topo h1{ font-size:1.05rem; font-weight:800; margin:0; }
+  #nhe .topo p{ font-size:.82rem; opacity:.93; margin:.25rem 0 0; font-weight:600;
+    line-height:1.5; }
+  #nhe .sit{ border-radius:11px; padding:.75rem .95rem; margin-bottom:.8rem;
+    font-size:.86rem; line-height:1.6; border:1px solid; }
+  #nhe .sit b{ display:block; font-size:.95rem; margin-bottom:.1rem; }
+  #nhe .sit--ok{ background:#eaf7ee; border-color:#bfe3ca; color:#14562a; }
+  #nhe .sit--at{ background:#fff8e8; border-color:#f0d8a8; color:#5a4300; }
+  #nhe .sit--per{ background:#fdecec; border-color:#f2c4c4; color:#7d2222; }
+  #nhe .cx{ border:1px solid var(--borda); border-radius:11px; background:#fff;
+    margin-bottom:.7rem; overflow:hidden; }
+  #nhe .cx__h{ padding:.55rem .8rem; background:#f7f9fc;
+    border-bottom:1px solid #eef1f5; font-weight:800; font-size:.86rem; }
+  #nhe table{ width:100%; border-collapse:collapse; font-size:.82rem; }
+  #nhe th{ text-align:left; font-size:.68rem; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); padding:.45rem .8rem;
+    border-bottom:1px solid var(--borda); white-space:nowrap; }
+  #nhe td{ padding:.45rem .8rem; border-bottom:1px solid #f2f5f8; }
+  #nhe tr:last-child td{ border-bottom:0; }
+  #nhe .num{ font-variant-numeric:tabular-nums; text-align:right;
+    white-space:nowrap; }
+  #nhe .arq{ font-weight:700; }
+  #nhe .arq small{ display:block; font-weight:600; color:var(--ambar);
+    font-size:.72rem; }
+  #nhe .vazio{ text-align:center; color:var(--muted); font-size:.86rem;
+    padding:1.8rem 1rem; line-height:1.7; }
+  #nhe ol{ margin:.4rem 0 0; padding-left:1.2rem; font-size:.82rem;
+    line-height:1.8; color:var(--muted); }
+  #nhe ol b{ color:var(--ink); }
+  #nhe .nota{ font-size:.78rem; color:var(--muted); line-height:1.65;
+    margin-top:.8rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid" id="nhe">
+
+  <div class="topo">
+    <h1><i class="bi bi-check2-square"></i> Meus envios</h1>
+    <p>Esta lista vem do sistema, não do seu computador. O que está aqui
+       chegou — não há o que conferir com mais ninguém.</p>
+  </div>
+
+  {#- A situacao primeiro: sem ela, a lista mente por omissao. -#}
+  {% if not estado %}
+    <div class="sit sit--at">
+      <b>Você ainda não tem chave</b>
+      O robô não foi ativado no seu computador. Peça a chave ao escritório e
+      siga a <a href="{{ url_for('nhrobo.instalar') }}">página de instalação</a>.
+    </div>
+  {% elif not estado.chave_ativa %}
+    <div class="sit sit--per">
+      <b>O seu robô está desligado</b>
+      A chave deste computador foi revogada, então nada está sendo enviado. Os
+      arquivos abaixo já tinham chegado antes. Fale com o escritório.
+    </div>
+  {% elif estado.min_sem_contato is none %}
+    <div class="sit sit--at">
+      <b>O robô ainda não falou com o sistema</b>
+      A chave existe, mas nenhum sinal chegou desta máquina. Verifique se o
+      programa está instalado e aberto.
+    </div>
+  {% elif estado.min_sem_contato <= 15 %}
+    <div class="sit sit--ok">
+      <b>O robô está funcionando</b>
+      Falou com o sistema
+      {% if estado.min_sem_contato < 2 %}agora há pouco{% else %}há
+        {{ estado.min_sem_contato }} minutos{% endif %} —
+      {{ estado.ultimo_contato.strftime('%d/%m/%Y às %H:%M') }}.
+      Se você salvou um arquivo e ele não está na lista, espere um minuto e
+      recarregue esta página.
+    </div>
+  {% else %}
+    <div class="sit sit--at">
+      <b>O robô não fala com o sistema há
+        {% if estado.min_sem_contato >= 1440 %}{{ (estado.min_sem_contato // 1440) }} dia(s)
+        {%- elif estado.min_sem_contato >= 60 %}{{ (estado.min_sem_contato // 60) }} hora(s)
+        {%- else %}{{ estado.min_sem_contato }} minutos{% endif %}</b>
+      Último sinal em {{ estado.ultimo_contato.strftime('%d/%m/%Y às %H:%M') }}.
+      Normalmente é o computador desligado ou sem internet — o que você salvou
+      sobe sozinho assim que ele voltar. Se a máquina está ligada e na internet,
+      avise o escritório.
+    </div>
+  {% endif %}
+
+  <div class="cx">
+    <div class="cx__h">Arquivos que chegaram
+      <small style="font-weight:600;color:var(--muted)">— {{ envios|length }}</small>
+    </div>
+    {% if not envios %}
+      <div class="vazio"><i class="bi bi-inbox" style="font-size:1.6rem"></i><br>
+        Nenhum arquivo seu chegou ainda.<br>
+        Salve um arquivo na pasta que você escolheu e ele aparece aqui em
+        até um minuto.</div>
+    {% else %}
+    <div style="overflow-x:auto">
+    <table>
+      <tr><th>Quando</th><th>Arquivo</th><th class="num">Tamanho</th></tr>
+      {% for e in envios %}
+      <tr>
+        <td style="white-space:nowrap">{{ e.recebido_em.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td class="arq">{{ e.nome_original }}
+          {#- O nome muda quando ja havia outro igual la. Dizer isso evita o
+              "mas eu mandei com outro nome" que vira chamado. -#}
+          {%- if e.nome_final != e.nome_original %}
+          <small>guardado como {{ e.nome_final }} — o nome já estava ocupado</small>
+          {%- endif -%}
+        </td>
+        <td class="num">{{ '{:,.0f}'.format(e.tamanho_bytes / 1024).replace(',', '.') }} KB</td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="cx" style="padding:.8rem 1rem">
+    <b style="font-size:.86rem">Salvou um arquivo e ele não está na lista?</b>
+    <ol>
+      <li><b>Salvou agora?</b> O robô olha a pasta a cada minuto. Espere um
+        minuto e recarregue.</li>
+      <li><b>Ele está na pasta “Nao enviados”?</b> Então foi recusado. O
+        bilhete <code>.motivo.txt</code> ao lado dele diz por quê — em geral é
+        tipo de arquivo (aqui entram {{ extensoes | join(', ') }}) ou tamanho
+        (o limite é {{ limite_mb }} MB).</li>
+      <li><b>É um arquivo antigo?</b> O robô só manda o que apareceu na pasta a
+        partir da data combinada com o escritório
+        {%- if estado and estado.data_inicio_captura %} —
+          {{ estado.data_inicio_captura.strftime('%d/%m/%Y') }}{% endif %}.</li>
+      <li><b>Nada disso?</b> Avise o escritório e diga o nome do arquivo.</li>
+    </ol>
+  </div>
+
+  <p class="nota">
+    O robô <b>nunca move, renomeia ou apaga</b> os seus arquivos: ele lê e manda
+    uma cópia, e o original fica exatamente onde você salvou. Na pasta que você
+    escolheu ele também deixa um arquivo
+    <code>_NH-ROBO - o que foi enviado.txt</code> com esta mesma informação,
+    para conferir sem abrir o sistema.
+  </p>
+
+</div>
+{% endblock %}

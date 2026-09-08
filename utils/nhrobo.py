@@ -319,6 +319,53 @@ def painel():
         conn.close()
 
 
+def meus_envios(usuario_id, limite=300):
+    """O que ESTE usuario mandou, do mais novo para o mais velho.
+
+    Existe para o colaborador conferir sozinho, sem passar pelo administrador e
+    sem ligar para o tecnico -- que era o custo real de cada "sera que chegou?".
+    """
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""
+            SELECT id, nome_original, nome_final, ext, tamanho_bytes, recebido_em
+              FROM nhrobo_recebidos
+             WHERE usuario_id = %s
+             ORDER BY recebido_em DESC
+             LIMIT %s
+        """, (int(usuario_id), int(limite)))
+        return cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+
+def meu_estado(usuario_id):
+    """A situacao da chave e do ultimo sinal desta pessoa, ou None sem chave.
+
+    E o que separa "nao chegou" de "o robo nem esta falando": sem isto a tela
+    mostraria uma lista velha e completa, e a pessoa a leria como prova de que o
+    sistema perdeu o arquivo dela.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""
+            SELECT c.token_prefixo, c.ativo AS chave_ativa, c.data_inicio_captura,
+                   c.ultimo_contato,
+                   TIMESTAMPDIFF(MINUTE, c.ultimo_contato, NOW()) AS min_sem_contato,
+                   (SELECT COUNT(*) FROM nhrobo_recebidos r
+                     WHERE r.usuario_id = c.usuario_id) AS enviados
+              FROM nhrobo_config c
+             WHERE c.usuario_id = %s
+        """, (int(usuario_id),))
+        return cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+
+
 def recebidos(limite=200):
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)

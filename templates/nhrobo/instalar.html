@@ -61,6 +61,11 @@
       <i class="bi bi-download"></i> Baixar o NH-Robô</a>
     <a class="secundario" href="{{ url_for('nhrobo.manual') }}" target="_blank">
       ver o passo a passo com imagens</a>
+    {#- O caminho de volta. Depois de instalado, a pergunta deixa de ser "como
+        instalo" e passa a ser "sera que chegou?" -- e e esta tela que responde,
+        sem ninguem ter de perguntar a ninguem. -#}
+    <a class="secundario" href="{{ url_for('nhrobo.meus_envios') }}">
+      já instalei — ver o que já foi enviado</a>
 
     <ol>
       <li>Baixe e <b>extraia a pasta inteira</b> num lugar fixo do seu

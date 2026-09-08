@@ -240,6 +240,25 @@ def instalar():
                            limite_mb=nhrobo.TAMANHO_MAX_BYTES // (1024 * 1024))
 
 
+@bp.route('/nh-robo/meus-envios', methods=['GET'])
+@login_required
+def meus_envios():
+    """A prova, para o proprio colaborador. Login basta -- nao e tela de admin.
+
+    O robo ja deixa um recibo na pasta da pessoa, mas aquilo e a palavra DELE.
+    Esta tela le a tabela do servidor: e o que de fato chegou. Quando os dois
+    discordarem, esta ganha -- e e ela que encerra a discussao sem o tecnico
+    precisar abrir o Dropbox para conferir na mao.
+    """
+    uid = getattr(current_user, 'id', None)
+    return render_template('nhrobo/meus_envios.html',
+                           envios=nhrobo.meus_envios(uid),
+                           estado=nhrobo.meu_estado(uid),
+                           destino=nhrobo.PASTA_DESTINO,
+                           extensoes=nhrobo.EXTENSOES_PERMITIDAS,
+                           limite_mb=nhrobo.TAMANHO_MAX_BYTES // (1024 * 1024))
+
+
 @bp.route('/nh-robo/instalador', methods=['GET'])
 @login_required
 def instalador():
