@@ -81,7 +81,11 @@ def gerar_chave(usuario_id, admin_id, regerar=False, data_inicio=None):
             return None, 'ja_existe'
 
         token = secrets.token_hex(_TOKEN_BYTES)
-        dados = (hash_token(token), token[:8], data_inicio, admin_id)
+        # A hora entra na TUPLA, e nao como NOW() no SQL: o relogio do container
+        # e UTC. Ela fica junto do resto para os dois caminhos (INSERT e UPDATE)
+        # nao terem contagens de %s diferentes -- foi assim que o 500 nasceu.
+        dados = (hash_token(token), token[:8], data_inicio, admin_id,
+                 agora_brasilia())
         if atual:
             cur.execute("""
                 UPDATE nhrobo_config
