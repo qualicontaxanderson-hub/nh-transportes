@@ -724,10 +724,15 @@ body > .container-fluid:has(#pfn){
                    data-produto="{{ f.produto or '—' }}"
                    data-litros="{{ '%.0f' | format(f.litros) }}" checked
                    onchange="pfnSoma(this)">
+            {#- Distribuidora e motorista na MESMA linha do produto: quem
+                confere antes de emitir o boleto pergunta "de quem veio e quem
+                levou", e ate aqui a resposta exigia abrir o frete um por um. -#}
             <span class="ef__n">{{ f.semana }} {{ f.data_frete.strftime('%d/%m') }}
               · {{ f.placa or '—' }}
               <small>{{ f.produto or '—' }}
-                {{ fmtl.format(f.litros).replace(',', '.') }} L</small></span>
+                {{ fmtl.format(f.litros).replace(',', '.') }} L
+                {%- if f.fornecedor %} · {{ f.fornecedor }}{% endif %}
+                {%- if f.motorista %} · {{ f.motorista }}{% endif %}</small></span>
             <span class="ef__v">{{ f.valor | formatar_moeda }}</span>
           </label>
           {% endfor %}

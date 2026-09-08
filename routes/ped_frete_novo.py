@@ -729,12 +729,17 @@ def _a_cobrar(cur, desde):
         SELECT f.id, f.data_frete, f.valor_total_frete,
                COALESCE(f.quantidade_manual, q.valor) AS litros,
                cl.id AS cid, cl.razao_social AS cliente,
-               pr.nome AS produto, v.placa
+               pr.nome AS produto, v.placa,
+               -- De quem se comprou e quem levou. Sem isso, conferir um frete
+               -- na hora de emitir o boleto exigia abrir o frete um por um.
+               fo.razao_social AS fornecedor, m.nome AS motorista
           FROM fretes f
           LEFT JOIN quantidades q ON q.id = f.quantidade_id
           LEFT JOIN clientes cl   ON cl.id = f.clientes_id
           LEFT JOIN produto pr    ON pr.id = f.produto_id
           LEFT JOIN veiculos v    ON v.id  = f.veiculos_id
+          LEFT JOIN fornecedores fo ON fo.id = f.fornecedores_id
+          LEFT JOIN motoristas m  ON m.id  = f.motoristas_id
           """ + _COBERTURA + """
          WHERE f.data_frete >= %s
            AND f.valor_total_frete > 0
