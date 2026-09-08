@@ -110,6 +110,13 @@
   <div id="qcol-topo">
     <div class="topo__l1">
       <h3><i class="bi bi-robot"></i> NH-Robô</h3>
+      {#- O manual mora AQUI tambem, e nao so na aba Instalar: quem gera a chave
+          e quem manda o passo a passo junto com ela. Ter de trocar de aba para
+          achar o link e o tipo de atrito que faz a pessoa mandar so a chave e
+          deixar o resto por conta do outro. -#}
+      <a class="acao" href="{{ url_for('nhrobo.manual') }}" target="_blank"
+         rel="noopener">
+        <i class="bi bi-book"></i> Manual de instalação</a>
     </div>
     <div class="abas">
       {% with ativa = 'chaves' %}{% include 'includes/abas_nhrobo.html' %}{% endwith %}

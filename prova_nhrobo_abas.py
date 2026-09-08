@@ -147,6 +147,15 @@ for pedaco, oque in [('Quem pode mandar', 'a lista de pessoas'),
 prova('Chaves nao repete mais a lista de recebidos (ela virou aba)',
       'O que chegou' not in h)
 
+# O manual e o que se manda JUNTO com a chave. Se so existisse na aba Instalar,
+# quem gera a chave teria de trocar de aba para achar o link -- e mandaria so a
+# chave.
+prova('Chaves traz o link do manual', '/nh-robo/manual' in h)
+cod, manual = abre(cli, admin['id'], '/nh-robo/manual')
+prova('e o manual abre de verdade (200)', cod == 200, 'codigo %s' % cod)
+prova('o manual e o de primeira instalacao, sem "versao anterior"',
+      'Manual de Instalação' in manual and 'versão anterior' not in manual)
+
 # ── a hora e a de Brasilia, nao a do container ───────────────────────────────
 # O servidor roda em UTC. Enquanto a hora vinha do NOW() do banco, um arquivo
 # entregue as 21h18 aparecia como 00:18 do dia seguinte -- hora que ninguem
@@ -183,8 +192,12 @@ if contato:
           contato <= agora + _dt.timedelta(minutes=2),
           'ultimo contato: %s' % contato)
 
-fonte = io.open('utils/nhrobo.py', encoding='utf-8').read()
-prova('nenhum NOW() sobrou no SQL do NH-Robo', 'NOW()' not in fonte)
+# Sem as linhas de comentario: o comentario que EXPLICA por que nao se usa
+# NOW() contem "NOW()", e derrubava esta prova por escrito -- nao por codigo.
+codigo = [l for l in io.open('utils/nhrobo.py', encoding='utf-8')
+          if not l.lstrip().startswith('#')]
+sobrou = [l.strip() for l in codigo if 'NOW()' in l]
+prova('nenhum NOW() sobrou no SQL do NH-Robo', not sobrou, '\n        '.join(sobrou))
 
 print('\n%d falha(s)' % len(falhas))
 sys.exit(1 if falhas else 0)
