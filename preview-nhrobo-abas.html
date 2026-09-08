@@ -1,0 +1,419 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prova — NH-Robô com as 3 abas (web e mobile)</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<style>
+  /* Prova autocontida. As duas molduras abaixo sao IFRAMES com a MESMA pagina:
+     uma na largura do computador, outra em 390px. Assim as media queries
+     respondem de verdade, em vez de eu desenhar dois mocks que podem divergir. */
+  *{ box-sizing:border-box; }
+  body{ margin:0; padding:18px; background:#eef2f7; color:#151d27;
+        font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  h1{ font-size:1.15rem; margin:0 0 .3rem; }
+  .sub{ color:#6b7684; font-size:.84rem; margin:0 0 1rem; line-height:1.55; max-width:78ch; }
+  h2{ font-size:.95rem; margin:1.5rem 0 .5rem; padding-bottom:.35rem;
+      border-bottom:2px solid #dde3ec; }
+  .nota{ color:#6b7684; font-size:.79rem; line-height:1.6; max-width:78ch; margin:.5rem 0 0; }
+  .nota b{ color:#151d27; }
+  .par{ display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; }
+  .moldura{ background:#fff; border:1px solid #d9e0e8; border-radius:14px;
+            padding:10px; box-shadow:0 2px 10px rgba(20,35,60,.07); }
+  .moldura > .rot{ font-size:.7rem; font-weight:800; text-transform:uppercase;
+            letter-spacing:.06em; color:#6b7684; margin:0 0 .45rem .2rem; }
+  .web{ flex:1 1 620px; min-width:0; }
+  .cel{ flex:0 0 auto; }
+  .cel iframe{ width:390px; }
+  iframe{ border:0; width:100%; display:block; background:#eef2f7; border-radius:8px; }
+
+  /* O menu Cadastros — so o pedaco que muda */
+  .menu{ width:310px; background:#fff; border:1px solid #d9e0e8; border-radius:10px;
+         padding:.4rem 0; box-shadow:0 6px 22px rgba(20,35,60,.14); font-size:.9rem; }
+  .menu div{ padding:.35rem .9rem; display:flex; align-items:center; gap:.55rem; }
+  .menu hr{ border:0; border-top:1px solid #e7ebf1; margin:.35rem 0; }
+  .menu .novo{ background:#eaf1f9; font-weight:700; }
+  .menu i{ width:1.05em; text-align:center; }
+</style>
+
+<h1>NH-Robô — uma tela só, com as 3 abas</h1>
+<p class="sub">Prova de como fica, <b>antes</b> de eu mexer no app. As duas molduras carregam
+a mesma página: à esquerda na largura do computador, à direita em 390px, como no celular.
+As abas funcionam — pode clicar. O topo azul, as pílulas e a lista são os mesmos do
+<code>/dfe/compras</code> e do <code>/dfe/ctes</code>.</p>
+
+<h2>1 · No menu Cadastros</h2>
+<div class="menu">
+  <div><i class="bi bi-wallet-fill" style="color:#28a745"></i> Formas Recebimento Caixa</div>
+  <div><i class="bi bi-droplet" style="color:#ff6b6b"></i> Lubrificantes</div>
+  <hr>
+  <div class="novo"><i class="bi bi-robot" style="color:#1D63A5"></i> NH-Robô</div>
+  <hr>
+  <div><i class="bi bi-person-plus-fill" style="color:#dc3545"></i> Novo Usuário</div>
+  <div><i class="bi bi-people-fill" style="color:#6c757d"></i> Gerenciar Usuários</div>
+</div>
+<p class="nota">Entra <b>acima do Novo Usuário</b>, com risco separando: é família própria, não
+é cadastro de pessoa nem de produto. Ícone de robô, azul da casa.</p>
+
+<h2>2 · A tela, nas duas larguras</h2>
+<div class="par">
+  <div class="moldura web"><p class="rot">Computador</p><iframe id="fw"></iframe></div>
+  <div class="moldura cel"><p class="rot">Celular · 390px</p><iframe id="fc"></iframe></div>
+</div>
+
+<p class="nota" style="margin-top:1rem"><b>Sobre a coluna Período.</b> Ela não sai de
+adivinhação. O extrato OFX carrega <code>DTSTART</code> e <code>DTEND</code> dentro dele — no
+arquivo de teste que já subiu, isso é <code>04/09/2026</code> a <code>07/09/2026</code>. XML
+de nota tem a data de emissão, e o SPED tem o período no registro 0000. Planilha, PDF e imagem
+não têm nada disso: aí eu tento o nome do arquivo (<code>07-2026</code>, <code>062026</code>,
+<code>2026-07</code>) e, quando nem o nome diz, a coluna mostra <b>—</b>. Prefiro o travessão a
+um período chutado, que é o erro que ninguém percebe.</p>
+
+<p class="nota"><b>O que é real e o que é exemplo.</b> A tabela hoje tem <b>2 registros</b>, os
+dois de teste meus — são as duas primeiras linhas do Histórico, com os nomes e horários
+verdadeiros. As demais linhas e as pessoas do quadro de chaves são exemplo, para a lista não
+aparecer vazia justamente na prova.</p>
+
+<script>
+/* ---- A pagina de dentro. Uma string so, servida aos dois iframes. ---- */
+var PAG = [
+'<!doctype html><meta charset="utf-8">',
+'<meta name="viewport" content="width=device-width, initial-scale=1">',
+'<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">',
+'<style>',
+'*{ box-sizing:border-box; }',
+'body{ margin:0; padding:.3rem .3rem 1rem; background:#eef2f7; color:#151d27;',
+'      font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; font-size:15px; }',
+'@media (min-width:992px){ body{ padding:.7rem 1rem 1rem; } }',
+
+/* ====== topo azul + abas: igual ao includes/abas_banco_css.html ====== */
+'#nhr-topo{ background:linear-gradient(120deg,#0C4C86,#1D63A5); color:#fff;',
+'  border-radius:14px; padding:.6rem .8rem .15rem; margin-bottom:.7rem; }',
+'#nhr-topo .topo__l1{ display:flex; align-items:center; gap:.5rem; }',
+'#nhr-topo h3{ margin:0; font-size:1.05rem; font-weight:800; letter-spacing:-.01em; color:#fff; }',
+'#nhr-topo .acao{ margin-left:auto; flex:0 0 auto; background:rgba(255,255,255,.2);',
+'  border:1px solid rgba(255,255,255,.35); color:#fff; border-radius:10px;',
+'  padding:.32rem .6rem; font-size:.78rem; font-weight:800; cursor:pointer;',
+'  display:inline-flex; align-items:center; gap:.32rem; font-family:inherit; white-space:nowrap; }',
+'#nhr-topo .abas{ display:flex; gap:.35rem; overflow-x:auto; padding:.55rem 0 .5rem;',
+'  scrollbar-width:none; }',
+'#nhr-topo .abas::-webkit-scrollbar{ display:none; }',
+'#nhr-topo .aba{ flex:0 0 auto; border-radius:99px; padding:.32rem .8rem; font-size:.79rem;',
+'  font-weight:800; white-space:nowrap; color:#fff; text-decoration:none; cursor:pointer;',
+'  background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22); }',
+'#nhr-topo .aba.on{ background:#fff; color:#0C4C86; border-color:#fff; }',
+
+'#nhr{ --azul:#1D63A5; --azul-deep:#0C4C86; --azul-claro:#eaf1f9; --ink:#151d27;',
+'  --ink-2:#3a4655; --muted:#6b7684; --line:#e7ebf1; --line-2:#d9e0e8; --surface:#f7f9fc;',
+'  --ok:#1c6b34; --ok-bg:#e4f4e8; --pend:#8a5a00; --pend-bg:#fdf0d6;',
+'  --ign:#4b5563; --ign-bg:#eceef1; --danger:#a32d2d; --danger-bg:#fbe9e9;',
+'  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace; }',
+
+/* ====== numeros em degrade ====== */
+'.nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:.7rem; }',
+'@media (min-width:768px){ .nums{ grid-template-columns:repeat(4,1fr); } }',
+'.nums .n{ border-radius:13px; padding:.55rem .75rem; color:#fff;',
+'  box-shadow:0 2px 8px rgba(20,35,60,.12); }',
+'.nums .r{ font-size:.66rem; font-weight:800; text-transform:uppercase;',
+'  letter-spacing:.06em; opacity:.92; }',
+'.nums .v{ font-size:1.02rem; font-weight:800; letter-spacing:-.02em;',
+'  font-variant-numeric:tabular-nums; line-height:1.28; }',
+'.n--azul{ background:linear-gradient(135deg,#2E6FB0,#1D63A5); }',
+'.n--verde{ background:linear-gradient(135deg,#22A24B,#17963C); }',
+'.n--ambar{ background:linear-gradient(135deg,#D79A2B,#B8791C); }',
+'.n--cinza{ background:linear-gradient(135deg,#5B6B7F,#465565); }',
+
+/* ====== lista: mesma do /dfe/ctes ====== */
+'.lst{ background:#fff; border:1px solid var(--line-2); border-radius:12px; overflow:hidden; }',
+'.banda{ display:flex; align-items:center; gap:.5rem; padding:.45rem .8rem;',
+'  background:var(--azul-claro); color:var(--azul-deep); font-size:.79rem; font-weight:800;',
+'  border-bottom:1px solid var(--line-2); }',
+'.banda .tot{ margin-left:auto; font-variant-numeric:tabular-nums; font-weight:700; font-size:.74rem; }',
+'.lin{ display:grid; gap:.1rem .35rem; align-items:baseline; padding:.5rem .7rem;',
+'  border-bottom:1px solid var(--line); }',
+'.lin:last-child{ border-bottom:0; }',
+'.lin:hover{ background:var(--surface); }',
+'.selo{ display:inline-block; font-size:.66rem; font-weight:800; border-radius:5px;',
+'  padding:.08rem .38rem; white-space:nowrap; }',
+'.selo--ok{ background:var(--ok-bg); color:var(--ok); }',
+'.selo--no{ background:var(--danger-bg); color:var(--danger); }',
+'.selo--az{ background:var(--azul-claro); color:var(--azul-deep); }',
+'.selo--ci{ background:var(--ign-bg); color:var(--ign); }',
+'.selo--am{ background:var(--pend-bg); color:var(--pend); }',
+'.cx{ background:#fff; border:1px solid var(--line-2); border-radius:12px;',
+'  padding:.8rem 1rem; margin-bottom:.7rem; }',
+'.cx__h{ font-size:.86rem; font-weight:800; color:var(--azul-deep); margin-bottom:.5rem; }',
+
+/* ---- ABA HISTORICO: a linha ---- */
+'.h-lin{ grid-template-columns:auto minmax(0,1fr) auto;',
+'  grid-template-areas:"doc doc doc" "hora quem tam" "selo per per"; }',
+'.h-doc{ grid-area:doc; font-size:.87rem; font-weight:800; letter-spacing:-.01em;',
+'  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }',
+'.h-hora{ grid-area:hora; font-family:var(--mono); font-size:.72rem; color:var(--muted); font-weight:600; }',
+'.h-quem{ grid-area:quem; font-size:.74rem; color:var(--muted); font-weight:700;',
+'  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }',
+'.h-quem::before{ content:"\\00b7\\00a0"; }',
+'.h-tam{ grid-area:tam; justify-self:end; font-size:.72rem; color:var(--muted);',
+'  font-variant-numeric:tabular-nums; }',
+'.h-selo{ grid-area:selo; justify-self:start; }',
+'.h-per{ grid-area:per; justify-self:end; font-size:.74rem; color:var(--ink-2);',
+'  font-weight:700; font-variant-numeric:tabular-nums; }',
+'.h-per small{ color:var(--muted); font-weight:600; }',
+'@media (min-width:992px){',
+'  .h-lin{ grid-template-columns:62px minmax(176px,.9fr) minmax(200px,1.5fr) 92px 172px 82px;',
+'    grid-template-areas:"hora quem doc selo per tam"; gap:.15rem 1rem;',
+'    align-items:center; padding:.48rem .9rem; }',
+'  .h-quem::before{ content:""; }',
+'  .h-quem{ font-size:.79rem; color:var(--ink-2); }',
+'  .h-per{ justify-self:start; }',
+'}',
+
+/* ---- ABA CHAVES: a linha ---- */
+'.k-lin{ grid-template-columns:minmax(0,1fr) auto;',
+'  grid-template-areas:"nome nome" "selo sinal" "corte arq" "acoes acoes"; }',
+'.k-nome{ grid-area:nome; font-size:.87rem; font-weight:800; letter-spacing:-.01em; }',
+'.k-nome small{ display:block; font-size:.72rem; color:var(--muted); font-weight:600; }',
+'.k-selo{ grid-area:selo; justify-self:start; margin-top:.25rem; }',
+'.k-sinal{ grid-area:sinal; justify-self:end; font-size:.73rem; color:var(--muted); margin-top:.25rem; }',
+'.k-corte{ grid-area:corte; font-size:.73rem; color:var(--muted); margin-top:.2rem; }',
+'.k-arq{ grid-area:arq; justify-self:end; font-size:.73rem; color:var(--muted);',
+'  font-variant-numeric:tabular-nums; margin-top:.2rem; }',
+'.k-acoes{ grid-area:acoes; display:flex; gap:.3rem; flex-wrap:wrap; margin-top:.45rem; }',
+'.bt{ border:1px solid var(--line-2); background:#fff; color:var(--ink-2); border-radius:8px;',
+'  padding:.22rem .55rem; font-size:.73rem; font-weight:700; cursor:pointer; font-family:inherit; }',
+'.bt--sim{ background:var(--azul); border-color:var(--azul); color:#fff; }',
+'.bt--per{ background:#fff; border-color:#e3b7b7; color:var(--danger); }',
+'@media (min-width:992px){',
+'  .k-lin{ grid-template-columns:minmax(180px,1.2fr) 104px 126px 118px 92px minmax(190px,auto);',
+'    grid-template-areas:"nome selo corte sinal arq acoes"; gap:.15rem 1rem;',
+'    align-items:center; padding:.5rem .9rem; }',
+'  .k-selo,.k-sinal,.k-corte,.k-arq,.k-acoes{ margin-top:0; }',
+'  .k-sinal,.k-arq{ justify-self:start; }',
+'  .k-acoes{ justify-self:end; flex-wrap:nowrap; }',
+'}',
+
+/* ---- ABA INSTALAR ---- */
+'.baixar{ display:inline-flex; align-items:center; gap:.5rem; background:var(--azul);',
+'  color:#fff; border:0; border-radius:11px; padding:.7rem 1.2rem; font-size:.95rem;',
+'  font-weight:800; text-decoration:none; cursor:pointer; }',
+'.sec{ margin-left:.6rem; font-size:.82rem; font-weight:700; color:var(--azul);',
+'  text-decoration:none; cursor:pointer; }',
+'ol.passos{ margin:.6rem 0 0; padding-left:1.15rem; font-size:.85rem; line-height:1.75; }',
+'ol.passos b{ color:var(--azul-deep); }',
+'.aviso{ background:#fff8e8; border:1px solid #f0d8a8; border-left:4px solid #8a5a00;',
+'  border-radius:0 10px 10px 0; padding:.7rem .9rem; font-size:.8rem; color:#5a4300;',
+'  line-height:1.6; margin-top:.7rem; }',
+'code{ background:#f2f5f8; padding:.1rem .35rem; border-radius:5px; font-size:.85em; }',
+'.eco{ display:flex; align-items:center; gap:.4rem; background:var(--azul-claro);',
+'  color:var(--azul-deep); border-radius:10px; padding:.5rem .7rem; font-size:.82rem;',
+'  font-weight:700; margin-bottom:.7rem; flex-wrap:wrap; }',
+'.eco a{ margin-left:auto; background:var(--azul); color:#fff; border-radius:8px;',
+'  padding:.3rem .7rem; font-size:.78rem; font-weight:800; text-decoration:none; }',
+'.pe{ font-size:.78rem; color:#6b7684; margin:.6rem .2rem 0; line-height:1.6; }',
+'.pane{ display:none; } .pane.on{ display:block; }',
+'</style>',
+
+'<div id="nhr">',
+'  <div id="nhr-topo">',
+'    <div class="topo__l1">',
+'      <h3><i class="bi bi-robot"></i> NH-Robô</h3>',
+'      <button class="acao" id="btFiltro" style="display:none">',
+'        <i class="bi bi-sliders"></i> Filtro</button>',
+'    </div>',
+'    <div class="abas">',
+'      <a class="aba on" data-p="chaves">Chaves</a>',
+'      <a class="aba" data-p="instalar">Instalar</a>',
+'      <a class="aba" data-p="hist">Histórico</a>',
+'    </div>',
+'  </div>',
+
+/* ============ ABA 1 — CHAVES  (/nh-robo/) ============ */
+'  <div class="pane on" id="p-chaves">',
+'    <div class="nums">',
+'      <div class="n n--azul"><div class="r">Com chave</div><div class="v">1 pessoa</div></div>',
+'      <div class="n n--cinza"><div class="r">Sem chave</div><div class="v">7 pessoas</div></div>',
+'      <div class="n n--verde"><div class="r">Arquivos recebidos</div><div class="v">2</div></div>',
+'      <div class="n n--ambar"><div class="r">Último sinal</div><div class="v">há 4 min</div></div>',
+'    </div>',
+'    <div class="lst">',
+'      <div class="banda"><i class="bi bi-key-fill"></i> Quem pode mandar',
+'        <span class="tot">8 pessoas ativas</span></div>',
+
+'      <div class="lin k-lin">',
+'        <div class="k-nome">ANDERSON VIEIRA<small>anderson · ADMIN</small></div>',
+'        <div class="k-selo"><span class="selo selo--ok">a3f19c7d…</span></div>',
+'        <div class="k-corte">desde 01/09/2026</div>',
+'        <div class="k-sinal"><span class="selo selo--ok">há 4 min</span></div>',
+'        <div class="k-arq">2 arq. · 08/09</div>',
+'        <div class="k-acoes"><button class="bt">Regerar</button>',
+'          <button class="bt bt--per">Revogar</button></div>',
+'      </div>',
+
+'      <div class="lin k-lin">',
+'        <div class="k-nome">MARIA DE FÁTIMA SOUZA<small>fatima · SUPERVISOR</small></div>',
+'        <div class="k-selo"><span class="selo selo--az">c1d0b8e2…</span></div>',
+'        <div class="k-corte">desde 07/07/2026</div>',
+'        <div class="k-sinal"><span class="selo selo--no">há 3 dias</span></div>',
+'        <div class="k-arq">0 arq.</div>',
+'        <div class="k-acoes"><button class="bt">Regerar</button>',
+'          <button class="bt bt--per">Revogar</button></div>',
+'      </div>',
+
+'      <div class="lin k-lin">',
+'        <div class="k-nome">JOSÉ CARLOS PEREIRA<small>jose · OPERADOR</small></div>',
+'        <div class="k-selo"><span class="selo selo--ci">sem chave</span></div>',
+'        <div class="k-corte">—</div>',
+'        <div class="k-sinal">nunca</div>',
+'        <div class="k-arq">0 arq.</div>',
+'        <div class="k-acoes"><button class="bt bt--sim">Gerar chave</button></div>',
+'      </div>',
+'    </div>',
+'    <p class="pe">A chave em claro aparece <b>uma vez</b>, na janela de cópia — depois daqui',
+'      só existe o hash. Revogar para o envio no próximo ciclo da máquina, sem ninguém ir lá.</p>',
+'  </div>',
+
+/* ============ ABA 2 — INSTALAR  (/nh-robo/instalar) ============ */
+'  <div class="pane" id="p-instalar">',
+'    <div class="cx">',
+'      <a class="baixar"><i class="bi bi-download"></i> Baixar o NH-Robô</a>',
+'      <a class="sec">ver o passo a passo com imagens</a>',
+'      <a class="sec">já instalei — ver o que já foi enviado</a>',
+'      <ol class="passos">',
+'        <li>Baixe e <b>extraia a pasta inteira</b> num lugar fixo do seu computador — a Área',
+'          de Trabalho serve. Não rode de dentro do <code>.zip</code>.</li>',
+'        <li>Abra o <code>nhrobo.exe</code>. Se o Windows perguntar, escolha',
+'          <b>Mais informações → Executar assim mesmo</b>.</li>',
+'        <li>Cole a <b>chave</b> que o Anderson te passou e clique em <b>Testar conexão</b>.',
+'          Tem que aparecer o seu nome.</li>',
+'        <li>Escolha a <b>pasta que ele vai vigiar</b>. Pode ser uma pasta nova, só p/ isso.</li>',
+'        <li>Deixe marcado <b>iniciar com o Windows</b> e feche a janela. Ele continua rodando',
+'          ali no relógio, perto da hora.</li>',
+'      </ol>',
+'    </div>',
+'    <div class="cx">',
+'      <div class="cx__h">O que ele leva</div>',
+'      <p style="font-size:.85rem;margin:0;line-height:1.6">Só <b>.ofx, .xlsx, .xls, .csv,',
+'        .xml, .txt, .pdf, .zip, .jpg, .png</b>, até 200 MB por arquivo. Qualquer outra coisa',
+'        na pasta ele ignora.</p>',
+'      <div class="aviso"><b>Ele nunca apaga nem move nada seu.</b> Depois de mandar, o',
+'        arquivo continua onde você salvou. O que ele escreve na sua pasta é o recibo',
+'        <code>_NH-ROBO - o que foi enviado.txt</code> e, quando algum arquivo é recusado,',
+'        uma cópia em <b>Nao enviados</b> com o bilhete do motivo.</div>',
+'    </div>',
+'    <p class="pe">Esta aba é a única das três que o colaborador comum enxerga —',
+'      <b>Chaves</b> é de administrador.</p>',
+'  </div>',
+
+/* ============ ABA 3 — HISTORICO (nova) ============ */
+'  <div class="pane" id="p-hist">',
+'    <div class="nums">',
+'      <div class="n n--azul"><div class="r">Arquivos no período</div><div class="v">6</div></div>',
+'      <div class="n n--verde"><div class="r">Pessoas que mandaram</div><div class="v">3</div></div>',
+'      <div class="n n--ambar"><div class="r">Sem período</div><div class="v">2 de 6</div></div>',
+'      <div class="n n--cinza"><div class="r">Último envio</div><div class="v">hoje 00:18</div></div>',
+'    </div>',
+
+'    <div class="eco"><i class="bi bi-funnel-fill"></i>',
+'      Filtro ativo — últimos 30 dias · todas as pessoas',
+'      <a href="#">Limpar</a></div>',
+
+'    <div class="lst">',
+'      <div class="banda"><i class="bi bi-calendar3"></i> 08/09/2026 · terça',
+'        <span class="tot">2 arquivos · 13 KB</span></div>',
+
+'      <div class="lin h-lin">',
+'        <div class="h-hora">00:18</div>',
+'        <div class="h-quem">ANDERSON VIEIRA</div>',
+'        <div class="h-doc">extrato teste.xls</div>',
+'        <div class="h-selo"><span class="selo selo--ci">planilha</span></div>',
+'        <div class="h-per">— <small>não identificado</small></div>',
+'        <div class="h-tam">9 KB</div>',
+'      </div>',
+
+'      <div class="lin h-lin">',
+'        <div class="h-hora">00:17</div>',
+'        <div class="h-quem">ANDERSON VIEIRA</div>',
+'        <div class="h-doc">extrato teste.ofx</div>',
+'        <div class="h-selo"><span class="selo selo--az">extrato</span></div>',
+'        <div class="h-per">04/09 a 07/09/2026 <small>do arquivo</small></div>',
+'        <div class="h-tam">4 KB</div>',
+'      </div>',
+
+'      <div class="banda"><i class="bi bi-calendar3"></i> 05/09/2026 · sexta',
+'        <span class="tot">4 arquivos · 2,1 MB</span></div>',
+
+'      <div class="lin h-lin">',
+'        <div class="h-hora">17:42</div>',
+'        <div class="h-quem">MARIA DE FÁTIMA SOUZA</div>',
+'        <div class="h-doc">SPED FISCAL 08-2026 POSTO NH.txt</div>',
+'        <div class="h-selo"><span class="selo selo--am">SPED</span></div>',
+'        <div class="h-per">01/08 a 31/08/2026 <small>do arquivo</small></div>',
+'        <div class="h-tam">1,4 MB</div>',
+'      </div>',
+
+'      <div class="lin h-lin">',
+'        <div class="h-hora">17:40</div>',
+'        <div class="h-quem">MARIA DE FÁTIMA SOUZA</div>',
+'        <div class="h-doc">Sicredi 39500-6 agosto.ofx</div>',
+'        <div class="h-selo"><span class="selo selo--az">extrato</span></div>',
+'        <div class="h-per">01/08 a 31/08/2026 <small>do arquivo</small></div>',
+'        <div class="h-tam">62 KB</div>',
+'      </div>',
+
+'      <div class="lin h-lin">',
+'        <div class="h-hora">11:05</div>',
+'        <div class="h-quem">JOSÉ CARLOS PEREIRA</div>',
+'        <div class="h-doc">35260812345678000199550010000123451000123456-nfe.xml</div>',
+'        <div class="h-selo"><span class="selo selo--ok">NF-e</span></div>',
+'        <div class="h-per">14/08/2026 <small>emissão</small></div>',
+'        <div class="h-tam">18 KB</div>',
+'      </div>',
+
+'      <div class="lin h-lin">',
+'        <div class="h-hora">09:31</div>',
+'        <div class="h-quem">JOSÉ CARLOS PEREIRA</div>',
+'        <div class="h-doc">comprovante posto.pdf</div>',
+'        <div class="h-selo"><span class="selo selo--ci">PDF</span></div>',
+'        <div class="h-per">— <small>não identificado</small></div>',
+'        <div class="h-tam">640 KB</div>',
+'      </div>',
+'    </div>',
+
+'    <p class="pe"><b>Período</b> é lido de dentro do arquivo quando ele diz (OFX, XML de',
+'      nota, SPED); do nome quando o nome diz; e fica <b>—</b> quando ninguém diz. O',
+'      <b>Filtro</b> lá em cima abre a mesma gaveta das outras telas: período, pessoa e tipo.</p>',
+'  </div>',
+'</div>',
+
+'<script>',
+'  var abas = document.querySelectorAll(".aba");',
+'  var bt = document.getElementById("btFiltro");',
+'  abas.forEach(function (a) {',
+'    a.addEventListener("click", function () {',
+'      abas.forEach(function (x) { x.classList.remove("on"); });',
+'      a.classList.add("on");',
+'      document.querySelectorAll(".pane").forEach(function (p) { p.classList.remove("on"); });',
+'      document.getElementById("p-" + a.dataset.p).classList.add("on");',
+'      bt.style.display = (a.dataset.p === "hist") ? "" : "none";',
+'      avisaAltura();',
+'    });',
+'  });',
+'  function avisaAltura(){',
+'    parent.postMessage({ alt: document.documentElement.scrollHeight }, "*");',
+'  }',
+'  window.addEventListener("load", avisaAltura);',
+'  setTimeout(avisaAltura, 400);',
+'<\/script>'
+].join('\n');
+
+['fw', 'fc'].forEach(function (id) { document.getElementById(id).srcdoc = PAG; });
+
+/* Cada moldura cresce com o proprio conteudo — sem barra de rolagem interna,
+   que atrapalharia justamente o que se quer olhar. */
+window.addEventListener('message', function (e) {
+  if (!e.data || !e.data.alt) return;
+  ['fw', 'fc'].forEach(function (id) {
+    var f = document.getElementById(id);
+    if (f.contentWindow === e.source) f.style.height = (e.data.alt + 14) + 'px';
+  });
+});
+</script>
