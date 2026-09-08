@@ -88,7 +88,7 @@ strong { font-weight:700; }
         <p class="capa-sub">Guia do colaborador · como instalar no seu computador</p>
         
 <span class="capa-selo">
-    Versão do programa: <strong>0.4.0</strong> &nbsp;•&nbsp; 
+    Versão do programa: <strong>1.1.0</strong> &nbsp;•&nbsp; 
     Envio automático de arquivos para o escritório
 </span>
 
@@ -126,7 +126,7 @@ strong { font-weight:700; }
 
 <h2><span class="n">1</span> Instalar o programa</h2>
 <ol class="passos">
-    <li><strong>Baixe o arquivo</strong> <code>nhrobo-0.4.0.zip</code>.</li>
+    <li><strong>Baixe o arquivo</strong> <code>nhrobo-1.1.0.zip</code>.</li>
     <li><strong>Extraia.</strong> Clique com o botão direito no arquivo e escolha
         <strong>“Extrair tudo…”</strong>. Mande extrair para <span class="cam">C:\nhrobo</span>
         — basta digitar esse caminho na janela de extração. Assim o programa e os arquivos
@@ -140,15 +140,6 @@ strong { font-weight:700; }
     <strong>não é vírus</strong>. Acontece porque o programa é novo e o Windows ainda não o
     conhece. Clique em <strong>“Mais informações”</strong> e depois em
     <strong>“Executar assim mesmo”</strong>. Isso só acontece na primeira vez.</p>
-</div>
-
-<div class="bloco">
-    <p><strong>Já tem uma versão anterior instalada?</strong> Antes de extrair, clique com o
-    botão direito no ícone perto do relógio e escolha <strong>Sair</strong> — com o programa
-    aberto, o Windows não deixa substituir o arquivo. Depois extraia por cima da mesma pasta,
-    mandando substituir, e abra o <code>nhrobo.exe</code> de novo.</p>
-    <p>A sua chave e as suas pastas continuam configuradas: não é preciso cadastrar nada
-    outra vez.</p>
 </div>
 
 <h2><span class="n">2</span> Configurar (só na primeira vez)</h2>
@@ -188,6 +179,32 @@ strong { font-weight:700; }
     <li>se algum arquivo <strong>não pôde ser enviado</strong>;</li>
     <li>se o <strong>início automático</strong> está ativo.</li>
 </ul>
+
+<h3>Como conferir se o seu arquivo chegou</h3>
+<p>Dentro de cada pasta que você escolheu, o programa mantém um arquivo chamado
+<code>_NH-ROBO - o que foi enviado.txt</code>. Dê dois cliques nele: abre no Bloco de
+Notas e mostra a lista do que <strong>já chegou</strong> ao escritório, o que foi
+<strong>recusado</strong> — com o motivo, ao lado — e a hora em que essa conferência foi
+feita. É a resposta para “será que subiu?” sem abrir programa nenhum e sem ligar para
+ninguém.</p>
+<ul class="simples">
+    <li>Ele <strong>aparece sozinho</strong> na primeira vez que o programa roda. Você não
+        precisa criar, abrir nem configurar nada.</li>
+    <li>É <strong>sempre o mesmo arquivo</strong>, reescrito por cima. Não vira dois e não
+        enche a sua pasta.</li>
+    <li>A linha <strong>“Conferido agora”</strong>, lá em cima, diz de quando é o que você
+        está lendo. Se deixar o arquivo aberto, feche e abra de novo para ver a lista
+        atualizada.</li>
+    <li>Salvou um documento agora? Espere cerca de <strong>um minuto</strong> e abra o
+        arquivo de novo.</li>
+    <li>Se o robô estiver <strong>sem internet</strong> ou <strong>sem autorização</strong>,
+        é o próprio arquivo que avisa, na linha <strong>“Situação”</strong> — em vez de
+        deixar você achando que subiu.</li>
+    <li>Ele é seu e fica na pasta: <strong>não é enviado</strong> ao escritório.</li>
+</ul>
+<p>No sistema, a tela <a href="/nh-robo/meus-envios"><strong>Meus envios</strong></a> mostra
+a mesma coisa pelo lado de cá, lida direto do servidor. Se as duas listas discordarem, vale
+a do sistema — e aí é hora de falar com o escritório.</p>
 
 <div class="bloco">
     <p><strong>E se algum arquivo não puder ser enviado?</strong> Acontece por dois motivos:
@@ -232,8 +249,9 @@ libere a pasta onde ele foi extraído:</p>
     <ul class="simples">
         <li>A sua chave é <strong>pessoal</strong>. Não passe para ninguém.</li>
         <li>O programa <strong>não move, não renomeia e não apaga</strong> nenhum arquivo
-            seu. A única coisa que ele escreve na sua pasta é a cópia de aviso em
-            <code>Nao enviados</code>, e só quando algum arquivo não pôde ser enviado.</li>
+            seu. O que ele escreve na sua pasta é o recibo
+            <code>_NH-ROBO - o que foi enviado.txt</code> e, quando algum arquivo não pôde
+            ser enviado, a cópia de aviso em <code>Nao enviados</code>.</li>
         <li>Ele só manda o que for <strong>a partir da data de corte</strong> combinada com o
             escritório. Documento mais antigo que ela fica onde está e não é enviado — e essa
             data o escritório pode ajustar a qualquer momento, sem mexer no seu computador.</li>
