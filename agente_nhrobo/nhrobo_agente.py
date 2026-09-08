@@ -96,6 +96,19 @@ REGISTRO_MAX = 200_000
 
 INTERVALO_PADRAO = 60             # segundos entre varreduras (também é o heartbeat)
 MARGEM_ESTABILIDADE = 5           # segundos: ignora arquivo mexido agora (meio-cópia)
+
+# RECIBO: um .txt na raiz de cada pasta vigiada, para o funcionário conferir
+# sozinho o que subiu -- sem abrir programa, sem logar, sem ligar para o
+# escritório. É o único arquivo que o robô escreve na pasta da pessoa fora da
+# "Nao enviados", e ele não toca em mais nada.
+#
+# A linha "Conferido agora" é o que faz o recibo valer mais que uma lista: se o
+# robô morrer, ela para de avançar, e quem olhar vê que o problema é a máquina
+# parada -- e não "o sistema comeu meu arquivo". Por isso ele é reescrito mesmo
+# quando nada foi enviado, e mesmo quando a internet está fora.
+NOME_RECIBO = "_NH-ROBO - o que foi enviado.txt"
+RECIBO_IDADE_MAX = 15 * 60        # sem novidade, reescreve a cada 15 min (a hora envelhece)
+RECIBO_MAX_ITENS = 200            # últimos N de cada lista; o resto vira uma linha de resumo
 PORTA_INSTANCIA = 52737           # trava de instância única (bind local).
 #   NAO pode ser a 52736: essa e a do NH-Robô. Numa maquina que tenha os
 #   dois, o segundo a abrir acharia que ja existe uma instancia e fecharia
@@ -219,6 +232,10 @@ class Estado:
         self.ultimo_nome = None
         self.ultimo_hora = None
         self.aguardando = 0            # arquivos em "Nao enviados"
+        # Quando o servidor respondeu pela última vez. O recibo usa isto para
+        # dizer "sem internet DESDE 20:10" -- sem a hora, o aviso não distingue
+        # uma queda de dois minutos de uma máquina fora do ar há três dias.
+        self.ultimo_ok = None
 
     def _virar_dia_se_preciso(self):
         hoje = _dt.date.today()
@@ -230,6 +247,8 @@ class Estado:
         with self._lock:
             self.conexao = estado
             self.detalhe = detalhe
+            if estado == "conectado":
+                self.ultimo_ok = _dt.datetime.now()
 
     def marcar_enviado(self, nome):
         with self._lock:
@@ -249,7 +268,7 @@ class Estado:
                 "conexao": self.conexao, "detalhe": self.detalhe,
                 "enviados_hoje": self.enviados_hoje,
                 "ultimo_nome": self.ultimo_nome, "ultimo_hora": self.ultimo_hora,
-                "aguardando": self.aguardando,
+                "aguardando": self.aguardando, "ultimo_ok": self.ultimo_ok,
             }
 
 
@@ -345,11 +364,14 @@ class Registro:
         return False, None, sha
 
     # -- escrita -----------------------------------------------------------
-    def anotar(self, caminho, st, sha, estado, motivo=None):
+    def anotar(self, caminho, st, sha, estado, motivo=None, raiz=None):
         with self._lock:
             self.hashes[sha] = {"quando": _dt.datetime.now().isoformat(timespec="seconds"),
                                 "estado": estado, "motivo": motivo,
-                                "nome": os.path.basename(caminho)}
+                                "nome": os.path.basename(caminho),
+                                # De qual pasta vigiada veio: o recibo de uma
+                                # pasta não pode listar arquivo de outra.
+                                "raiz": os.path.normcase(raiz) if raiz else None}
             self.rapido[self._chave_rapida(caminho, st)] = sha
             if len(self.hashes) > REGISTRO_MAX:
                 # Poda pelas mais antigas. Reenviar um arquivo velho é
@@ -368,6 +390,20 @@ class Registro:
         with self._lock:
             return [dict(v, sha=k) for k, v in self.hashes.items()
                     if v.get("estado") == "recusado"]
+
+    def do_recibo(self, raiz):
+        """(enviados, recusados) desta pasta, do mais novo para o mais velho.
+
+        Entrada sem "raiz" é de antes desta versão e entra em todos os recibos:
+        some da lista seria pior do que aparecer no lugar errado.
+        """
+        alvo = os.path.normcase(raiz)
+        with self._lock:
+            itens = list(self.hashes.values())
+        meus = [v for v in itens if v.get("raiz") in (alvo, None)]
+        meus.sort(key=lambda v: v.get("quando") or "", reverse=True)
+        return ([v for v in meus if v.get("estado") == "ok"],
+                [v for v in meus if v.get("estado") == "recusado"])
 
 
 # Caracteres que o Windows recusa em nome de arquivo — o nome da cópia é montado
@@ -435,6 +471,136 @@ def copiar_para_nao_enviados(raiz_vigiada, caminho, motivo):
         return None
 
 
+
+def _quando_bonito(iso):
+    """'2026-09-07T21:17:03' -> '07/09/2026 21:17'. Nunca levanta."""
+    try:
+        return _dt.datetime.fromisoformat(iso).strftime("%d/%m/%Y %H:%M")
+    except (TypeError, ValueError):
+        return "?"
+
+
+def texto_do_recibo(raiz, registro, snap):
+    """O recibo inteiro, em ASCII e com quebra do Windows.
+
+    Sem acento de propósito: este arquivo abre no Bloco de Notas de máquina de
+    terceiro, e um acento mal decodificado transforma o recibo -- que existe
+    para dar confiança -- em mais um motivo para desconfiar do sistema.
+    """
+    L = []
+    ad = L.append
+    enviados, recusados = registro.do_recibo(raiz)
+
+    conexao = snap.get("conexao")
+    if conexao == "conectado" and not snap.get("detalhe"):
+        situacao = "o robo esta funcionando."
+    elif conexao == "conectado":
+        situacao = "ATENCAO: %s" % snap.get("detalhe")
+    elif conexao == "chave_invalida":
+        situacao = ("ATENCAO: este computador esta sem autorizacao para enviar. "
+                    "Nada esta subindo - fale com o escritorio.")
+    elif conexao == "sem_conexao":
+        desde = snap.get("ultimo_ok")
+        quando = (" desde %s" % desde.strftime("%d/%m/%Y %H:%M")) if desde else ""
+        situacao = ("ATENCAO: sem conexao com o escritorio%s. Os arquivos sobem "
+                    "sozinhos quando a internet voltar - nao precisa fazer nada." % quando)
+    else:
+        situacao = "o robo esta iniciando."
+
+    ad("NH-ROBO - O QUE JA FOI ENVIADO")
+    ad("=" * 64)
+    # Duas linhas, e nao uma. A hora muda toda vez e por isso _corpo() a ignora
+    # na hora de decidir se vale reescrever; se a situacao morasse na mesma
+    # linha, ela iria junto no descarte e uma queda de internet so apareceria no
+    # recibo 15 minutos depois -- justamente quando a pessoa esta olhando a
+    # pasta e perguntando por que o arquivo dela nao subiu.
+    ad("Conferido agora: %s" % _dt.datetime.now().strftime("%d/%m/%Y %H:%M"))
+    ad("Situacao: %s" % situacao)
+    ad("")
+    ad("Este arquivo e escrito pelo proprio robo, sozinho. Se o seu arquivo")
+    ad("esta na lista ENVIADOS, ele CHEGOU no escritorio. Nao precisa abrir")
+    ad("programa nenhum nem ligar para ninguem para conferir.")
+    ad("")
+
+    ad("ENVIADOS (%d)" % len(enviados))
+    ad("-" * 64)
+    if not enviados:
+        ad("(nenhum ainda)")
+    for v in enviados[:RECIBO_MAX_ITENS]:
+        ad("%s  %s" % (_quando_bonito(v.get("quando")), v.get("nome") or "?"))
+    if len(enviados) > RECIBO_MAX_ITENS:
+        ad("... e mais %d antes destes." % (len(enviados) - RECIBO_MAX_ITENS))
+    ad("")
+
+    ad("NAO ENVIADOS (%d)" % len(recusados))
+    ad("-" * 64)
+    if not recusados:
+        ad("(nenhum)")
+    for v in recusados[:RECIBO_MAX_ITENS]:
+        ad("%s  %s" % (_quando_bonito(v.get("quando")), v.get("nome") or "?"))
+        ad("%s-> %s" % (" " * 18, v.get("motivo") or "recusado pelo servidor"))
+    if len(recusados) > RECIBO_MAX_ITENS:
+        ad("... e mais %d antes destes." % (len(recusados) - RECIBO_MAX_ITENS))
+    ad("")
+
+    ad("NAO ACHOU O SEU ARQUIVO NA LISTA?")
+    ad("-" * 64)
+    ad("1. Salvou agora? Espere 1 minuto e abra este arquivo de novo.")
+    ad('2. Esta na pasta "%s"? O bilhete .motivo.txt ao lado dele' % SUBPASTA_ERRO)
+    ad("   diz por que foi recusado.")
+    ad("3. Nada disso? Mande ESTE arquivo para o escritorio - ele tem tudo")
+    ad("   o que o tecnico precisa saber.")
+    ad("")
+    ad("-" * 64)
+    ad("Pasta conferida: %s" % raiz)
+    ad("(e todas as subpastas, menos %s)" % " e ".join('"%s"' % x for x in SUBPASTAS))
+    ad("O robo NUNCA move, renomeia ou apaga os seus arquivos. Ele so le e")
+    ad("manda uma copia. O original fica exatamente onde voce salvou.")
+    ad("NH-Robo %s" % __version__)
+    return "\r\n".join(L) + "\r\n"
+
+
+def _corpo(texto):
+    """O recibo sem a linha da hora — duas rodadas iguais têm o mesmo corpo.
+
+    Só a hora sai. A linha "Situacao:" FICA, para que passar de "funcionando"
+    para "sem conexao" conte como novidade e force a gravação na hora.
+    """
+    return "\n".join(l for l in texto.splitlines()
+                      if not l.startswith("Conferido agora:"))
+
+
+def escrever_recibo(raiz, registro, snap):
+    """Grava o recibo na raiz da pasta vigiada, se valer a pena reescrever.
+
+    NÃO reescreve a cada ciclo. A pasta do funcionário costuma estar dentro do
+    Dropbox ou do OneDrive: um arquivo reescrito a cada minuto viraria uma
+    sincronização por minuto, para sempre, por nada. Só grava quando o conteúdo
+    muda de verdade ou quando o de lá passou de RECIBO_IDADE_MAX -- e aí a
+    gravação é justamente para a hora não envelhecer, que é o sinal de vida.
+
+    Falhar aqui nunca derruba o ciclo: recibo é conforto, arquivo entregue é o
+    serviço.
+    """
+    alvo = os.path.join(raiz, NOME_RECIBO)
+    try:
+        novo = texto_do_recibo(raiz, registro, snap)
+        try:
+            with open(alvo, "r", encoding="utf-8") as f:
+                atual = f.read()
+            idade = time.time() - os.path.getmtime(alvo)
+            if _corpo(atual) == _corpo(novo) and idade < RECIBO_IDADE_MAX:
+                return
+        except OSError:
+            pass                                  # nao existe ainda: escreve
+        tmp = alvo + ".tmp"
+        with open(tmp, "w", encoding="utf-8", newline="") as f:
+            f.write(novo)
+        os.replace(tmp, alvo)                     # atomico: nunca fica pela metade
+    except OSError as exc:
+        log.warning("Nao consegui escrever o recibo em '%s': %s", raiz, exc)
+
+
 def arquivos_para_olhar(pasta):
     """TODOS os arquivos da pasta e das SUBPASTAS, em qualquer profundidade.
 
@@ -446,7 +612,7 @@ def arquivos_para_olhar(pasta):
       * 'Enviados' e 'Nao enviados' — a primeira é legado das instalações
         antigas (reenviaria tudo o que já foi entregue) e a segunda é a nossa
         própria pasta de cópias (reenviaria o recusado para sempre);
-      * '.motivo.txt' — bilhete nosso, não documento do funcionário;
+      * '.motivo.txt' e o próprio recibo — papel nosso, não do funcionário;
       * arquivo mexido nos últimos MARGEM_ESTABILIDADE segundos, que pode
         estar sendo copiado ainda (pegaria meio arquivo).
     """
@@ -456,6 +622,11 @@ def arquivos_para_olhar(pasta):
         dirnames[:] = [d for d in dirnames if d.lower() not in SUBPASTAS_IGNORADAS]
         for n in filenames:
             if n.endswith(".motivo.txt"):
+                continue
+            # O recibo é nosso, não documento do funcionário. Sem esta linha o
+            # robô mandaria o próprio recibo para o Dropbox e ele apareceria na
+            # lista de enviados dele mesmo, a cada ciclo, para sempre.
+            if n.lower() == NOME_RECIBO.lower():
                 continue
             cheio = os.path.join(dirpath, n)
             try:
@@ -594,6 +765,13 @@ class Worker(threading.Thread):
             except Exception as exc:            # blindagem final: o agente não morre
                 log.exception("Erro inesperado no ciclo (o agente segue vivo): %s", exc)
                 status = "sem_conexao"
+            # Fora do try/except do ciclo, e depois dele: o recibo tem de sair
+            # TAMBEM quando nao houve conexao ou a chave foi revogada. E
+            # justamente nessas horas que a pessoa vai olhar a pasta, e e o
+            # recibo que separa "o robo esta parado" de "o sistema me comeu".
+            for _raiz in (cfg.get("pastas") or []):
+                escrever_recibo(_raiz, self.registro, self.estado.snapshot())
+
             base = max(10, (cfg.get("intervalo_seg") or INTERVALO_PADRAO))
             espera = proxima_espera(espera, base, status == "sem_conexao")
             if status == "sem_conexao":
@@ -681,7 +859,7 @@ class Worker(threading.Thread):
         fica onde ele salvou. O que muda é só o caderninho."""
         nome = os.path.basename(caminho)
         if resultado == "ok":
-            self.registro.anotar(caminho, st, sha, "ok")
+            self.registro.anotar(caminho, st, sha, "ok", raiz=raiz_vigiada)
             self.estado.marcar_enviado(nome)
             log.info("Enviado: %s", caminho)
 
@@ -689,7 +867,7 @@ class Worker(threading.Thread):
             # Recusa definitiva (extensão fora da lista, arquivo grande demais):
             # anota para não tentar de novo e deixa uma CÓPIA de aviso. O
             # original continua onde está.
-            self.registro.anotar(caminho, st, sha, "recusado", motivo)
+            self.registro.anotar(caminho, st, sha, "recusado", motivo, raiz=raiz_vigiada)
             copiar_para_nao_enviados(raiz_vigiada, caminho, motivo)
             log.warning("Recusado (%s): %s — copia em '%s' (original intacto)",
                         motivo, caminho, SUBPASTA_ERRO)
