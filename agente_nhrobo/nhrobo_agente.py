@@ -49,7 +49,7 @@ try:
 except ImportError:                  # noqa: em outra plataforma o autostart vira no-op
     winreg = None
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 # Assets embutidos no executável (Nuitka --include-data-file) — ver gerar_assets.py.
 # Em produção ficam ao lado do .exe; em desenvolvimento, ao lado deste .py.
