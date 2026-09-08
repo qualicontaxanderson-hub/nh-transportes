@@ -312,9 +312,7 @@ NH-Robô — instalação
     t.value = texto; t.style.position = 'fixed'; t.style.left = '-9999px';
     document.body.appendChild(t); t.select();
     try { document.execCommand('copy'); pronto(); }
-    catch (e) { alert('Copie à mão:
-
-' + texto); }
+    catch (e) { window.prompt('Copie à mão com Ctrl+C:', texto); }
     document.body.removeChild(t);
   }
 
