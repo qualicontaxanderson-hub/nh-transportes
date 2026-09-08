@@ -23,10 +23,10 @@ import hashlib
 import re
 import secrets
 import unicodedata
-from datetime import date
 
 from utils import nhrobo_periodo
 from utils.db import get_db_connection
+from utils.fuso import agora_brasilia, hoje_brasilia
 
 # Pasta unica, a mesma que o importador de extrato ja varre. Sem subpasta por
 # pessoa: quem separa e o conteudo do arquivo, nao o lugar dele.
@@ -87,7 +87,7 @@ def gerar_chave(usuario_id, admin_id, regerar=False, data_inicio=None):
                 UPDATE nhrobo_config
                    SET token_hash = %s, token_prefixo = %s,
                        data_inicio_captura = COALESCE(%s, data_inicio_captura),
-                       token_gerado_por = %s, token_gerado_em = NOW(),
+                       token_gerado_por = %s, token_gerado_em = %s,
                        versao = versao + 1, ativo = 1
                  WHERE usuario_id = %s
             """, dados + (usuario_id,))
@@ -97,7 +97,7 @@ def gerar_chave(usuario_id, admin_id, regerar=False, data_inicio=None):
                        (usuario_id, token_hash, token_prefixo,
                         data_inicio_captura, token_gerado_por, token_gerado_em,
                         versao, ativo)
-                VALUES (%s, %s, %s, %s, %s, NOW(), 1, 1)
+                VALUES (%s, %s, %s, %s, %s, %s, 1, 1)
             """, (usuario_id,) + dados)
         conn.commit()
         return token, None
@@ -130,7 +130,7 @@ def definir_corte(usuario_id, data_inicio):
     Data futura e recusada: o agente entenderia "nao mande nada" e ficaria
     parado sem ninguem saber por que.
     """
-    if data_inicio and data_inicio > date.today():
+    if data_inicio and data_inicio > hoje_brasilia():
         return False, 'futura'
     conn = get_db_connection()
     cur = conn.cursor()
@@ -175,8 +175,8 @@ def marcar_contato(usuario_id):
     conn = get_db_connection()
     cur = conn.cursor()
     try:
-        cur.execute("""UPDATE nhrobo_config SET ultimo_contato = NOW()
-                        WHERE usuario_id = %s""", (usuario_id,))
+        cur.execute("""UPDATE nhrobo_config SET ultimo_contato = %s
+                        WHERE usuario_id = %s""", (agora_brasilia(), usuario_id))
         conn.commit()
     except Exception:
         pass
@@ -293,11 +293,12 @@ def registrar_recebido(usuario_id, nome_original, nome_final, ext, tamanho, ip,
         cur.execute("""
             INSERT INTO nhrobo_recebidos
                    (usuario_id, nome_original, nome_final, ext, tamanho_bytes,
-                    destino, ip, doc_tipo, periodo_ini, periodo_fim, periodo_fonte)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    destino, ip, doc_tipo, periodo_ini, periodo_fim, periodo_fonte,
+                    recebido_em)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (usuario_id, nome_original[:255], nome_final[:255], ext[:12],
               tamanho, PASTA_DESTINO[:255], (ip or '')[:45],
-              tipo, p_ini, p_fim, p_fonte))
+              tipo, p_ini, p_fim, p_fonte, agora_brasilia()))
         conn.commit()
     finally:
         cur.close()
@@ -315,7 +316,7 @@ def painel():
             SELECT u.id, u.nome_completo, u.username, u.nivel, u.ativo AS usuario_ativo,
                    c.token_prefixo, c.ativo AS chave_ativa, c.data_inicio_captura,
                    c.ultimo_contato, c.versao, c.token_gerado_em,
-                   TIMESTAMPDIFF(MINUTE, c.ultimo_contato, NOW()) AS min_sem_contato,
+                   TIMESTAMPDIFF(MINUTE, c.ultimo_contato, %s) AS min_sem_contato,
                    (SELECT COUNT(*) FROM nhrobo_recebidos r
                      WHERE r.usuario_id = u.id) AS enviados,
                    (SELECT MAX(r.recebido_em) FROM nhrobo_recebidos r
@@ -324,7 +325,7 @@ def painel():
               LEFT JOIN nhrobo_config c ON c.usuario_id = u.id
              WHERE u.ativo = 1
              ORDER BY (c.token_hash IS NULL), u.nome_completo
-        """)
+        """, (agora_brasilia(),))
         return cur.fetchall()
     finally:
         cur.close()
@@ -366,12 +367,12 @@ def meu_estado(usuario_id):
         cur.execute("""
             SELECT c.token_prefixo, c.ativo AS chave_ativa, c.data_inicio_captura,
                    c.ultimo_contato,
-                   TIMESTAMPDIFF(MINUTE, c.ultimo_contato, NOW()) AS min_sem_contato,
+                   TIMESTAMPDIFF(MINUTE, c.ultimo_contato, %s) AS min_sem_contato,
                    (SELECT COUNT(*) FROM nhrobo_recebidos r
                      WHERE r.usuario_id = c.usuario_id) AS enviados
               FROM nhrobo_config c
              WHERE c.usuario_id = %s
-        """, (int(usuario_id),))
+        """, (agora_brasilia(), int(usuario_id)))
         return cur.fetchone()
     finally:
         cur.close()

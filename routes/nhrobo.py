@@ -25,7 +25,7 @@ deles muda o comportamento nas cinco maquinas sem ninguem tocar nelas.
 import logging
 import os
 import re
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 
 from flask import (Blueprint, flash, jsonify, redirect, render_template,
                    request, session, url_for)
@@ -33,6 +33,7 @@ from flask_login import current_user, login_required
 
 from extensions import csrf
 from utils import nhrobo, nhrobo_periodo
+from utils.fuso import hoje_brasilia
 from utils.decorators import admin_required
 
 bp = Blueprint('nhrobo', __name__)
@@ -183,7 +184,7 @@ def historico():
     A tela do colaborador (meus-envios) responde a mesma pergunta so que sobre
     ele; esta e a do escritorio, sobre todos.
     """
-    hoje = date.today()
+    hoje = hoje_brasilia()
     d1 = (request.args.get('data_ini') or '').strip()
     d2 = (request.args.get('data_fim') or '').strip()
     uid = (request.args.get('usuario') or '').strip()

@@ -25,6 +25,20 @@ def hoje_brasilia():
     return datetime.now(BRASILIA).date()
 
 
+def agora_brasilia():
+    """AGORA em Brasília, sem fuso colado (naive), para gravar em DATETIME.
+
+    As colunas DATETIME do banco não guardam fuso: o que entra é o que sai. Se
+    o servidor grava com NOW() ele grava UTC -- e a tela mostra 00:18 para um
+    arquivo que chegou 21:18. Quem lê acha que alguém trabalhou de madrugada,
+    ou pior, procura o arquivo no dia errado.
+
+    Naive de propósito: um datetime com tzinfo colado faz o driver do MySQL
+    converter de novo, e o erro volta pelo outro lado.
+    """
+    return datetime.now(BRASILIA).replace(tzinfo=None)
+
+
 def janelas_dia_mes(hoje):
     """Janelas SQL semiabertas [ini, fim) do dia e do mês de `hoje`.
 

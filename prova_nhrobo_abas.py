@@ -147,5 +147,44 @@ for pedaco, oque in [('Quem pode mandar', 'a lista de pessoas'),
 prova('Chaves nao repete mais a lista de recebidos (ela virou aba)',
       'O que chegou' not in h)
 
+# ── a hora e a de Brasilia, nao a do container ───────────────────────────────
+# O servidor roda em UTC. Enquanto a hora vinha do NOW() do banco, um arquivo
+# entregue as 21h18 aparecia como 00:18 do dia seguinte -- hora que ninguem
+# trabalha e, pior, DIA errado para quem procurasse pela data.
+import datetime as _dt                                  # noqa: E402
+from utils.fuso import BRASILIA, agora_brasilia         # noqa: E402
+
+agora = agora_brasilia()
+relogio = _dt.datetime.now(BRASILIA).replace(tzinfo=None)
+prova('agora_brasilia() bate com o relogio de Brasilia',
+      abs((agora - relogio).total_seconds()) < 120,
+      '%s vs %s' % (agora, relogio))
+
+conn = get_db_connection()
+cur = conn.cursor()
+cur.execute("SELECT NOW()")
+now_banco = cur.fetchone()[0]
+cur.execute("SELECT MAX(recebido_em), MAX(ultimo_contato) FROM nhrobo_recebidos, nhrobo_config")
+mais_novo, contato = cur.fetchone()
+cur.close()
+conn.close()
+
+prova('o relogio do BANCO esta mesmo adiantado (por isso nao usamos NOW())',
+      (now_banco - agora).total_seconds() > 3000,
+      'banco %s, Brasilia %s' % (now_banco, agora))
+# Uma linha gravada em UTC fica ATE 3 HORAS NO FUTURO. E assim que este erro
+# se denuncia sem depender de saber a hora certa de cada arquivo.
+if mais_novo:
+    prova('nenhum arquivo recebido tem hora no futuro',
+          mais_novo <= agora + _dt.timedelta(minutes=2),
+          'mais novo: %s' % mais_novo)
+if contato:
+    prova('o ultimo contato do agente nao esta no futuro',
+          contato <= agora + _dt.timedelta(minutes=2),
+          'ultimo contato: %s' % contato)
+
+fonte = io.open('utils/nhrobo.py', encoding='utf-8').read()
+prova('nenhum NOW() sobrou no SQL do NH-Robo', 'NOW()' not in fonte)
+
 print('\n%d falha(s)' % len(falhas))
 sys.exit(1 if falhas else 0)
