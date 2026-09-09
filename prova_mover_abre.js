@@ -67,7 +67,7 @@ prova('entre a linha e o painel existe outro bloco (a causa)',
 // O destino novo esta na lista.
 const ops = [...doc.querySelectorAll('.mv__d option')].map(o => o.textContent.trim());
 prova('a lista de destinos oferece o caminhao de fora',
-      ops.some(t => t.includes('TERCEIRO')), 'opcoes: '+JSON.stringify(ops.slice(0,6)));
+      ops.some(t => t === 'Terceiro'), 'opcoes: '+JSON.stringify(ops.slice(0,6)));
 
 console.log(falhas ? '\n'+falhas+' FALHA(S)' : '\nTUDO OK');
 process.exit(falhas ? 1 : 0);

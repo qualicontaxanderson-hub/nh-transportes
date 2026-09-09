@@ -97,7 +97,7 @@ dia = dias[0]['d'].isoformat()
 cod, html = abre(cli, admin['id'], '/ped-frete-novo/?data=%s' % dia)
 prova('a tela do dia %s abre (200)' % dia, cod == 200, 'codigo %s' % cod)
 prova('o botao de mover oferece o caminhao de fora',
-      'TERCEIRO · caminhão de fora' in html,
+      '>Terceiro<' in html,
       'a opcao nao apareceu em nenhum <select> de mover')
 
 # O destino tem de ser o id do cadastro, com motorista 0 -- motorista do
@@ -138,6 +138,25 @@ prova('o modo "por caminhao" continua abrindo (200)', cod == 200, 'codigo %s' % 
 prova('a frota continua sendo so quem tem placa',
       ('>TERCEIRO<' not in h3) and any(v['placa'] in h3 for v in nossos),
       'o TERCEIRO nao pode virar aba da frota — ele nao e caminhao nosso')
+
+# ── a lista chama o caminhao como a casa chama ──────────────────────────────
+# R500, R540, Truck, Terceiro. Placa mais nome completo do motorista dava tres
+# linhas por opcao no celular.
+cod, hj = abre(cli, admin['id'], '/ped-frete-novo/')
+sel = re.search(r'<select class="mv__d">(.*?)</select>', hj, re.S)
+ops = re.findall(r'<option value="[^"]*">([^<]+)</option>',
+                 sel.group(1) if sel else '')
+ops = [o.strip() for o in ops]
+prova('a lista de destinos usa o apelido do caminhao',
+      bool(ops) and all(re.match(r'^(R\d{3}|Truck|Terceiro)( · \w+)?$', o) for o in ops),
+      'opcoes: %r' % (ops,))
+prova('nenhuma opcao traz placa ou nome completo de motorista',
+      not any(re.search(r'[A-Z]{3}\d[A-Z0-9]{3}| [A-Z]{4,} [A-Z]{4,}', o) for o in ops),
+      'opcoes: %r' % (ops,))
+# Um caminhao, uma linha: o que ja esta rodando nao volta como "parado".
+prova('cada caminhao aparece uma vez so',
+      len({o.split(' · ')[0] for o in ops}) == len(ops),
+      'opcoes: %r' % (ops,))
 
 # ── o botao de mover tem de ABRIR o painel ──────────────────────────────────
 # O painel nao e o irmao imediato da linha: entre os dois esta o bloco de

@@ -257,6 +257,25 @@ def _candidatos_bordo(cur, dia, veiculo_ids):
     return por_veic
 
 
+def _apelido(v):
+    """Como a casa chama o caminhao: R500, R540, Truck, Terceiro.
+
+    O cadastro ja guarda os dois jeitos, em colunas diferentes: `modelo` tem o
+    codigo curto do cavalo (R500 no RDT7H76, R540 no RXP0I78) e `caminhao` tem
+    o apelido do resto (TRUCK, TERCEIRO). O truck tambem tem modelo — "Actros
+    1620" — mas ninguem o chama assim; por isso modelo com espaco nao serve de
+    apelido, e a regra cai no `caminhao`.
+
+    Nao inventa cadastro novo: e so ler o que ja esta la, escrito do jeito que
+    se fala. Placa continua sendo a identidade nos cartoes e na frota.
+    """
+    modelo = (v.get('modelo') or '').strip()
+    if modelo and ' ' not in modelo and len(modelo) <= 6:
+        return modelo
+    nome = (v.get('caminhao') or '').strip()
+    return nome.title() if nome else (v.get('placa') or '—')
+
+
 def _capacidades(cur):
     """({veiculo_id: {'bocas': [...], 'total': L, 'carreta': placa}}, carreta_ids).
 
@@ -1892,6 +1911,12 @@ def index():
             cursor.execute("""SELECT veiculo_id, id, nome FROM motoristas
                                WHERE ativo = 1 AND veiculo_id IS NOT NULL""")
             padrao = {r['veiculo_id']: r for r in cursor.fetchall()}
+            # Na lista de destinos o caminhao se chama como a casa o chama:
+            # R500, R540, Truck, Terceiro. Placa mais nome completo do
+            # motorista enchia a caixinha do celular com tres linhas por
+            # opcao — dava trabalho ler justamente onde a escolha e obvia.
+            cursor.execute("SELECT id, caminhao, placa, modelo FROM veiculos")
+            apel = {r['id']: _apelido(r) for r in cursor.fetchall()}
             destinos, vistos = [], set()
             for v in viagens:
                 ch = (v['veiculo_id'], v['motorista_id'] or 0)
@@ -1900,9 +1925,19 @@ def index():
                 vistos.add(ch)
                 destinos.append({'veiculo_id': v['veiculo_id'],
                                  'motorista_id': v['motorista_id'] or 0,
-                                 'label': '%s · %s' % (v['caminhao'] if v['externo']
-                                                       else v['placa'], v['motorista'])})
+                                 'nome': apel.get(v['veiculo_id']) or v['placa'],
+                                 'motorista': v['motorista'] or ''})
+            # Caminhao que JA esta rodando hoje nao volta aqui como "parado".
+            # Ele entrava duas vezes — uma pela carga de verdade, outra pela
+            # frota com o motorista do cadastro — e as duas linhas nem batiam:
+            # hoje a carga e do R500 com o Welington, e a lista oferecia o R500
+            # com o Luiz Fernando. Escolher essa segunda abria uma carga
+            # paralela do mesmo caminhao, no mesmo dia, no nome de quem nao
+            # esta dirigindo ele.
+            com_carga = {v['veiculo_id'] for v in viagens}
             for vc in veiculos:
+                if vc['id'] in com_carga:
+                    continue
                 m = padrao.get(vc['id'])
                 ch = (vc['id'], (m or {}).get('id') or 0)
                 if ch in vistos:
@@ -1910,8 +1945,8 @@ def index():
                 vistos.add(ch)
                 destinos.append({'veiculo_id': vc['id'],
                                  'motorista_id': (m or {}).get('id') or 0,
-                                 'label': '%s · %s' % (vc['placa'],
-                                                       (m or {}).get('nome') or 'sem motorista')})
+                                 'nome': apel.get(vc['id']) or vc['placa'],
+                                 'motorista': (m or {}).get('nome') or ''})
             # O caminhao de fora, sempre por ultimo. Ele esta no cadastro e ja
             # levou 34 fretes (16/02 a 18/06/2026), mas a lista da frota corta
             # quem nao tem placa — filtro que existe pelas carretas e levava o
@@ -1929,7 +1964,21 @@ def index():
             if ext and (ext['id'], 0) not in vistos:
                 vistos.add((ext['id'], 0))
                 destinos.append({'veiculo_id': ext['id'], 'motorista_id': 0,
-                                 'label': 'TERCEIRO · caminhão de fora'})
+                                 'nome': apel.get(ext['id']) or 'Terceiro',
+                                 'motorista': ''})
+
+            # O motorista so entra quando o nome sozinho nao basta: o mesmo
+            # caminhao pode sair duas vezes no dia com motoristas diferentes
+            # (o RDT em 21/08, com o Marcos e depois o Wellington), e duas
+            # opcoes "R500" identicas fariam escolher no escuro. Nesse caso —
+            # e so nesse — vai o primeiro nome, que e como se fala deles aqui.
+            repetidos = {}
+            for d in destinos:
+                repetidos[d['nome']] = repetidos.get(d['nome'], 0) + 1
+            for d in destinos:
+                curto = (d['motorista'] or '').split()[0].title() if d['motorista'] else ''
+                d['label'] = ('%s · %s' % (d['nome'], curto)
+                              if repetidos[d['nome']] > 1 and curto else d['nome'])
             ctx['destinos'] = destinos
 
             cids = {fr['clientes_id'] for v in viagens for p in v['postos']
