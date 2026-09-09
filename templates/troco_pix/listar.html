@@ -187,15 +187,17 @@ body > .container-fluid:has(#tpx){
     </div>
   </div>
 
+  {# Nao ha "pendentes" aqui: a coluna status esta em PENDENTE nas 1.206
+     solicitacoes da tabela desde 02/01 — e o padrao dela, e nada no sistema
+     muda. O que varia e ter troco e estar conciliado. #}
   <div class="g-nums">
-    <div class="n {{ 'n--ambar' if resumo.pendentes else 'n--cinza' }}">
-      <div class="r">Pendentes</div>
-      <div class="v">{{ resumo.pendentes or 0 }}</div></div>
-    <div class="n {{ 'n--verde' if resumo.processados else 'n--cinza' }}">
-      <div class="r">Processados</div>
-      <div class="v">{{ resumo.processados or 0 }}</div></div>
-    <div class="n n--cinza"><div class="r">Cancelados</div>
-      <div class="v">{{ resumo.cancelados or 0 }}</div></div>
+    <div class="n n--azul"><div class="r">Com troco</div>
+      <div class="v">{{ resumo.com_troco or 0 }}</div></div>
+    <div class="n n--cinza"><div class="r">Sem troco</div>
+      <div class="v">{{ resumo.sem_troco or 0 }}</div></div>
+    <div class="n {{ 'n--ambar' if resumo.falta_conciliar else 'n--verde' }}">
+      <div class="r">Falta conciliar</div>
+      <div class="v">{{ resumo.falta_conciliar or 0 }}</div></div>
     {# total_dia ja vem de formatar_moeda(), com o "R$" dentro. A tela punha
        outro na frente e mostrava "R$ R$ 2.817,99". #}
     <div class="n n--azul"><div class="r">Total hoje</div>
@@ -231,7 +233,8 @@ body > .container-fluid:has(#tpx){
       <button type="submit" class="bt"><i class="bi bi-search"></i> Buscar</button>
       <a class="bt bt--ghost" href="{{ url_for('troco_pix.listar') }}">Limpar</a>
     </div>
-    <div class="dica">O status filtra aqui na tela, nas pílulas abaixo.</div>
+    <div class="dica">Com troco, sem troco e conciliação filtram aqui na
+      tela, nas pílulas abaixo.</div>
   </form>
 
   <div class="busca">
@@ -240,18 +243,21 @@ body > .container-fluid:has(#tpx){
            oninput="tpxBusca()">
   </div>
 
-  {% set n_pend = resumo.pendentes or 0 %}
-  {% set n_proc = resumo.processados or 0 %}
-  {% set n_canc = resumo.cancelados or 0 %}
   <div class="abas">
-    <button type="button" class="aba on" data-s="" onclick="tpxStatus(this)">
+    <button type="button" class="aba on" data-f="" onclick="tpxFiltra(this)">
       Todas <span class="b">{{ transacoes|length }}</span></button>
-    <button type="button" class="aba" data-s="PENDENTE" onclick="tpxStatus(this)">
-      Pendentes <span class="b">{{ n_pend }}</span></button>
-    <button type="button" class="aba" data-s="PROCESSADO" onclick="tpxStatus(this)">
-      Processadas <span class="b">{{ n_proc }}</span></button>
-    <button type="button" class="aba" data-s="CANCELADO" onclick="tpxStatus(this)">
-      Canceladas <span class="b">{{ n_canc }}</span></button>
+    <button type="button" class="aba" data-f="com" onclick="tpxFiltra(this)">
+      Com troco <span class="b">{{ resumo.com_troco or 0 }}</span></button>
+    <button type="button" class="aba" data-f="sem" onclick="tpxFiltra(this)">
+      Sem troco <span class="b">{{ resumo.sem_troco or 0 }}</span></button>
+    <button type="button" class="aba" data-f="conc" onclick="tpxFiltra(this)">
+      Conciliadas <span class="b">{{ resumo.conciliados or 0 }}</span></button>
+    <button type="button" class="aba" data-f="nconc" onclick="tpxFiltra(this)">
+      Não conciliadas <span class="b">{{ resumo.falta_conciliar or 0 }}</span></button>
+    {% if resumo.cancelados %}
+    <button type="button" class="aba" data-f="canc" onclick="tpxFiltra(this)">
+      Canceladas <span class="b">{{ resumo.cancelados }}</span></button>
+    {% endif %}
   </div>
 
   <div class="conta" id="tpx-conta"></div>
@@ -263,31 +269,43 @@ body > .container-fluid:has(#tpx){
     {% set posto = t.posto_nome or '—' %}
     {% set pix = t.cliente_pix_nome or '—' %}
     {% set dia = t.data.strftime(_fmt) if t.data else '—' %}
-    <div class="c" data-s="{{ st }}"
+    {% set tem_troco = (t.troco_pix or 0) > 0 %}
+    {% set conc = tem_troco and t.get('bank_transaction_id') %}
+    <div class="c" data-troco="{{ '1' if tem_troco else '0' }}"
+         data-conc="{{ '1' if conc else '0' }}" data-s="{{ st }}"
          data-busca="{{ (ctrl ~ ' ' ~ posto ~ ' ' ~ pix ~ ' ' ~ dia ~ ' ' ~ ((t.troco_pix or 0)|string)) | lower }}">
       <div class="c__h" onclick="tpxAbre(this)">
         <span class="c__ic"><i class="bi bi-cash-coin"></i></span>
         <div class="c__t">
           <div class="c__n">{{ posto }}</div>
-          <div class="c__f">{{ dia }} · {{ pix }}</div>
+          <div class="c__f">{{ dia }}{% if tem_troco %} · {{ pix }}{% endif %}</div>
           <div class="c__s">
             <span class="ctrl">{{ ctrl }}</span>
-            {% if st == 'PENDENTE' %}<span class="selo selo--pend">pendente</span>
-            {% elif st == 'PROCESSADO' %}<span class="selo selo--proc">processado</span>
-            {% elif st == 'CANCELADO' %}<span class="selo selo--canc">cancelado</span>
+            {# O selo diz o que falta fazer. Sem troco nao falta nada: nao ha
+               PIX a mandar nem lancamento a casar no extrato — chamar isso de
+               "pendente" punha 16 das 23 do mes numa fila que nao existe. #}
+            {% if not tem_troco %}
+            <span class="selo selo--canc">sem troco</span>
+            {% elif conc %}
+            <span class="selo selo--conc"><i class="bi bi-check-circle"></i> conciliado</span>
+            {% else %}
+            <span class="selo selo--pend">falta conciliar</span>
             {% endif %}
-            {% if t.troco_pix and t.troco_pix > 0 %}
-              {% if t.get('bank_transaction_id') %}
-              <span class="selo selo--conc"><i class="bi bi-check-circle"></i> conciliado</span>
-              {% else %}
-              <span class="selo selo--falta">sem conciliar</span>
-              {% endif %}
-            {% endif %}
+            {% if st == 'CANCELADO' %}
+            <span class="selo selo--canc">cancelado</span>{% endif %}
           </div>
         </div>
         <div class="val">
-          <div class="val__v">{{ (t.troco_pix or 0) | formatar_moeda }}</div>
+          {% if tem_troco %}
+          <div class="val__v">{{ t.troco_pix | formatar_moeda }}</div>
           <div class="val__r">troco PIX</div>
+          {% else %}
+          {# R$ 0,00 com "troco PIX" embaixo nao diz nada. O que esse registro
+             tem de verdade e a venda. #}
+          <div class="val__v" style="color:var(--muted)">
+            {{ (t.venda_total or 0) | formatar_moeda }}</div>
+          <div class="val__r">venda</div>
+          {% endif %}
         </div>
         <i class="bi bi-chevron-down chev"></i>
       </div>
@@ -424,16 +442,30 @@ function tpxFiltro(){
   var f = document.getElementById('tpx-filtro');
   if (f) f.hidden = !f.hidden;
 }
-var tpxSt = '';
-function tpxStatus(bt){
+var tpxF = '';
+function tpxFiltra(bt){
   var abas = document.querySelectorAll('#tpx .aba');
   for (var i = 0; i < abas.length; i++) abas[i].classList.remove('on');
   bt.classList.add('on');
-  tpxSt = bt.getAttribute('data-s') || '';
+  tpxF = bt.getAttribute('data-f') || '';
   tpxAplica();
 }
 function tpxBusca(){ tpxAplica(); }
-// Busca e status andam juntos: filtrar por um sem olhar o outro fazia a
+// Conciliada e nao conciliada so falam de quem TEM troco: sem troco nao ha o
+// que casar no extrato, e essas duas pilulas nao devem trazer esses cards.
+function tpxCabe(c){
+  var troco = c.getAttribute('data-troco') === '1';
+  var conc  = c.getAttribute('data-conc') === '1';
+  switch (tpxF) {
+    case 'com':   return troco;
+    case 'sem':   return !troco;
+    case 'conc':  return troco && conc;
+    case 'nconc': return troco && !conc;
+    case 'canc':  return c.getAttribute('data-s') === 'CANCELADO';
+    default:      return true;
+  }
+}
+// Busca e pilula andam juntas: filtrar por uma sem olhar a outra fazia a
 // contagem do rodape mentir.
 function tpxAplica(){
   var campo = document.getElementById('tpx-busca');
@@ -442,7 +474,7 @@ function tpxAplica(){
   var vistos = 0;
   for (var i = 0; i < cards.length; i++){
     var c = cards[i];
-    var okS = !tpxSt || c.getAttribute('data-s') === tpxSt;
+    var okS = tpxCabe(c);
     var okB = !termo || (c.getAttribute('data-busca') || '').indexOf(termo) >= 0;
     c.hidden = !(okS && okB);
     if (!c.hidden) vistos++;

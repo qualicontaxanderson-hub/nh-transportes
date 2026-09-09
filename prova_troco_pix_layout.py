@@ -102,7 +102,7 @@ linhas = consulta("""SELECT tp.id, tp.numero_sequencial, tp.status, tp.troco_pix
                                         AND CURDATE()""")
 prova('ha solicitacoes no periodo para provar', bool(linhas),
       'sem dados no mes corrente — a prova nao teria o que conferir')
-cards = re.findall(r'<div class="c" data-s="([^"]*)"', h)
+cards = re.findall(r'<div class="c" data-troco="([01])"', h)
 prova('a tela mostra um card por solicitacao do periodo',
       len(cards) == len(linhas), '%s cards para %s no banco'
       % (len(cards), len(linhas)))
@@ -113,9 +113,12 @@ if linhas:
         if valor:
             prova('o %s aparece na tela' % campo, str(valor) in h,
                   'nao achei %r' % valor)
-    prova('o status de cada card vai no data-s (as pilulas filtram por ele)',
-          all(x in ('PENDENTE', 'PROCESSADO', 'CANCELADO', '') for x in cards),
-          'status encontrados: %r' % sorted(set(cards)))
+    # Cada card carrega o que as pilulas usam. Vazio nao vale por "todos
+    # certos": a versao anterior desta prova passou com ZERO cards, porque o
+    # regex tinha ficado velho e all([]) e verdadeiro.
+    prova('todo card traz o data-troco que as pilulas usam',
+          bool(cards) and all(x in ('0', '1') for x in cards),
+          '%s cards, valores: %r' % (len(cards), sorted(set(cards))))
 
 # ── acoes e conciliacao continuam existindo ───────────────────────────────
 prova('ver, editar e excluir seguem em cada card',
@@ -138,6 +141,78 @@ h2 = r2.get_data(as_text=True)
 prova('mudar o periodo pela URL muda o que a tela mostra',
       r2.status_code == 200 and 'value="2026-01-01"' in h2,
       'codigo %s' % r2.status_code)
+
+# ── sem troco nao e "pendente" ─────────────────────────────────────────────
+# A coluna status esta em PENDENTE nas 1.206 solicitacoes da tabela desde
+# 02/01: e o padrao dela, e nada no sistema muda. Chamar de pendente a
+# solicitacao SEM troco punha 16 das 23 do mes numa fila que nao existe.
+todos_status = consulta("SELECT DISTINCT status FROM troco_pix")
+prova('a coluna status nao distingue nada (o motivo de nao filtrar por ela)',
+      len(todos_status) == 1
+      and (todos_status[0]['status'] or '').upper() == 'PENDENTE',
+      'status na tabela: %r' % [x['status'] for x in todos_status])
+
+sem_troco = [l for l in linhas if not (l['troco_pix'] or 0)]
+com_troco = [l for l in linhas if (l['troco_pix'] or 0)]
+conc = consulta("""SELECT tp.id FROM troco_pix tp
+                    WHERE tp.data BETWEEN DATE_FORMAT(CURDATE(), '%Y-%m-01')
+                                      AND CURDATE()
+                      AND tp.bank_transaction_id IS NOT NULL
+                      AND COALESCE(tp.troco_pix, 0) > 0""")
+
+prova('nenhum card e chamado de "pendente"', '>pendente</span>' not in h,
+      'a palavra ainda aparece como selo')
+prova('a solicitacao sem troco leva o selo "sem troco"',
+      h.count('>sem troco</span>') == len(sem_troco),
+      '%s selos para %s sem troco no banco'
+      % (h.count('>sem troco</span>'), len(sem_troco)))
+prova('cada card diz se tem troco e se esta conciliado',
+      h.count('data-troco="1"') == len(com_troco)
+      and h.count('data-conc="1"') == len(conc),
+      'com troco: %s/%s; conciliados: %s/%s'
+      % (h.count('data-troco="1"'), len(com_troco),
+         h.count('data-conc="1"'), len(conc)))
+
+
+def num(rotulo):
+    """O numero que o topo mostra sob aquele rotulo."""
+    m = re.search(r'<div class="r">' + rotulo + r'</div>\s*<div class="v">([^<]+)<',
+                  h)
+    return m.group(1).strip() if m else None
+
+
+prova('o topo mostra Com troco, e bate com o banco',
+      num('Com troco') == str(len(com_troco)),
+      'tela: %r, banco: %s' % (num('Com troco'), len(com_troco)))
+prova('o topo mostra Sem troco, e bate com o banco',
+      num('Sem troco') == str(len(sem_troco)),
+      'tela: %r, banco: %s' % (num('Sem troco'), len(sem_troco)))
+prova('o topo mostra Falta conciliar (so entre as que tem troco)',
+      num('Falta conciliar') == str(len(com_troco) - len(conc)),
+      'tela: %r, banco: %s' % (num('Falta conciliar'), len(com_troco) - len(conc)))
+prova('sumiram Pendentes e Processados do topo',
+      '>Pendentes<' not in h and '>Processados<' not in h)
+
+# ── as pilulas pedidas: com troco, sem troco, conciliadas, nao conciliadas ─
+pil = dict(re.findall(r'data-f="([^"]*)"[^>]*>\s*([^<]+?)\s*<span class="b">', h))
+prova('as pilulas sao Todas, Com troco, Sem troco, Conciliadas e Não conciliadas',
+      set(pil) == {'', 'com', 'sem', 'conc', 'nconc'}, 'pilulas: %r' % pil)
+cont = dict(re.findall(r'data-f="([^"]*)"[^>]*>[^<]*<span class="b">(\d+)</span>', h))
+prova('os contadores das pilulas batem com o banco',
+      cont.get('com') == str(len(com_troco))
+      and cont.get('sem') == str(len(sem_troco))
+      and cont.get('conc') == str(len(conc))
+      and cont.get('nconc') == str(len(com_troco) - len(conc)),
+      'contadores: %r' % cont)
+
+prova('o card sem troco mostra a venda, nao "R$ 0,00 troco PIX"',
+      h.count('>venda</div>') == len(sem_troco),
+      '%s rotulos "venda" para %s sem troco'
+      % (h.count('>venda</div>'), len(sem_troco)))
+
+if len(sys.argv) > 2 and sys.argv[1] == '--html':
+    io.open(sys.argv[2], 'w', encoding='utf-8').write(h)
+    print('\nHTML salvo em %s (para prova_troco_pix_pilulas.js)' % sys.argv[2])
 
 print('\n%s' % ('TUDO OK' if not falhas else '%d FALHA(S): %s'
                 % (len(falhas), '; '.join(falhas))))

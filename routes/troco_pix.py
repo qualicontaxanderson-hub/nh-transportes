@@ -451,23 +451,40 @@ def listar():
         cursor.close()
         conn.close()
         
-        # Calcular resumo por status
+        # O resumo conta o que MUDA. Nao e o status: as 1.206 solicitacoes da
+        # tabela, de 02/01 ate hoje, estao todas em PENDENTE -- o valor padrao
+        # da coluna, que nenhuma rotina do sistema altera. "Pendentes 23 /
+        # Processados 0 / Cancelados 0" era um numero fixo se passando por
+        # informacao, e chamava de pendente ate a solicitacao sem troco
+        # nenhum, que nao tem o que esperar.
+        #
+        # O que varia e ter troco (602 das 1.206 nao tem) e estar conciliado
+        # com o extrato (587 estao). Sao esses os quatro numeros.
         resumo = {
-            'pendentes': 0,
-            'processados': 0,
-            'cancelados': 0
+            'com_troco': 0,
+            'sem_troco': 0,
+            'conciliados': 0,
+            'falta_conciliar': 0,
+            'cancelados': 0,
         }
         total_dia = 0
         data_hoje = _hoje_br()
         
         for t in transacoes:
             status = t.get('status', '').upper()
-            if status == 'PENDENTE':
-                resumo['pendentes'] += 1
-            elif status == 'PROCESSADO':
-                resumo['processados'] += 1
-            elif status == 'CANCELADO':
+            if status == 'CANCELADO':
                 resumo['cancelados'] += 1
+            tem_troco = float(t.get('troco_pix') or 0) > 0
+            if tem_troco:
+                resumo['com_troco'] += 1
+                if t.get('bank_transaction_id'):
+                    resumo['conciliados'] += 1
+                else:
+                    resumo['falta_conciliar'] += 1
+            else:
+                # Sem troco PIX nao ha o que conciliar: a solicitacao existe
+                # para registrar a venda e o cheque.
+                resumo['sem_troco'] += 1
             
             # Calcular total do dia (apenas transações não canceladas)
             data_transacao = t.get('data')
