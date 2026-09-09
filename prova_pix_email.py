@@ -156,30 +156,62 @@ alvos = consulta("""SELECT tp.id, tp.data, tp.troco_pix, tpc.nome_completo
 prova('há solicitações recentes com troco para casar', bool(alvos),
       'sem troco lançado nos últimos dias')
 
+# O robô já rodou em produção, então essas solicitações provavelmente já têm
+# comprovante. A prova não pode depender disso: ela SOLTA o vínculo, prova o
+# casamento e devolve cada um para onde estava.
+vinculos = {}
+for a in alvos:
+    ligados = consulta("SELECT id FROM troco_pix_comprovantes WHERE troco_pix_id=%s",
+                       (a['id'],))
+    vinculos[a['id']] = [r['id'] for r in ligados]
+
 conn = get_db_connection()
 cur = conn.cursor(dictionary=True)
 try:
     for a in alvos:
         quando = datetime.combine(a['data'], datetime.min.time()).replace(hour=11)
+        # já com comprovante, a mesma solicitação não pode ser oferecida de
+        # novo — senão um segundo aviso igual roubaria o dono do primeiro
+        if vinculos[a['id']]:
+            prova('solicitação que já tem comprovante não casa de novo (%s)' % a['id'],
+                  pix_email.casar(cur, float(a['troco_pix']), a['nome_completo'],
+                                  quando) != a['id'])
+        for cid in vinculos[a['id']]:
+            executa("UPDATE troco_pix_comprovantes SET troco_pix_id=NULL WHERE id=%s",
+                    (cid,))
+        # O UPDATE foi por outra conexão. Esta aqui abriu a transação antes e,
+        # em REPEATABLE READ, continuaria lendo o vínculo velho — a prova
+        # falharia acusando o código de não casar. Um commit renova o
+        # instantâneo.
+        conn.commit()
         achou = pix_email.casar(cur, float(a['troco_pix']), a['nome_completo'],
                                 quando)
         prova('o aviso de R$ %s para %s acha a solicitação %s'
               % (a['troco_pix'], (a['nome_completo'] or '?').split()[0].title(), a['id']),
               achou == a['id'], 'casou com %r' % achou)
-    if alvos:
-        a = alvos[0]
-        quando = datetime.combine(a['data'], datetime.min.time()).replace(hour=11)
-        prova('valor certo com nome de outra pessoa NÃO casa',
-              pix_email.casar(cur, float(a['troco_pix']),
-                              'ZEZINHO DA SILVA SAURO', quando) is None,
-              'casou com quem não devia')
-        prova('nome certo com valor de outro NÃO casa',
-              pix_email.casar(cur, float(a['troco_pix']) + 7.77,
-                              a['nome_completo'], quando) is None,
-              'casou com quem não devia')
+        if a is alvos[0]:
+            prova('valor certo com nome de outra pessoa NÃO casa',
+                  pix_email.casar(cur, float(a['troco_pix']),
+                                  'ZEZINHO DA SILVA SAURO', quando) is None,
+                  'casou com quem não devia')
+            prova('nome certo com valor de outro NÃO casa',
+                  pix_email.casar(cur, float(a['troco_pix']) + 7.77,
+                                  a['nome_completo'], quando) is None,
+                  'casou com quem não devia')
+        for cid in vinculos[a['id']]:
+            executa("UPDATE troco_pix_comprovantes SET troco_pix_id=%s WHERE id=%s",
+                    (a['id'], cid))
+        conn.commit()   # o proximo alvo tem de enxergar o vinculo devolvido
 finally:
     cur.close()
     conn.close()
+
+for a in alvos:
+    agora = {r['id'] for r in consulta(
+        "SELECT id FROM troco_pix_comprovantes WHERE troco_pix_id=%s", (a['id'],))}
+    prova('o vínculo da solicitação %s voltou como estava' % a['id'],
+          agora == set(vinculos[a['id']]),
+          'antes %r, agora %r' % (vinculos[a['id']], agora))
 
 # ── 5. o selo na tela ──────────────────────────────────────────────────────
 admin = (consulta("""SELECT id FROM usuarios WHERE ativo = 1
@@ -194,13 +226,33 @@ if admin:
         s['_user_id'] = str(admin['id'])
         s['_fresh'] = True
 
+# Um troco a conciliar, para montar os dois estados do envelope: sem aviso
+# (vermelho) e com aviso (azul).
+alvo_tela = (consulta("""SELECT tp.id, tp.data, tp.troco_pix, tpc.nome_completo
+                           FROM troco_pix tp
+                           LEFT JOIN troco_pix_clientes tpc
+                                  ON tpc.id = tp.troco_pix_cliente_id
+                          WHERE COALESCE(tp.troco_pix,0) > 0
+                            AND tp.bank_transaction_id IS NULL
+                            AND tp.data >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+                          ORDER BY tp.data DESC LIMIT 1""") or [None])[0]
+prova('há um troco a conciliar para provar o envelope', bool(alvo_tela))
+
 comp_id = None
+soltos = []
 try:
-    if alvos and admin:
-        a = alvos[0]
+    if alvo_tela and admin:
+        a = alvo_tela
+        soltos = [r['id'] for r in consulta(
+            "SELECT id FROM troco_pix_comprovantes WHERE troco_pix_id=%s", (a['id'],))]
+        for cid in soltos:
+            executa("UPDATE troco_pix_comprovantes SET troco_pix_id=NULL WHERE id=%s",
+                    (cid,))
+
         antes = cli.get('/troco_pix/').get_data(as_text=True)
-        prova('antes do comprovante, o card não diz "PIX enviado"',
-              'PIX enviado</button>' not in antes)
+        prova('sem o aviso, o troco a conciliar leva envelope VERMELHO',
+              'env env--nao' in antes,
+              'nenhum envelope vermelho na tela')
 
         comp_id, _ = executa("""INSERT INTO troco_pix_comprovantes
                                   (message_id, enviado_em, valor, favorecido,
@@ -216,11 +268,23 @@ try:
         depois = cli.get('/troco_pix/').get_data(as_text=True)
         prova('a tela abre inteira com o comprovante',
               'Erro ao carregar transações' not in depois and 'id="tpx"' in depois)
-        prova('o card ganha o selo "PIX enviado"',
-              'PIX enviado</button>' in depois)
-        prova('o selo guarda a hora, para o clique mostrar',
+        prova('o card ganha o envelope AZUL',
+              depois.count('env env--ok') == antes.count('env env--ok') + 1,
+              'azuis antes: %s, depois: %s'
+              % (antes.count('env env--ok'), depois.count('env env--ok')))
+        prova('o envelope é só o ícone, sem texto empurrando a linha',
+              'PIX enviado</button>' not in depois
+              and 'bi-envelope-fill"></i></button>' in depois)
+        prova('o envelope azul diz a hora no toque longo (title)',
+              re.search(r'title="PIX enviado em \d{2}/\d{2}/\d{4} às 11:29"', depois)
+              is not None, 'não achei o title com a hora')
+        prova('e guarda a hora escondida, para o clique mostrar',
               re.search(r'selo--hora" hidden>\s*11:29', depois) is not None,
-              'não achei a hora escondida ao lado do selo')
+              'não achei a hora escondida ao lado do envelope')
+        prova('esse card perdeu o envelope vermelho (o aviso chegou)',
+              depois.count('env env--nao') == antes.count('env env--nao') - 1,
+              'vermelhos antes: %s, depois: %s'
+              % (antes.count('env env--nao'), depois.count('env env--nao')))
         prova('o card aberto mostra o comprovante do banco',
               'Comprovante do banco' in depois
               and '11:29' in depois)
@@ -231,6 +295,9 @@ try:
 finally:
     if comp_id:
         executa("DELETE FROM troco_pix_comprovantes WHERE id=%s", (comp_id,))
+    for cid in soltos:
+        executa("UPDATE troco_pix_comprovantes SET troco_pix_id=%s WHERE id=%s",
+                (alvo_tela['id'], cid))
 
 # ── 6. a caixa é a mesma do ELS: nada a configurar no Railway ─────────────
 # Os avisos da Cora chegam junto com os do sistema de medição. Repetir a senha

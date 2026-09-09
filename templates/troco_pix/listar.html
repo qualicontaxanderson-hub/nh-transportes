@@ -132,11 +132,17 @@ body > .container-fluid:has(#tpx){
   #tpx .selo--canc{ background:#eef1f5; color:#5b6b7f; }
   #tpx .selo--conc{ background:#e4f4e8; color:#1c6b34; }
   #tpx .selo--falta{ background:#eaf1f9; color:var(--blue-deep); }
-  /* o comprovante do banco: verde porque o dinheiro saiu, mas com borda —
-     nao e o verde cheio do conciliado, que so vem com o extrato */
-  #tpx .selo--env{ background:#e6f9ee; color:#146c43; border:1px solid #a9dfc2;
-    font-family:inherit; cursor:pointer; }
-  #tpx .selo--hora{ background:#146c43; color:#fff; }
+  /* o envelope: só o ícone, do tamanho de um selo, na mesma linha do
+     controle. Azul (achou o aviso) e vermelho (não achou) — nunca verde, que
+     nesta tela é a cor de conciliado, e comprovante não é conciliação. */
+  #tpx .env{ display:inline-grid; place-items:center; width:1.35rem;
+    height:1.35rem; border-radius:99px; border:1px solid transparent;
+    font-size:.7rem; padding:0; line-height:1; flex:0 0 auto; }
+  #tpx .env--ok{ background:#eaf1f9; color:var(--blue); border-color:#bcd3ea;
+    cursor:pointer; font-family:inherit; }
+  #tpx .env--ok:hover{ background:#dfeaf8; }
+  #tpx .env--nao{ background:#fbe9e9; color:var(--danger); border-color:#f0c8c8; }
+  #tpx .selo--hora{ background:var(--blue); color:#fff; }
   #tpx .selo--hora[hidden]{ display:none; }
   /* o numero de controle e o que a pessoa confere com o papel — fica em
      monoespacada pra bater digito a digito */
@@ -306,14 +312,26 @@ body > .container-fluid:has(#tpx){
             {# O aviso que o banco mandou por e-mail na hora do PIX. Nao e
                conciliacao — e a diferenca entre "o troco ja saiu, falta
                conferir no extrato amanha" e "ninguem mandou esse dinheiro
-               ainda", que a tela antes nao sabia distinguir. #}
-            {% if t.get('pix_enviado_em') %}
-            <button type="button" class="selo selo--env"
+               ainda", que a tela antes nao sabia distinguir.
+
+               So o envelope, sem palavra: com o texto "PIX enviado" o selo
+               nao cabia na linha do controle e empurrava tudo pra baixo, em
+               cada card. Azul achou o e-mail, vermelho nao achou. #}
+            {% if tem_troco and t.get('pix_enviado_em') %}
+            <button type="button" class="env env--ok"
                     title="PIX enviado em {{ t.pix_enviado_em.strftime('%d/%m/%Y às %H:%M') }}"
-                    onclick="event.stopPropagation(); tpxComprovante(this)">
-              <i class="bi bi-envelope-check-fill"></i> PIX enviado</button>
+                    onclick="event.stopPropagation(); tpxComprovante(this)"
+                    aria-label="PIX enviado — ver a hora">
+              <i class="bi bi-envelope-fill"></i></button>
             <span class="selo selo--hora" hidden>{{ t.pix_enviado_em.strftime('%H:%M') }}
               de {{ t.pix_enviado_em.strftime('%d/%m') }}</span>
+            {% elif tem_troco and not conc %}
+            {# Vermelho so enquanto falta conciliar: no que ja bateu com o
+               extrato o e-mail nao decide mais nada, e pintar de vermelho os
+               587 conciliados do historico seria alarme sem assunto. #}
+            <span class="env env--nao"
+                  title="Sem aviso do banco para este troco — confira se o PIX foi mesmo feito">
+              <i class="bi bi-envelope-fill"></i></span>
             {% endif %}
             {% if st == 'CANCELADO' %}
             <span class="selo selo--canc">cancelado</span>{% endif %}
