@@ -83,10 +83,13 @@ body > .container-fluid:has(#tpc){
   #tpc .c__t{ flex:1; min-width:0; }
   #tpc .c__n{ font-weight:800; font-size:.87rem; line-height:1.3;
     overflow-wrap:anywhere; }
-  /* a chave e o que o caixa confere antes de mandar o dinheiro: fica em
-     monoespacada, embaixo do nome, e nunca mais atras de rolagem lateral */
-  #tpc .c__k{ font-family:'Courier New',Courier,monospace; font-size:.78rem;
-    color:#26313f; margin-top:.12rem; overflow-wrap:anywhere; }
+  /* a chave e o que se confere digito a digito antes de mandar o dinheiro:
+     fica embaixo do nome, nunca mais atras de rolagem lateral:
+     tinta cheia, negrito e a monoespacada do sistema — a Courier New e fina
+     demais e sumia no celular */
+  #tpc .c__k{ font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace; font-size:.8rem;
+    font-weight:700; color:var(--ink); margin-top:.14rem;
+    overflow-wrap:anywhere; letter-spacing:.01em; }
   #tpc .c__s{ display:flex; gap:.3rem; flex-wrap:wrap; margin-top:.28rem; }
   #tpc .val{ text-align:right; flex:0 0 auto; }
   #tpc .val__v{ font-weight:800; font-size:.84rem; color:var(--blue-deep);
@@ -110,7 +113,7 @@ body > .container-fluid:has(#tpc){
   #tpc .li{ display:flex; gap:.5rem; font-size:.8rem; padding:.16rem 0; }
   #tpc .li .k{ color:var(--muted); flex:0 0 104px; }
   #tpc .li .v{ flex:1; min-width:0; font-weight:600; overflow-wrap:anywhere; }
-  #tpc .li .v.mono{ font-family:'Courier New',Courier,monospace; }
+  #tpc .li .v.mono{ font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace; font-weight:700; }
   /* a relacao de trocos: uma linha por troco, do mais novo pro mais velho */
   #tpc .tr{ display:flex; align-items:center; gap:.5rem; padding:.3rem 0;
     border-top:1px solid #eef1f5; font-size:.79rem; color:var(--ink);
@@ -119,12 +122,14 @@ body > .container-fluid:has(#tpc){
   #tpc .tr:hover{ background:#f7f9fc; }
   #tpc .tr__d{ flex:0 0 auto; font-variant-numeric:tabular-nums;
     font-weight:700; }
-  #tpc .tr__c{ flex:1; min-width:0; color:var(--muted); font-size:.7rem;
-    font-family:'Courier New',Courier,monospace; overflow:hidden;
+  #tpc .tr__c{ flex:1; min-width:0; color:#3d4854; font-size:.72rem;
+    font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace; overflow:hidden;
     text-overflow:ellipsis; white-space:nowrap; }
   #tpc .tr__v{ flex:0 0 auto; font-weight:800; color:var(--blue-deep);
     font-variant-numeric:tabular-nums; }
-  #tpc .tr__ok{ color:var(--ok); font-size:.8rem; flex:0 0 auto; }
+  /* o verde do --ok e claro demais num icone de 0,8rem (3,8:1);
+     este e o mesmo verde escuro dos selos de conciliado */
+  #tpc .tr__ok{ color:#146c43; font-size:.85rem; flex:0 0 auto; }
   #tpc .tr__nao{ color:var(--muted); font-size:.8rem; flex:0 0 auto; }
   #tpc .acoes{ display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.55rem; }
   #tpc .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
