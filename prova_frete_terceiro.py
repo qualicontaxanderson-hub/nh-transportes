@@ -52,12 +52,32 @@ def _consulta(sql, args=()):
         conn.close()
 
 
+# A tela engole a excecao e devolve 200 com uma faixa vermelha. Conferir so o
+# codigo dava "OK" numa tela que nao mostrava cartao nenhum — foi o que deixou
+# passar o "name 'padrao' is not defined" em 09/09.
+ERRO_NA_TELA = 'Não deu pra montar a leitura'
+
+
 def abre(cli, uid, url):
     with cli.session_transaction() as s:
         s['_user_id'] = str(uid)
         s['_fresh'] = True
     r = cli.get(url, follow_redirects=False)
     return r.status_code, r.get_data(as_text=True)
+
+
+def _falha(html):
+    """A mensagem de erro que a tela mostra, quando mostra."""
+    m = re.search(re.escape(ERRO_NA_TELA) + r'[^<]*', html or '')
+    return m.group(0) if m else ''
+
+
+def abre_ok(titulo, cli, uid, url):
+    """Abre e exige tela INTEIRA: 200 e sem faixa vermelha."""
+    cod, html = abre(cli, uid, url)
+    prova(titulo, cod == 200 and not _falha(html),
+          'codigo %s%s' % (cod, ('; ' + _falha(html)) if _falha(html) else ''))
+    return html
 
 
 admin = (_consulta("""SELECT id, nome_completo FROM usuarios
@@ -94,8 +114,8 @@ if not dias:
     sys.exit(1)
 dia = dias[0]['d'].isoformat()
 
-cod, html = abre(cli, admin['id'], '/ped-frete-novo/?data=%s' % dia)
-prova('a tela do dia %s abre (200)' % dia, cod == 200, 'codigo %s' % cod)
+html = abre_ok('a tela do dia %s abre inteira' % dia, cli, admin['id'],
+               '/ped-frete-novo/?data=%s' % dia)
 prova('o botao de mover oferece o caminhao de fora',
       '>Terceiro<' in html,
       'a opcao nao apareceu em nenhum <select> de mover')
@@ -112,9 +132,8 @@ antigos = _consulta("""SELECT data_frete AS d FROM fretes
                         ORDER BY data_frete DESC LIMIT 1""", (ext['id'],))
 if antigos:
     d2 = antigos[0]['d'].isoformat()
-    cod, h2 = abre(cli, admin['id'], '/ped-frete-novo/?data=%s' % d2)
-    prova('a tela do dia %s (com carga de terceiro) abre (200)' % d2,
-          cod == 200, 'codigo %s' % cod)
+    h2 = abre_ok('a tela do dia %s (com carga de terceiro) abre inteira' % d2,
+                 cli, admin['id'], '/ped-frete-novo/?data=%s' % d2)
     # O cartao da viagem: o titulo e o nome do caminhao, nao um travessao.
     cartao = re.search(r'<div class="vg__p">([^<]*)<', h2)
     prova('o cartao do terceiro se identifica em vez de mostrar "—"',
@@ -133,8 +152,8 @@ else:
 # ── nada mudou pros caminhoes nossos ────────────────────────────────────────
 nossos = _consulta("SELECT id, placa FROM veiculos "
                    "WHERE ativo = 1 AND placa <> '' ORDER BY id LIMIT 3")
-cod, h3 = abre(cli, admin['id'], '/ped-frete-novo/?modo=caminhao')
-prova('o modo "por caminhao" continua abrindo (200)', cod == 200, 'codigo %s' % cod)
+h3 = abre_ok('o modo "por caminhao" continua abrindo inteiro', cli, admin['id'],
+             '/ped-frete-novo/?modo=caminhao')
 prova('a frota continua sendo so quem tem placa',
       ('>TERCEIRO<' not in h3) and any(v['placa'] in h3 for v in nossos),
       'o TERCEIRO nao pode virar aba da frota — ele nao e caminhao nosso')
@@ -142,7 +161,7 @@ prova('a frota continua sendo so quem tem placa',
 # ── a lista chama o caminhao como a casa chama ──────────────────────────────
 # R500, R540, Truck, Terceiro. Placa mais nome completo do motorista dava tres
 # linhas por opcao no celular.
-cod, hj = abre(cli, admin['id'], '/ped-frete-novo/')
+hj = abre_ok('a tela de hoje abre inteira', cli, admin['id'], '/ped-frete-novo/')
 sel = re.search(r'<select class="mv__d"[^>]*>(.*?)</select>', hj, re.S)
 ops = re.findall(r'<option value="[^"]*"[^>]*>([^<]+)</option>',
                  sel.group(1) if sel else '', re.S)
@@ -157,6 +176,11 @@ prova('nenhuma opcao traz placa ou nome completo de motorista',
 prova('cada caminhao aparece uma vez so',
       len({o.split(' · ')[0] for o in ops}) == len(ops),
       'opcoes: %r' % (ops,))
+
+# Os quatro modos, todos inteiros: o erro de 09/09 derrubava todos de uma vez.
+for _modo in ('dia', 'caminhao', 'cobrar', 'conferir'):
+    abre_ok('o modo "%s" abre inteiro' % _modo, cli, admin['id'],
+            '/ped-frete-novo/?modo=%s' % _modo)
 
 # ── quem levou: o campo so existe porque a coluna EXIGE um motorista ────────
 # `fretes.motoristas_id` e NOT NULL. Mover pro caminhao de fora sem dizer quem
@@ -231,8 +255,7 @@ if frete and qops:
 # edicao. Quem procurar so o vizinho fica mudo -- foi o que aconteceu, sem
 # erro no console e sem o template acusar nada. Aqui vai a prova estrutural;
 # o clique de verdade esta em prova_mover_abre.js (jsdom).
-cod, hoje_html = abre(cli, admin['id'], '/ped-frete-novo/')
-prova('a tela de hoje abre (200)', cod == 200, 'codigo %s' % cod)
+hoje_html = hj
 ordem = re.findall(r'<div class="(fr |ed"|mv")', hoje_html)
 prova('entre a linha do frete e o painel de mover ha outro bloco',
       ['fr ', 'ed"', 'mv"'] == ordem[:3] if len(ordem) >= 3 else False,

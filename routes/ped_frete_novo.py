@@ -2206,6 +2206,14 @@ def index():
             # O motorista do cadastro entra aqui pra que dê pra abrir a carga
             # direto no caminhao parado — sem isso um dia vazio nao tinha por
             # onde comecar, e lancar pra amanha era impossivel.
+            #
+            # A consulta e propria: `padrao` morava solto aqui e foi junto com
+            # o bloco que virou _destinos(), deixando este uso orfao. A tela
+            # inteira caiu em "name 'padrao' is not defined" — nenhum cartao,
+            # nenhum caminhao, so a faixa vermelha.
+            cursor.execute("""SELECT veiculo_id, id, nome FROM motoristas
+                               WHERE ativo = 1 AND veiculo_id IS NOT NULL""")
+            padrao = {r['veiculo_id']: r for r in cursor.fetchall()}
             for oc in ociosos:
                 m = padrao.get(oc['id']) or {}
                 oc['motorista_id'] = m.get('id') or 0
