@@ -257,6 +257,14 @@ def _candidatos_bordo(cur, dia, veiculo_ids):
     return por_veic
 
 
+def _data_ou_none(v):
+    """A data que veio da tela, ou None se nao veio (nem deu pra ler)."""
+    try:
+        return date.fromisoformat((v or '').strip())
+    except (AttributeError, ValueError):
+        return None
+
+
 def _apelido(v):
     """Como a casa chama o caminhao: R500, R540, Truck, Terceiro.
 
@@ -1190,6 +1198,121 @@ def _opcoes(cur):
             'historico': hist, 'json': js}
 
 
+def _destinos(cur, viagens, veiculos):
+    """(destinos, id_do_caminhao_de_fora, transportadoras) para aquele dia.
+
+    Fica fora da tela porque a data e escolhida no proprio painel de mover: se
+    a carga passou para amanha, os destinos sao os de amanha, e quem responde e
+    a rota /destinos, com esta mesma funcao. Duas listas montadas por caminhos
+    diferentes acabariam discordando no dia em que importasse.
+
+    Para onde da pra mover: as outras cargas do dia, os caminhoes parados (com
+    o motorista do cadastro) e o caminhao de fora. Na correria ela lanca tudo
+    num caminhao e divide depois — esse e o momento.
+    """
+    # O caminhao de fora primeiro, porque as outras listas dependem de saber
+    # qual e. Ele esta no cadastro e ja levou 34 fretes (16/02 a 18/06/2026),
+    # mas a lista da frota corta quem nao tem placa — filtro que existe pelas
+    # carretas e levava o TERCEIRO junto. Sem ele nao havia como dizer, num
+    # frete que o cliente ja pagou, que quem entrega e caminhao de terceiro.
+    cur.execute("""SELECT id, caminhao FROM veiculos
+                    WHERE ativo = 1 AND caminhao = 'TERCEIRO'
+                    ORDER BY id LIMIT 1""")
+    ext = cur.fetchone()
+    ext_id = ext['id'] if ext else 0
+
+    cur.execute("""SELECT veiculo_id, id, nome FROM motoristas
+                    WHERE ativo = 1 AND veiculo_id IS NOT NULL""")
+    padrao = {r['veiculo_id']: r for r in cur.fetchall()}
+    # Na lista o caminhao se chama como a casa o chama: R500, R540, Truck,
+    # Terceiro. Placa mais nome completo do motorista enchia a caixinha do
+    # celular com tres linhas por opcao — trabalho de ler justamente onde a
+    # escolha e obvia.
+    cur.execute("SELECT id, caminhao, placa, modelo FROM veiculos")
+    apel = {r['id']: _apelido(r) for r in cur.fetchall()}
+
+    destinos, vistos = [], set()
+    for v in viagens:
+        # A carga de fora que ja existe NAO vira destino proprio: ela ja esta
+        # coberta pela opcao "Terceiro" mais o campo de quem levou — escolher
+        # a mesma transportadora cai nela sozinho. Sem isto a lista mostrava
+        # "Terceiro · Gasol" e "Terceiro", duas linhas para a mesma coisa.
+        if v['veiculo_id'] == ext_id:
+            continue
+        ch = (v['veiculo_id'], v['motorista_id'] or 0)
+        if ch in vistos:
+            continue
+        vistos.add(ch)
+        destinos.append({'veiculo_id': v['veiculo_id'],
+                         'motorista_id': v['motorista_id'] or 0,
+                         'nome': apel.get(v['veiculo_id']) or v['placa'],
+                         'motorista': v['motorista'] or ''})
+    # Caminhao que JA esta rodando no dia nao volta aqui como "parado". Ele
+    # entrava duas vezes — uma pela carga de verdade, outra pela frota com o
+    # motorista do cadastro — e as duas nem batiam: em 09/09 a carga era do
+    # R500 com o Welington e a lista oferecia o R500 com o Luiz Fernando.
+    # Escolher essa segunda abria uma carga paralela do mesmo caminhao, no
+    # mesmo dia, no nome de quem nao estava dirigindo ele.
+    com_carga = {v['veiculo_id'] for v in viagens}
+    for vc in veiculos:
+        if vc['id'] in com_carga:
+            continue
+        m = padrao.get(vc['id'])
+        ch = (vc['id'], (m or {}).get('id') or 0)
+        if ch in vistos:
+            continue
+        vistos.add(ch)
+        destinos.append({'veiculo_id': vc['id'],
+                         'motorista_id': (m or {}).get('id') or 0,
+                         'nome': apel.get(vc['id']) or vc['placa'],
+                         'motorista': (m or {}).get('nome') or ''})
+    # O de fora, sempre por ultimo e sempre uma vez so. Vai sem motorista: a
+    # tela pergunta quem levou, e a resposta e que preenche o campo.
+    if ext_id:
+        destinos.append({'veiculo_id': ext_id, 'motorista_id': 0,
+                         'nome': apel.get(ext_id) or 'Terceiro', 'motorista': ''})
+
+    # O motorista so entra no rotulo quando o nome sozinho nao basta: o mesmo
+    # caminhao pode sair duas vezes no dia com motoristas diferentes (o RDT em
+    # 21/08, com o Marcos e depois o Wellington), e duas opcoes "R500" iguais
+    # fariam escolher no escuro. So nesse caso, e so o primeiro nome.
+    repetidos = {}
+    for d in destinos:
+        repetidos[d['nome']] = repetidos.get(d['nome'], 0) + 1
+    for d in destinos:
+        curto = (d['motorista'] or '').split()[0].title() if d['motorista'] else ''
+        d['label'] = ('%s · %s' % (d['nome'], curto)
+                      if repetidos[d['nome']] > 1 and curto else d['nome'])
+
+    # Quem leva, quando quem leva e de fora. `fretes.motoristas_id` e NOT
+    # NULL, entao mover pro caminhao de fora sem dizer quem levou nao passa no
+    # banco — e nem devia: a casa guarda a transportadora nesse campo desde
+    # 16/02/2026 (FREIRE & NUNES em 16 fretes, FVE/FLEXLOG em 9, REM em 6,
+    # GASOL em 3).
+    #
+    # A lista sai do historico do proprio caminhao de fora, mais quem o
+    # cadastro aponta pra ele (a BARROS). Nao vale filtrar por "sem CPF": o
+    # Valmir, motorista nosso, tambem esta sem CPF e cairia aqui como se fosse
+    # transportadora.
+    transportadoras = []
+    if ext_id:
+        cur.execute("""SELECT m.id, m.nome, COUNT(f.id) AS n
+                         FROM motoristas m
+                         LEFT JOIN fretes f ON f.motoristas_id = m.id
+                                           AND f.veiculos_id = %s
+                        WHERE m.ativo = 1
+                          AND (m.veiculo_id = %s OR f.id IS NOT NULL)
+                        GROUP BY m.id, m.nome
+                        ORDER BY n DESC, m.nome""", (ext_id, ext_id))
+        # Nome como esta no cadastro: .title() virava "Fve Transportes" e
+        # "Gasol Transportes E Logistica", pior de ler que a maiuscula que a
+        # casa mesmo digitou.
+        transportadoras = [{'id': r['id'], 'nome': r['nome']}
+                           for r in cur.fetchall()]
+
+    return destinos, ext_id, transportadoras
+
+
 def _carga_do_dia(cursor, dia, vid, mid, criar=True):
     """Acha o pedido daquela carga (data + veiculo + motorista), ou cria um.
 
@@ -1428,7 +1551,7 @@ def excluir():
 @bp.route('/ped-frete-novo/mover', methods=['POST'])
 @login_required
 def mover():
-    """Passa um frete para outro caminhao da mesma data.
+    """Passa um frete para outro caminhao, e para outro dia se for o caso.
 
     Na correria a Monica lanca tudo num caminhao so e divide depois. Aqui a
     troca leva junto o item do pedido e o vinculo com a carga de destino — que
@@ -1449,6 +1572,12 @@ def mover():
     if not mid:
         return jsonify({'ok': False,
                         'erro': 'diga quem leva a carga antes de mover'}), 400
+    # A data e opcional: sem ela, o frete fica no dia em que esta. Vem quando
+    # a carga mudou de dia — "essa carga vem amanha" — e ai muda junto com o
+    # caminhao, numa operacao so.
+    nova_data = _data_ou_none(dados.get('data'))
+    if dados.get('data') and not nova_data:
+        return jsonify({'ok': False, 'erro': 'data inválida'}), 400
 
     _ensure_tabela()
     conn = cursor = None
@@ -1462,30 +1591,37 @@ def mover():
         if not fr:
             return jsonify({'ok': False, 'erro': 'frete não encontrado'}), 404
         dia = fr['data_frete']
+        destino_dia = nova_data or dia
 
         # Carga fechada, dos dois lados, nao aceita movimento sem reabrir.
-        for v_, m_, onde in ((fr['veiculos_id'], fr['motoristas_id'] or 0, 'de origem'),
-                             (vid, mid, 'de destino')):
+        # Cada lado no SEU dia: quando a carga muda de data, a de origem esta
+        # num dia e a de destino noutro, e conferir as duas no mesmo dia
+        # deixaria passar movimento para uma carga ja fechada.
+        for d_, v_, m_, onde in ((dia, fr['veiculos_id'], fr['motoristas_id'] or 0,
+                                  'de origem'),
+                                 (destino_dia, vid, mid, 'de destino')):
             cursor.execute("""SELECT id FROM carga_fechada
                                WHERE data_frete=%s AND veiculo_id=%s AND motorista_id=%s""",
-                           (dia, v_, m_))
+                           (d_, v_, m_))
             if cursor.fetchone():
                 return jsonify({'ok': False,
                                 'erro': 'a carga %s está fechada — reabra antes '
                                         'de mover' % onde}), 409
 
-        pedido_id, numero, criou = _carga_do_dia(cursor, dia, vid, mid)
-        cursor.execute("""UPDATE fretes SET veiculos_id=%s, motoristas_id=%s,
-                                 pedido_id=%s, updated_at=NOW()
+        pedido_id, numero, criou = _carga_do_dia(cursor, destino_dia, vid, mid)
+        cursor.execute("""UPDATE fretes SET data_frete=%s, veiculos_id=%s,
+                                 motoristas_id=%s, pedido_id=%s, updated_at=NOW()
                            WHERE id=%s""",
-                       (vid, mid or None, pedido_id, frete_id))
+                       (destino_dia, vid, mid or None, pedido_id, frete_id))
         # O item do pedido vai junto — e o que mantem os dois lados de acordo.
         cursor.execute("UPDATE pedidos_itens SET pedido_id=%s WHERE frete_id=%s",
                        (pedido_id, frete_id))
         itens = cursor.rowcount
         conn.commit()
         return jsonify({'ok': True, 'pedido': numero, 'pedido_novo': criou,
-                        'itens_movidos': itens})
+                        'itens_movidos': itens,
+                        'data': destino_dia.isoformat(),
+                        'mudou_dia': destino_dia != dia})
     except Exception as e:
         if conn:
             try:
@@ -1493,6 +1629,142 @@ def mover():
             except Exception:
                 pass
         logging.getLogger(__name__).exception("[ped_frete_novo] mover")
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@bp.route('/ped-frete-novo/destinos', methods=['GET'])
+@login_required
+def destinos_do_dia():
+    """Os caminhoes daquele dia, para o painel que acabou de mudar de data.
+
+    Cada dia tem as suas cargas: o R500 que hoje esta com o Welington pode
+    amanha nem sair. Sem consultar o dia escolhido, a lista continuaria
+    mostrando os pares de hoje e a carga cairia no motorista errado.
+    """
+    dia = _data_ou_none(request.args.get('data'))
+    if not dia:
+        return jsonify({'ok': False, 'erro': 'data inválida'}), 400
+    conn = cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cap, carretas = _capacidades(cursor)
+        cursor.execute("SELECT id, placa, caminhao, tipo_veiculo FROM veiculos "
+                       "WHERE ativo = 1 AND placa <> '' ORDER BY caminhao, placa")
+        veiculos = [v for v in cursor.fetchall()
+                    if v['id'] not in carretas
+                    and (v.get('tipo_veiculo') or '').strip().lower() != 'carreta']
+        viagens = _montar_viagens(_fretes_do_periodo(cursor, dia, dia), cap)
+        destinos, terceiro_id, _ = _destinos(cursor, viagens, veiculos)
+        return jsonify({'ok': True, 'data': dia.isoformat(),
+                        'terceiro_id': terceiro_id,
+                        'destinos': [{'v': d['veiculo_id'], 'm': d['motorista_id'],
+                                      'label': d['label']} for d in destinos]})
+    except Exception as e:
+        logging.getLogger(__name__).exception("[ped_frete_novo] destinos")
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@bp.route('/ped-frete-novo/mover-carga', methods=['POST'])
+@login_required
+def mover_carga():
+    """Leva a carga inteira — todos os fretes dela — para outro dia/caminhao.
+
+    "Essa carga vem amanha" e uma frase sobre a carga, nao sobre um produto:
+    repetir o movimento em cada linha era trabalho de quatro vezes na carga de
+    hoje, e bastava esquecer uma para o dia ficar partido em duas cargas.
+    """
+    dados = request.get_json(silent=True) or {}
+    try:
+        vid = int(dados.get('veiculo_id') or 0)
+        mid = int(dados.get('motorista_id') or 0)
+        o_vid = int(dados.get('origem_veiculo_id') or 0)
+        o_mid = int(dados.get('origem_motorista_id') or 0)
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'erro': 'dados inválidos'}), 400
+    origem_dia = _data_ou_none(dados.get('origem_data'))
+    destino_dia = _data_ou_none(dados.get('data')) or origem_dia
+    if not origem_dia or not o_vid:
+        return jsonify({'ok': False, 'erro': 'informe a carga de origem'}), 400
+    if not vid:
+        return jsonify({'ok': False, 'erro': 'informe o caminhão'}), 400
+    if not mid:
+        return jsonify({'ok': False,
+                        'erro': 'diga quem leva a carga antes de mover'}), 400
+    if (destino_dia, vid, mid) == (origem_dia, o_vid, o_mid):
+        return jsonify({'ok': False, 'erro': 'a carga já está aí'}), 400
+
+    _ensure_tabela()
+    conn = cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        for d_, v_, m_, onde in ((origem_dia, o_vid, o_mid, 'de origem'),
+                                 (destino_dia, vid, mid, 'de destino')):
+            cursor.execute("""SELECT id FROM carga_fechada
+                               WHERE data_frete=%s AND veiculo_id=%s AND motorista_id=%s""",
+                           (d_, v_, m_))
+            if cursor.fetchone():
+                return jsonify({'ok': False,
+                                'erro': 'a carga %s está fechada — reabra antes '
+                                        'de mover' % onde}), 409
+
+        # A carga e a chave fisica inteira: data + caminhao + motorista. Sem o
+        # motorista na conta, duas viagens do mesmo caminhao no mesmo dia
+        # viriam juntas, e so uma delas mudou de dia.
+        cursor.execute("""SELECT id FROM fretes
+                           WHERE data_frete=%s AND veiculos_id=%s
+                             AND COALESCE(motoristas_id,0)=%s""",
+                       (origem_dia, o_vid, o_mid))
+        ids = [r['id'] for r in cursor.fetchall()]
+        if not ids:
+            return jsonify({'ok': False, 'erro': 'essa carga não tem fretes'}), 404
+
+        pedido_id, numero, criou = _carga_do_dia(cursor, destino_dia, vid, mid)
+        marcas = ','.join(['%s'] * len(ids))
+        cursor.execute("UPDATE fretes SET data_frete=%s, veiculos_id=%s, "
+                       "motoristas_id=%s, pedido_id=%s, updated_at=NOW() "
+                       "WHERE id IN (" + marcas + ")",
+                       [destino_dia, vid, mid, pedido_id] + ids)
+        movidos = cursor.rowcount
+        # O item do pedido vai junto — e o que mantem os dois lados de acordo.
+        cursor.execute("UPDATE pedidos_itens SET pedido_id=%s WHERE frete_id IN ("
+                       + marcas + ")", [pedido_id] + ids)
+        itens = cursor.rowcount
+        conn.commit()
+        return jsonify({'ok': True, 'pedido': numero, 'pedido_novo': criou,
+                        'fretes_movidos': movidos, 'itens_movidos': itens,
+                        'data': destino_dia.isoformat(),
+                        'mudou_dia': destino_dia != origem_dia})
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.getLogger(__name__).exception("[ped_frete_novo] mover_carga")
         return jsonify({'ok': False, 'erro': str(e)}), 500
     finally:
         if cursor:
@@ -1910,109 +2182,14 @@ def index():
                             _fechadas(cursor, dia),
                             _bordo_registrado(cursor, dia),
                             _candidatos_bordo(cursor, dia, vids))
-            # Para onde da pra mover um frete: as outras cargas do dia (que ja
-            # tem motorista definido) e os caminhoes parados, com o motorista
-            # do cadastro. Na correria ela lanca tudo num caminhao e divide
-            # depois — esse e o momento.
-            cursor.execute("""SELECT veiculo_id, id, nome FROM motoristas
-                               WHERE ativo = 1 AND veiculo_id IS NOT NULL""")
-            padrao = {r['veiculo_id']: r for r in cursor.fetchall()}
-            # Na lista de destinos o caminhao se chama como a casa o chama:
-            # R500, R540, Truck, Terceiro. Placa mais nome completo do
-            # motorista enchia a caixinha do celular com tres linhas por
-            # opcao — dava trabalho ler justamente onde a escolha e obvia.
-            cursor.execute("SELECT id, caminhao, placa, modelo FROM veiculos")
-            apel = {r['id']: _apelido(r) for r in cursor.fetchall()}
-            destinos, vistos = [], set()
-            for v in viagens:
-                ch = (v['veiculo_id'], v['motorista_id'] or 0)
-                if ch in vistos:
-                    continue
-                vistos.add(ch)
-                destinos.append({'veiculo_id': v['veiculo_id'],
-                                 'motorista_id': v['motorista_id'] or 0,
-                                 'nome': apel.get(v['veiculo_id']) or v['placa'],
-                                 'motorista': v['motorista'] or ''})
-            # Caminhao que JA esta rodando hoje nao volta aqui como "parado".
-            # Ele entrava duas vezes — uma pela carga de verdade, outra pela
-            # frota com o motorista do cadastro — e as duas linhas nem batiam:
-            # hoje a carga e do R500 com o Welington, e a lista oferecia o R500
-            # com o Luiz Fernando. Escolher essa segunda abria uma carga
-            # paralela do mesmo caminhao, no mesmo dia, no nome de quem nao
-            # esta dirigindo ele.
-            com_carga = {v['veiculo_id'] for v in viagens}
-            for vc in veiculos:
-                if vc['id'] in com_carga:
-                    continue
-                m = padrao.get(vc['id'])
-                ch = (vc['id'], (m or {}).get('id') or 0)
-                if ch in vistos:
-                    continue
-                vistos.add(ch)
-                destinos.append({'veiculo_id': vc['id'],
-                                 'motorista_id': (m or {}).get('id') or 0,
-                                 'nome': apel.get(vc['id']) or vc['placa'],
-                                 'motorista': (m or {}).get('nome') or ''})
-            # O caminhao de fora, sempre por ultimo. Ele esta no cadastro e ja
-            # levou 34 fretes (16/02 a 18/06/2026), mas a lista da frota corta
-            # quem nao tem placa — filtro que existe pelas carretas e levava o
-            # TERCEIRO junto. Sem ele nao havia como dizer, num frete que o
-            # cliente ja pagou, que quem entrega e caminhao de terceiro: a
-            # unica saida era mover pra outro caminhao nosso, que e mentira.
-            #
-            # Sem motorista de proposito: o motorista do terceiro nao e nosso
-            # e nao esta cadastrado. Escolher um da casa poria o nome dele
-            # numa viagem que ele nao fez.
-            cursor.execute("""SELECT id, caminhao FROM veiculos
-                               WHERE ativo = 1 AND caminhao = 'TERCEIRO'
-                               ORDER BY id LIMIT 1""")
-            ext = cursor.fetchone()
-            if ext and (ext['id'], 0) not in vistos:
-                vistos.add((ext['id'], 0))
-                destinos.append({'veiculo_id': ext['id'], 'motorista_id': 0,
-                                 'nome': apel.get(ext['id']) or 'Terceiro',
-                                 'motorista': ''})
-
-            # O motorista so entra quando o nome sozinho nao basta: o mesmo
-            # caminhao pode sair duas vezes no dia com motoristas diferentes
-            # (o RDT em 21/08, com o Marcos e depois o Wellington), e duas
-            # opcoes "R500" identicas fariam escolher no escuro. Nesse caso —
-            # e so nesse — vai o primeiro nome, que e como se fala deles aqui.
-            repetidos = {}
-            for d in destinos:
-                repetidos[d['nome']] = repetidos.get(d['nome'], 0) + 1
-            for d in destinos:
-                curto = (d['motorista'] or '').split()[0].title() if d['motorista'] else ''
-                d['label'] = ('%s · %s' % (d['nome'], curto)
-                              if repetidos[d['nome']] > 1 and curto else d['nome'])
+            # Para onde da pra mover, e quem leva quando quem leva e de
+            # fora. Sai daqui tambem pela rota /destinos, porque trocar a DATA
+            # no painel troca a lista: cada dia tem as suas cargas.
+            destinos, terceiro_id, transportadoras = _destinos(cursor, viagens,
+                                                               veiculos)
             ctx['destinos'] = destinos
-
-            # Quem leva, quando quem leva e de fora. `fretes.motoristas_id` e
-            # NOT NULL, entao mover pro caminhao de fora sem dizer quem levou
-            # nao passa no banco — e nem devia: a casa ja guarda a
-            # transportadora nesse campo desde 16/02/2026 (FREIRE & NUNES em
-            # 16 fretes, FVE/FLEXLOG em 9, REM em 6, GASOL em 3).
-            #
-            # A lista sai do proprio historico do caminhao de fora, mais quem
-            # o cadastro aponta pra ele (a BARROS). Nao vale filtrar por "sem
-            # CPF": o Valmir, motorista nosso, tambem esta sem CPF e cairia
-            # aqui como se fosse transportadora.
-            if ext:
-                cursor.execute("""SELECT m.id, m.nome, COUNT(f.id) AS n
-                                    FROM motoristas m
-                                    LEFT JOIN fretes f ON f.motoristas_id = m.id
-                                                      AND f.veiculos_id = %s
-                                   WHERE m.ativo = 1
-                                     AND (m.veiculo_id = %s OR f.id IS NOT NULL)
-                                   GROUP BY m.id, m.nome
-                                   ORDER BY n DESC, m.nome""",
-                               (ext['id'], ext['id']))
-                # Nome como esta no cadastro: .title() virava "Fve
-                # Transportes" e "Gasol Transportes E Logistica" — pior de ler
-                # do que a maiuscula que a casa mesmo digitou.
-                ctx['transportadoras'] = [{'id': r['id'], 'nome': r['nome']}
-                                          for r in cursor.fetchall()]
-                ctx['terceiro_id'] = ext['id']
+            ctx['terceiro_id'] = terceiro_id
+            ctx['transportadoras'] = transportadoras
 
             cids = {fr['clientes_id'] for v in viagens for p in v['postos']
                     if p['estado'] == 'falta' for fr in p['fretes']

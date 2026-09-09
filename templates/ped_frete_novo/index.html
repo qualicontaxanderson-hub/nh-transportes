@@ -251,6 +251,11 @@ body > .container-fluid:has(#pfn){
     border-radius:8px; padding:.35rem .5rem; font-size:.8rem; font-family:inherit;
     background:#fff; }
   #pfn .mv__q[hidden]{ display:none; }
+  /* a data da carga, do lado do caminhao */
+  #pfn .mv__dt{ flex:0 1 9.5rem; min-width:0; border:1px solid var(--borda);
+    border-radius:8px; padding:.3rem .45rem; font-size:.8rem; font-family:inherit;
+    background:#fff; color:var(--ink); }
+  #pfn .mvc{ margin:.1rem .1rem .5rem; }
   #pfn .nf__t{ font-size:.8rem; font-weight:800; color:var(--blue-deep);
     margin-bottom:.55rem; }
   #pfn .nf__g{ display:grid; grid-template-columns:1fr; gap:.5rem; }
@@ -894,10 +899,47 @@ body > .container-fluid:has(#pfn){
             <button type="button" class="bd__b" onclick="pfnPainelBordo(this, 'bordo')">
               <i class="bi bi-box-seam"></i> Já tem carga a bordo?</button>
             {% endif %}
+            {% if destinos %}
+            <button type="button" class="bd__b" onclick="pfnAbreMoverCarga(this)">
+              <i class="bi bi-calendar-event"></i> Mudar dia ou caminhão</button>
+            {% endif %}
             <button type="button" class="bd__b bd__b--sim"
                     onclick="pfnPainelBordo(this, 'fechar')">
               <i class="bi bi-lock-fill"></i> Fechar carga</button>
           </div>
+          {# A carga inteira de uma vez: "essa carga vem amanha" e frase sobre
+             a carga, nao sobre um produto. Repetir produto a produto era
+             trabalho de quatro vezes na carga de 09/09, e bastava esquecer um
+             para o dia ficar partido em duas cargas. #}
+          {% if destinos %}
+          <div class="mv mvc" hidden>
+            <span class="mv__t">Mover a carga inteira ({{ v.fretes|length }}
+              {{ 'produto' if v.fretes|length == 1 else 'produtos' }}) para:</span>
+            <input type="date" class="mv__dt" value="{{ v.data.isoformat() }}"
+                   onchange="pfnMvData(this)">
+            <select class="mv__d" data-terceiro="{{ terceiro_id or 0 }}"
+                    onchange="pfnMvDestino(this)">
+              {% for d in destinos %}
+              <option value="{{ d.veiculo_id }}:{{ d.motorista_id }}"
+                {{ 'selected' if d.veiculo_id == v.veiculo_id
+                   and d.motorista_id == (v.motorista_id or 0) }}>{{ d.label }}</option>
+              {% endfor %}
+            </select>
+            {% if terceiro_id and transportadoras %}
+            <select class="mv__q" hidden>
+              <option value="">— quem levou? —</option>
+              {% for t in transportadoras %}
+              <option value="{{ t.id }}">{{ t.nome }}</option>
+              {% endfor %}
+            </select>
+            {% endif %}
+            <button type="button" class="bd__b bd__b--sim"
+                    onclick="pfnMoverCarga(this, '{{ v.data.isoformat() }}',
+                             {{ v.veiculo_id }}, {{ v.motorista_id or 0 }})">Mover
+              carga</button>
+            <button type="button" class="bd__b" onclick="pfnFechaMover(this)">✕</button>
+          </div>
+          {% endif %}
           {% endif %}
 
           {% if not v.fechada %}
@@ -1098,12 +1140,19 @@ body > .container-fluid:has(#pfn){
               <div class="mv" hidden>
                 <span class="mv__t">Mover {{ f.produto or '' }}
                   {{ fmtl.format(f.litros).replace(',', '.') }} L para:</span>
+                {# A data vem junto: "essa carga vem amanha" muda o dia e o
+                   caminhao de uma vez so. Trocar aqui recarrega a lista de
+                   baixo, porque cada dia tem as suas cargas. #}
+                <input type="date" class="mv__dt" value="{{ v.data.isoformat() }}"
+                       onchange="pfnMvData(this)">
+                {# O proprio caminhao continua na lista: com a data em jogo,
+                   "mesmo caminhao, outro dia" e um movimento legitimo. #}
                 <select class="mv__d" data-terceiro="{{ terceiro_id or 0 }}"
                         onchange="pfnMvDestino(this)">
                   {% for d in destinos %}
-                  {% if not (d.veiculo_id == v.veiculo_id and d.motorista_id == (v.motorista_id or 0)) %}
-                  <option value="{{ d.veiculo_id }}:{{ d.motorista_id }}">{{ d.label }}</option>
-                  {% endif %}
+                  <option value="{{ d.veiculo_id }}:{{ d.motorista_id }}"
+                    {{ 'selected' if d.veiculo_id == v.veiculo_id
+                       and d.motorista_id == (v.motorista_id or 0) }}>{{ d.label }}</option>
                   {% endfor %}
                 </select>
                 {# No caminhao de fora o campo do motorista guarda a
@@ -2251,6 +2300,48 @@ function pfnAbreMover(botao, freteId){
     if (sel) pfnMvDestino(sel);
   }
 }
+// O painel da carga inteira mora no proprio cartao, logo abaixo dos botoes.
+function pfnAbreMoverCarga(botao){
+  var cx = botao.closest('.fechou');
+  cx = cx ? cx.nextElementSibling : null;
+  while (cx && !cx.classList.contains('mvc')) cx = cx.nextElementSibling;
+  if (cx) {
+    cx.hidden = !cx.hidden;
+    var sel = cx.querySelector('.mv__d');
+    if (sel) pfnMvDestino(sel);
+  }
+}
+// Trocar a data troca a lista de caminhoes: o R500 que hoje sai com o
+// Welington pode amanha nem sair, e a carga cairia no motorista errado.
+function pfnMvData(inp){
+  var cx = inp.closest('.mv');
+  var sel = cx ? cx.querySelector('.mv__d') : null;
+  if (!sel || !inp.value) return;
+  var antes = sel.value;
+  sel.disabled = true;
+  fetch('/ped-frete-novo/destinos?data=' + encodeURIComponent(inp.value),
+        {credentials: 'same-origin'})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d || !d.ok) throw new Error((d && d.erro) || 'não deu');
+      sel.innerHTML = '';
+      var tem = false;
+      for (var i = 0; i < d.destinos.length; i++) {
+        var x = d.destinos[i], o = document.createElement('option');
+        o.value = x.v + ':' + x.m;
+        o.textContent = x.label;
+        if (o.value === antes) tem = true;
+        sel.appendChild(o);
+      }
+      if (tem) sel.value = antes;      // mantem a escolha, quando ela existe la
+      sel.setAttribute('data-terceiro', d.terceiro_id || 0);
+      pfnMvDestino(sel);
+    })
+    .catch(function(e){
+      alert('Não deu pra ver os caminhões desse dia: ' + e.message);
+    })
+    .then(function(){ sel.disabled = false; });
+}
 // Quem leva so e pergunta quando quem leva e de fora: no caminhao nosso o
 // motorista ja vem com a carga.
 function pfnMvDestino(sel){
@@ -2278,10 +2369,40 @@ function pfnMover(botao, freteId){
     mid = parseInt(quem.value, 10);
   }
   if (!mid){ alert('Esse caminhão está sem motorista no cadastro.'); return; }
+  var dt = cx.querySelector('.mv__dt');
   pfnEnvia(botao, '/ped-frete-novo/mover', {
     frete_id: freteId,
     veiculo_id: parseInt(partes[0], 10),
-    motorista_id: mid
+    motorista_id: mid,
+    data: dt ? dt.value : ''
+  });
+}
+
+// A carga inteira. Mesmo painel, mesma regra de quem levou — o que muda e que
+// vai a chave da carga de origem, e nao um frete.
+function pfnMoverCarga(botao, dataOrigem, vidOrigem, midOrigem){
+  var cx = botao.closest('.mv');
+  var sel = cx ? cx.querySelector('.mv__d') : null;
+  if (!sel || !sel.value){ alert('Escolha o caminhão.'); return; }
+  var partes = sel.value.split(':');
+  var mid = parseInt(partes[1], 10) || 0;
+  var quem = cx.querySelector('.mv__q');
+  if (quem && !quem.hidden){
+    if (!quem.value){ alert('Escolha quem levou a carga.'); return; }
+    mid = parseInt(quem.value, 10);
+  }
+  if (!mid){ alert('Esse caminhão está sem motorista no cadastro.'); return; }
+  var dt = cx.querySelector('.mv__dt');
+  var data = dt ? dt.value : '';
+  var vid = parseInt(partes[0], 10);
+  if (data === dataOrigem && vid === vidOrigem && mid === midOrigem){
+    alert('A carga já está nesse dia e nesse caminhão.');
+    return;
+  }
+  pfnEnvia(botao, '/ped-frete-novo/mover-carga', {
+    origem_data: dataOrigem, origem_veiculo_id: vidOrigem,
+    origem_motorista_id: midOrigem,
+    data: data, veiculo_id: vid, motorista_id: mid
   });
 }
 

@@ -119,5 +119,62 @@ if (fn3) {
         'enviado: ' + JSON.stringify(enviados));
 }
 
+// ── o painel da carga inteira, no cartao ───────────────────────────────────
+const fnCarga = html.match(/function pfnAbreMoverCarga\(botao\)\{[\s\S]*?\n\}/);
+prova('pfnAbreMoverCarga existe no arquivo servido', !!fnCarga);
+if (fnCarga && mDest) {
+  const abreCarga = new Function('document',
+      fnCarga[0] + '\n' + mDest[0] + '; return pfnAbreMoverCarga;')(doc);
+  const bt = [...doc.querySelectorAll('.bd__b')].find(
+      b => /Mudar dia ou caminh/.test(b.textContent));
+  prova('o cartao da carga tem o botao de mudar dia', !!bt);
+  if (bt) {
+    const painel = doc.querySelector('.mvc');
+    prova('o painel da carga comeca escondido', painel.hasAttribute('hidden'));
+    abreCarga(bt);
+    prova('o botao abre o painel da carga', !painel.hidden);
+    prova('o painel da carga tem data e caminhao',
+          !!painel.querySelector('.mv__dt') && !!painel.querySelector('.mv__d'));
+    prova('a data ja vem preenchida com o dia da carga',
+          /^\d{4}-\d{2}-\d{2}$/.test(painel.querySelector('.mv__dt').value),
+          'valor: ' + painel.querySelector('.mv__dt').value);
+    prova('o caminhao da propria carga vem escolhido',
+          !!painel.querySelector('.mv__d option[selected]'));
+  }
+}
+
+// ── trocar a data recarrega a lista daquele dia ────────────────────────────
+const fnData = html.match(/function pfnMvData\(inp\)\{[\s\S]*?\n\}/);
+prova('pfnMvData existe no arquivo servido', !!fnData);
+if (fnData && mDest) {
+  let pedido = null;
+  const fakeFetch = (url) => {
+    pedido = url;
+    return Promise.resolve({ json: () => Promise.resolve({
+      ok: true, data: '2026-12-25', terceiro_id: 5,
+      destinos: [{v: 9, m: 3, label: 'R900'}, {v: 5, m: 0, label: 'Terceiro'}]
+    })});
+  };
+  const pfnMvData = new Function('document', 'fetch', 'alert',
+      fnData[0] + '\n' + mDest[0] + '; return pfnMvData;')(doc, fakeFetch, () => {});
+  const painel = doc.querySelector('.mv');
+  const dt = painel.querySelector('.mv__dt'), sel = painel.querySelector('.mv__d');
+  dt.value = '2026-12-25';
+  pfnMvData(dt);
+  // o preenchimento e assincrono: espera a volta do fetch antes de conferir
+  return new Promise(r => setTimeout(r, 0)).then(() => {
+    prova('a troca de data pergunta pelos caminhoes DAQUELE dia',
+          /\/ped-frete-novo\/destinos\?data=2026-12-25/.test(pedido || ''),
+          'pediu: ' + pedido);
+    const labels = [...sel.options].map(o => o.textContent);
+    prova('a lista de caminhoes vira a do dia novo',
+          labels.join(',') === 'R900,Terceiro', 'ficou: ' + labels.join(','));
+    fim();
+  });
+}
+
+fim();
+function fim(){
 console.log(falhas ? '\n'+falhas+' FALHA(S)' : '\nTUDO OK');
-process.exit(falhas ? 1 : 0);
+process.exitCode = falhas ? 1 : 0;
+}

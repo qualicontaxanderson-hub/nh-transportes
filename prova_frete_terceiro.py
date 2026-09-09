@@ -144,9 +144,9 @@ prova('a frota continua sendo so quem tem placa',
 # linhas por opcao no celular.
 cod, hj = abre(cli, admin['id'], '/ped-frete-novo/')
 sel = re.search(r'<select class="mv__d"[^>]*>(.*?)</select>', hj, re.S)
-ops = re.findall(r'<option value="[^"]*">([^<]+)</option>',
-                 sel.group(1) if sel else '')
-ops = [o.strip() for o in ops]
+ops = re.findall(r'<option value="[^"]*"[^>]*>([^<]+)</option>',
+                 sel.group(1) if sel else '', re.S)
+ops = [' '.join(o.split()) for o in ops]
 prova('a lista de destinos usa o apelido do caminhao',
       bool(ops) and all(re.match(r'^(R\d{3}|Truck|Terceiro)( · \w+)?$', o) for o in ops),
       'opcoes: %r' % (ops,))
@@ -168,8 +168,8 @@ prova('a coluna do motorista no frete e NOT NULL (a causa do erro)',
       bool(col) and col[0]['n'] == 'NO', 'IS_NULLABLE: %r' % (col,))
 
 selq = re.search(r'<select class="mv__q"[^>]*>(.*?)</select>', hj, re.S)
-qops = re.findall(r'<option value="([^"]*)">([^<]+)</option>',
-                  selq.group(1) if selq else '')
+qops = re.findall(r'<option value="([^"]*)"[^>]*>([^<]+)</option>',
+                  selq.group(1) if selq else '', re.S)
 prova('o painel pergunta quem levou, quando o destino e o de fora', bool(selq))
 prova('a lista de quem levou sai do historico do caminhao de fora',
       {v for v, _ in qops if v} ==
