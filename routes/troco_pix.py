@@ -1516,11 +1516,15 @@ def pista():
                 tp.*,
                 c.razao_social as posto_nome,
                 tpc.nome_completo as cliente_pix_nome,
-                f.nome as frentista_nome
+                f.nome as frentista_nome,
+                cp.enviado_em as pix_enviado_em
             FROM troco_pix tp
             LEFT JOIN clientes c ON tp.cliente_id = c.id
             LEFT JOIN troco_pix_clientes tpc ON tp.troco_pix_cliente_id = tpc.id
             LEFT JOIN funcionarios f ON tp.funcionario_id = f.id
+            -- o comprovante que o banco mandou por e-mail: e o que responde,
+            -- para quem lancou, se o PIX ja saiu
+            LEFT JOIN troco_pix_comprovantes cp ON cp.troco_pix_id = tp.id
             WHERE 1=1
         """
         

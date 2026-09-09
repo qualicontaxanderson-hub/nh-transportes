@@ -169,6 +169,43 @@ if not de_hoje:
     prova('sem lançamento hoje, a tela diz o que fazer',
           'Nenhum troco lançado hoje ainda' in h)
 
+# ── o envelope: o PIX do meu cliente já saiu? ─────────────────────────────
+# Mesma linguagem da tela do administrativo: azul o banco já avisou, vermelho
+# ainda não. Aqui vale mais ainda, porque quem lançou não faz o PIX — ele
+# depende do administrativo e não tinha como saber.
+enviados = consulta("""SELECT tp.id FROM troco_pix tp
+                         JOIN troco_pix_comprovantes cp ON cp.troco_pix_id = tp.id
+                        WHERE tp.cliente_id = %s
+                          AND tp.data BETWEEN DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+                                          AND CURDATE()
+                          AND COALESCE(tp.troco_pix,0) > 0""",
+                    (frentista['cliente_id'],))
+faltando = consulta("""SELECT tp.id FROM troco_pix tp
+                        LEFT JOIN troco_pix_comprovantes cp ON cp.troco_pix_id = tp.id
+                       WHERE tp.cliente_id = %s
+                         AND tp.data BETWEEN DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+                                         AND CURDATE()
+                         AND COALESCE(tp.troco_pix,0) > 0
+                         AND cp.id IS NULL
+                         AND tp.bank_transaction_id IS NULL""",
+                    (frentista['cliente_id'],))
+prova('o troco já enviado leva envelope AZUL',
+      h.count('env env--ok') == len(enviados),
+      '%s azuis para %s comprovantes no banco'
+      % (h.count('env env--ok'), len(enviados)))
+prova('o troco que ainda não saiu leva envelope VERMELHO',
+      h.count('env env--nao') == len(faltando),
+      '%s vermelhos para %s sem comprovante'
+      % (h.count('env env--nao'), len(faltando)))
+prova('o envelope azul guarda a hora do PIX',
+      not enviados or re.search(r'title="PIX enviado em \d{2}/\d{2}/\d{4} às \d{2}:\d{2}"', h)
+      is not None, 'não achei a hora no envelope')
+prova('o vermelho explica que falta o administrativo mandar',
+      not faltando or 'ainda não mandou este PIX' in h)
+prova('solicitação sem troco não ganha envelope nenhum',
+      h.count('class="env') == len(enviados) + len(faltando),
+      'apareceu envelope onde não há troco a mandar')
+
 if len(sys.argv) > 2 and sys.argv[1] == '--html':
     io.open(sys.argv[2], 'w', encoding='utf-8').write(h)
     print('\nHTML salvo em %s' % sys.argv[2])
