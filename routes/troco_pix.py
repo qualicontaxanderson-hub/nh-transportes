@@ -540,13 +540,16 @@ def visualizar(troco_pix_id):
                 tpc.chave_pix,
                 f.nome as frentista_nome,
                 u1.username as criado_por_nome,
-                u2.username as atualizado_por_nome
+                u2.username as atualizado_por_nome,
+                cp.enviado_em as pix_enviado_em
             FROM troco_pix tp
             LEFT JOIN clientes c ON tp.cliente_id = c.id
             LEFT JOIN troco_pix_clientes tpc ON tp.troco_pix_cliente_id = tpc.id
             LEFT JOIN funcionarios f ON tp.funcionario_id = f.id
             LEFT JOIN usuarios u1 ON tp.criado_por = u1.id
             LEFT JOIN usuarios u2 ON tp.atualizado_por = u2.id
+            -- o aviso do banco: e o que diz, nesta tela, se o PIX ja saiu
+            LEFT JOIN troco_pix_comprovantes cp ON cp.troco_pix_id = tp.id
             WHERE tp.id = %s
         """
         

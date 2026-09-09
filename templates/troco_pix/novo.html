@@ -1,661 +1,585 @@
 {% extends "base.html" %}
 
-{% block title %}{{ 'Editar' if edit_mode else 'Nova' }} Solicitação de Troco PIX{% endblock %}
+{% block title %}{{ 'Corrigir' if edit_mode else 'Nova' }} solicitação de troco PIX{% endblock %}
+
+{#- O lancamento. Quem preenche esta tela esta no balcao, com o cheque numa mao
+    e o celular na outra, e a conta que importa e uma so:
+
+        TROCO PIX = cheque − abastecimento − arla − produtos
+                            − troco em especie − credito de venda programada
+
+    Entao o resultado dessa conta acompanha a pessoa: fica no rodape, sempre a
+    vista, mudando a cada digito. Antes ele era um campo cinza no meio do
+    formulario, e so aparecia depois de rolar a tela.
+
+    Duas trocas que mudam o uso no celular:
+      - o cliente PIX era um <select> com 264 opcoes; agora e busca por nome ou
+        chave, com a chave em destaque (e ela que se confere antes de mandar).
+      - "a vista / a prazo" eram opcoes de um <select>; agora sao dois botoes,
+        e o campo de vencimento so existe quando e a prazo.
+
+    O que NAO mudou, de proposito: os nomes dos campos, a formula e o jeito de
+    enviar (cada valor vai como numero cru num hidden, no submit). E o mesmo
+    formulario que as rotas /novo e /editar sempre receberam. -#}
+
+{% block styles %}
+<style>
+body > .container-fluid:has(#tpn){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#tpn){ padding:.7rem 1rem 0; }
+}
+</style>
+<style>
+  #tpn{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#4b5563; --ink:#151d27; --borda:#d9e0e8;
+        color:var(--ink); max-width:100%; padding-bottom:5.5rem; }
+
+  #tpn .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .7rem;
+    margin-bottom:.7rem; }
+  #tpn .topo__t{ font-weight:800; font-size:1.02rem; }
+  #tpn .topo__s{ font-size:.76rem; opacity:.96; margin-top:.1rem; }
+
+  #tpn .bloco{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; padding:.75rem .8rem .8rem; margin-bottom:.7rem;
+    box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #tpn .bloco__t{ font-size:.7rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--blue-deep); margin-bottom:.55rem;
+    display:flex; align-items:center; gap:.35rem; }
+  #tpn .campo{ display:block; margin-bottom:.6rem; }
+  #tpn .campo:last-child{ margin-bottom:0; }
+  #tpn .campo__r{ display:block; font-size:.78rem; font-weight:800;
+    color:var(--ink); margin-bottom:.2rem; }
+  #tpn .campo__d{ font-size:.72rem; color:var(--muted); margin-top:.2rem; }
+  #tpn input[type=text], #tpn input[type=date], #tpn select{
+    width:100%; border:1px solid var(--borda); border-radius:10px;
+    padding:.6rem .7rem; font-size:1rem; font-family:inherit;
+    color:var(--ink); background:#fff; }
+  #tpn input:focus, #tpn select:focus{ outline:2px solid #bcd3ea;
+    border-color:var(--blue); }
+  #tpn input[readonly]{ background:#f4f6f9; color:var(--muted); }
+  /* dinheiro: alinhado a direita e tabular, para conferir com o papel */
+  #tpn .din{ display:flex; align-items:center; gap:.4rem; }
+  #tpn .din span{ font-size:.86rem; font-weight:800; color:var(--muted);
+    flex:0 0 auto; }
+  #tpn .din input{ text-align:right; font-variant-numeric:tabular-nums;
+    font-weight:700; }
+  #tpn .fixo{ display:flex; align-items:center; gap:.4rem;
+    background:#f4f6f9; border:1px solid var(--borda); border-radius:10px;
+    padding:.6rem .7rem; font-size:.92rem; font-weight:700; }
+  #tpn .fixo i{ color:var(--muted); }
+
+  /* a vista / a prazo: botao, nao lista */
+  #tpn .duo{ display:grid; grid-template-columns:1fr 1fr; gap:.45rem; }
+  #tpn .duo label{ border:1px solid var(--borda); background:#fff;
+    border-radius:11px; padding:.6rem .5rem; text-align:center;
+    font-size:.88rem; font-weight:800; cursor:pointer; color:#3a4655; }
+  #tpn .duo input{ position:absolute; opacity:0; width:0; height:0; }
+  /* a classe vem do JS, e nao de :has(): num navegador que ignora :has os dois
+     botoes ficariam brancos e ninguem veria qual esta marcado */
+  #tpn .duo label.on{ background:var(--blue); border-color:var(--blue);
+    color:#fff; }
+
+  #tpn .soma{ display:flex; align-items:center; gap:.5rem; margin-top:.5rem;
+    background:#eaf1f9; color:var(--blue-deep); border-radius:10px;
+    padding:.45rem .65rem; font-size:.82rem; font-weight:800; }
+  #tpn .soma b{ margin-left:auto; font-variant-numeric:tabular-nums;
+    font-size:.95rem; }
+
+  /* o resultado da conta, dentro do bloco do troco */
+  #tpn .pix{ background:#e4f4e8; border:1px solid #a9dfc2; border-radius:12px;
+    padding:.6rem .7rem; margin-top:.6rem; }
+  #tpn .pix__r{ font-size:.7rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; color:#146c43; }
+  #tpn .pix__v{ font-size:1.5rem; font-weight:800; color:#146c43;
+    font-variant-numeric:tabular-nums; line-height:1.15; }
+  #tpn .pix__c{ font-size:.72rem; color:#1c6b34; margin-top:.15rem; }
+  #tpn .pix--ruim{ background:#fbe9e9; border-color:#f0c8c8; }
+  #tpn .pix--ruim .pix__r, #tpn .pix--ruim .pix__v,
+  #tpn .pix--ruim .pix__c{ color:var(--danger); }
+
+  /* cliente PIX: busca entre 264, com a chave a vista */
+  #tpn .cli{ position:relative; }
+  #tpn .drop{ position:absolute; z-index:40; left:0; right:0; top:100%;
+    margin-top:.2rem; max-height:14rem; overflow-y:auto; background:#fff;
+    border:1px solid var(--borda); border-radius:11px;
+    box-shadow:0 8px 24px rgba(20,35,60,.18); display:none; }
+  #tpn .item{ padding:.5rem .65rem; font-size:.85rem; cursor:pointer;
+    border-bottom:1px solid #f2f5f8; }
+  #tpn .item:last-child{ border-bottom:0; }
+  #tpn .item:hover{ background:#eef5fd; }
+  #tpn .item b{ display:block; font-weight:800; }
+  #tpn .item small{ font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,
+    Consolas,'Liberation Mono',monospace; color:#3d4854; font-weight:700; }
+  #tpn .escolhido{ margin-top:.5rem; background:#eaf1f9; border-radius:11px;
+    padding:.55rem .7rem; }
+  #tpn .escolhido[hidden]{ display:none; }
+  #tpn .escolhido__n{ font-weight:800; font-size:.88rem; }
+  #tpn .escolhido__k{ font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,
+    Consolas,'Liberation Mono',monospace; font-weight:700; font-size:.88rem;
+    color:var(--ink); margin-top:.15rem; overflow-wrap:anywhere; }
+  #tpn .escolhido__t{ font-size:.66rem; font-weight:800; color:var(--blue-deep);
+    text-transform:uppercase; letter-spacing:.05em; }
+  #tpn .link{ display:inline-flex; gap:.3rem; align-items:center;
+    margin-top:.45rem; font-size:.8rem; font-weight:700; color:var(--blue-deep);
+    text-decoration:none; }
+
+  #tpn .erro{ background:#fbe9e9; color:var(--danger); border-radius:11px;
+    padding:.55rem .7rem; font-size:.82rem; font-weight:700;
+    margin-bottom:.6rem; }
+  #tpn .erro[hidden]{ display:none; }
+
+  /* o rodape acompanha a rolagem: o valor do troco e o botao andam juntos */
+  #tpn .rodape{ position:fixed; left:0; right:0; bottom:0; z-index:50;
+    background:#fff; border-top:1px solid var(--borda);
+    box-shadow:0 -4px 16px rgba(20,35,60,.12); padding:.6rem .8rem .7rem; }
+  #tpn .rodape__l{ display:flex; align-items:center; gap:.7rem;
+    max-width:900px; margin:0 auto; }
+  #tpn .rodape__v{ flex:1; min-width:0; }
+  #tpn .rodape__r{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.05em; }
+  #tpn .rodape__n{ font-size:1.15rem; font-weight:800; color:#146c43;
+    font-variant-numeric:tabular-nums; line-height:1.1; }
+  #tpn .rodape__n.ruim{ color:var(--danger); }
+  #tpn .salvar{ flex:0 0 auto; border:0; background:var(--blue); color:#fff;
+    border-radius:12px; padding:.7rem 1.1rem; font-size:.95rem;
+    font-weight:800; font-family:inherit; cursor:pointer;
+    display:inline-flex; gap:.4rem; align-items:center; }
+  #tpn .salvar:hover{ background:var(--blue-deep); }
+  #tpn .voltar{ display:inline-flex; gap:.3rem; align-items:center;
+    color:var(--muted); font-size:.82rem; font-weight:700;
+    text-decoration:none; }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row mb-3">
-        <div class="col-md-12">
-            <h2>
-                <i class="bi bi-cash-coin"></i> 
-                {{ 'Editar' if edit_mode else 'Nova' }} Solicitação de Troco PIX
-            </h2>
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb">
-                    {% if request.args.get('origem') == 'pista' %}
-                    <li class="breadcrumb-item"><a href="{{ url_for('troco_pix.pista') }}">Troco PIX Pista</a></li>
-                    {% else %}
-                    <li class="breadcrumb-item"><a href="{{ url_for('troco_pix.listar') }}">Troco PIX</a></li>
-                    {% endif %}
-                    <li class="breadcrumb-item active">{{ 'Editar' if edit_mode else 'Nova Solicitação' }}</li>
-                </ol>
-            </nav>
-        </div>
-    </div>
+{% set nivel_usuario = current_user.nivel|upper if current_user.nivel else '' %}
+{% set e_pista = nivel_usuario in ['PISTA', 'SUPERVISOR'] and current_user.cliente_id %}
+{% set origem = request.args.get('origem') or '' %}
+{% set voltar = url_for('troco_pix.pista') if origem == 'pista' or nivel_usuario == 'PISTA'
+                else url_for('troco_pix.listar') %}
+<div id="tpn">
 
-    <!-- Info about sequential number -->
-    {% if not edit_mode %}
-    <div class="alert alert-info">
-        <i class="bi bi-info-circle"></i>
-        <strong>Número Sequencial:</strong> Um número sequencial será gerado automaticamente ao salvar (formato: PIX-DD-MM-AAAA-N1, PIX-DD-MM-AAAA-N2, etc.)
-    </div>
-    {% endif %}
+  <div class="topo">
+    <div class="topo__t"><i class="bi bi-cash-coin"></i>
+      {{ 'Corrigir solicitação' if edit_mode else 'Nova solicitação de troco' }}</div>
+    <div class="topo__s">
+      {%- if edit_mode %}{{ transacao.numero_sequencial or '' }}
+      {%- else %}O número é gerado ao salvar (PIX-{{ data_hoje[8:10] }}-{{ data_hoje[5:7] }}-{{ data_hoje[0:4] }}-N…)
+      {%- endif %}</div>
+  </div>
 
-    <form method="POST" action="{{ url_for('troco_pix.editar', troco_pix_id=transacao.id, origem=request.args.get('origem')) if edit_mode else url_for('troco_pix.novo', origem=request.args.get('origem')) }}">
-        <!-- Informações Gerais -->
-        <div class="card mb-3">
-            <div class="card-header bg-primary text-white">
-                <i class="bi bi-info-circle"></i> Informações Gerais
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label for="cliente_id" class="form-label">Posto/Cliente *</label>
-                            {% set nivel_usuario = current_user.nivel|upper if current_user.nivel else '' %}
-                            {% if nivel_usuario in ['PISTA', 'SUPERVISOR'] and current_user.cliente_id %}
-                                <!-- Campo hidden com cliente_id do usuário -->
-                                <input type="hidden" name="cliente_id" value="{{ current_user.cliente_id }}">
-                                
-                                <!-- Mostra nome do posto (readonly) com destaque visual -->
-                                <input type="text" class="form-control" 
-                                       style="background-color: #fff3cd; border-color: #ffc107; font-weight: 500;" 
-                                       value="{{ cliente_nome or 'Posto vinculado' }}" readonly>
-                                <small class="text-warning"><i class="bi bi-lock-fill"></i> Posto vinculado ao seu usuário (não pode ser alterado)</small>
-                            {% else %}
-                                <!-- Dropdown para ADMIN/GERENTE -->
-                                <select class="form-control" id="cliente_id" name="cliente_id" required>
-                                    <option value="">Selecione...</option>
-                                    {% for posto in postos %}
-                                    <option value="{{ posto.id }}" 
-                                            {% if edit_mode and transacao.cliente_id == posto.id %}selected{% endif %}>
-                                        {{ posto.razao_social }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                            {% endif %}
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label for="data" class="form-label">Data *</label>
-                            {% set nivel_usuario = current_user.nivel|upper if current_user.nivel else '' %}
-                            {% if nivel_usuario in ['PISTA'] %}
-                                <!-- Data fixa para PISTA com destaque visual -->
-                                <input type="date" class="form-control" id="data" name="data" 
-                                       style="background-color: #fff3cd; border-color: #ffc107; font-weight: 500;" 
-                                       value="{{ data_hoje }}" readonly required>
-                                <small class="text-warning"><i class="bi bi-lock-fill"></i> Data fixa: hoje (não pode ser alterada)</small>
-                            {% else %}
-                                <!-- Data editável para SUPERVISOR/ADMIN/GERENTE -->
-                                <input type="date" class="form-control" id="data" name="data" required
-                                       value="{{ transacao.data.strftime('%Y-%m-%d') if edit_mode and transacao.data else data_hoje }}">
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+  <div class="erro" id="tpn-erro" hidden></div>
 
-        <!-- VENDA -->
-        <div class="card mb-3">
-            <div class="card-header bg-success text-white">
-                <i class="bi bi-cart"></i> VENDA
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="mb-3">
-                            <label for="venda_abastecimento" class="form-label">Abastecimento</label>
-                            <div class="input-group">
-                                <span class="input-group-text">R$</span>
-                                <input type="text" class="form-control venda-input money-input" 
-                                       id="venda_abastecimento" name="venda_abastecimento"
-                                       value="{{ ('{:.2f}'.format(transacao.venda_abastecimento or 0).replace('.', ',')) if edit_mode else '0,00' }}"
-                                       data-raw-value="{{ transacao.venda_abastecimento or 0 if edit_mode else 0 }}">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="mb-3">
-                            <label for="venda_arla" class="form-label">Arla</label>
-                            <div class="input-group">
-                                <span class="input-group-text">R$</span>
-                                <input type="text" class="form-control venda-input money-input" 
-                                       id="venda_arla" name="venda_arla"
-                                       value="{{ ('{:.2f}'.format(transacao.venda_arla or 0).replace('.', ',')) if edit_mode else '0,00' }}"
-                                       data-raw-value="{{ transacao.venda_arla or 0 if edit_mode else 0 }}">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="mb-3">
-                            <label for="venda_produtos" class="form-label">Produtos</label>
-                            <div class="input-group">
-                                <span class="input-group-text">R$</span>
-                                <input type="text" class="form-control venda-input money-input" 
-                                       id="venda_produtos" name="venda_produtos"
-                                       value="{{ ('{:.2f}'.format(transacao.venda_produtos or 0).replace('.', ',')) if edit_mode else '0,00' }}"
-                                       data-raw-value="{{ transacao.venda_produtos or 0 if edit_mode else 0 }}">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="col-md-12">
-                        <div class="alert alert-success">
-                            <strong>TOTAL DA VENDA: R$ <span id="venda_total_display">0,00</span></strong>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+  <form method="POST" id="tpn-form"
+        action="{% if edit_mode %}{{ url_for('troco_pix.editar', troco_pix_id=troco_pix_id, origem=origem) }}{% else %}{{ url_for('troco_pix.novo', origem=origem) }}{% endif %}">
+    <input type="hidden" name="origem" value="{{ origem }}">
 
-        <!-- CHEQUE -->
-        <div class="card mb-3">
-            <div class="card-header bg-warning">
-                <i class="bi bi-wallet2"></i> CHEQUE
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="mb-3">
-                            <label for="cheque_tipo" class="form-label">Tipo de Cheque *</label>
-                            <select class="form-control" id="cheque_tipo" name="cheque_tipo" required>
-                                <option value="">Selecione...</option>
-                                <option value="A_VISTA" {% if edit_mode and transacao.cheque_tipo == 'A_VISTA' %}selected{% endif %}>À Vista</option>
-                                <option value="A_PRAZO" {% if edit_mode and transacao.cheque_tipo == 'A_PRAZO' %}selected{% endif %}>A Prazo</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-md-4" id="data_vencimento_group" style="display:none;">
-                        <div class="mb-3">
-                            <label for="cheque_data_vencimento" class="form-label">Data de Vencimento</label>
-                            <input type="date" class="form-control" id="cheque_data_vencimento" name="cheque_data_vencimento"
-                                   value="{{ transacao.cheque_data_vencimento.strftime('%Y-%m-%d') if edit_mode and transacao.cheque_data_vencimento else '' }}">
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="mb-3">
-                            <label for="cheque_valor" class="form-label">Valor do Cheque *</label>
-                            <div class="input-group">
-                                <span class="input-group-text">R$</span>
-                                <input type="text" class="form-control money-input" 
-                                       id="cheque_valor" name="cheque_valor" required
-                                       value="{{ ('{:.2f}'.format(transacao.cheque_valor or 0).replace('.', ',')) if edit_mode else '' }}"
-                                       data-raw-value="{{ transacao.cheque_valor or 0 if edit_mode else 0 }}">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- TROCO -->
-        <div class="card mb-3">
-            <div class="card-header bg-info text-white">
-                <i class="bi bi-arrow-left-right"></i> TROCO
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="mb-3">
-                            <label for="troco_especie" class="form-label">Troco em Espécie</label>
-                            <div class="input-group">
-                                <span class="input-group-text">R$</span>
-                                <input type="text" class="form-control troco-input money-input" 
-                                       id="troco_especie" name="troco_especie"
-                                       value="{{ ('{:.2f}'.format(transacao.troco_especie or 0).replace('.', ',')) if edit_mode else '0,00' }}"
-                                       data-raw-value="{{ transacao.troco_especie or 0 if edit_mode else 0 }}">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="mb-3">
-                            <label for="troco_pix" class="form-label">Troco PIX <span class="badge bg-secondary">Calculado</span></label>
-                            <div class="input-group">
-                                <span class="input-group-text">R$</span>
-                                <input type="text" class="form-control troco-input money-input" 
-                                       id="troco_pix" name="troco_pix" readonly
-                                       value="{{ ('{:.2f}'.format(transacao.troco_pix or 0).replace('.', ',')) if edit_mode else '0,00' }}"
-                                       data-raw-value="{{ transacao.troco_pix or 0 if edit_mode else 0 }}"
-                                       style="background-color: #e9ecef;">
-                            </div>
-                            <small class="form-text text-muted">Calculado automaticamente</small>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="mb-3">
-                            <label for="troco_credito_vda_programada" class="form-label">Crédito Vda Programada</label>
-                            <div class="input-group">
-                                <span class="input-group-text">R$</span>
-                                <input type="text" class="form-control troco-input money-input" 
-                                       id="troco_credito_vda_programada" name="troco_credito_vda_programada"
-                                       value="{{ ('{:.2f}'.format(transacao.troco_credito_vda_programada or 0).replace('.', ',')) if edit_mode else '0,00' }}"
-                                       data-raw-value="{{ transacao.troco_credito_vda_programada or 0 if edit_mode else 0 }}">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="col-md-12">
-                        <div class="alert alert-info">
-                            <strong>TOTAL DO TROCO: R$ <span id="troco_total_display">0,00</span></strong>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- DADOS DO DESTINATÁRIO PIX -->
-        <div class="card mb-3">
-            <div class="card-header bg-secondary text-white">
-                <i class="bi bi-person"></i> Destinatário do PIX
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-12">
-                        <div class="mb-3">
-                            <label for="troco_pix_cliente_id" class="form-label">Cliente PIX *</label>
-                            <div class="input-group">
-                                <select class="form-control" id="troco_pix_cliente_id" name="troco_pix_cliente_id" required>
-                                    <option value="">Selecione...</option>
-                                    {% for cliente_pix in clientes_pix %}
-                                    <option value="{{ cliente_pix.id }}" 
-                                            data-tipo="{{ cliente_pix.tipo_chave_pix }}"
-                                            data-chave="{{ cliente_pix.chave_pix }}"
-                                            {% if edit_mode and transacao.troco_pix_cliente_id == cliente_pix.id %}selected{% endif %}>
-                                        {{ cliente_pix.nome_completo }} - {{ cliente_pix.tipo_chave_pix }}: {{ cliente_pix.chave_pix }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                                <a href="{{ url_for('troco_pix.cliente_novo', return_to=request.url) }}" class="btn btn-outline-secondary" target="_blank">
-                                    <i class="bi bi-plus"></i> Novo Cliente PIX
-                                </a>
-                            </div>
-                            <small class="form-text text-muted">
-                                Se não encontrar o cliente, clique em "Novo Cliente PIX" para cadastrar.
-                            </small>
-                        </div>
-                    </div>
-                </div>
-                <div class="row" id="pix_info" style="display:none;">
-                    <div class="col-md-6">
-                        <div class="alert alert-light">
-                            <strong>Tipo de Chave:</strong> <span id="pix_tipo"></span>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="alert alert-light">
-                            <strong>Chave PIX:</strong> <span id="pix_chave"></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- FRENTISTA -->
-        <div class="card mb-3">
-            <div class="card-header bg-dark text-white">
-                <i class="bi bi-person-badge"></i> Frentista
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-12">
-                        <div class="mb-3">
-                            <label for="funcionario_id" class="form-label">Frentista *</label>
-                            <select class="form-control" id="funcionario_id" name="funcionario_id" required>
-                                <option value="">Selecione primeiro o Posto/Cliente...</option>
-                                {% for funcionario in funcionarios %}
-                                <option value="{{ funcionario.id }}"
-                                        data-cliente-id="{{ funcionario.clienteid or '' }}"
-                                        {% if edit_mode and transacao.funcionario_id == funcionario.id %}selected{% endif %}>
-                                    {{ funcionario.nome }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                            <small class="form-text text-muted" id="frentista-info"></small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- STATUS (apenas em modo edição) -->
-        {% if edit_mode %}
-        <div class="card mb-3">
-            <div class="card-header">
-                <i class="bi bi-flag"></i> Status
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-12">
-                        <div class="mb-3">
-                            <label for="status" class="form-label">Status</label>
-                            <select class="form-control" id="status" name="status">
-                                <option value="PENDENTE" {% if transacao.status == 'PENDENTE' %}selected{% endif %}>Pendente</option>
-                                <option value="PROCESSADO" {% if transacao.status == 'PROCESSADO' %}selected{% endif %}>Processado</option>
-                                <option value="CANCELADO" {% if transacao.status == 'CANCELADO' %}selected{% endif %}>Cancelado</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <!-- ONDE E QUANDO -->
+    <div class="bloco">
+      <div class="bloco__t"><i class="bi bi-shop"></i> Onde e quando</div>
+      <label class="campo">
+        <span class="campo__r">Posto</span>
+        {% if e_pista %}
+        <input type="hidden" name="cliente_id" value="{{ current_user.cliente_id }}">
+        <div class="fixo"><i class="bi bi-lock-fill"></i>
+          {{ cliente_nome or 'Posto vinculado ao seu usuário' }}</div>
+        {% else %}
+        <select id="cliente_id" name="cliente_id" required>
+          <option value="">Selecione o posto…</option>
+          {% for posto in postos %}
+          <option value="{{ posto.id }}"
+            {{ 'selected' if edit_mode and transacao.cliente_id == posto.id }}>
+            {{ posto.razao_social }}</option>
+          {% endfor %}
+        </select>
         {% endif %}
+      </label>
+      <label class="campo">
+        <span class="campo__r">Data</span>
+        {% if nivel_usuario == 'PISTA' %}
+        <input type="hidden" name="data" value="{{ data_hoje }}">
+        <div class="fixo"><i class="bi bi-lock-fill"></i>
+          Hoje, {{ data_hoje[8:10] }}/{{ data_hoje[5:7] }}/{{ data_hoje[0:4] }}</div>
+        {% else %}
+        <input type="date" id="data" name="data" required
+               value="{{ transacao.data.strftime('%Y-%m-%d') if edit_mode and transacao.data else data_hoje }}">
+        {% endif %}
+      </label>
+    </div>
 
-        <!-- Botões -->
-        <div class="row mb-5">
-            <div class="col-md-12">
-                <button type="submit" class="btn btn-primary btn-lg">
-                    <i class="bi bi-save"></i> {{ 'Atualizar' if edit_mode else 'Salvar' }}
-                </button>
-                {% if request.args.get('origem') == 'pista' %}
-                <a href="{{ url_for('troco_pix.pista') }}" class="btn btn-secondary btn-lg">
-                    <i class="bi bi-x-circle"></i> Cancelar
-                </a>
-                {% else %}
-                <a href="{{ url_for('troco_pix.listar') }}" class="btn btn-secondary btn-lg">
-                    <i class="bi bi-x-circle"></i> Cancelar
-                </a>
-                {% endif %}
-            </div>
+    <!-- O CHEQUE -->
+    <div class="bloco">
+      <div class="bloco__t"><i class="bi bi-receipt"></i> O cheque que o cliente deu</div>
+      <div class="campo">
+        <span class="campo__r">Tipo</span>
+        <div class="duo">
+          <label><input type="radio" name="cheque_tipo" value="A_VISTA" required
+                   {{ 'checked' if not edit_mode or transacao.cheque_tipo == 'A_VISTA' }}
+                   onchange="tpnCheque()"><span>À vista</span></label>
+          <label><input type="radio" name="cheque_tipo" value="A_PRAZO"
+                   {{ 'checked' if edit_mode and transacao.cheque_tipo == 'A_PRAZO' }}
+                   onchange="tpnCheque()"><span>A prazo</span></label>
         </div>
-    </form>
+      </div>
+      <label class="campo" id="tpn-venc" hidden>
+        <span class="campo__r">Vence em</span>
+        <input type="date" id="cheque_data_vencimento" name="cheque_data_vencimento"
+               value="{{ transacao.cheque_data_vencimento.strftime('%Y-%m-%d') if edit_mode and transacao.cheque_data_vencimento else '' }}">
+        <span class="campo__d">Obrigatório para cheque a prazo.</span>
+      </label>
+      <label class="campo">
+        <span class="campo__r">Valor do cheque</span>
+        <div class="din"><span>R$</span>
+          <input type="text" inputmode="decimal" class="money" id="cheque_valor"
+                 name="cheque_valor" required
+                 value="{{ '%.2f'|format(transacao.cheque_valor or 0)|replace('.', ',') if edit_mode else '0,00' }}"
+                 data-raw-value="{{ transacao.cheque_valor or 0 if edit_mode else 0 }}"></div>
+      </label>
+    </div>
+
+    <!-- A VENDA -->
+    <div class="bloco">
+      <div class="bloco__t"><i class="bi bi-cart3"></i> O que o cliente comprou</div>
+      <label class="campo">
+        <span class="campo__r">Abastecimento</span>
+        <div class="din"><span>R$</span>
+          <input type="text" inputmode="decimal" class="money venda"
+                 id="venda_abastecimento" name="venda_abastecimento"
+                 value="{{ '%.2f'|format(transacao.venda_abastecimento or 0)|replace('.', ',') if edit_mode else '0,00' }}"
+                 data-raw-value="{{ transacao.venda_abastecimento or 0 if edit_mode else 0 }}"></div>
+      </label>
+      <label class="campo">
+        <span class="campo__r">Arla</span>
+        <div class="din"><span>R$</span>
+          <input type="text" inputmode="decimal" class="money venda"
+                 id="venda_arla" name="venda_arla"
+                 value="{{ '%.2f'|format(transacao.venda_arla or 0)|replace('.', ',') if edit_mode else '0,00' }}"
+                 data-raw-value="{{ transacao.venda_arla or 0 if edit_mode else 0 }}"></div>
+      </label>
+      <label class="campo">
+        <span class="campo__r">Produtos da loja</span>
+        <div class="din"><span>R$</span>
+          <input type="text" inputmode="decimal" class="money venda"
+                 id="venda_produtos" name="venda_produtos"
+                 value="{{ '%.2f'|format(transacao.venda_produtos or 0)|replace('.', ',') if edit_mode else '0,00' }}"
+                 data-raw-value="{{ transacao.venda_produtos or 0 if edit_mode else 0 }}"></div>
+      </label>
+      <div class="soma"><i class="bi bi-plus-slash-minus"></i> Total da venda
+        <b id="tpn-venda">R$ 0,00</b></div>
+    </div>
+
+    <!-- O TROCO -->
+    <div class="bloco">
+      <div class="bloco__t"><i class="bi bi-arrow-left-right"></i> Como o troco volta</div>
+      <label class="campo">
+        <span class="campo__r">Em dinheiro, na hora</span>
+        <div class="din"><span>R$</span>
+          <input type="text" inputmode="decimal" class="money" id="troco_especie"
+                 name="troco_especie"
+                 value="{{ '%.2f'|format(transacao.troco_especie or 0)|replace('.', ',') if edit_mode else '0,00' }}"
+                 data-raw-value="{{ transacao.troco_especie or 0 if edit_mode else 0 }}"></div>
+      </label>
+      <label class="campo">
+        <span class="campo__r">Crédito em venda programada</span>
+        <div class="din"><span>R$</span>
+          <input type="text" inputmode="decimal" class="money"
+                 id="troco_credito_vda_programada" name="troco_credito_vda_programada"
+                 value="{{ '%.2f'|format(transacao.troco_credito_vda_programada or 0)|replace('.', ',') if edit_mode else '0,00' }}"
+                 data-raw-value="{{ transacao.troco_credito_vda_programada or 0 if edit_mode else 0 }}"></div>
+      </label>
+
+      {# O resultado da conta. E campo do formulario (vai no POST), mas nao se
+         digita nele: e o cheque menos tudo o que ja foi dado de outra forma. #}
+      <div class="pix" id="tpn-pix">
+        <div class="pix__r">Troco por PIX</div>
+        <div class="pix__v" id="tpn-pix-v">R$ 0,00</div>
+        <div class="pix__c" id="tpn-pix-c">cheque − venda − troco em dinheiro − crédito</div>
+        <input type="hidden" class="money" id="troco_pix" name="troco_pix"
+               value="0,00" data-raw-value="{{ transacao.troco_pix or 0 if edit_mode else 0 }}">
+      </div>
+    </div>
+
+    <!-- QUEM RECEBE -->
+    <div class="bloco">
+      <div class="bloco__t"><i class="bi bi-person-check"></i> Quem recebe o PIX</div>
+      <div class="campo cli">
+        <span class="campo__r">Cliente PIX</span>
+        {# Busca, e nao lista: sao 264 cadastros. Digitar tres letras do nome
+           (ou o comeco da chave) e mais rapido do que rolar. #}
+        <input type="text" id="tpn-busca" autocomplete="off"
+               placeholder="Nome ou chave PIX…"
+               onfocus="tpnAbre()" oninput="tpnFiltra()">
+        <input type="hidden" id="troco_pix_cliente_id" name="troco_pix_cliente_id"
+               value="{{ transacao.troco_pix_cliente_id or '' if edit_mode else '' }}" required>
+        <div class="drop" id="tpn-drop"></div>
+        <div class="escolhido" id="tpn-escolhido" hidden>
+          <div class="escolhido__n" id="tpn-esc-n"></div>
+          <div class="escolhido__t" id="tpn-esc-t"></div>
+          <div class="escolhido__k" id="tpn-esc-k"></div>
+        </div>
+        <a class="link" target="_blank"
+           href="{{ url_for('troco_pix.cliente_novo', return_to=request.url) }}">
+          <i class="bi bi-plus-circle"></i> Não está na lista? Cadastrar cliente PIX</a>
+      </div>
+    </div>
+
+    <!-- QUEM LANÇOU -->
+    <div class="bloco">
+      <div class="bloco__t"><i class="bi bi-person-badge"></i> Quem atendeu</div>
+      <label class="campo">
+        <span class="campo__r">Frentista</span>
+        <select id="funcionario_id" name="funcionario_id" required>
+          <option value="">Selecione…</option>
+          {% for funcionario in funcionarios %}
+          <option value="{{ funcionario.id }}"
+                  data-cliente-id="{{ funcionario.clienteid or '' }}"
+            {{ 'selected' if edit_mode and transacao.funcionario_id == funcionario.id }}>
+            {{ funcionario.nome }}</option>
+          {% endfor %}
+        </select>
+        <span class="campo__d" id="tpn-frentista-d"></span>
+      </label>
+    </div>
+
+    <div class="rodape">
+      <div class="rodape__l">
+        <a class="voltar" href="{{ voltar }}"><i class="bi bi-x-lg"></i> Sair</a>
+        <div class="rodape__v">
+          <div class="rodape__r">Troco por PIX</div>
+          <div class="rodape__n" id="tpn-rod">R$ 0,00</div>
+        </div>
+        <button type="submit" class="salvar">
+          <i class="bi bi-check-lg"></i> {{ 'Salvar' if edit_mode else 'Lançar' }}</button>
+      </div>
+    </div>
+  </form>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // ==================== FORMATAÇÃO MONETÁRIA ====================
-    
-    // Função para formatar valor em Real Brasileiro (visual)
-    function formatarReal(valor) {
-        return valor.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    }
-    
-    // Função para converter string formatada para número
-    function desformatarReal(valor) {
-        if (!valor) return 0;
-        // Remove pontos de milhar e substitui vírgula por ponto
-        return parseFloat(valor.replace(/\./g, '').replace(',', '.')) || 0;
-    }
-    
-    // Função para aplicar máscara monetária em tempo real
-    function aplicarMascaraMonetaria(input) {
-        let valor = input.value.replace(/\D/g, ''); // Remove tudo que não é dígito
-        
-        if (!valor || valor === '0') {
-            input.value = '0,00';
-            input.setAttribute('data-raw-value', '0');
-            return;
-        }
-        
-        // Converte para centavos
-        let centavos = parseInt(valor, 10);
-        let reais = centavos / 100;
-        
-        // Atualiza o valor formatado
-        input.value = formatarReal(reais);
-        input.setAttribute('data-raw-value', reais.toFixed(2));
-    }
-    
-    // Adicionar evento de input para todos os campos monetários
-    document.querySelectorAll('.money-input').forEach(input => {
-        // Formatar valor inicial APENAS se não estiver em modo de edição ou se o valor não tiver vírgula
-        // Em modo de edição, os valores já vêm formatados do servidor
-        if (input.value) {
-            let valorInicial = desformatarReal(input.value);
-            input.setAttribute('data-raw-value', valorInicial.toFixed(2));
-            
-            // Reformatar apenas se não tiver vírgula (modo novo)
-            if (!input.value.includes(',')) {
-                input.value = formatarReal(valorInicial);
-            }
-        }
-        
-        // Evento de input para formatação em tempo real
-        input.addEventListener('input', function(e) {
-            aplicarMascaraMonetaria(this);
-            
-            // Disparar evento de change para recalcular totais
-            this.dispatchEvent(new Event('change', { bubbles: true }));
-        });
-        
-        // Ao focar, selecionar todo o texto
-        input.addEventListener('focus', function() {
-            this.select();
-        });
-    });
-    
-    // ==================== CÁLCULOS ====================
-    
-    // Função para calcular total de venda
-    function calcularTotalVenda() {
-        const abastecimento = desformatarReal(document.getElementById('venda_abastecimento').value);
-        const arla = desformatarReal(document.getElementById('venda_arla').value);
-        const produtos = desformatarReal(document.getElementById('venda_produtos').value);
-        
-        const total = abastecimento + arla + produtos;
-        document.getElementById('venda_total_display').textContent = formatarReal(total);
-        
-        // Recalcular Troco PIX quando venda mudar
-        calcularTrocoPix();
-    }
+var TPN_CLIENTES = {{ clientes_pix_json | safe }};
 
-    // Função para calcular Troco PIX automaticamente
-    function calcularTrocoPix() {
-        // Pegar valores dos campos
-        const chequeValor = desformatarReal(document.getElementById('cheque_valor').value);
-        const abastecimento = desformatarReal(document.getElementById('venda_abastecimento').value);
-        const arla = desformatarReal(document.getElementById('venda_arla').value);
-        const produtos = desformatarReal(document.getElementById('venda_produtos').value);
-        const trocoEspecie = desformatarReal(document.getElementById('troco_especie').value);
-        const creditoVdaProgramada = desformatarReal(document.getElementById('troco_credito_vda_programada').value);
-        
-        // Fórmula: Troco PIX = Cheque - Abastecimento - Arla - Produtos - Troco Espécie - Crédito Vda Programada
-        const trocoPix = chequeValor - abastecimento - arla - produtos - trocoEspecie - creditoVdaProgramada;
-        
-        // Atualizar campo
-        const trocoPixInput = document.getElementById('troco_pix');
-        trocoPixInput.value = formatarReal(trocoPix);
-        trocoPixInput.setAttribute('data-raw-value', trocoPix);
-        
-        // Recalcular total do troco
-        calcularTotalTroco();
+// ─── dinheiro ────────────────────────────────────────────────────────────
+// O valor digitado aparece em real (1.234,56) e viaja como numero (1234.56).
+// Quem faz a conta e o data-raw-value; o texto e so para os olhos.
+function tpnFmt(v){
+  return (v || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2,
+                                           maximumFractionDigits: 2});
+}
+function tpnCru(txt){
+  var t = String(txt || '').replace(/[^\d,-]/g, '').replace(',', '.');
+  var n = parseFloat(t);
+  return isNaN(n) ? 0 : n;
+}
+function tpnMascara(inp){
+  // Digita-se da direita para a esquerda, como em maquininha: cada tecla
+  // empurra os centavos. E o jeito que nao exige achar a virgula no teclado.
+  var so = String(inp.value).replace(/\D/g, '');
+  var n = (parseInt(so, 10) || 0) / 100;
+  inp.value = tpnFmt(n);
+  inp.setAttribute('data-raw-value', n.toFixed(2));
+}
+function tpnValor(id){
+  var e = document.getElementById(id);
+  return e ? parseFloat(e.getAttribute('data-raw-value') || '0') || 0 : 0;
+}
+
+// ─── a conta ─────────────────────────────────────────────────────────────
+function tpnConta(){
+  var venda = tpnValor('venda_abastecimento') + tpnValor('venda_arla')
+            + tpnValor('venda_produtos');
+  var pix = tpnValor('cheque_valor') - venda - tpnValor('troco_especie')
+          - tpnValor('troco_credito_vda_programada');
+  document.getElementById('tpn-venda').textContent = 'R$ ' + tpnFmt(venda);
+
+  var campo = document.getElementById('troco_pix');
+  campo.setAttribute('data-raw-value', pix.toFixed(2));
+  campo.value = tpnFmt(pix);
+
+  var cx = document.getElementById('tpn-pix');
+  var vv = document.getElementById('tpn-pix-v');
+  var cc = document.getElementById('tpn-pix-c');
+  var rod = document.getElementById('tpn-rod');
+  vv.textContent = 'R$ ' + tpnFmt(pix);
+  rod.textContent = 'R$ ' + tpnFmt(pix);
+  if (pix < -0.004){
+    cx.className = 'pix pix--ruim';
+    rod.className = 'rodape__n ruim';
+    // Negativo quer dizer que o cheque nao cobre o que foi lancado — e o erro
+    // mais comum: digitar a venda maior que o cheque.
+    cc.textContent = 'O cheque não cobre a venda mais os trocos. Confira os valores.';
+  } else {
+    cx.className = 'pix';
+    rod.className = 'rodape__n';
+    cc.textContent = 'cheque − venda − troco em dinheiro − crédito';
+  }
+  return pix;
+}
+
+// ─── cheque a prazo ──────────────────────────────────────────────────────
+function tpnCheque(){
+  var prazo = document.querySelector('input[name="cheque_tipo"][value="A_PRAZO"]');
+  var venc = document.getElementById('tpn-venc');
+  var campo = document.getElementById('cheque_data_vencimento');
+  var eh = prazo && prazo.checked;
+  var labels = document.querySelectorAll('#tpn .duo label');
+  for (var i = 0; i < labels.length; i++){
+    var r = labels[i].querySelector('input');
+    labels[i].classList.toggle('on', !!(r && r.checked));
+  }
+  venc.hidden = !eh;
+  campo.required = !!eh;      // cheque a prazo sem vencimento o servidor recusa
+  if (!eh) campo.value = '';
+}
+
+// ─── cliente PIX: busca entre 264 ────────────────────────────────────────
+function tpnItens(q){
+  q = (q || '').trim().toLowerCase();
+  var fora = [];
+  for (var i = 0; i < TPN_CLIENTES.length && fora.length < 40; i++){
+    var c = TPN_CLIENTES[i];
+    var alvo = ((c.nome_completo || '') + ' ' + (c.chave_pix || '')).toLowerCase();
+    if (!q || alvo.indexOf(q) >= 0) fora.push(c);
+  }
+  return fora;
+}
+function tpnPinta(q){
+  var drop = document.getElementById('tpn-drop');
+  var itens = tpnItens(q), html = '';
+  for (var i = 0; i < itens.length; i++){
+    var c = itens[i];
+    html += '<div class="item" data-id="' + c.id + '" onmousedown="tpnEscolhe(event,' +
+            c.id + ')"><b>' + (c.nome_completo || '') + '</b><small>' +
+            ((c.tipo_chave_pix || '').toLowerCase()) + ' · ' +
+            (c.chave_pix || '') + '</small></div>';
+  }
+  drop.innerHTML = html ||
+    '<div class="item"><b>Nenhum cliente com esse nome ou chave</b>' +
+    '<small>cadastre pelo link abaixo</small></div>';
+  drop.style.display = 'block';
+}
+function tpnAbre(){ tpnPinta(''); }
+function tpnFiltra(){ tpnPinta(document.getElementById('tpn-busca').value); }
+function tpnEscolhe(ev, id){
+  if (ev) ev.preventDefault();
+  var c = null;
+  for (var i = 0; i < TPN_CLIENTES.length; i++)
+    if (String(TPN_CLIENTES[i].id) === String(id)) c = TPN_CLIENTES[i];
+  if (!c) return;
+  document.getElementById('troco_pix_cliente_id').value = c.id;
+  document.getElementById('tpn-busca').value = '';
+  document.getElementById('tpn-drop').style.display = 'none';
+  var cx = document.getElementById('tpn-escolhido');
+  document.getElementById('tpn-esc-n').textContent = c.nome_completo || '';
+  document.getElementById('tpn-esc-t').textContent = (c.tipo_chave_pix || '').replace('_', ' ');
+  document.getElementById('tpn-esc-k').textContent = c.chave_pix || '';
+  cx.hidden = false;
+}
+
+// ─── frentista: só os do posto escolhido ─────────────────────────────────
+function tpnFrentistas(){
+  var sel = document.getElementById('funcionario_id');
+  if (!sel || !sel._todos) return;
+  var posto = document.getElementById('cliente_id');
+  var pid = posto ? posto.value
+                  : (document.querySelector('input[name="cliente_id"]') || {}).value;
+  var atual = sel.value;
+  sel.innerHTML = '<option value="">Selecione…</option>';
+  var n = 0;
+  for (var i = 0; i < sel._todos.length; i++){
+    var o = sel._todos[i];
+    var dele = o.getAttribute('data-cliente-id');
+    // Sem posto no cadastro, o frentista serve para qualquer um: cortar esses
+    // deixava a lista vazia e travava o lancamento.
+    if (!pid || !dele || String(dele) === String(pid)){
+      sel.appendChild(o.cloneNode(true));
+      n++;
     }
+  }
+  sel.value = atual;
+  var d = document.getElementById('tpn-frentista-d');
+  if (d) d.textContent = pid ? (n + (n === 1 ? ' frentista neste posto'
+                                             : ' frentistas neste posto'))
+                             : 'Escolha o posto primeiro.';
+}
 
-    // Função para calcular total de troco
-    function calcularTotalTroco() {
-        const especie = desformatarReal(document.getElementById('troco_especie').value);
-        const pix = desformatarReal(document.getElementById('troco_pix').value);
-        const credito = desformatarReal(document.getElementById('troco_credito_vda_programada').value);
-        
-        const total = especie + pix + credito;
-        document.getElementById('troco_total_display').textContent = formatarReal(total);
+// ─── ligar tudo ──────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function(){
+  var moedas = document.querySelectorAll('#tpn input.money[type=text]');
+  for (var i = 0; i < moedas.length; i++){
+    (function(inp){
+      inp.addEventListener('input', function(){ tpnMascara(inp); tpnConta(); });
+      inp.addEventListener('focus', function(){ inp.select(); });
+      // o que vem do banco na edicao ja chega formatado; normaliza mesmo assim
+      var cru = parseFloat(inp.getAttribute('data-raw-value') || '0') || 0;
+      inp.value = tpnFmt(cru);
+    })(moedas[i]);
+  }
+
+  var sel = document.getElementById('funcionario_id');
+  if (sel){
+    sel._todos = Array.prototype.slice.call(sel.options, 1);
+    var posto = document.getElementById('cliente_id');
+    if (posto) posto.addEventListener('change', tpnFrentistas);
+    tpnFrentistas();
+  }
+
+  // na edicao, mostra de saida o cliente PIX que ja estava escolhido
+  var jaTem = document.getElementById('troco_pix_cliente_id').value;
+  if (jaTem) tpnEscolhe(null, jaTem);
+
+  tpnCheque();
+  tpnConta();
+
+  document.addEventListener('click', function(ev){
+    if (ev.target.closest && ev.target.closest('.cli')) return;
+    document.getElementById('tpn-drop').style.display = 'none';
+  });
+
+  // ─── envio ─────────────────────────────────────────────────────────────
+  document.getElementById('tpn-form').addEventListener('submit', function(ev){
+    var erro = document.getElementById('tpn-erro');
+    var pix = tpnConta();
+    var falta = [];
+    if (!document.getElementById('troco_pix_cliente_id').value)
+      falta.push('escolha quem recebe o PIX');
+    if (!document.getElementById('funcionario_id').value)
+      falta.push('escolha o frentista');
+    var prazo = document.querySelector('input[name="cheque_tipo"][value="A_PRAZO"]');
+    if (prazo && prazo.checked && !document.getElementById('cheque_data_vencimento').value)
+      falta.push('informe o vencimento do cheque a prazo');
+    if (tpnValor('cheque_valor') <= 0) falta.push('informe o valor do cheque');
+    // Troco negativo o banco aceitaria e ninguem perceberia — e o erro mais
+    // comum da tela. Barra aqui, com o motivo escrito.
+    if (pix < -0.004) falta.push('o troco ficou negativo: o cheque não cobre a venda mais os trocos');
+
+    if (falta.length){
+      ev.preventDefault();
+      erro.hidden = false;
+      erro.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> ' +
+                       'Antes de salvar: ' + falta.join('; ') + '.';
+      window.scrollTo({top: 0, behavior: 'smooth'});
+      return;
     }
-
-    // Adicionar listeners para campos de venda
-    document.querySelectorAll('.venda-input').forEach(input => {
-        input.addEventListener('change', calcularTotalVenda);
-        input.addEventListener('input', calcularTotalVenda); // Calcular em tempo real
-    });
-
-    // Adicionar listeners para campos que afetam Troco PIX
-    const camposCalculo = [
-        'cheque_valor',
-        'venda_abastecimento',
-        'venda_arla',
-        'venda_produtos',
-        'troco_especie',
-        'troco_credito_vda_programada'
-    ];
-    
-    camposCalculo.forEach(campoId => {
-        const campo = document.getElementById(campoId);
-        if (campo) {
-            campo.addEventListener('change', calcularTrocoPix);
-            campo.addEventListener('input', calcularTrocoPix); // Calcular em tempo real
-        }
-    });
-
-    // Adicionar listener apenas para troco em espécie e crédito (Troco PIX já é calculado)
-    document.getElementById('troco_especie').addEventListener('change', calcularTotalTroco);
-    document.getElementById('troco_credito_vda_programada').addEventListener('change', calcularTotalTroco);
-
-    // ==================== FILTRO DE FRENTISTAS POR POSTO ====================
-    
-    const clienteSelect = document.getElementById('cliente_id');
-    const frentistaSelect = document.getElementById('funcionario_id');
-    const frentistaInfo = document.getElementById('frentista-info');
-    const todasOpcoesFrentistas = Array.from(frentistaSelect.options).slice(1); // Excluir primeira opção
-    
-    function filtrarFrentistas() {
-        // Pegar cliente_id do select ou do hidden input (PISTA)
-        let clienteId = clienteSelect ? clienteSelect.value : null;
-        
-        // Se não tem select (PISTA), buscar do hidden input
-        if (!clienteId) {
-            const hiddenClienteId = document.querySelector('input[name="cliente_id"]');
-            if (hiddenClienteId) {
-                clienteId = hiddenClienteId.value;
-            }
-        }
-        
-        // Limpar select mantendo apenas a primeira opção
-        frentistaSelect.innerHTML = '<option value="">Selecione...</option>';
-        
-        if (!clienteId) {
-            frentistaSelect.innerHTML = '<option value="">Selecione primeiro o Posto/Cliente...</option>';
-            frentistaInfo.textContent = '';
-            return;
-        }
-        
-        // Filtrar frentistas pelo cliente selecionado
-        let frentistasVinculados = 0;
-        let frentistasGerais = 0;
-        
-        todasOpcoesFrentistas.forEach(option => {
-            const optionClienteId = option.getAttribute('data-cliente-id');
-            
-            // Incluir se o frentista está vinculado ao cliente OU não tem cliente vinculado
-            // Converter ambos para string para garantir comparação correta
-            if (String(optionClienteId) === String(clienteId) || optionClienteId === '' || optionClienteId === 'None') {
-                const newOption = option.cloneNode(true);
-                frentistaSelect.appendChild(newOption);
-                
-                if (String(optionClienteId) === String(clienteId)) {
-                    frentistasVinculados++;
-                } else {
-                    frentistasGerais++;
-                }
-            }
-        });
-        
-        // Atualizar mensagem informativa
-        if (frentistasVinculados === 0 && frentistasGerais === 0) {
-            frentistaInfo.textContent = 'Nenhum frentista disponível para este posto.';
-            frentistaInfo.className = 'form-text text-danger';
-        } else if (frentistasVinculados > 0) {
-            frentistaInfo.textContent = `${frentistasVinculados} frentista(s) vinculado(s) a este posto`;
-            frentistaInfo.className = 'form-text text-success';
-        } else {
-            frentistaInfo.textContent = `${frentistasGerais} frentista(s) disponível(is) (não vinculados especificamente)`;
-            frentistaInfo.className = 'form-text text-info';
-        }
+    erro.hidden = true;
+    // Cada valor viaja como número cru, em hidden — é o que as rotas /novo e
+    // /editar sempre receberam.
+    var campos = document.querySelectorAll('#tpn .money');
+    for (var i = 0; i < campos.length; i++){
+      var c = campos[i];
+      var h = document.createElement('input');
+      h.type = 'hidden';
+      h.name = c.name;
+      h.value = c.getAttribute('data-raw-value') || '0';
+      c.removeAttribute('name');
+      this.appendChild(h);
     }
-    
-    // Adicionar listener para mudança de cliente (se existir select)
-    if (clienteSelect) {
-        clienteSelect.addEventListener('change', filtrarFrentistas);
-    }
-    
-    // Para PISTA (campo hidden), executar filtro imediatamente
-    if (!clienteSelect || clienteSelect.tagName !== 'SELECT') {
-        filtrarFrentistas();
-    }
-    
-    // ==================== OUTROS COMPORTAMENTOS ====================
-
-    // Mostrar/ocultar campo de data de vencimento baseado no tipo de cheque
-    const chequeTipo = document.getElementById('cheque_tipo');
-    const dataVencimentoGroup = document.getElementById('data_vencimento_group');
-    const dataVencimentoInput = document.getElementById('cheque_data_vencimento');
-    
-    chequeTipo.addEventListener('change', function() {
-        if (this.value === 'A_PRAZO') {
-            dataVencimentoGroup.style.display = 'block';
-            dataVencimentoInput.required = true;
-        } else {
-            dataVencimentoGroup.style.display = 'none';
-            dataVencimentoInput.required = false;
-            dataVencimentoInput.value = '';
-        }
-    });
-
-    // Mostrar informações do cliente PIX selecionado
-    const clientePixSelect = document.getElementById('troco_pix_cliente_id');
-    const pixInfo = document.getElementById('pix_info');
-    const pixTipo = document.getElementById('pix_tipo');
-    const pixChave = document.getElementById('pix_chave');
-    
-    clientePixSelect.addEventListener('change', function() {
-        const selectedOption = this.options[this.selectedIndex];
-        if (this.value) {
-            const tipo = selectedOption.getAttribute('data-tipo');
-            const chave = selectedOption.getAttribute('data-chave');
-            pixTipo.textContent = tipo;
-            pixChave.textContent = chave;
-            pixInfo.style.display = 'flex';
-        } else {
-            pixInfo.style.display = 'none';
-        }
-    });
-
-    // ==================== INICIALIZAÇÃO ====================
-
-    // Pré-preencher data com hoje se não estiver em modo edição E se não for PISTA
-    {% if not edit_mode %}
-    const dataInput = document.getElementById('data');
-    if (dataInput && !dataInput.value && !dataInput.readOnly) {
-        const today = new Date().toISOString().split('T')[0];
-        dataInput.value = today;
-    }
-    {% endif %}
-
-    // Calcular totais e Troco PIX iniciais (em modo edição)
-    calcularTrocoPix();  // Calcular Troco PIX primeiro
-    calcularTotalVenda();
-    calcularTotalTroco();
-    
-    // Verificar tipo de cheque inicial (em modo edição)
-    if (chequeTipo.value === 'A_PRAZO') {
-        dataVencimentoGroup.style.display = 'block';
-        dataVencimentoInput.required = true;
-    }
-    
-    // Mostrar info PIX se já tiver cliente selecionado
-    if (clientePixSelect.value) {
-        clientePixSelect.dispatchEvent(new Event('change'));
-    }
-    
-    // Filtrar frentistas se já tiver cliente selecionado (modo edição)
-    {% if edit_mode %}
-    if (clienteSelect.value) {
-        filtrarFrentistas();
-    }
-    {% endif %}
-    
-    // ==================== ANTES DE ENVIAR O FORM ====================
-    
-    // Converter valores formatados para formato numérico antes de enviar
-    document.querySelector('form').addEventListener('submit', function(e) {
-        document.querySelectorAll('.money-input').forEach(input => {
-            const rawValue = input.getAttribute('data-raw-value') || '0';
-            // Criar um input hidden com o valor numérico
-            const hiddenInput = document.createElement('input');
-            hiddenInput.type = 'hidden';
-            hiddenInput.name = input.name;
-            hiddenInput.value = rawValue;
-            
-            // Remover o name do input original para não enviar o valor formatado
-            input.removeAttribute('name');
-            
-            // Adicionar o hidden input ao form
-            this.appendChild(hiddenInput);
-        });
-    });
+  });
 });
 </script>
 {% endblock %}

@@ -1,283 +1,247 @@
 {% extends "base.html" %}
 
-{% block title %}Visualizar Troco PIX #{{ transacao.id }}{% endblock %}
+{% block title %}{{ transacao.numero_sequencial or 'Solicitação' }} – Troco PIX{% endblock %}
+
+{#- A tela do fim do lancamento. Ela e aberta por dois motivos, e so dois:
+    conferir o que foi gravado, e MANDAR a solicitacao no WhatsApp para quem vai
+    fazer o PIX. Entao "Copiar para WhatsApp" e o botao principal, largo,
+    primeiro — e nao um botao verde perdido ao lado de "Editar".
+
+    O texto que ele copia e o mesmo de sempre, byte a byte: e ele que a casa
+    cola no grupo, e mudar o formato quebraria o costume de quem le.
+
+    O que era uma pilha de seis cartoes com tabelas de duas colunas virou o
+    resumo primeiro (o numero que importa em cima) e o detalhe embaixo, na
+    ordem da conta: cheque, venda, troco. -#}
+
+{% block styles %}
+<style>
+body > .container-fluid:has(#tpv){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#tpv){ padding:.7rem 1rem 0; }
+}
+</style>
+<style>
+  #tpv{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#4b5563; --ink:#151d27; --borda:#d9e0e8;
+        color:var(--ink); max-width:100%; }
+
+  #tpv .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .7rem;
+    margin-bottom:.7rem; }
+  #tpv .topo__n{ font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,
+    Consolas,'Liberation Mono',monospace; font-weight:800; font-size:1rem;
+    letter-spacing:.02em; }
+  #tpv .topo__s{ font-size:.76rem; opacity:.96; margin-top:.15rem; }
+
+  #tpv .flash{ border-radius:11px; padding:.55rem .7rem; font-size:.82rem;
+    font-weight:700; margin-bottom:.7rem; background:#e4f4e8; color:#146c43; }
+  #tpv .flash--danger{ background:#fbe9e9; color:var(--danger); }
+  #tpv .flash--warning{ background:#fdf0d6; color:var(--ambar); }
+
+  /* o que se faz nesta tela: mandar. o resto e conferencia */
+  #tpv .zap{ display:flex; align-items:center; justify-content:center;
+    gap:.45rem; width:100%; background:#146c43; color:#fff; border:0;
+    border-radius:13px; padding:.85rem .8rem; font-size:1rem; font-weight:800;
+    font-family:inherit; cursor:pointer; margin-bottom:.5rem;
+    box-shadow:0 3px 10px rgba(20,108,67,.25); }
+  #tpv .zap:hover{ background:#0f5132; }
+  #tpv .zap--ok{ background:var(--blue); }
+  #tpv .acoes{ display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:.7rem; }
+  #tpv .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:10px; padding:.45rem .8rem; font-size:.84rem; font-weight:700;
+    font-family:inherit; text-decoration:none; display:inline-flex; gap:.35rem;
+    align-items:center; }
+  #tpv .bt:hover{ background:#dfeaf8; color:var(--blue-deep); }
+  #tpv .bt--ed{ background:#fdf0d6; border-color:#f0d8a8; color:var(--ambar); }
+
+  /* o resumo: o troco por PIX e o numero que interessa */
+  #tpv .resumo{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; padding:.8rem; margin-bottom:.7rem;
+    box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #tpv .resumo__r{ font-size:.68rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--muted); }
+  #tpv .resumo__v{ font-size:1.9rem; font-weight:800; color:#146c43;
+    font-variant-numeric:tabular-nums; line-height:1.1; }
+  #tpv .resumo__v.zero{ color:var(--muted); font-size:1.3rem; }
+  #tpv .resumo__q{ margin-top:.5rem; font-size:.86rem; }
+  #tpv .resumo__q b{ font-weight:800; }
+  #tpv .chave{ font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,
+    'Liberation Mono',monospace; font-weight:700; font-size:.92rem;
+    color:var(--ink); overflow-wrap:anywhere; margin-top:.1rem; }
+  #tpv .selos{ display:flex; gap:.3rem; flex-wrap:wrap; margin-top:.5rem; }
+  #tpv .selo{ display:inline-block; border-radius:99px; padding:.16rem .55rem;
+    font-size:.66rem; font-weight:800; white-space:nowrap; }
+  #tpv .selo--env{ background:#eaf1f9; color:var(--blue-deep); }
+  #tpv .selo--nao{ background:#fbe9e9; color:var(--danger); }
+  #tpv .selo--conc{ background:#e4f4e8; color:#146c43; }
+  #tpv .selo--sem{ background:#e7ebf0; color:#3d4854; }
+
+  #tpv .bloco{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; padding:.7rem .8rem .75rem; margin-bottom:.7rem;
+    box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #tpv .bloco__t{ font-size:.68rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--blue-deep); margin-bottom:.45rem;
+    display:flex; align-items:center; gap:.35rem; }
+  #tpv .li{ display:flex; gap:.6rem; font-size:.86rem; padding:.22rem 0;
+    align-items:baseline; }
+  #tpv .li .k{ color:var(--muted); flex:1; min-width:0; }
+  #tpv .li .v{ flex:0 0 auto; font-weight:700; font-variant-numeric:tabular-nums; }
+  #tpv .li--tot{ border-top:1px solid #eef1f5; margin-top:.25rem;
+    padding-top:.35rem; }
+  #tpv .li--tot .k{ color:var(--ink); font-weight:800; }
+  #tpv .li--tot .v{ font-weight:800; color:var(--blue-deep); font-size:.95rem; }
+  #tpv .li--txt .v{ font-variant-numeric:normal; font-weight:600;
+    text-align:right; overflow-wrap:anywhere; }
+
+  #tpv .confere{ display:flex; gap:.5rem; align-items:flex-start;
+    border-radius:11px; padding:.6rem .7rem; font-size:.82rem;
+    font-weight:700; margin-bottom:.7rem; }
+  #tpv .confere--ok{ background:#e4f4e8; color:#146c43; }
+  #tpv .confere--nao{ background:#fbe9e9; color:var(--danger); }
+  #tpv .rodape{ font-size:.72rem; color:var(--muted); margin-bottom:1rem; }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row mb-3">
-        <div class="col-md-12">
-            <h2><i class="bi bi-eye"></i> Visualizar Solicitação de Troco PIX #{{ transacao.id }}</h2>
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb">
-                    {% if request.args.get('origem') == 'pista' %}
-                    <li class="breadcrumb-item"><a href="{{ url_for('troco_pix.pista') }}">Troco PIX Pista</a></li>
-                    {% else %}
-                    <li class="breadcrumb-item"><a href="{{ url_for('troco_pix.listar') }}">Troco PIX</a></li>
-                    {% endif %}
-                    <li class="breadcrumb-item active">Visualizar #{{ transacao.id }}</li>
-                </ol>
-            </nav>
-        </div>
-    </div>
+{% set origem = request.args.get('origem') or '' %}
+{% set voltar = url_for('troco_pix.pista') if origem == 'pista'
+                else url_for('troco_pix.listar') %}
+{% set tem_pix = (transacao.troco_pix or 0) > 0 %}
+{% set venda = transacao.venda_total or 0 %}
+{% set diferenca = (transacao.cheque_valor or 0) - venda %}
+{% set confere = (diferenca - (transacao.troco_total or 0))|abs < 0.005 %}
+<div id="tpv">
 
-    <!-- Botões de ação -->
-    <div class="row mb-3">
-        <div class="col-md-12">
-            <button type="button" class="btn btn-success" id="btnCopyWhatsApp">
-                <i class="bi bi-whatsapp"></i> Copiar para WhatsApp
-            </button>
-            <a href="{{ url_for('troco_pix.editar', troco_pix_id=transacao.id, origem=request.args.get('origem')) }}" class="btn btn-warning">
-                <i class="bi bi-pencil"></i> Editar
-            </a>
-            {% if request.args.get('origem') == 'pista' %}
-            <a href="{{ url_for('troco_pix.pista') }}" class="btn btn-secondary">
-                <i class="bi bi-arrow-left"></i> Voltar
-            </a>
-            {% else %}
-            <a href="{{ url_for('troco_pix.listar') }}" class="btn btn-secondary">
-                <i class="bi bi-arrow-left"></i> Voltar
-            </a>
-            {% endif %}
-        </div>
-    </div>
+  <div class="topo">
+    <div class="topo__n">{{ transacao.numero_sequencial or ('#' ~ transacao.id) }}</div>
+    <div class="topo__s">
+      {{ transacao.data.strftime('%d/%m/%Y') if transacao.data else '—' }}
+      · {{ transacao.posto_nome or '—' }}</div>
+  </div>
 
-    <!-- Informações Gerais -->
-    <div class="card mb-3">
-        <div class="card-header bg-primary text-white">
-            <i class="bi bi-info-circle"></i> Informações Gerais
-        </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-6">
-                    <table class="table table-borderless">
-                        <tr>
-                            <th width="40%">Número:</th>
-                            <td><strong>{{ transacao.numero_sequencial or '-' }}</strong></td>
-                        </tr>
-                        <tr>
-                            <th width="40%">Data:</th>
-                            <td>{{ transacao.data.strftime('%d/%m/%Y') if transacao.data else '-' }}</td>
-                        </tr>
-                        <tr>
-                            <th>Posto/Cliente:</th>
-                            <td>{{ transacao.posto_nome or '-' }}</td>
-                        </tr>
-                        <tr>
-                            <th>Status:</th>
-                            <td>
-                                {% if transacao.status == 'PENDENTE' %}
-                                    <span class="badge bg-warning">Pendente</span>
-                                {% elif transacao.status == 'PROCESSADO' %}
-                                    <span class="badge bg-success">Processado</span>
-                                {% elif transacao.status == 'CANCELADO' %}
-                                    <span class="badge bg-danger">Cancelado</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                    </table>
-                </div>
-                <div class="col-md-6">
-                    <table class="table table-borderless">
-                        <tr>
-                            <th width="40%">Frentista:</th>
-                            <td>{{ transacao.frentista_nome or '-' }}</td>
-                        </tr>
-                        <tr>
-                            <th>Importado:</th>
-                            <td>
-                                {% if transacao.importado_lancamento_caixa %}
-                                    <span class="badge bg-success">Sim</span>
-                                    {% if transacao.lancamento_caixa_id %}
-                                        (Lançamento #{{ transacao.lancamento_caixa_id }})
-                                    {% endif %}
-                                {% else %}
-                                    <span class="badge bg-secondary">Não</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>Criado em:</th>
-                            <td>{{ transacao.criado_em.strftime('%d/%m/%Y %H:%M') if transacao.criado_em else '-' }}</td>
-                        </tr>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+    <div class="flash {{ 'flash--danger' if category == 'danger' else 'flash--warning' if category == 'warning' else '' }}">
+      {{ message }}</div>
+    {% endfor %}
+  {% endwith %}
 
-    <!-- VENDA -->
-    <div class="card mb-3">
-        <div class="card-header bg-success text-white">
-            <i class="bi bi-cart"></i> VENDA
-        </div>
-        <div class="card-body">
-            <table class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>Descrição</th>
-                        <th class="text-end">Valor</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>Abastecimento</td>
-                        <td class="text-end">{{ (transacao.venda_abastecimento or 0)|formatar_moeda }}</td>
-                    </tr>
-                    <tr>
-                        <td>Arla</td>
-                        <td class="text-end">{{ (transacao.venda_arla or 0)|formatar_moeda }}</td>
-                    </tr>
-                    <tr>
-                        <td>Produtos</td>
-                        <td class="text-end">{{ (transacao.venda_produtos or 0)|formatar_moeda }}</td>
-                    </tr>
-                    <tr class="table-success">
-                        <th>TOTAL</th>
-                        <th class="text-end">{{ (transacao.venda_total or 0)|formatar_moeda }}</th>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
+  {# O botao que resolve a tela: manda a solicitacao para quem faz o PIX. #}
+  <button type="button" class="zap" id="btnCopyWhatsApp">
+    <i class="bi bi-whatsapp"></i> Copiar para o WhatsApp</button>
+  <div class="acoes">
+    {% if pode_editar(transacao) %}
+    <a class="bt bt--ed"
+       href="{{ url_for('troco_pix.editar', troco_pix_id=transacao.id, origem=origem) }}">
+      <i class="bi bi-pencil"></i> Corrigir</a>
+    {% endif %}
+    <a class="bt" href="{{ voltar }}"><i class="bi bi-arrow-left"></i> Voltar</a>
+  </div>
 
-    <!-- CHEQUE -->
-    <div class="card mb-3">
-        <div class="card-header bg-warning">
-            <i class="bi bi-wallet2"></i> CHEQUE
-        </div>
-        <div class="card-body">
-            <table class="table table-borderless">
-                <tr>
-                    <th width="30%">Tipo:</th>
-                    <td>
-                        {% if transacao.cheque_tipo == 'A_VISTA' %}
-                            À Vista
-                        {% elif transacao.cheque_tipo == 'A_PRAZO' %}
-                            A Prazo
-                        {% else %}
-                            -
-                        {% endif %}
-                    </td>
-                </tr>
-                {% if transacao.cheque_tipo == 'A_PRAZO' and transacao.cheque_data_vencimento %}
-                <tr>
-                    <th>Data de Vencimento:</th>
-                    <td>{{ transacao.cheque_data_vencimento.strftime('%d/%m/%Y') }}</td>
-                </tr>
-                {% endif %}
-                <tr>
-                    <th>Valor do Cheque:</th>
-                    <td class="text-end" style="font-size: 1.2em; font-weight: bold;">
-                        {{ (transacao.cheque_valor or 0)|formatar_moeda }}
-                    </td>
-                </tr>
-            </table>
-        </div>
+  <div class="resumo">
+    <div class="resumo__r">Troco por PIX</div>
+    <div class="resumo__v {{ '' if tem_pix else 'zero' }}">
+      {{ (transacao.troco_pix or 0) | formatar_moeda }}</div>
+    {% if tem_pix %}
+    <div class="resumo__q">
+      <b>{{ transacao.cliente_pix_nome or '—' }}</b>
+      <div class="chave">{{ (transacao.tipo_chave_pix or '')|replace('_', ' ')|lower }}
+        {{ transacao.chave_pix or '—' }}</div>
     </div>
+    {% else %}
+    <div class="resumo__q">Esta solicitação não tem troco por PIX — ela registra
+      a venda e o cheque.</div>
+    {% endif %}
+    <div class="selos">
+      {% if tem_pix %}
+        {% if transacao.get('pix_enviado_em') %}
+        <span class="selo selo--env"><i class="bi bi-envelope-fill"></i>
+          PIX enviado {{ transacao.pix_enviado_em.strftime('%d/%m às %H:%M') }}</span>
+        {% else %}
+        <span class="selo selo--nao"><i class="bi bi-envelope-fill"></i>
+          PIX ainda não enviado</span>
+        {% endif %}
+        {% if transacao.bank_transaction_id %}
+        <span class="selo selo--conc"><i class="bi bi-check-circle"></i> conciliado</span>
+        {% endif %}
+      {% else %}
+      <span class="selo selo--sem">sem troco</span>
+      {% endif %}
+    </div>
+  </div>
 
-    <!-- TROCO -->
-    <div class="card mb-3">
-        <div class="card-header bg-info text-white">
-            <i class="bi bi-arrow-left-right"></i> TROCO
-        </div>
-        <div class="card-body">
-            <table class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>Tipo de Troco</th>
-                        <th class="text-end">Valor</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>Troco em Espécie</td>
-                        <td class="text-end">{{ (transacao.troco_especie or 0)|formatar_moeda }}</td>
-                    </tr>
-                    <tr>
-                        <td>Troco PIX</td>
-                        <td class="text-end">{{ (transacao.troco_pix or 0)|formatar_moeda }}</td>
-                    </tr>
-                    <tr>
-                        <td>Crédito Vda Programada</td>
-                        <td class="text-end">{{ (transacao.troco_credito_vda_programada or 0)|formatar_moeda }}</td>
-                    </tr>
-                    <tr class="table-info">
-                        <th>TOTAL</th>
-                        <th class="text-end">{{ (transacao.troco_total or 0)|formatar_moeda }}</th>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
+  <div class="confere {{ 'confere--ok' if confere else 'confere--nao' }}">
+    <i class="bi {{ 'bi-check-circle-fill' if confere else 'bi-exclamation-triangle-fill' }}"></i>
+    {% if confere %}
+    <span>Contas certas: o cheque menos a venda dá
+      {{ diferenca | formatar_moeda }}, que é exatamente o troco.</span>
+    {% else %}
+    <span>Contas não fecham: o cheque menos a venda dá
+      {{ diferenca | formatar_moeda }}, mas o troco somado é
+      {{ (transacao.troco_total or 0) | formatar_moeda }}.</span>
+    {% endif %}
+  </div>
 
-    <!-- DESTINATÁRIO PIX -->
-    <div class="card mb-3">
-        <div class="card-header bg-secondary text-white">
-            <i class="bi bi-person"></i> Destinatário do PIX
-        </div>
-        <div class="card-body">
-            <table class="table table-borderless">
-                <tr>
-                    <th width="30%">Nome Completo:</th>
-                    <td>{{ transacao.cliente_pix_nome or '-' }}</td>
-                </tr>
-                <tr>
-                    <th>Tipo de Chave PIX:</th>
-                    <td>{{ transacao.tipo_chave_pix or '-' }}</td>
-                </tr>
-                <tr>
-                    <th>Chave PIX:</th>
-                    <td style="font-family: monospace; font-size: 1.1em;">{{ transacao.chave_pix or '-' }}</td>
-                </tr>
-            </table>
-        </div>
-    </div>
+  <div class="bloco">
+    <div class="bloco__t"><i class="bi bi-receipt"></i> O cheque</div>
+    <div class="li li--txt"><span class="k">Tipo</span>
+      <span class="v">{{ 'À vista' if transacao.cheque_tipo == 'A_VISTA' else 'A prazo' }}</span></div>
+    {% if transacao.cheque_data_vencimento %}
+    <div class="li li--txt"><span class="k">Vence em</span>
+      <span class="v">{{ transacao.cheque_data_vencimento.strftime('%d/%m/%Y') }}</span></div>
+    {% endif %}
+    <div class="li li--tot"><span class="k">Valor do cheque</span>
+      <span class="v">{{ (transacao.cheque_valor or 0) | formatar_moeda }}</span></div>
+  </div>
 
-    <!-- RESUMO FINANCEIRO -->
-    <div class="card mb-3">
-        <div class="card-header bg-dark text-white">
-            <i class="bi bi-calculator"></i> Resumo Financeiro
-        </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-4">
-                    <div class="card text-white bg-success mb-3">
-                        <div class="card-body text-center">
-                            <h5>Total Venda</h5>
-                            <h3>{{ (transacao.venda_total or 0)|formatar_moeda }}</h3>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card text-white bg-warning mb-3">
-                        <div class="card-body text-center">
-                            <h5>Valor Cheque</h5>
-                            <h3>{{ (transacao.cheque_valor or 0)|formatar_moeda }}</h3>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card text-white bg-info mb-3">
-                        <div class="card-body text-center">
-                            <h5>Total Troco</h5>
-                            <h3>{{ (transacao.troco_total or 0)|formatar_moeda }}</h3>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            {% set diferenca = (transacao.cheque_valor or 0) - (transacao.venda_total or 0) %}
-            <div class="alert {% if diferenca == (transacao.troco_total or 0) %}alert-success{% else %}alert-danger{% endif %}">
-                <strong>Verificação:</strong>
-                Diferença (Cheque - Venda) = {{ diferenca|formatar_moeda }}
-                {% if diferenca == (transacao.troco_total or 0) %}
-                    <i class="bi bi-check-circle"></i> Valores conferem!
-                {% else %}
-                    <i class="bi bi-exclamation-triangle"></i> Valores não conferem!
-                {% endif %}
-            </div>
-        </div>
-    </div>
+  <div class="bloco">
+    <div class="bloco__t"><i class="bi bi-cart3"></i> A venda</div>
+    <div class="li"><span class="k">Abastecimento</span>
+      <span class="v">{{ (transacao.venda_abastecimento or 0) | formatar_moeda }}</span></div>
+    <div class="li"><span class="k">Arla</span>
+      <span class="v">{{ (transacao.venda_arla or 0) | formatar_moeda }}</span></div>
+    <div class="li"><span class="k">Produtos da loja</span>
+      <span class="v">{{ (transacao.venda_produtos or 0) | formatar_moeda }}</span></div>
+    <div class="li li--tot"><span class="k">Total da venda</span>
+      <span class="v">{{ venda | formatar_moeda }}</span></div>
+  </div>
+
+  <div class="bloco">
+    <div class="bloco__t"><i class="bi bi-arrow-left-right"></i> Como o troco voltou</div>
+    <div class="li"><span class="k">Em dinheiro, na hora</span>
+      <span class="v">{{ (transacao.troco_especie or 0) | formatar_moeda }}</span></div>
+    <div class="li"><span class="k">Por PIX</span>
+      <span class="v">{{ (transacao.troco_pix or 0) | formatar_moeda }}</span></div>
+    <div class="li"><span class="k">Crédito em venda programada</span>
+      <span class="v">{{ (transacao.troco_credito_vda_programada or 0) | formatar_moeda }}</span></div>
+    <div class="li li--tot"><span class="k">Total do troco</span>
+      <span class="v">{{ (transacao.troco_total or 0) | formatar_moeda }}</span></div>
+  </div>
+
+  <div class="bloco">
+    <div class="bloco__t"><i class="bi bi-person-badge"></i> Quem atendeu</div>
+    <div class="li li--txt"><span class="k">Frentista</span>
+      <span class="v">{{ transacao.frentista_nome or '—' }}</span></div>
+    <div class="li li--txt"><span class="k">Lançado por</span>
+      <span class="v">{{ transacao.criado_por_nome or '—' }}
+        {%- if transacao.criado_em %} ·
+        {{ transacao.criado_em.strftime('%d/%m/%Y %H:%M') }}{% endif -%}</span></div>
+    {% if transacao.atualizado_por_nome %}
+    <div class="li li--txt"><span class="k">Corrigido por</span>
+      <span class="v">{{ transacao.atualizado_por_nome }}
+        {%- if transacao.atualizado_em %} ·
+        {{ transacao.atualizado_em.strftime('%d/%m/%Y %H:%M') }}{% endif -%}</span></div>
+    {% endif %}
+    <div class="li li--txt"><span class="k">Lançamento de caixa</span>
+      <span class="v">{{ 'criado' if transacao.lancamento_caixa_id else '—' }}</span></div>
+  </div>
+
+  <div class="rodape">Solicitação #{{ transacao.id }}.
+    As datas e horas aparecem no horário de Brasília.</div>
 </div>
 {% endblock %}
 
@@ -286,7 +250,7 @@
 document.addEventListener('DOMContentLoaded', function() {
     const btnCopyWhatsApp = document.getElementById('btnCopyWhatsApp');
     const FEEDBACK_TIMEOUT = 2000; // milliseconds
-    
+
     if (btnCopyWhatsApp) {
         btnCopyWhatsApp.addEventListener('click', function() {
             // Helper function to format currency values
@@ -299,21 +263,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Format with thousand separator (.) and decimal (,)
                 return num.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
             }
-            
+
             // Function to show success feedback
             function showSuccessFeedback() {
                 const originalText = btnCopyWhatsApp.innerHTML;
-                btnCopyWhatsApp.innerHTML = '<i class="bi bi-check-circle"></i> Copiado!';
-                btnCopyWhatsApp.classList.remove('btn-success');
-                btnCopyWhatsApp.classList.add('btn-info');
-                
+                btnCopyWhatsApp.innerHTML = '<i class="bi bi-check-circle"></i> Copiado! Cole no WhatsApp';
+                btnCopyWhatsApp.classList.add('zap--ok');
+
                 setTimeout(function() {
                     btnCopyWhatsApp.innerHTML = originalText;
-                    btnCopyWhatsApp.classList.remove('btn-info');
-                    btnCopyWhatsApp.classList.add('btn-success');
+                    btnCopyWhatsApp.classList.remove('zap--ok');
                 }, FEEDBACK_TIMEOUT);
             }
-            
+
             // Get transaction data - using tojson for safe escaping
             const data = {
                 numero_sequencial: {{ (transacao.numero_sequencial or "")|tojson }},
@@ -334,18 +296,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 chave_pix: {{ (transacao.chave_pix or "")|tojson }},
                 frentista_nome: {{ (transacao.frentista_nome or "")|tojson }}
             };
-            
+
             // Build WhatsApp message with bold formatting and icons
             let message = '';
-            
+
             // Check if this is a "SEM PIX" transaction
             const isSemPix = data.cliente_pix_nome === 'SEM PIX';
-            
+
             // Add sequential number if available
             if (data.numero_sequencial) {
                 message += '🔢 *' + data.numero_sequencial + '*\n\n';
             }
-            
+
             // Different title for SEM PIX transactions
             if (isSemPix) {
                 message += '💰 *VENDA EM CHEQUE* 💰\n';
@@ -354,13 +316,13 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             message += '━━━━━━━━━━━━━━━━━━━━\n';
             message += '📅 *Data:* ' + data.data + '\n\n';
-            
+
             message += '🏪 *VENDA*\n';
             message += '├ Abastecimento: ' + (formatCurrency(data.venda_abastecimento) || '—') + '\n';
             message += '├ Arla: ' + (formatCurrency(data.venda_arla) || '—') + '\n';
             message += '├ Produtos: ' + (formatCurrency(data.venda_produtos) || '—') + '\n';
             message += '└ *TOTAL:* ' + formatCurrency(data.venda_total) + '\n\n';
-            
+
             // CHEQUE section - only if there's cheque data
             if (data.cheque_tipo || data.cheque_valor > 0) {
                 message += '💵 *CHEQUE*\n';
@@ -375,12 +337,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 message += '└ *Valor:* ' + formatCurrency(data.cheque_valor) + '\n\n';
             }
-            
+
             message += '💸 *TROCO*\n';
             message += '├ Em Espécie: ' + (formatCurrency(data.troco_especie) || '—') + '\n';
             message += '├ Crédito Vda. Programada: ' + (formatCurrency(data.troco_credito) || '—') + '\n';
             message += '└ *TOTAL:* ' + formatCurrency(data.troco_total) + '\n';
-            
+
             // Only show PIX details if NOT "SEM PIX"
             if (!isSemPix) {
                 message += '\n🔑 *TROCO PIX:* ' + formatCurrency(data.troco_pix) + '\n';
@@ -396,32 +358,39 @@ document.addEventListener('DOMContentLoaded', function() {
                 // For SEM PIX, just add the separator line
                 message += '━━━━━━━━━━━━━━━━━━━━\n';
             }
-            
+
             message += '⛽ Frentista: ' + (data.frentista_nome ? '*' + data.frentista_nome + '*' : '—');
-            
-            
+
             // Copy to clipboard
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(message).then(function() {
                     showSuccessFeedback();
                 }).catch(function(err) {
-                    alert('Erro ao copiar: ' + err);
+                    // Fallback para navegador que nao libera a area de
+                    // transferencia sem HTTPS: seleciona num campo temporario.
+                    copiarNaMao(message, err);
                 });
             } else {
-                // Fallback for older browsers
-                const textArea = document.createElement('textarea');
-                textArea.value = message;
-                textArea.style.position = 'fixed';
-                textArea.style.left = '-999999px';
-                document.body.appendChild(textArea);
-                textArea.select();
+                copiarNaMao(message, null);
+            }
+
+            function copiarNaMao(texto, err) {
                 try {
-                    document.execCommand('copy');
-                    showSuccessFeedback();
-                } catch (err) {
-                    alert('Erro ao copiar: ' + err);
+                    const area = document.createElement('textarea');
+                    area.value = texto;
+                    area.style.position = 'fixed';
+                    area.style.opacity = '0';
+                    document.body.appendChild(area);
+                    area.focus();
+                    area.select();
+                    const deu = document.execCommand('copy');
+                    document.body.removeChild(area);
+                    if (deu) { showSuccessFeedback(); return; }
+                    throw new Error('cópia recusada pelo navegador');
+                } catch (e) {
+                    alert('Não deu para copiar automaticamente. ' +
+                          'Segure o dedo no texto abaixo e copie:\n\n' + texto);
                 }
-                document.body.removeChild(textArea);
             }
         });
     }
