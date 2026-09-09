@@ -1,186 +1,264 @@
 {% extends "base.html" %}
 
-{% block title %}Configuração Contábil – Troco PIX{% endblock %}
+{% block title %}Config. contábil – Troco PIX{% endblock %}
+
+{#- Mesmo padrao das outras duas telas do PIX: topo azul com a familia,
+    numeros em degrade e um cartao por empresa.
+
+    Aqui se diz, por empresa, qual conta contabil leva o DEBITO dos trocos na
+    exportacao — o credito continua sendo a conta bancaria. Sao 5 empresas e
+    228 contas no plano: a escolha e por busca, nunca por uma lista de 228
+    linhas para rolar no celular.
+
+    O que havia antes era uma tabela de duas colunas onde a conta ja escolhida
+    aparecia so dentro de um campo de texto: quem abria a tela nao via, de
+    relance, quais empresas ainda estavam sem conta. Agora isso e a primeira
+    coisa que se ve. -#}
+
+{% block styles %}
+<style>
+body > .container-fluid:has(#tpg){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#tpg){ padding:.7rem 1rem 0; }
+}
+</style>
+
+{% with esc = '#tpg' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
+<style>
+  #tpg{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#4b5563; --ink:#151d27; --borda:#d9e0e8; }
+  #tpg{ color:var(--ink); max-width:100%; }
+
+  #tpg .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .65rem;
+    margin-bottom:.7rem; }
+  #tpg .topo__l{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  #tpg .topo__t{ font-weight:800; font-size:1.02rem; flex:1; min-width:0; }
+  #tpg .topo__s{ font-size:.74rem; opacity:.96; margin-top:.1rem; }
+  #tpg .fam{ display:flex; gap:.4rem; margin-top:.6rem; overflow-x:auto;
+    padding-bottom:.15rem; }
+  #tpg .fam a{ flex:0 0 auto; border-radius:99px; padding:.35rem .8rem;
+    font-size:.78rem; font-weight:800; background:rgba(255,255,255,.18);
+    color:#fff; text-decoration:none; white-space:nowrap; }
+  #tpg .fam a.on{ background:#fff; color:var(--blue-deep); }
+
+  #tpg .aviso{ display:flex; align-items:flex-start; gap:.5rem;
+    background:#eaf1f9; color:var(--blue-deep); border-radius:11px;
+    padding:.55rem .7rem; font-size:.8rem; font-weight:600;
+    margin-bottom:.7rem; }
+  #tpg .aviso b{ font-weight:800; }
+  #tpg .flash{ border-radius:11px; padding:.55rem .7rem; font-size:.82rem;
+    font-weight:700; margin-bottom:.7rem; }
+  #tpg .flash--success{ background:#e4f4e8; color:#146c43; }
+  #tpg .flash--danger{ background:#fbe9e9; color:var(--danger); }
+
+  #tpg .lista{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; overflow:hidden;
+    box-shadow:0 2px 10px rgba(20,35,60,.06); margin-bottom:.7rem; }
+  #tpg .e{ border-bottom:1px solid #eef1f5; padding:.7rem .8rem; }
+  #tpg .e:last-child{ border-bottom:0; }
+  #tpg .e__n{ font-weight:800; font-size:.87rem; line-height:1.3;
+    overflow-wrap:anywhere; margin-bottom:.1rem; }
+  #tpg .e__s{ display:flex; gap:.3rem; flex-wrap:wrap; margin-bottom:.4rem; }
+  #tpg .selo{ display:inline-block; border-radius:99px; padding:.14rem .5rem;
+    font-size:.64rem; font-weight:800; white-space:nowrap; }
+  #tpg .selo--ok{ background:#e4f4e8; color:#146c43; }
+  #tpg .selo--falta{ background:#fdf0d6; color:var(--ambar); }
+  /* o codigo da conta e conferido digito a digito com o plano: monoespacada
+     do sistema, negrito, tinta cheia */
+  #tpg .conta{ font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,
+    'Liberation Mono',monospace; font-weight:700; font-size:.8rem;
+    color:var(--ink); overflow-wrap:anywhere; }
+
+  #tpg .csel{ position:relative; margin-top:.35rem; }
+  #tpg .csel input[type=text]{ width:100%; border:1px solid var(--borda);
+    border-radius:10px; padding:.5rem .65rem; font-size:.84rem;
+    font-family:inherit; color:var(--ink); background:#fff; }
+  #tpg .csel input[type=text]:focus{ outline:2px solid #bcd3ea;
+    border-color:var(--blue); }
+  #tpg .drop{ position:absolute; z-index:30; left:0; right:0; top:100%;
+    margin-top:.2rem; max-height:15rem; overflow-y:auto; background:#fff;
+    border:1px solid var(--borda); border-radius:11px;
+    box-shadow:0 8px 24px rgba(20,35,60,.18); display:none; }
+  #tpg .item{ padding:.5rem .65rem; font-size:.8rem; cursor:pointer;
+    border-bottom:1px solid #f2f5f8; }
+  #tpg .item:last-child{ border-bottom:0; }
+  #tpg .item:hover{ background:#eef5fd; }
+  #tpg .item--nada{ color:var(--muted); font-weight:700; }
+  #tpg .vazio{ padding:1.4rem .8rem; text-align:center; color:var(--muted);
+    font-size:.85rem; }
+
+  #tpg .rodape{ position:sticky; bottom:0; background:#f7f9fc;
+    padding:.6rem 0 .8rem; }
+  #tpg .salvar{ width:100%; border:0; background:var(--blue); color:#fff;
+    border-radius:11px; padding:.65rem .8rem; font-size:.88rem;
+    font-weight:800; font-family:inherit; cursor:pointer; }
+  #tpg .salvar:hover{ background:var(--blue-deep); }
+  #tpg .dica{ font-size:.72rem; color:var(--muted); margin-top:.4rem; }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
+<div id="tpg">
 
-    <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mt-2 mb-3">
-        <div>
-            <h2 style="color:#1D63A5;font-size:1.25rem;margin:0;">
-                <i class="bi bi-gear"></i> Config. Contábil – Troco PIX
-            </h2>
-            <p class="text-muted mb-0" style="font-size:0.78rem;">
-                Defina a conta contábil de <strong>débito</strong> usada na exportação contábil para os lançamentos de Troco PIX de cada empresa.
-            </p>
+  <div class="topo">
+    <div class="topo__l">
+      <span class="topo__t"><i class="bi bi-gear-fill"></i> Config. contábil
+        <div class="topo__s">Qual conta recebe o débito dos trocos</div></span>
+    </div>
+    <div class="fam">
+      <a href="{{ url_for('troco_pix.listar') }}">Solicitações</a>
+      <a href="{{ url_for('troco_pix.clientes') }}">Clientes PIX</a>
+      <a class="on" href="{{ url_for('troco_pix.config_contabil') }}">Config. contábil</a>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+    <div class="flash flash--{{ 'danger' if category == 'danger' else 'success' }}">
+      {{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="g-nums">
+    <div class="n n--azul"><div class="r">Empresas</div>
+      <div class="v">{{ totais.empresas }}</div></div>
+    <div class="n n--verde"><div class="r">Configuradas</div>
+      <div class="v">{{ totais.configuradas }}</div></div>
+    <div class="n {{ 'n--ambar' if totais.faltando else 'n--cinza' }}">
+      <div class="r">Sem conta</div>
+      <div class="v">{{ totais.faltando }}</div></div>
+    <div class="n n--cinza"><div class="r">Contas no plano</div>
+      <div class="v">{{ totais.contas }}</div></div>
+  </div>
+
+  <div class="aviso">
+    <i class="bi bi-info-circle-fill"></i>
+    <span>Na exportação contábil, o troco PIX <b>debita</b> a conta escolhida
+      aqui. O <b>crédito</b> continua sendo a conta bancária da empresa.</span>
+  </div>
+
+  {% if not empresas %}
+  <div class="lista"><div class="vazio">
+    Nenhuma empresa com produtos ativos encontrada.</div></div>
+  {% else %}
+  <form method="POST" action="{{ url_for('troco_pix.config_contabil') }}">
+    <div class="lista">
+      {% for emp in empresas %}
+      {% set cfg = config_map.get(emp.id, {}) %}
+      <div class="e" data-empresa="{{ emp.id }}"
+           data-tem="{{ '1' if cfg.conta_debito_id else '0' }}">
+        <div class="e__n">{{ emp.razao_social }}</div>
+        <div class="e__s">
+          {% if cfg.conta_debito_id %}
+          <span class="selo selo--ok"><i class="bi bi-check-circle"></i> conta definida</span>
+          {% else %}
+          <span class="selo selo--falta">sem conta contábil</span>
+          {% endif %}
         </div>
-        <div>
-            <a href="{{ url_for('troco_pix.listar') }}" class="btn btn-outline-secondary btn-sm" style="font-size:0.78rem;">
-                <i class="bi bi-arrow-left"></i> Voltar
-            </a>
+        {% if cfg.conta_debito_id %}
+        <div class="conta">{{ cfg.debito_codigo }} · {{ cfg.debito_nome }}</div>
+        {% endif %}
+        <div class="csel">
+          {# 228 contas: escolher e por busca. Uma lista rolavel de 228 linhas
+             no celular seria pior do que a tabela que estava aqui antes. #}
+          <input type="text" class="csel__t"
+                 placeholder="{{ 'Trocar a conta…' if cfg.conta_debito_id else 'Buscar a conta pelo código ou nome…' }}"
+                 autocomplete="off"
+                 value="{% if cfg.conta_debito_id %}{{ cfg.debito_codigo }} – {{ cfg.debito_nome }}{% endif %}"
+                 onfocus="tpgAbre(this)" oninput="tpgFiltra(this)">
+          <input type="hidden" name="conta_debito_id_{{ emp.id }}"
+                 class="csel__h" value="{{ cfg.conta_debito_id or '' }}">
+          <div class="drop"></div>
         </div>
+      </div>
+      {% endfor %}
     </div>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="alert alert-{{ category }} alert-dismissible fade show py-2" role="alert" style="font-size:0.82rem;">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-          </div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
-
-    <div class="card shadow-sm">
-        <div class="card-body p-3">
-            <p class="text-muted small mb-3">
-                <i class="bi bi-info-circle text-primary"></i>
-                Ao exportar o extrato contábil, as transações do tipo <em>Troco PIX</em> usarão a conta abaixo como <strong>débito</strong>.
-                O crédito continuará sendo a conta bancária da empresa.
-            </p>
-
-            {% if not empresas %}
-                <div class="alert alert-warning py-2" style="font-size:0.82rem;">
-                    Nenhuma empresa com produtos ativos encontrada.
-                </div>
-            {% else %}
-                <form method="POST" action="{{ url_for('troco_pix.config_contabil') }}">
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover align-middle" style="font-size:0.82rem;">
-                            <thead class="table-light">
-                                <tr>
-                                    <th style="width:35%;">Empresa</th>
-                                    <th>Conta Contábil de Débito (Troco PIX)</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for emp in empresas %}
-                                {% set cfg = config_map.get(emp.id, {}) %}
-                                <tr>
-                                    <td class="fw-semibold">{{ emp.razao_social }}</td>
-                                    <td>
-                                        <div class="csel-wrap">
-                                            <input type="text" class="form-control form-control-sm csel-txt"
-                                                   placeholder="Buscar conta…" autocomplete="off"
-                                                   style="font-size:0.78rem;"
-                                                   value="{% if cfg.conta_debito_id %}{{ cfg.debito_codigo }} – {{ cfg.debito_nome }}{% endif %}"
-                                                   onfocus="openCsel(this)" oninput="filterCsel(this)">
-                                            <input type="hidden"
-                                                   name="conta_debito_id_{{ emp.id }}"
-                                                   class="csel-hid"
-                                                   value="{{ cfg.conta_debito_id or '' }}">
-                                            <div class="csel-drop"></div>
-                                        </div>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="d-flex justify-content-end mt-2">
-                        <button type="submit" class="btn btn-primary btn-sm" style="font-size:0.82rem;">
-                            <i class="bi bi-check-lg"></i> Salvar Configuração
-                        </button>
-                    </div>
-                </form>
-            {% endif %}
-        </div>
+    <div class="rodape">
+      <button type="submit" class="salvar">
+        <i class="bi bi-check-lg"></i> Salvar configuração</button>
+      <div class="dica">Apagar o campo e salvar remove a conta daquela empresa.</div>
     </div>
+  </form>
+  {% endif %}
 </div>
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
 <script>
-// Plano de contas para o dropdown pesquisável
-const PLANO_CONTAS_TP = {{ plano_contas | tojson }};
-const _PC_BY_ID_TP = {};
-PLANO_CONTAS_TP.forEach(pc => { _PC_BY_ID_TP[String(pc.id)] = pc; });
+// O plano de contas inteiro vai para a tela uma vez: 228 contas sao ~18 KB, e
+// buscar no proprio aparelho responde na hora — sem ida ao servidor a cada
+// letra digitada.
+var TPG_CONTAS = {{ plano_contas | tojson }};
 
-function _pcText(id) {
-    if (!id) return '';
-    const pc = _PC_BY_ID_TP[String(id)];
-    return pc ? `${pc.codigo} – ${pc.nome} (${pc.grupo_nome})` : '';
+function tpgTexto(pc){
+  return pc.codigo + ' – ' + pc.nome + (pc.grupo_nome ? ' (' + pc.grupo_nome + ')' : '');
 }
-
-function _buildDropItems(query) {
-    const q = (query || '').trim().toLowerCase();
-    const items = [{ id: '', text: '— Não configurado —' }];
-    PLANO_CONTAS_TP.forEach(pc => {
-        const text = `${pc.codigo} – ${pc.nome} (${pc.grupo_nome})`;
-        if (!q || text.toLowerCase().includes(q)) items.push({ id: String(pc.id), text });
+function tpgItens(busca){
+  var q = (busca || '').trim().toLowerCase();
+  var fora = [{id: '', txt: '— sem conta contábil —', nada: true}];
+  for (var i = 0; i < TPG_CONTAS.length; i++){
+    var t = tpgTexto(TPG_CONTAS[i]);
+    if (!q || t.toLowerCase().indexOf(q) >= 0)
+      fora.push({id: String(TPG_CONTAS[i].id), txt: t});
+  }
+  return fora;
+}
+function tpgPinta(drop, busca){
+  var itens = tpgItens(busca), html = '';
+  for (var i = 0; i < itens.length; i++){
+    html += '<div class="item' + (itens[i].nada ? ' item--nada' : '') +
+            '" data-id="' + itens[i].id + '" onmousedown="tpgEscolhe(event, this)">' +
+            itens[i].txt.replace(/</g, '&lt;') + '</div>';
+  }
+  drop.innerHTML = html || '<div class="item item--nada">Nenhuma conta encontrada</div>';
+  drop.style.display = 'block';
+}
+function tpgAbre(campo){
+  var cx = campo.closest('.csel');
+  var drop = cx.querySelector('.drop');
+  var todos = document.querySelectorAll('#tpg .drop');
+  for (var i = 0; i < todos.length; i++) if (todos[i] !== drop) todos[i].style.display = 'none';
+  // Ao focar, mostra a lista inteira: quem vai TROCAR a conta nao quer que o
+  // texto que ja esta no campo filtre a busca para uma opcao so.
+  tpgPinta(drop, '');
+}
+function tpgFiltra(campo){
+  tpgPinta(campo.closest('.csel').querySelector('.drop'), campo.value);
+}
+function tpgEscolhe(ev, item){
+  ev.preventDefault();
+  var cx = item.closest('.csel');
+  cx.querySelector('.csel__h').value = item.getAttribute('data-id') || '';
+  cx.querySelector('.csel__t').value = item.classList.contains('item--nada')
+    ? '' : item.textContent;
+  cx.querySelector('.drop').style.display = 'none';
+}
+document.addEventListener('click', function(ev){
+  if (ev.target.closest && ev.target.closest('.csel')) return;
+  var todos = document.querySelectorAll('#tpg .drop');
+  for (var i = 0; i < todos.length; i++) todos[i].style.display = 'none';
+});
+// Digitar sem escolher da lista nao vale: o que o servidor recebe e o id do
+// campo escondido, e um texto solto deixaria a pessoa achar que salvou.
+document.addEventListener('DOMContentLoaded', function(){
+  var campos = document.querySelectorAll('#tpg .csel__t');
+  for (var i = 0; i < campos.length; i++){
+    campos[i].addEventListener('blur', function(){
+      var cx = this.closest('.csel');
+      var id = cx.querySelector('.csel__h').value;
+      if (!id) { this.value = ''; return; }
+      var pc = null;
+      for (var j = 0; j < TPG_CONTAS.length; j++)
+        if (String(TPG_CONTAS[j].id) === String(id)) pc = TPG_CONTAS[j];
+      if (pc) this.value = tpgTexto(pc);
     });
-    return items;
-}
-
-function _renderDrop(drop, query) {
-    const items = _buildDropItems(query);
-    drop.innerHTML = items.length === 0
-        ? '<div class="csel-empty">Nenhuma conta encontrada</div>'
-        : items.map(it => `<div class="csel-item" data-id="${it.id}" onmousedown="selectCsel(event,this)">${it.text}</div>`).join('');
-}
-
-function openCsel(inputEl) {
-    const wrap = inputEl.closest('.csel-wrap');
-    const drop = wrap.querySelector('.csel-drop');
-    document.querySelectorAll('.csel-drop').forEach(d => { if (d !== drop) d.style.display = 'none'; });
-    _renderDrop(drop, inputEl.value);
-    drop.style.display = 'block';
-}
-
-function filterCsel(inputEl) {
-    const wrap = inputEl.closest('.csel-wrap');
-    const drop = wrap.querySelector('.csel-drop');
-    _renderDrop(drop, inputEl.value);
-    drop.style.display = 'block';
-}
-
-function selectCsel(evt, itemEl) {
-    evt.preventDefault();
-    const wrap = itemEl.closest('.csel-wrap');
-    const txt = wrap.querySelector('.csel-txt');
-    const hid = wrap.querySelector('.csel-hid');
-    const drop = wrap.querySelector('.csel-drop');
-    hid.value = itemEl.dataset.id;
-    txt.value = itemEl.dataset.id ? itemEl.textContent : '';
-    drop.style.display = 'none';
-}
-
-document.addEventListener('click', function(e) {
-    if (!e.target.closest('.csel-wrap')) {
-        document.querySelectorAll('.csel-drop').forEach(d => { d.style.display = 'none'; });
-        document.querySelectorAll('.csel-wrap').forEach(wrap => {
-            const hid = wrap.querySelector('.csel-hid');
-            const txt = wrap.querySelector('.csel-txt');
-            if (hid && txt && !txt.value && hid.value) {
-                txt.value = _pcText(hid.value);
-            }
-        });
-    }
+  }
 });
 </script>
-<style>
-.csel-wrap { position: relative; }
-.csel-drop {
-    display: none;
-    position: absolute;
-    z-index: 1055;
-    background: #fff;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-    max-height: 220px;
-    overflow-y: auto;
-    width: 100%;
-    box-shadow: 0 4px 12px rgba(0,0,0,.12);
-}
-.csel-item {
-    padding: 5px 10px;
-    font-size: 0.76rem;
-    cursor: pointer;
-}
-.csel-item:hover { background: #e9f0fb; }
-.csel-empty { padding: 6px 10px; color: #6c757d; font-size: 0.76rem; }
-</style>
 {% endblock %}

@@ -1453,11 +1453,22 @@ def config_contabil():
         )
         plano_contas = cursor.fetchall()
 
+        # O que a tela precisa dizer de cara: quantas empresas ainda saem sem
+        # conta de debito na exportacao contabil.
+        totais = {
+            'empresas': len(empresas),
+            'configuradas': sum(1 for e in empresas
+                                if (config_map.get(e['id']) or {}).get('conta_debito_id')),
+            'contas': len(plano_contas),
+        }
+        totais['faltando'] = totais['empresas'] - totais['configuradas']
+
         cursor.close()
     except Exception as e:
         flash(f'Erro ao carregar configuração: {str(e)}', 'danger')
         _logger_tp.error("config_contabil GET error: %s", e, exc_info=True)
         empresas, config_map, plano_contas = [], {}, []
+        totais = {'empresas': 0, 'configuradas': 0, 'faltando': 0, 'contas': 0}
     finally:
         if conn:
             conn.close()
@@ -1467,6 +1478,7 @@ def config_contabil():
         empresas=empresas,
         config_map=config_map,
         plano_contas=plano_contas,
+        totais=totais,
         titulo='Configuração Contábil – Troco PIX',
     )
 
