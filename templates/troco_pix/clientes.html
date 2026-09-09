@@ -28,7 +28,7 @@ body > .container-fluid:has(#tpc){
 {% with esc = '#tpc' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
 <style>
   #tpc{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
-        --ambar:#8a5a00; --muted:#6b7684; --ink:#151d27; --borda:#d9e0e8; }
+        --ambar:#8a5a00; --muted:#4b5563; --ink:#151d27; --borda:#d9e0e8; }
   #tpc{ color:var(--ink); max-width:100%; }
 
   #tpc .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
@@ -36,7 +36,7 @@ body > .container-fluid:has(#tpc){
     margin-bottom:.7rem; }
   #tpc .topo__l{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
   #tpc .topo__t{ font-weight:800; font-size:1.02rem; flex:1; min-width:0; }
-  #tpc .topo__s{ font-size:.74rem; opacity:.85; margin-top:.1rem; }
+  #tpc .topo__s{ font-size:.74rem; opacity:.96; margin-top:.1rem; }
   #tpc .bt-t{ border:1px solid rgba(255,255,255,.35);
     background:rgba(255,255,255,.14); color:#fff; border-radius:9px;
     padding:.34rem .7rem; font-size:.78rem; font-weight:800;
@@ -85,8 +85,8 @@ body > .container-fluid:has(#tpc){
     overflow-wrap:anywhere; }
   /* a chave e o que o caixa confere antes de mandar o dinheiro: fica em
      monoespacada, embaixo do nome, e nunca mais atras de rolagem lateral */
-  #tpc .c__k{ font-family:'Courier New',Courier,monospace; font-size:.76rem;
-    color:#3a4655; margin-top:.12rem; overflow-wrap:anywhere; }
+  #tpc .c__k{ font-family:'Courier New',Courier,monospace; font-size:.78rem;
+    color:#26313f; margin-top:.12rem; overflow-wrap:anywhere; }
   #tpc .c__s{ display:flex; gap:.3rem; flex-wrap:wrap; margin-top:.28rem; }
   #tpc .val{ text-align:right; flex:0 0 auto; }
   #tpc .val__v{ font-weight:800; font-size:.84rem; color:var(--blue-deep);
@@ -99,9 +99,9 @@ body > .container-fluid:has(#tpc){
   #tpc .selo{ display:inline-block; border-radius:99px; padding:.14rem .5rem;
     font-size:.64rem; font-weight:800; white-space:nowrap; }
   #tpc .selo--tipo{ background:#eaf1f9; color:var(--blue-deep); }
-  #tpc .selo--off{ background:#eef1f5; color:#5b6b7f; }
+  #tpc .selo--off{ background:#e7ebf0; color:#3d4854; }
   #tpc .selo--rep{ background:#fdf0d6; color:var(--ambar); }
-  #tpc .selo--novo{ background:#f2eefb; color:#5b4a8a; }
+  #tpc .selo--novo{ background:#ede7f8; color:#453675; }
 
   #tpc .c__c{ background:#f7f9fc; border-top:1px solid #eef1f5;
     padding:.65rem .8rem .75rem; }
