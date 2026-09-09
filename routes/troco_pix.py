@@ -1053,6 +1053,68 @@ def excluir(troco_pix_id):
 
 # ==================== ROTAS DE GESTÃO DE CLIENTES PIX ====================
 
+@troco_pix_bp.route('/comprovantes/ler', methods=['POST'])
+@login_required
+def comprovantes_ler():
+    """Lê agora os avisos de PIX enviado, sem esperar os 5 minutos.
+
+    Mesma ideia do botão "Reler e-mails de descarga" do estoque, e pelo mesmo
+    motivo: quem abre o aviso no celular deixa ele LIDO, e a rotina automática
+    só olha os não lidos. Aqui a leitura ignora o estado de lido e não mexe
+    nele — dá para apertar quantas vezes quiser, que o Message-ID impede
+    gravar o mesmo aviso duas vezes.
+    """
+    from flask import jsonify
+    from integrations import pix_email
+
+    if not pix_email.caixa_configurada():
+        return jsonify({'ok': False,
+                        'erro': 'Nenhuma caixa de e-mail configurada para ler '
+                                'os avisos do banco.'}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    got = 0
+    try:
+        # Espera ate 5s pelo lock do agendador: duas leituras ao mesmo tempo
+        # brigariam pelo mesmo e-mail.
+        cur.execute("SELECT GET_LOCK(%s, 5)", ('pix_email_import',))
+        row = cur.fetchone()
+        got = row[0] if row else 0
+        if got != 1:
+            return jsonify({'ok': False,
+                            'erro': 'Leitura em andamento; tente em instantes.'}), 409
+
+        saida = pix_email.reprocessar(dias=7)
+        novos = int(saida.get('gravados', 0))
+        casados = int(saida.get('casados', 0))
+        if not novos and not casados:
+            msg = 'Nenhum comprovante novo'
+        else:
+            msg = '%d comprovante%s lido%s' % (novos, '' if novos == 1 else 's',
+                                               '' if novos == 1 else 's')
+            if casados:
+                msg += ', %d ligado%s à solicitação' % (casados,
+                                                        '' if casados == 1 else 's')
+        return jsonify({'ok': True, 'msg': msg, 'detalhe': saida})
+    except Exception as e:
+        _logging.getLogger(__name__).exception('[troco_pix/comprovantes] falha ao ler')
+        return jsonify({'ok': False, 'erro': 'Falha ao ler os e-mails: %s' % e}), 500
+    finally:
+        try:
+            if got == 1:
+                cur.execute("SELECT RELEASE_LOCK(%s)", ('pix_email_import',))
+                cur.fetchall()
+        except Exception:
+            pass
+        for c in (cur, conn):
+            try:
+                if c is not None:
+                    c.close()
+            except Exception:
+                pass
+
+
 @troco_pix_bp.route('/clientes')
 @login_required
 def clientes():

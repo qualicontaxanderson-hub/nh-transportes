@@ -184,6 +184,10 @@ finally:
 # ── 5. o selo na tela ──────────────────────────────────────────────────────
 admin = (consulta("""SELECT id FROM usuarios WHERE ativo = 1
                       AND UPPER(nivel) = 'ADMIN' LIMIT 1""") or [None])[0]
+# O POST de "ler agora" e protegido por CSRF: no navegador o token vai
+# sozinho (o base.html injeta em todo fetch), mas o test_client nao passa por
+# ele e levaria 400 vazio.
+app.config['WTF_CSRF_ENABLED'] = False
 cli = app.test_client()
 if admin:
     with cli.session_transaction() as s:
@@ -227,6 +231,77 @@ try:
 finally:
     if comp_id:
         executa("DELETE FROM troco_pix_comprovantes WHERE id=%s", (comp_id,))
+
+# ── 6. a caixa é a mesma do ELS: nada a configurar no Railway ─────────────
+# Os avisos da Cora chegam junto com os do sistema de medição. Repetir a senha
+# em PIX_MAIL_PASSWORD seria um segundo lugar para ela ficar velha.
+_guarda = {k: os.environ.get(k) for k in
+           ('PIX_MAIL_USER', 'PIX_MAIL_PASSWORD', 'PIX_MAIL_IMAP_HOST',
+            'PIX_MAIL_REMETENTE', 'ELS_MAIL_USER', 'ELS_MAIL_PASSWORD',
+            'ELS_MAIL_IMAP_HOST')}
+try:
+    for k in _guarda:
+        os.environ.pop(k, None)
+    prova('sem nenhuma variável, não há caixa (e o robô nem liga)',
+          not pix_email.caixa_configurada())
+
+    os.environ['ELS_MAIL_USER'] = 'goiatuba@postonovohorizonte.com.br'
+    os.environ['ELS_MAIL_PASSWORD'] = 'senha-do-els'
+    os.environ['ELS_MAIL_IMAP_HOST'] = 'imap.titan.email'
+    prova('só com as do ELS, o PIX já tem caixa para ler',
+          pix_email.caixa_configurada())
+    prova('herda usuário, senha e servidor do ELS',
+          pix_email._cfg('PIX_MAIL_USER') == 'goiatuba@postonovohorizonte.com.br'
+          and pix_email._cfg('PIX_MAIL_PASSWORD') == 'senha-do-els'
+          and pix_email._cfg('PIX_MAIL_IMAP_HOST') == 'imap.titan.email')
+    # O remetente NAO pode ser herdado: o do ELS e o sistema de medicao, e
+    # com ele a busca nao acharia um aviso da Cora sequer.
+    os.environ['ELS_REMETENTE'] = 'notificacao@sistemaels.com.br'
+    prova('mas NÃO herda o remetente (o do ELS é outro sistema)',
+          pix_email._cfg('PIX_MAIL_REMETENTE', pix_email.REMETENTE_PADRAO)
+          == 'cora.com.br')
+
+    os.environ['PIX_MAIL_USER'] = 'pix.goiatuba@postonovohorizonte.com.br'
+    prova('quando a do PIX existe, é ela que vale',
+          pix_email._cfg('PIX_MAIL_USER') == 'pix.goiatuba@postonovohorizonte.com.br')
+finally:
+    for k, v in _guarda.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+    os.environ.pop('ELS_REMETENTE', None)
+
+# ── 7. o botão "Ler e-mails" ──────────────────────────────────────────────
+if admin:
+    tela = cli.get('/troco_pix/').get_data(as_text=True)
+    prova('a tela tem o botão de ler os e-mails agora',
+          'tpxLerEmails(this)' in tela and 'Ler e-mails' in tela)
+    r = cli.post('/troco_pix/comprovantes/ler')
+    corpo = r.get_json() or {}
+    # Nesta maquina nao ha caixa configurada: a resposta tem de explicar isso,
+    # e nao estourar.
+    prova('sem caixa configurada, a rota recusa por escrito',
+          r.status_code == 400 and 'caixa de e-mail' in (corpo.get('erro') or ''),
+          'codigo %s, corpo %r' % (r.status_code, corpo))
+
+    _g2 = {k: os.environ.get(k) for k in ('PIX_MAIL_USER', 'PIX_MAIL_PASSWORD',
+                                          'PIX_MAIL_IMAP_HOST')}
+    try:
+        os.environ['PIX_MAIL_USER'] = 'ninguem@exemplo.invalido'
+        os.environ['PIX_MAIL_PASSWORD'] = 'nao-existe'
+        os.environ['PIX_MAIL_IMAP_HOST'] = 'imap.exemplo.invalido'
+        r = cli.post('/troco_pix/comprovantes/ler')
+        corpo = r.get_json() or {}
+        prova('servidor que não responde vira mensagem, não tela de erro',
+              r.status_code == 500 and 'Falha ao ler' in (corpo.get('erro') or ''),
+              'codigo %s, corpo %r' % (r.status_code, corpo))
+    finally:
+        for k, v in _g2.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 sobrou = consulta("""SELECT COUNT(*) n FROM troco_pix_comprovantes
                       WHERE message_id LIKE '<prova-%'""")

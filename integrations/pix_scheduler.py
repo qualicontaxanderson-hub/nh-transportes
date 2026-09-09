@@ -17,6 +17,9 @@ e só marca como lido depois de gravar, rodar de 5 em 5 não duplica nada.
 Concorrência (gunicorn --workers N): cada worker cria o seu scheduler, então o
 job usa GET_LOCK global no MySQL para que só UMA execução rode por vez.
 
+A caixa e a mesma do ELS (os avisos da Cora chegam junto com o sistema de
+medicao), entao nao ha nada a configurar para ele comecar a rodar.
+
 Liga/desliga por env (configurar no Railway):
     PIX_SCHED_ENABLED = '1' (default) | '0' para desligar
     PIX_SCHED_MINUTE  = minuto cron (default '*/5')
@@ -72,10 +75,12 @@ def iniciar_scheduler(app):
     if os.environ.get("PIX_SCHED_ENABLED", "1") != "1":
         app.logger.info("[pix_sched] desabilitado (PIX_SCHED_ENABLED != '1').")
         return
-    if not os.environ.get("PIX_MAIL_USER"):
-        # Sem caixa configurada nao ha o que ler; ligar o job so encheria o
-        # log de aviso a cada 5 minutos.
-        app.logger.info("[pix_sched] sem PIX_MAIL_USER; scheduler não iniciado.")
+    if not pix_email.caixa_configurada():
+        # Sem caixa nao ha o que ler; ligar o job so encheria o log de aviso a
+        # cada 5 minutos. Caixa aqui e a do PIX ou a herdada do ELS — os
+        # avisos da Cora chegam na mesma que ja recebe o sistema de medicao.
+        app.logger.info("[pix_sched] sem caixa configurada (PIX_MAIL_* nem "
+                        "ELS_MAIL_*); scheduler não iniciado.")
         return
     with _started_lock:
         if _started:

@@ -21,13 +21,18 @@ Mesmo desenho do integrations/els_email.py (que traz a leitura de tanque e as
 descargas por e-mail): IMAP com BODY.PEEK para nao marcar lido sem querer,
 gravacao idempotente, e o e-mail so e marcado como lido depois do commit.
 
-Configuração (variáveis de ambiente — configurar no Railway):
-    PIX_MAIL_IMAP_HOST  (default imap.titan.email, como o ELS)
-    PIX_MAIL_IMAP_PORT  (default 993)
-    PIX_MAIL_USER       (a caixa que recebe os avisos, ex.: pix.goiatuba@...)
-    PIX_MAIL_PASSWORD   (senha de app do provedor)
-    PIX_MAIL_MAILBOX    (default INBOX)
-    PIX_MAIL_REMETENTE  (default cora.com.br — vale o dominio inteiro)
+Configuração: nao precisa de nenhuma. Os avisos da Cora chegam na MESMA caixa
+que ja recebe o ELS, entao caixa, senha, servidor e pasta sao herdados das
+ELS_MAIL_* que ja estao no Railway. As variaveis abaixo existem para o dia em
+que isso mudar, e quando presentes ganham da heranca:
+
+    PIX_MAIL_IMAP_HOST  (senao ELS_MAIL_IMAP_HOST, senao imap.titan.email)
+    PIX_MAIL_IMAP_PORT  (senao ELS_MAIL_IMAP_PORT, senao 993)
+    PIX_MAIL_USER       (senao ELS_MAIL_USER)
+    PIX_MAIL_PASSWORD   (senao ELS_MAIL_PASSWORD)
+    PIX_MAIL_MAILBOX    (senao ELS_MAIL_MAILBOX, senao INBOX)
+    PIX_MAIL_REMETENTE  (default cora.com.br — vale o dominio inteiro; este NAO
+                         e herdado, o remetente do ELS e outro)
     PIX_MATCH_DIAS      (quantos dias atras procurar a solicitacao; default 3)
 """
 
@@ -52,7 +57,40 @@ REMETENTE_PADRAO = "cora.com.br"
 
 
 def _cfg(nome, default=None):
-    return os.environ.get(nome, default)
+    """A configuração do PIX, caindo para a do ELS quando não houver.
+
+    Os avisos da Cora chegam na MESMA caixa que recebe o ELS. Exigir
+    PIX_MAIL_USER e PIX_MAIL_PASSWORD seria repetir no Railway uma senha que
+    ja esta la — e um lugar a mais para a senha ficar velha no dia em que ela
+    mudar. As PIX_* continuam valendo, e ganham de quem cair aqui: no dia em
+    que os avisos forem para outra caixa, basta criar as duas.
+    """
+    v = os.environ.get(nome)
+    if v:
+        return v
+    espelho = _ESPELHO_ELS.get(nome)
+    if espelho:
+        v = os.environ.get(espelho)
+        if v:
+            return v
+    return default
+
+
+# PIX_MAIL_X cai para ELS_MAIL_X: mesma caixa, mesma senha, mesmo servidor.
+# O remetente NAO entra aqui — o do ELS e o sistema de medicao, e ler a Cora
+# com aquele filtro nao traria e-mail nenhum.
+_ESPELHO_ELS = {
+    "PIX_MAIL_IMAP_HOST": "ELS_MAIL_IMAP_HOST",
+    "PIX_MAIL_IMAP_PORT": "ELS_MAIL_IMAP_PORT",
+    "PIX_MAIL_USER": "ELS_MAIL_USER",
+    "PIX_MAIL_PASSWORD": "ELS_MAIL_PASSWORD",
+    "PIX_MAIL_MAILBOX": "ELS_MAIL_MAILBOX",
+}
+
+
+def caixa_configurada():
+    """Tem caixa para ler? (propria ou a herdada do ELS)"""
+    return bool(_cfg("PIX_MAIL_USER") and _cfg("PIX_MAIL_PASSWORD"))
 
 
 # ===========================================================================
@@ -232,7 +270,8 @@ def _buscar(dias=2, apenas_nao_lidos=True):
     mailbox = _cfg("PIX_MAIL_MAILBOX", "INBOX")
     remetente = _cfg("PIX_MAIL_REMETENTE", REMETENTE_PADRAO)
     if not user or not pwd:
-        _log.warning("[pix_mail] PIX_MAIL_USER / PIX_MAIL_PASSWORD não configurados.")
+        _log.warning("[pix_mail] sem caixa: nem PIX_MAIL_USER/PASSWORD "
+                     "nem ELS_MAIL_USER/PASSWORD estão configurados.")
         return []
 
     since = (date.today() - timedelta(days=dias)).strftime("%d-%b-%Y")

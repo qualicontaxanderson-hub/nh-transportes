@@ -183,6 +183,12 @@ body > .container-fluid:has(#tpx){
     <div class="topo__l">
       <span class="topo__t"><i class="bi bi-cash-coin"></i> Troco PIX
         <div class="topo__s">Solicitações de troco via PIX</div></span>
+      {# Ler agora, sem esperar os 5 minutos do agendador — e sem depender de
+         o aviso estar nao-lido, que e o que quebrava a captura de descarga
+         quando alguem abria o e-mail no celular antes. #}
+      <button type="button" class="bt-t" id="tpx-ler"
+              onclick="tpxLerEmails(this)" title="Ler os avisos de PIX enviado">
+        <i class="bi bi-envelope-arrow-down"></i> Ler e-mails</button>
       <a class="bt-t" href="{{ url_for('troco_pix.novo') }}">
         <i class="bi bi-plus-circle"></i> Nova solicitação</a>
     </div>
@@ -473,6 +479,32 @@ function tpxAbre(cab){
   if (!corpo) return;
   corpo.hidden = !corpo.hidden;
   c.classList.toggle('aberto', !corpo.hidden);
+}
+// Ler os avisos do banco agora. Recarrega a tela quando algo entrou: o selo
+// "PIX enviado" e desenhado no servidor.
+function tpxLerEmails(bt){
+  var antes = bt.innerHTML;
+  bt.disabled = true;
+  bt.innerHTML = '<i class="bi bi-hourglass-split"></i> lendo…';
+  fetch('{{ url_for("troco_pix.comprovantes_ler") }}',
+        {method: 'POST', credentials: 'same-origin',
+         headers: {'X-Requested-With': 'XMLHttpRequest'}})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d || !d.ok) throw new Error((d && d.erro) || 'não deu');
+      if ((d.detalhe && d.detalhe.gravados) || (d.detalhe && d.detalhe.casados)) {
+        location.reload();
+        return;
+      }
+      bt.innerHTML = antes;
+      bt.disabled = false;
+      alert(d.msg || 'Nada novo.');
+    })
+    .catch(function(e){
+      bt.innerHTML = antes;
+      bt.disabled = false;
+      alert('Não deu pra ler os e-mails: ' + e.message);
+    });
 }
 // Clicar no "PIX enviado" mostra a hora ali mesmo, sem abrir o card — e a
 // pergunta que se faz olhando a lista: "esse ja saiu? que horas?".
