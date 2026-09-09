@@ -507,6 +507,11 @@ def _montar_viagens(fretes, cap):
             v = viagens[ch] = {
                 'data': fr['data_frete'], 'veiculo_id': fr['veiculos_id'],
                 'placa': fr['placa'] or '—', 'caminhao': fr['caminhao'] or '',
+                # Caminhao de fora: o cadastro dele nao tem placa, e e assim
+                # que a casa registra "quem levou foi terceiro" desde
+                # 16/02/2026. A tela precisa saber pra nao chamar de "—" nem
+                # cobrar bocas de um caminhao que nao e nosso.
+                'externo': not (fr['placa'] or '').strip(),
                 'motorista_id': fr['motoristas_id'] or 0,
                 'motorista': fr['motorista'] or '—',
                 'bocas': c['bocas'], 'capacidade': c['total'], 'carreta': c['carreta'],
@@ -575,7 +580,9 @@ def _montar_viagens(fretes, cap):
         v['livre'] = max(0.0, v['capacidade'] - v['litros'])
         v['pct'] = round(100.0 * v['litros'] / v['capacidade'], 1) if v['capacidade'] else 0.0
         v['estoura'] = bool(v['capacidade']) and v['litros'] > v['capacidade'] + 0.01
-        v['sem_cadastro'] = not v['capacidade']
+        # Falta de bocas so e falha em caminhao nosso. No de fora nao ha o que
+        # cadastrar, e o selo vermelho apontaria um erro que nao existe.
+        v['sem_cadastro'] = not v['capacidade'] and not v['externo']
         # Preenchidos de verdade por _aplicar_estado.
         v['bordo'] = []
         v['bordo_litros'] = 0.0
@@ -1893,7 +1900,8 @@ def index():
                 vistos.add(ch)
                 destinos.append({'veiculo_id': v['veiculo_id'],
                                  'motorista_id': v['motorista_id'] or 0,
-                                 'label': '%s · %s' % (v['placa'], v['motorista'])})
+                                 'label': '%s · %s' % (v['caminhao'] if v['externo']
+                                                       else v['placa'], v['motorista'])})
             for vc in veiculos:
                 m = padrao.get(vc['id'])
                 ch = (vc['id'], (m or {}).get('id') or 0)
@@ -1904,6 +1912,24 @@ def index():
                                  'motorista_id': (m or {}).get('id') or 0,
                                  'label': '%s · %s' % (vc['placa'],
                                                        (m or {}).get('nome') or 'sem motorista')})
+            # O caminhao de fora, sempre por ultimo. Ele esta no cadastro e ja
+            # levou 34 fretes (16/02 a 18/06/2026), mas a lista da frota corta
+            # quem nao tem placa — filtro que existe pelas carretas e levava o
+            # TERCEIRO junto. Sem ele nao havia como dizer, num frete que o
+            # cliente ja pagou, que quem entrega e caminhao de terceiro: a
+            # unica saida era mover pra outro caminhao nosso, que e mentira.
+            #
+            # Sem motorista de proposito: o motorista do terceiro nao e nosso
+            # e nao esta cadastrado. Escolher um da casa poria o nome dele
+            # numa viagem que ele nao fez.
+            cursor.execute("""SELECT id, caminhao FROM veiculos
+                               WHERE ativo = 1 AND caminhao = 'TERCEIRO'
+                               ORDER BY id LIMIT 1""")
+            ext = cursor.fetchone()
+            if ext and (ext['id'], 0) not in vistos:
+                vistos.add((ext['id'], 0))
+                destinos.append({'veiculo_id': ext['id'], 'motorista_id': 0,
+                                 'label': 'TERCEIRO · caminhão de fora'})
             ctx['destinos'] = destinos
 
             cids = {fr['clientes_id'] for v in viagens for p in v['postos']

@@ -813,7 +813,8 @@ body > .container-fluid:has(#pfn){
       <div class="vg__h" onclick="pfnAbre(this)">
         <span class="vg__ic"><i class="bi bi-truck-front-fill"></i></span>
         <div class="vg__t">
-          <div class="vg__p">{{ v.placa }}
+          <div class="vg__p">{{ v.caminhao if v.externo else v.placa }}
+            {%- if v.externo %} <span class="selo selo--vg">caminhão de fora</span>{% endif -%}
             {%- if v.fechada %} <span class="selo selo--fech">carga fechada</span>
             {%- else %} <span class="selo selo--abre">montando</span>{% endif -%}
             {%- if v.viagem_n %} <span class="selo selo--vg">{{ v.viagem_n }}ª viagem
