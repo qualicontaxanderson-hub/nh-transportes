@@ -23,7 +23,11 @@ global.document = doc;
 // A funcao provada e a do proprio arquivo, extraida do <script> inline.
 const m = html.match(/function pfnAbreMover\(botao, freteId\)\{[\s\S]*?\n\}/);
 if (!m) { console.log('FALHA  nao achei pfnAbreMover no HTML'); process.exit(1); }
-const pfnAbreMover = new Function('document', m[0] + '; return pfnAbreMover;')(doc);
+// pfnAbreMover chama pfnMvDestino ao abrir, entao as duas vem juntas.
+const mDest = html.match(/function pfnMvDestino\(sel\)\{[\s\S]*?\n\}/);
+const pfnAbreMover = new Function('document',
+    m[0] + '\n' + (mDest ? mDest[0] : 'function pfnMvDestino(){}') +
+    '; return pfnAbreMover;')(doc);
 
 let falhas = 0;
 function prova(t, ok, d){ console.log((ok?'OK    ':'FALHA ')+t); if(!ok){ if(d)console.log('        '+d); falhas++; } }
@@ -68,6 +72,52 @@ prova('entre a linha e o painel existe outro bloco (a causa)',
 const ops = [...doc.querySelectorAll('.mv__d option')].map(o => o.textContent.trim());
 prova('a lista de destinos oferece o caminhao de fora',
       ops.some(t => t === 'Terceiro'), 'opcoes: '+JSON.stringify(ops.slice(0,6)));
+
+// ── quem levou: so aparece quando o destino e o caminhao de fora ───────────
+const fn2 = html.match(/function pfnMvDestino\(sel\)\{[\s\S]*?\n\}/);
+prova('pfnMvDestino existe no arquivo servido', !!fn2);
+if (fn2) {
+  const pfnMvDestino = new Function('document', fn2[0] + '; return pfnMvDestino;')(doc);
+  const cx = doc.querySelector('.mv');
+  const dest = cx.querySelector('.mv__d'), quem = cx.querySelector('.mv__q');
+  prova('o painel tem o campo de quem levou', !!quem);
+  if (quem) {
+    const idExt = dest.getAttribute('data-terceiro');
+    const nosso = [...dest.options].find(o => !o.value.startsWith(idExt + ':'));
+    dest.value = nosso.value; pfnMvDestino(dest);
+    prova('caminhao nosso nao pergunta quem levou', quem.hidden,
+          'destino: ' + nosso.textContent);
+    const fora = [...dest.options].find(o => o.value.startsWith(idExt + ':'));
+    dest.value = fora.value; pfnMvDestino(dest);
+    prova('caminhao de fora pergunta quem levou', !quem.hidden,
+          'destino: ' + fora.textContent);
+    prova('a pergunta comeca sem resposta escolhida', quem.value === '');
+  }
+}
+
+// ── mover sem escolher quem levou nao chega a sair da tela ─────────────────
+const fn3 = html.match(/function pfnMover\(botao, freteId\)\{[\s\S]*?\n\}/);
+if (fn3) {
+  const avisos = [], enviados = [];
+  const pfnMover = new Function('document', 'alert', 'pfnEnvia',
+      fn3[0] + '; return pfnMover;')(doc, m => avisos.push(m),
+      (b, url, dados) => enviados.push(dados));
+  const cx = doc.querySelector('.mv');
+  const dest = cx.querySelector('.mv__d'), quem = cx.querySelector('.mv__q');
+  const idExt = dest.getAttribute('data-terceiro');
+  dest.value = [...dest.options].find(o => o.value.startsWith(idExt + ':')).value;
+  quem.hidden = false; quem.value = '';
+  pfnMover(cx.querySelector('.bd__b--sim'), 999);
+  prova('sem escolher quem levou, avisa e nao envia',
+        enviados.length === 0 && avisos.length === 1,
+        'avisos: ' + JSON.stringify(avisos));
+  const t = [...quem.options].find(o => o.value);
+  quem.value = t.value;
+  pfnMover(cx.querySelector('.bd__b--sim'), 999);
+  prova('com a transportadora escolhida, e ela que vai no motorista',
+        enviados.length === 1 && String(enviados[0].motorista_id) === t.value,
+        'enviado: ' + JSON.stringify(enviados));
+}
 
 console.log(falhas ? '\n'+falhas+' FALHA(S)' : '\nTUDO OK');
 process.exit(falhas ? 1 : 0);

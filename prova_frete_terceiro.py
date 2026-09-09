@@ -143,7 +143,7 @@ prova('a frota continua sendo so quem tem placa',
 # R500, R540, Truck, Terceiro. Placa mais nome completo do motorista dava tres
 # linhas por opcao no celular.
 cod, hj = abre(cli, admin['id'], '/ped-frete-novo/')
-sel = re.search(r'<select class="mv__d">(.*?)</select>', hj, re.S)
+sel = re.search(r'<select class="mv__d"[^>]*>(.*?)</select>', hj, re.S)
 ops = re.findall(r'<option value="[^"]*">([^<]+)</option>',
                  sel.group(1) if sel else '')
 ops = [o.strip() for o in ops]
@@ -157,6 +157,74 @@ prova('nenhuma opcao traz placa ou nome completo de motorista',
 prova('cada caminhao aparece uma vez so',
       len({o.split(' · ')[0] for o in ops}) == len(ops),
       'opcoes: %r' % (ops,))
+
+# ── quem levou: o campo so existe porque a coluna EXIGE um motorista ────────
+# `fretes.motoristas_id` e NOT NULL. Mover pro caminhao de fora sem dizer quem
+# levou dava "Column 'motoristas_id' cannot be null" na cara da usuaria.
+col = _consulta("""SELECT IS_NULLABLE AS n FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'fretes'
+                      AND COLUMN_NAME = 'motoristas_id'""")
+prova('a coluna do motorista no frete e NOT NULL (a causa do erro)',
+      bool(col) and col[0]['n'] == 'NO', 'IS_NULLABLE: %r' % (col,))
+
+selq = re.search(r'<select class="mv__q"[^>]*>(.*?)</select>', hj, re.S)
+qops = re.findall(r'<option value="([^"]*)">([^<]+)</option>',
+                  selq.group(1) if selq else '')
+prova('o painel pergunta quem levou, quando o destino e o de fora', bool(selq))
+prova('a lista de quem levou sai do historico do caminhao de fora',
+      {v for v, _ in qops if v} ==
+      {str(r['id']) for r in _consulta("""SELECT DISTINCT m.id
+                                            FROM motoristas m
+                                            LEFT JOIN fretes f
+                                              ON f.motoristas_id = m.id AND f.veiculos_id = %s
+                                           WHERE m.ativo = 1
+                                             AND (m.veiculo_id = %s OR f.id IS NOT NULL)""",
+                                       (ext['id'], ext['id']))},
+      'opcoes: %r' % (qops,))
+# O Valmir tambem esta sem CPF, e nao pode entrar aqui: ele e motorista nosso.
+prova('motorista da casa sem CPF nao vira transportadora',
+      not any('VALMIR' in t.upper() for _, t in qops), 'opcoes: %r' % (qops,))
+prova('o campo comeca escondido (so aparece no destino de fora)',
+      bool(selq) and 'class="mv__q" hidden' in hj)
+
+# ── a rota recusa por escrito, em vez de deixar o MySQL falar ───────────────
+frete = _consulta("""SELECT f.id FROM fretes f
+                      WHERE f.data_frete = %s AND f.veiculos_id <> %s
+                      LIMIT 1""", (dia, ext['id']))
+if frete:
+    with cli.session_transaction() as s_:
+        s_['_user_id'] = str(admin['id'])
+        s_['_fresh'] = True
+    r = cli.post('/ped-frete-novo/mover',
+                 json={'frete_id': frete[0]['id'], 'veiculo_id': ext['id'],
+                       'motorista_id': 0})
+    corpo = r.get_json() or {}
+    prova('mover sem dizer quem levou e recusado com 400',
+          r.status_code == 400, 'codigo %s, corpo %r' % (r.status_code, corpo))
+    prova('a recusa fala portugues, nao SQL',
+          'quem leva' in (corpo.get('erro') or '') and
+          'motoristas_id' not in (corpo.get('erro') or ''),
+          'erro: %r' % corpo.get('erro'))
+
+# ── e com transportadora o banco aceita (provado e desfeito) ────────────────
+# Escrita de verdade dentro de transacao, com ROLLBACK: prova que a combinacao
+# passa na constraint sem deixar nada gravado.
+if frete and qops:
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("UPDATE fretes SET veiculos_id=%s, motoristas_id=%s WHERE id=%s",
+                    (ext['id'], int([v for v, _ in qops if v][0]), frete[0]['id']))
+        prova('o banco aceita o frete no caminhao de fora com transportadora',
+              cur.rowcount == 1, 'linhas afetadas: %s' % cur.rowcount)
+    except Exception as e:
+        prova('o banco aceita o frete no caminhao de fora com transportadora',
+              False, str(e))
+    finally:
+        conn.rollback()          # nada fica gravado
+        cur.close()
+        conn.close()
+
 
 # ── o botao de mover tem de ABRIR o painel ──────────────────────────────────
 # O painel nao e o irmao imediato da linha: entre os dois esta o bloco de

@@ -245,6 +245,12 @@ body > .container-fluid:has(#pfn){
   #pfn .mv__d{ flex:1 1 160px; min-width:0; border:1px solid var(--borda);
     border-radius:8px; padding:.35rem .5rem; font-size:.8rem; font-family:inherit;
     background:#fff; }
+  /* quem levou, no caminhao de fora: linha inteira, porque nome de
+     transportadora nao cabe do lado do destino no celular */
+  #pfn .mv__q{ flex:1 1 100%; min-width:0; border:1px solid var(--borda);
+    border-radius:8px; padding:.35rem .5rem; font-size:.8rem; font-family:inherit;
+    background:#fff; }
+  #pfn .mv__q[hidden]{ display:none; }
   #pfn .nf__t{ font-size:.8rem; font-weight:800; color:var(--blue-deep);
     margin-bottom:.55rem; }
   #pfn .nf__g{ display:grid; grid-template-columns:1fr; gap:.5rem; }
@@ -1092,13 +1098,25 @@ body > .container-fluid:has(#pfn){
               <div class="mv" hidden>
                 <span class="mv__t">Mover {{ f.produto or '' }}
                   {{ fmtl.format(f.litros).replace(',', '.') }} L para:</span>
-                <select class="mv__d">
+                <select class="mv__d" data-terceiro="{{ terceiro_id or 0 }}"
+                        onchange="pfnMvDestino(this)">
                   {% for d in destinos %}
                   {% if not (d.veiculo_id == v.veiculo_id and d.motorista_id == (v.motorista_id or 0)) %}
                   <option value="{{ d.veiculo_id }}:{{ d.motorista_id }}">{{ d.label }}</option>
                   {% endif %}
                   {% endfor %}
                 </select>
+                {# No caminhao de fora o campo do motorista guarda a
+                   transportadora — e assim desde 16/02/2026. So aparece
+                   quando o destino e ele. #}
+                {% if terceiro_id and transportadoras %}
+                <select class="mv__q" hidden>
+                  <option value="">— quem levou? —</option>
+                  {% for t in transportadoras %}
+                  <option value="{{ t.id }}">{{ t.nome }}</option>
+                  {% endfor %}
+                </select>
+                {% endif %}
                 <button type="button" class="bd__b bd__b--sim"
                         onclick="pfnMover(this, {{ f.id }})">Mover</button>
                 <button type="button" class="bd__b" onclick="pfnFechaMover(this)">✕</button>
@@ -2224,7 +2242,24 @@ function pfnAbreMover(botao, freteId){
   while (cx && !cx.classList.contains('mv') && !cx.classList.contains('fr')) {
     cx = cx.nextElementSibling;   // para na proxima linha: cada frete tem o seu
   }
-  if (cx && cx.classList.contains('mv')) cx.hidden = !cx.hidden;
+  if (cx && cx.classList.contains('mv')) {
+    cx.hidden = !cx.hidden;
+    // O painel pode abrir ja com o caminhao de fora escolhido (e a primeira
+    // opcao quando a carga do dia e a unica outra). Sem isto o campo de quem
+    // levou so aparecia se a pessoa MUDASSE o destino.
+    var sel = cx.querySelector('.mv__d');
+    if (sel) pfnMvDestino(sel);
+  }
+}
+// Quem leva so e pergunta quando quem leva e de fora: no caminhao nosso o
+// motorista ja vem com a carga.
+function pfnMvDestino(sel){
+  var cx = sel.closest('.mv');
+  var quem = cx ? cx.querySelector('.mv__q') : null;
+  if (!quem) return;
+  var ext = parseInt(sel.getAttribute('data-terceiro') || '0', 10);
+  var vid = parseInt((sel.value || '').split(':')[0], 10);
+  quem.hidden = !(ext && vid === ext);
 }
 function pfnFechaMover(botao){
   var cx = botao.closest('.mv');
@@ -2235,10 +2270,18 @@ function pfnMover(botao, freteId){
   var sel = cx ? cx.querySelector('.mv__d') : null;
   if (!sel || !sel.value){ alert('Escolha o caminhão.'); return; }
   var partes = sel.value.split(':');
+  var mid = parseInt(partes[1], 10) || 0;
+  // No caminhao de fora quem vai neste campo e a transportadora.
+  var quem = cx ? cx.querySelector('.mv__q') : null;
+  if (quem && !quem.hidden){
+    if (!quem.value){ alert('Escolha quem levou a carga.'); return; }
+    mid = parseInt(quem.value, 10);
+  }
+  if (!mid){ alert('Esse caminhão está sem motorista no cadastro.'); return; }
   pfnEnvia(botao, '/ped-frete-novo/mover', {
     frete_id: freteId,
     veiculo_id: parseInt(partes[0], 10),
-    motorista_id: parseInt(partes[1], 10)
+    motorista_id: mid
   });
 }
 

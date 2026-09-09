@@ -1444,6 +1444,11 @@ def mover():
         return jsonify({'ok': False, 'erro': 'dados inválidos'}), 400
     if not frete_id or not vid:
         return jsonify({'ok': False, 'erro': 'informe o frete e o caminhão'}), 400
+    # `fretes.motoristas_id` e NOT NULL. Sem esta linha quem falava era o
+    # MySQL, com "Column 'motoristas_id' cannot be null" na cara da usuaria.
+    if not mid:
+        return jsonify({'ok': False,
+                        'erro': 'diga quem leva a carga antes de mover'}), 400
 
     _ensure_tabela()
     conn = cursor = None
@@ -1841,6 +1846,7 @@ def index():
            'vencimento_padrao': (hoje + timedelta(days=3)).isoformat(),
            'viagens': [], 'ociosos': [], 'dias': [], 'veiculos': [],
            'cobrar': [], 'divergencias': [], 'erro': None, 'destinos': [],
+           'transportadoras': [], 'terceiro_id': 0,
            'conferencia': [], 'achados': 0,
            'op': {'clientes': [], 'fornecedores': [], 'produtos': [],
                   'origens': [], 'bases': [], 'quantidades': [],
@@ -1980,6 +1986,33 @@ def index():
                 d['label'] = ('%s · %s' % (d['nome'], curto)
                               if repetidos[d['nome']] > 1 and curto else d['nome'])
             ctx['destinos'] = destinos
+
+            # Quem leva, quando quem leva e de fora. `fretes.motoristas_id` e
+            # NOT NULL, entao mover pro caminhao de fora sem dizer quem levou
+            # nao passa no banco — e nem devia: a casa ja guarda a
+            # transportadora nesse campo desde 16/02/2026 (FREIRE & NUNES em
+            # 16 fretes, FVE/FLEXLOG em 9, REM em 6, GASOL em 3).
+            #
+            # A lista sai do proprio historico do caminhao de fora, mais quem
+            # o cadastro aponta pra ele (a BARROS). Nao vale filtrar por "sem
+            # CPF": o Valmir, motorista nosso, tambem esta sem CPF e cairia
+            # aqui como se fosse transportadora.
+            if ext:
+                cursor.execute("""SELECT m.id, m.nome, COUNT(f.id) AS n
+                                    FROM motoristas m
+                                    LEFT JOIN fretes f ON f.motoristas_id = m.id
+                                                      AND f.veiculos_id = %s
+                                   WHERE m.ativo = 1
+                                     AND (m.veiculo_id = %s OR f.id IS NOT NULL)
+                                   GROUP BY m.id, m.nome
+                                   ORDER BY n DESC, m.nome""",
+                               (ext['id'], ext['id']))
+                # Nome como esta no cadastro: .title() virava "Fve
+                # Transportes" e "Gasol Transportes E Logistica" — pior de ler
+                # do que a maiuscula que a casa mesmo digitou.
+                ctx['transportadoras'] = [{'id': r['id'], 'nome': r['nome']}
+                                          for r in cursor.fetchall()]
+                ctx['terceiro_id'] = ext['id']
 
             cids = {fr['clientes_id'] for v in viagens for p in v['postos']
                     if p['estado'] == 'falta' for fr in p['fretes']
