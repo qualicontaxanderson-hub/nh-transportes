@@ -1123,18 +1123,52 @@ def clientes():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
+        # Cada cliente com o que ele ja recebeu: e o que separa o cadastro vivo
+        # do que alguem criou uma vez e nunca usou (23 dos 264).
+        #
+        # O JOIN so conta troco de verdade (> 0). Sem isso o "SEM PIX" — o
+        # registro tecnico que as solicitacoes sem troco usam — apareceria
+        # como o maior cliente da casa, com 614 lancamentos.
         cursor.execute("""
-            SELECT *
-            FROM troco_pix_clientes
-            ORDER BY ativo DESC, nome_completo
+            SELECT tpc.*,
+                   COUNT(tp.id)                      AS n_trocos,
+                   COALESCE(SUM(tp.troco_pix), 0)    AS total_recebido,
+                   MAX(tp.data)                      AS ultimo_troco
+              FROM troco_pix_clientes tpc
+              LEFT JOIN troco_pix tp
+                     ON tp.troco_pix_cliente_id = tpc.id
+                    AND COALESCE(tp.troco_pix, 0) > 0
+             GROUP BY tpc.id
+             ORDER BY tpc.ativo DESC, tpc.nome_completo
         """)
         clientes = cursor.fetchall()
-        
+
+        # Nome repetido nao e erro — a mesma pessoa pode ter CPF e telefone
+        # cadastrados —, mas e o que faz escolher o cadastro errado na pressa,
+        # entao a tela avisa quais sao.
+        cursor.execute("""
+            SELECT nome_completo FROM troco_pix_clientes
+             GROUP BY nome_completo HAVING COUNT(*) > 1
+        """)
+        repetidos = {r['nome_completo'] for r in cursor.fetchall()}
+
+        totais = {
+            'clientes': len(clientes),
+            'ativos': sum(1 for c in clientes if c.get('ativo')),
+            'inativos': sum(1 for c in clientes if not c.get('ativo')),
+            'com_troco': sum(1 for c in clientes if (c.get('n_trocos') or 0) > 0),
+            'sem_uso': sum(1 for c in clientes if not (c.get('n_trocos') or 0)),
+            'repetidos': len(repetidos),
+            'total_pago': sum(float(c.get('total_recebido') or 0) for c in clientes),
+        }
+
         cursor.close()
         conn.close()
-        
-        return render_template('troco_pix/clientes.html', 
+
+        return render_template('troco_pix/clientes.html',
                              clientes=clientes,
+                             repetidos=repetidos,
+                             totais=totais,
                              titulo='Clientes PIX')
         
     except Exception as e:
