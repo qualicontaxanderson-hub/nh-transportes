@@ -139,6 +139,26 @@ prova('a frota continua sendo so quem tem placa',
       ('>TERCEIRO<' not in h3) and any(v['placa'] in h3 for v in nossos),
       'o TERCEIRO nao pode virar aba da frota — ele nao e caminhao nosso')
 
+# ── o botao de mover tem de ABRIR o painel ──────────────────────────────────
+# O painel nao e o irmao imediato da linha: entre os dois esta o bloco de
+# edicao. Quem procurar so o vizinho fica mudo -- foi o que aconteceu, sem
+# erro no console e sem o template acusar nada. Aqui vai a prova estrutural;
+# o clique de verdade esta em prova_mover_abre.js (jsdom).
+cod, hoje_html = abre(cli, admin['id'], '/ped-frete-novo/')
+prova('a tela de hoje abre (200)', cod == 200, 'codigo %s' % cod)
+ordem = re.findall(r'<div class="(fr |ed"|mv")', hoje_html)
+prova('entre a linha do frete e o painel de mover ha outro bloco',
+      ['fr ', 'ed"', 'mv"'] == ordem[:3] if len(ordem) >= 3 else False,
+      'ordem encontrada: %r' % (ordem[:4],))
+fn = re.search(r'function pfnAbreMover\(botao, freteId\)\{[\s\S]*?\n\}', hoje_html)
+prova('pfnAbreMover procura o painel, em vez de olhar so o vizinho',
+      bool(fn) and 'while' in fn.group(0),
+      'a funcao voltou a depender do irmao imediato — o botao fica mudo')
+
+if len(sys.argv) > 2 and sys.argv[1] == '--html':
+    io.open(sys.argv[2], 'w', encoding='utf-8').write(hoje_html)
+    print('\nHTML da tela salvo em %s (para prova_mover_abre.js)' % sys.argv[2])
+
 print('\n%s' % ('TUDO OK' if not falhas else '%d FALHA(S): %s'
                 % (len(falhas), '; '.join(falhas))))
 sys.exit(1 if falhas else 0)

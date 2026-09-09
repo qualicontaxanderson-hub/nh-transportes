@@ -2217,7 +2217,13 @@ function pfnExcluir(botao, freteId){
 // o item do pedido, então os dois lados continuam de acordo.
 function pfnAbreMover(botao, freteId){
   var linha = botao.closest('.fr');
+  // O painel NAO e o irmao imediato da linha: entre os dois esta o bloco de
+  // edicao, que entrou depois (05/09/2026). Olhar so o vizinho deixava o
+  // botao mudo — clicava e nada acontecia, em toda carga aberta.
   var cx = linha ? linha.nextElementSibling : null;
+  while (cx && !cx.classList.contains('mv') && !cx.classList.contains('fr')) {
+    cx = cx.nextElementSibling;   // para na proxima linha: cada frete tem o seu
+  }
   if (cx && cx.classList.contains('mv')) cx.hidden = !cx.hidden;
 }
 function pfnFechaMover(botao){
