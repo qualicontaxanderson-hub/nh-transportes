@@ -154,6 +154,61 @@ prova('desativar só aparece em quem está ativo',
 prova('o link "Solicitações" leva para a tela certa deste usuário',
       '/troco_pix/' in h)
 
+# ── a relação dos trocos, dentro do card ──────────────────────────────────
+# "8 trocos" nao diz quando nem de quanto. A relacao tem de bater, troco a
+# troco, com o que esta no banco.
+linhas_tela = re.findall(
+    r'<a class="tr" href="[^"]*/visualizar/(\d+)">\s*'
+    r'<span class="tr__d">([^<]+)</span>', h)
+no_banco = consulta("""SELECT tp.id, tp.data, tp.troco_pix, tp.troco_pix_cliente_id
+                         FROM troco_pix tp
+                        WHERE COALESCE(tp.troco_pix,0) > 0""")
+prova('a tela lista os trocos um a um',
+      len(linhas_tela) == len(no_banco),
+      '%s linhas na tela para %s trocos no banco'
+      % (len(linhas_tela), len(no_banco)))
+prova('cada linha da relação leva à solicitação',
+      {int(i) for i, _ in linhas_tela} == {r['id'] for r in no_banco},
+      'a tela lista solicitações que não existem, ou deixa de fora')
+
+# O cliente que o print mostrava com 8 trocos: a relacao dele tem de ter 8,
+# com as datas certas.
+maior = consulta("""SELECT tpc.id, tpc.nome_completo, COUNT(tp.id) n
+                      FROM troco_pix_clientes tpc
+                      JOIN troco_pix tp ON tp.troco_pix_cliente_id = tpc.id
+                                       AND COALESCE(tp.troco_pix,0) > 0
+                     GROUP BY tpc.id, tpc.nome_completo
+                     ORDER BY n DESC LIMIT 1""")
+if maior:
+    m = maior[0]
+    trechos = h.split('data-busca=')
+    dele = [t for t in trechos if (m['nome_completo'] or '').lower() in t.lower()]
+    bloco = dele[0] if dele else ''
+    prova('o cliente com mais trocos (%s) mostra a relação completa'
+          % (m['nome_completo'] or '?').split()[0].title(),
+          bloco.count('<a class="tr"') == int(m['n']),
+          '%s linhas para %s trocos' % (bloco.count('<a class="tr"'), m['n']))
+    prova('o cabeçalho da relação diz quantos são',
+          'Trocos recebidos (%s)' % m['n'] in bloco,
+          'não achei "Trocos recebidos (%s)"' % m['n'])
+    # A data vem crua e é formatada aqui: DATE_FORMAT com %%d dentro de uma
+    # consulta parametrizada depende de como o driver trata o escape, e foi
+    # isso que fez esta prova acusar datas faltando numa tela que tinha todas.
+    datas = consulta("""SELECT tp.data FROM troco_pix tp
+                         WHERE tp.troco_pix_cliente_id = %s
+                           AND COALESCE(tp.troco_pix,0) > 0""", (m['id'],))
+    faltam = [d['data'].strftime('%d/%m/%Y') for d in datas
+              if d['data'] and d['data'].strftime('%d/%m/%Y') not in bloco]
+    prova('as datas de cada troco aparecem', not faltam,
+          'faltaram: %r' % faltam)
+
+prova('a relação diz o que já foi conciliado',
+      h.count('bi bi-check-circle-fill tr__ok')
+      == len([r for r in consulta("""SELECT id FROM troco_pix
+                                      WHERE COALESCE(troco_pix,0) > 0
+                                        AND bank_transaction_id IS NOT NULL""")]),
+      'os certinhos verdes não batem com os conciliados do banco')
+
 if len(sys.argv) > 2 and sys.argv[1] == '--html':
     io.open(sys.argv[2], 'w', encoding='utf-8').write(h)
     print('\nHTML salvo em %s' % sys.argv[2])

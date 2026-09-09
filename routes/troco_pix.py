@@ -1143,6 +1143,22 @@ def clientes():
         """)
         clientes = cursor.fetchall()
 
+        # A relacao dos trocos de cada um. "8 trocos" sozinho nao responde a
+        # pergunta que se faz olhando: QUANDO foram, e de quanto. Vem tudo de
+        # uma consulta so e e agrupado aqui — sao ~600 linhas no total, menos
+        # peso do que 264 idas ao banco, uma por card aberto.
+        cursor.execute("""
+            SELECT tp.troco_pix_cliente_id AS cid, tp.id, tp.data,
+                   tp.troco_pix, tp.numero_sequencial,
+                   tp.bank_transaction_id
+              FROM troco_pix tp
+             WHERE COALESCE(tp.troco_pix, 0) > 0
+             ORDER BY tp.data DESC, tp.id DESC
+        """)
+        trocos = {}
+        for t in cursor.fetchall():
+            trocos.setdefault(t['cid'], []).append(t)
+
         # Nome repetido nao e erro — a mesma pessoa pode ter CPF e telefone
         # cadastrados —, mas e o que faz escolher o cadastro errado na pressa,
         # entao a tela avisa quais sao.
@@ -1168,6 +1184,7 @@ def clientes():
         return render_template('troco_pix/clientes.html',
                              clientes=clientes,
                              repetidos=repetidos,
+                             trocos=trocos,
                              totais=totais,
                              titulo='Clientes PIX')
         

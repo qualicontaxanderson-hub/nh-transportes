@@ -111,6 +111,21 @@ body > .container-fluid:has(#tpc){
   #tpc .li .k{ color:var(--muted); flex:0 0 104px; }
   #tpc .li .v{ flex:1; min-width:0; font-weight:600; overflow-wrap:anywhere; }
   #tpc .li .v.mono{ font-family:'Courier New',Courier,monospace; }
+  /* a relacao de trocos: uma linha por troco, do mais novo pro mais velho */
+  #tpc .tr{ display:flex; align-items:center; gap:.5rem; padding:.3rem 0;
+    border-top:1px solid #eef1f5; font-size:.79rem; color:var(--ink);
+    text-decoration:none; }
+  #tpc .tr:first-of-type{ border-top:0; }
+  #tpc .tr:hover{ background:#f7f9fc; }
+  #tpc .tr__d{ flex:0 0 auto; font-variant-numeric:tabular-nums;
+    font-weight:700; }
+  #tpc .tr__c{ flex:1; min-width:0; color:var(--muted); font-size:.7rem;
+    font-family:'Courier New',Courier,monospace; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
+  #tpc .tr__v{ flex:0 0 auto; font-weight:800; color:var(--blue-deep);
+    font-variant-numeric:tabular-nums; }
+  #tpc .tr__ok{ color:var(--ok); font-size:.8rem; flex:0 0 auto; }
+  #tpc .tr__nao{ color:var(--muted); font-size:.8rem; flex:0 0 auto; }
   #tpc .acoes{ display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.55rem; }
   #tpc .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
     border-radius:9px; padding:.36rem .7rem; font-size:.77rem; font-weight:700;
@@ -234,6 +249,29 @@ body > .container-fluid:has(#tpc){
             antes de escolher.</div>
           {% endif %}
         </div>
+
+        {# "8 trocos" nao responde a pergunta que se faz olhando: quando foram,
+           e de quanto. A relacao vem aqui, do mais novo para o mais velho, e
+           cada linha abre a solicitacao. #}
+        {% set lista = trocos.get(c.id) or [] %}
+        {% if lista %}
+        <div class="bloco" style="margin-top:.5rem;">
+          <div class="bloco__t">Trocos recebidos ({{ lista|length }})</div>
+          {% for t in lista %}
+          <a class="tr" href="{{ url_for('troco_pix.visualizar', troco_pix_id=t.id) }}">
+            <span class="tr__d">{{ t.data.strftime('%d/%m/%Y') if t.data else '—' }}</span>
+            <span class="tr__c">{{ t.numero_sequencial or '—' }}</span>
+            <span class="tr__v">{{ t.troco_pix | formatar_moeda }}</span>
+            {% if t.bank_transaction_id %}
+            <i class="bi bi-check-circle-fill tr__ok"
+               title="Conciliado com o extrato"></i>
+            {% else %}
+            <i class="bi bi-dash-circle tr__nao" title="Ainda não conciliado"></i>
+            {% endif %}
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
         <div class="acoes">
           <a class="bt bt--ed"
              href="{{ url_for('troco_pix.cliente_editar', cliente_id=c.id) }}">
