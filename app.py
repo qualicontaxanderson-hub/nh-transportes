@@ -493,6 +493,21 @@ def create_app():
     except Exception:
         app.logger.warning("[els_sched] nao foi possivel iniciar o scheduler.", exc_info=True)
 
+    # Agendador que le os comprovantes de PIX enviado no e-mail do banco (a
+    # cada 5 min) e marca na solicitacao de Troco PIX que o dinheiro saiu — e a
+    # que horas. NAO concilia: isso segue com o usuario, no OFX do dia
+    # seguinte. Falha aqui NAO deve derrubar o app.
+    try:
+        # A tabela dos comprovantes nasce aqui mesmo sem caixa configurada: a
+        # tela do Troco PIX ja faz LEFT JOIN nela, e sem a tabela a consulta
+        # cairia no fallback antigo sem dizer por que.
+        from integrations import pix_email
+        pix_email.ensure_tables()
+        from integrations.pix_scheduler import iniciar_scheduler as iniciar_pix
+        iniciar_pix(app)
+    except Exception:
+        app.logger.warning("[pix_sched] nao foi possivel iniciar o scheduler.", exc_info=True)
+
     # Agendador da baixa automatica dos boletos da EFI. O caminho normal e o
     # webhook; este e a rede de seguranca para quando a notificacao nao chega —
     # que e uma falha silenciosa dos dois lados. Falha aqui NAO derruba o app.

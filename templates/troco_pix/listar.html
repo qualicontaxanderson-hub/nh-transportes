@@ -132,6 +132,12 @@ body > .container-fluid:has(#tpx){
   #tpx .selo--canc{ background:#eef1f5; color:#5b6b7f; }
   #tpx .selo--conc{ background:#e4f4e8; color:#1c6b34; }
   #tpx .selo--falta{ background:#eaf1f9; color:var(--blue-deep); }
+  /* o comprovante do banco: verde porque o dinheiro saiu, mas com borda —
+     nao e o verde cheio do conciliado, que so vem com o extrato */
+  #tpx .selo--env{ background:#e6f9ee; color:#146c43; border:1px solid #a9dfc2;
+    font-family:inherit; cursor:pointer; }
+  #tpx .selo--hora{ background:#146c43; color:#fff; }
+  #tpx .selo--hora[hidden]{ display:none; }
   /* o numero de controle e o que a pessoa confere com o papel — fica em
      monoespacada pra bater digito a digito */
   #tpx .ctrl{ display:inline-block; font-family:'Courier New',Courier,monospace;
@@ -291,6 +297,18 @@ body > .container-fluid:has(#tpx){
             {% else %}
             <span class="selo selo--pend">falta conciliar</span>
             {% endif %}
+            {# O aviso que o banco mandou por e-mail na hora do PIX. Nao e
+               conciliacao — e a diferenca entre "o troco ja saiu, falta
+               conferir no extrato amanha" e "ninguem mandou esse dinheiro
+               ainda", que a tela antes nao sabia distinguir. #}
+            {% if t.get('pix_enviado_em') %}
+            <button type="button" class="selo selo--env"
+                    title="PIX enviado em {{ t.pix_enviado_em.strftime('%d/%m/%Y às %H:%M') }}"
+                    onclick="event.stopPropagation(); tpxComprovante(this)">
+              <i class="bi bi-envelope-check-fill"></i> PIX enviado</button>
+            <span class="selo selo--hora" hidden>{{ t.pix_enviado_em.strftime('%H:%M') }}
+              de {{ t.pix_enviado_em.strftime('%d/%m') }}</span>
+            {% endif %}
             {% if st == 'CANCELADO' %}
             <span class="selo selo--canc">cancelado</span>{% endif %}
           </div>
@@ -336,6 +354,24 @@ body > .container-fluid:has(#tpx){
             {% endif %}
           </div>
         </div>
+
+        {% if t.get('pix_enviado_em') %}
+        <div class="bloco" style="margin-top:.5rem;">
+          <div class="bloco__t">Comprovante do banco</div>
+          <div class="li"><span class="k">PIX enviado</span>
+            <span class="v">{{ t.pix_enviado_em.strftime('%d/%m/%Y às %H:%M') }}</span></div>
+          {% if t.get('pix_favorecido') %}
+          <div class="li"><span class="k">Para</span>
+            <span class="v">{{ t.pix_favorecido }}</span></div>
+          {% endif %}
+          {% if t.get('pix_valor') is not none %}
+          <div class="li"><span class="k">Valor no aviso</span>
+            <span class="v num">{{ t.pix_valor | formatar_moeda }}</span></div>
+          {% endif %}
+          <div class="dica">Isto é o aviso do banco, não a conciliação — ela
+            continua sendo feita com o OFX.</div>
+        </div>
+        {% endif %}
 
         {% if t.troco_pix and t.troco_pix > 0 %}
         <div class="bloco" style="margin-top:.5rem;">
@@ -437,6 +473,12 @@ function tpxAbre(cab){
   if (!corpo) return;
   corpo.hidden = !corpo.hidden;
   c.classList.toggle('aberto', !corpo.hidden);
+}
+// Clicar no "PIX enviado" mostra a hora ali mesmo, sem abrir o card — e a
+// pergunta que se faz olhando a lista: "esse ja saiu? que horas?".
+function tpxComprovante(bt){
+  var hora = bt.nextElementSibling;
+  if (hora && hora.classList.contains('selo--hora')) hora.hidden = !hora.hidden;
 }
 function tpxFiltro(){
   var f = document.getElementById('tpx-filtro');

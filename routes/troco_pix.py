@@ -407,13 +407,19 @@ def listar():
                     bt.data_transacao as banco_data_transacao,
                     bt.descricao as banco_descricao,
                     ba.apelido as banco_conta_apelido,
-                    ba.banco_nome as banco_nome
+                    ba.banco_nome as banco_nome,
+                    cp.enviado_em as pix_enviado_em,
+                    cp.favorecido as pix_favorecido,
+                    cp.valor as pix_valor
                 FROM troco_pix tp
                 LEFT JOIN clientes c ON tp.cliente_id = c.id
                 LEFT JOIN troco_pix_clientes tpc ON tp.troco_pix_cliente_id = tpc.id
                 LEFT JOIN funcionarios f ON tp.funcionario_id = f.id
                 LEFT JOIN bank_transactions bt ON bt.id = tp.bank_transaction_id
                 LEFT JOIN bank_accounts ba ON ba.id = bt.account_id
+                -- o comprovante que o banco mandou por e-mail: diz que o PIX
+                -- SAIU, e nao que ja foi conciliado
+                LEFT JOIN troco_pix_comprovantes cp ON cp.troco_pix_id = tp.id
                 WHERE tp.data BETWEEN %s AND %s {combined_filter_clause}
                 ORDER BY tp.data DESC, tp.criado_em DESC
             """
