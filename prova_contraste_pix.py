@@ -20,7 +20,8 @@ import sys
 PISO = 4.5
 ARQUIVOS = ('templates/troco_pix/listar.html',
             'templates/troco_pix/clientes.html',
-            'templates/troco_pix/config_contabil.html')
+            'templates/troco_pix/config_contabil.html',
+            'templates/troco_pix/pista.html')
 
 falhas = []
 
@@ -71,7 +72,7 @@ for arq in ARQUIVOS:
             txt = vars_.get(m.group(1), '')
         return rgb(txt) if txt.startswith('#') else None
 
-    regras = re.findall(r'(#tp[xcg][^{}]*)\{([^}]*)\}', css)
+    regras = re.findall(r'(#tp[xcgp][^{}]*)\{([^}]*)\}', css)
     medidos = 0
     print('\n%s' % arq)
     for seletor, corpo in regras:

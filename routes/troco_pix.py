@@ -1499,10 +1499,12 @@ def pista():
         data_inicio = request.args.get('data_inicio')
         data_fim = request.args.get('data_fim')
         
-        # Se não tem filtro, usar data de hoje por padrão
+        # Sem filtro, a tela abre com os ULTIMOS 7 DIAS, nao so hoje. O
+        # frentista usa isto para conferir o que ele mesmo lancou — e a
+        # pergunta "o de ontem entrou certo?" nao tinha resposta nesta tela.
         if not data_inicio and not data_fim:
             data_hoje = _hoje_br()
-            data_inicio = data_hoje.strftime('%Y-%m-%d')
+            data_inicio = (data_hoje - timedelta(days=6)).strftime('%Y-%m-%d')
             data_fim = data_hoje.strftime('%Y-%m-%d')
         
         conn = get_db_connection()
@@ -1560,17 +1562,67 @@ def pista():
             else:
                 t['criado_em_br'] = None
         
+        # Ate quando cada uma pode ser editada por quem lancou. A regra e a
+        # de pode_editar(): 15 minutos da criacao. Vai em UTC com Z para o
+        # relogio do proprio celular fazer a conta — assim o "faltam 8 min" e
+        # verdade mesmo que servidor e aparelho discordem de fuso.
+        for t in transacoes:
+            if t.get('criado_em'):
+                t['edita_ate'] = (pytz.utc.localize(t['criado_em'])
+                                  + timedelta(minutes=15)).strftime('%Y-%m-%dT%H:%M:%SZ')
+            else:
+                t['edita_ate'] = None
+
         # Calcular transações de hoje e total (usando horário de Brasília)
         data_hoje = _hoje_br()
         transacoes_hoje = [t for t in transacoes if t.get('data') == data_hoje]
         total_troco_pix_hoje = sum(t.get('troco_pix', 0) or 0 for t in transacoes_hoje)
-        
+
+        # Os dias anteriores, agrupados, com o total de cada dia: e assim que
+        # o frentista confere o proprio movimento.
+        dias = []
+        for t in transacoes:
+            if t.get('data') == data_hoje:
+                continue
+            if not dias or dias[-1]['data'] != t.get('data'):
+                dias.append({'data': t.get('data'), 'itens': [], 'troco': 0.0})
+            dias[-1]['itens'].append(t)
+            dias[-1]['troco'] += float(t.get('troco_pix') or 0)
+
+        totais = {
+            'hoje': len(transacoes_hoje),
+            'troco_hoje': float(total_troco_pix_hoje or 0),
+            'sem_troco_hoje': sum(1 for t in transacoes_hoje
+                                  if not float(t.get('troco_pix') or 0)),
+            'periodo': float(sum(float(t.get('troco_pix') or 0) for t in transacoes)),
+        }
+
+        # O nome do posto: a tela dizia "Todos os postos" para todo mundo,
+        # porque a variavel nunca era passada — inclusive para o frentista,
+        # que so ve o proprio posto.
+        posto_nome = None
+        if getattr(current_user, 'cliente_id', None):
+            for t in transacoes:
+                if t.get('cliente_id') == current_user.cliente_id:
+                    posto_nome = t.get('posto_nome')
+                    break
+            if not posto_nome:
+                cursor.execute("SELECT razao_social FROM clientes WHERE id = %s",
+                               (current_user.cliente_id,))
+                linha = cursor.fetchone()
+                posto_nome = (linha or {}).get('razao_social')
+
         cursor.close()
         conn.close()
-        
+
         return render_template('troco_pix/pista.html', 
                              transacoes=transacoes,
                              transacoes_hoje=transacoes_hoje,
+                             dias=dias,
+                             totais=totais,
+                             cliente_posto=posto_nome,
+                             data_inicio=data_inicio,
+                             data_fim=data_fim,
                              total_troco_pix_hoje=total_troco_pix_hoje,
                              titulo='TROCO PIX - Pista')
         
