@@ -1,164 +1,319 @@
-{% extends 'base.html' %}
-{% block title %}Funcionários - {{ app_name }}{% endblock %}
+{% extends "base.html" %}
+
+{% block title %}Funcionários - NH Transportes{% endblock %}
+
+{#- Lista no padrao da casa. O que esta tela passa a dizer, e nao dizia: QUEM
+    JA SAIU, e quando.
+
+    Desligado nao e apagado. Quem saiu continua aqui, com a data — porque os
+    lancamentos dos meses em que trabalhou seguem valendo e ela precisa
+    aparecer nos relatorios desses meses. O que a data de saida faz e tirar a
+    pessoa das listas de ESCOLHA dali em diante: o troco PIX de amanha nao a
+    oferece mais, e a folha de 08/2026 nao oferece quem saiu em 07/2026. -#}
 
 {% block styles %}
 <style>
-  .page-hero {
-    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
-    border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
+body > .container-fluid:has(#fun){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#fun){ padding:.7rem 1rem 0; }
+}
+</style>
+
+{% with esc = '#fun' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
+<style>
+  #fun{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#4b5563; --ink:#151d27; --borda:#d9e0e8; }
+  #fun{ color:var(--ink); max-width:100%; }
+
+  #fun .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .7rem;
+    margin-bottom:.7rem; }
+  #fun .topo__l{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  #fun .topo__t{ font-weight:800; font-size:1.02rem; flex:1; min-width:0; }
+  #fun .topo__s{ font-size:.74rem; opacity:.96; margin-top:.1rem; }
+  #fun .bt-t{ border:1px solid rgba(255,255,255,.35);
+    background:rgba(255,255,255,.14); color:#fff; border-radius:9px;
+    padding:.34rem .7rem; font-size:.78rem; font-weight:800;
+    font-family:inherit; cursor:pointer; text-decoration:none;
+    white-space:nowrap; display:inline-flex; gap:.3rem; align-items:center; }
+  #fun .bt-t:hover{ background:rgba(255,255,255,.26); color:#fff; }
+
+  #fun .flash{ border-radius:11px; padding:.55rem .7rem; font-size:.82rem;
+    font-weight:700; margin-bottom:.7rem; background:#e4f4e8; color:#146c43; }
+  #fun .flash--danger{ background:#fbe9e9; color:var(--danger); }
+  #fun .flash--warning{ background:#fdf0d6; color:var(--ambar); }
+
+  #fun .busca{ display:flex; gap:.4rem; margin-bottom:.6rem; }
+  #fun .busca input{ flex:1; min-width:0; border:1px solid var(--borda);
+    border-radius:10px; padding:.5rem .65rem; font-size:.86rem;
+    font-family:inherit; }
+  #fun .abas{ display:flex; gap:.35rem; margin-bottom:.7rem; overflow-x:auto;
+    padding-bottom:.15rem; }
+  #fun .aba{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
+    color:#3a4655; border-radius:99px; padding:.36rem .78rem; font-size:.8rem;
+    font-weight:800; font-family:inherit; cursor:pointer; display:inline-flex;
+    gap:.35rem; align-items:center; }
+  #fun .aba.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #fun .aba .b{ background:#eaf1f9; color:var(--blue-deep); border-radius:99px;
+    min-width:17px; height:17px; display:inline-grid; place-items:center;
+    font-size:.64rem; padding:0 .3rem; }
+  #fun .aba.on .b{ background:#fff; }
+  #fun .conta{ font-size:.76rem; color:var(--muted); margin-bottom:.5rem;
+    font-weight:700; }
+
+  #fun .lista{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #fun .c{ border-bottom:1px solid #eef1f5; }
+  #fun .c:last-child{ border-bottom:0; }
+  #fun .c[hidden]{ display:none; }
+  #fun .c__h{ display:flex; gap:.6rem; padding:.6rem .8rem; align-items:flex-start;
+    cursor:pointer; min-width:0; }
+  #fun .c__h:hover{ background:#fafbfd; }
+  #fun .c__ic{ flex:0 0 34px; height:34px; border-radius:9px; background:#eaf1f9;
+    color:var(--blue-deep); display:grid; place-items:center; font-size:.78rem;
+    font-weight:800; }
+  #fun .c--off .c__ic{ background:#eef1f5; color:var(--muted); }
+  #fun .c__t{ flex:1; min-width:0; }
+  #fun .c__n{ font-weight:800; font-size:.87rem; line-height:1.3;
+    overflow-wrap:anywhere; }
+  #fun .c__f{ color:var(--muted); font-size:.74rem; margin-top:.1rem; }
+  #fun .c__s{ display:flex; gap:.3rem; flex-wrap:wrap; margin-top:.28rem; }
+  #fun .chev{ color:var(--muted); font-size:.8rem; align-self:center;
+    transition:transform .2s; }
+  #fun .c.aberto .chev{ transform:rotate(180deg); }
+
+  #fun .selo{ display:inline-block; border-radius:99px; padding:.14rem .5rem;
+    font-size:.64rem; font-weight:800; white-space:nowrap; }
+  #fun .selo--cat{ background:#eaf1f9; color:var(--blue-deep); }
+  #fun .selo--fora{ background:#fbe9e9; color:var(--danger); }
+  #fun .selo--novo{ background:#e4f4e8; color:#146c43; }
+
+  #fun .c__c{ background:#f7f9fc; border-top:1px solid #eef1f5;
+    padding:.65rem .8rem .75rem; }
+  #fun .grade{ display:grid; gap:.5rem; grid-template-columns:1fr; }
+  @media (min-width:768px){ #fun .grade{ grid-template-columns:1fr 1fr; } }
+  #fun .bloco{ background:#fff; border:1px solid var(--borda);
+    border-radius:11px; padding:.55rem .7rem; min-width:0; }
+  #fun .bloco__t{ font-size:.64rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); margin-bottom:.3rem; }
+  #fun .li{ display:flex; gap:.5rem; font-size:.8rem; padding:.16rem 0; }
+  #fun .li .k{ color:var(--muted); flex:0 0 106px; }
+  #fun .li .v{ flex:1; min-width:0; font-weight:600; overflow-wrap:anywhere; }
+  #fun .acoes{ display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.55rem;
+    align-items:center; }
+  #fun .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:9px; padding:.36rem .7rem; font-size:.77rem; font-weight:700;
+    font-family:inherit; cursor:pointer; text-decoration:none;
+    display:inline-flex; gap:.3rem; align-items:center; }
+  #fun .bt:hover{ background:#dfeaf8; color:var(--blue-deep); }
+  #fun .bt--ed{ background:#fdf0d6; border-color:#f0d8a8; color:var(--ambar); }
+  #fun .bt--sai{ background:#fbe9e9; border-color:#f0c8c8; color:var(--danger); }
+  #fun .bt--volta{ background:#e4f4e8; border-color:#a9dfc2; color:#146c43; }
+  #fun .desl{ display:flex; gap:.4rem; align-items:center; flex-wrap:wrap;
+    background:#fff; border:1px solid #f0c8c8; border-radius:11px;
+    padding:.5rem .6rem; margin-top:.5rem; }
+  #fun .desl[hidden]{ display:none; }
+  #fun .desl span{ font-size:.76rem; font-weight:700; color:var(--danger); }
+  #fun .desl input{ border:1px solid var(--borda); border-radius:8px;
+    padding:.35rem .5rem; font-size:.82rem; font-family:inherit; }
+  #fun .nada{ padding:1.4rem .8rem; text-align:center; color:var(--muted);
+    font-size:.85rem; }
+  #fun .dica{ font-size:.72rem; color:var(--muted); margin-top:.4rem; }
+
+  /* na tela grande, a lista vira grade — o mesmo tratamento do Troco PIX */
+  @media (min-width:992px){
+    #fun .lista{ display:grid; gap:.6rem; background:transparent; border:0;
+      box-shadow:none; overflow:visible;
+      grid-template-columns:repeat(auto-fill, minmax(330px, 1fr)); }
+    #fun .c{ background:#fff; border:1px solid var(--borda); border-radius:12px;
+      box-shadow:0 2px 10px rgba(20,35,60,.06); display:flex;
+      flex-direction:column; }
+    #fun .c:last-child{ border-bottom:1px solid var(--borda); }
+    #fun .busca{ max-width:32rem; }
   }
-  .page-hero .hero-icon {
-    width: 3rem; height: 3rem; background: rgba(255,255,255,.15); border-radius: .6rem;
-    display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0;
-  }
-  .stat-card { border: 0; border-radius: .65rem; box-shadow: 0 2px 8px rgba(0,0,0,.07); transition: box-shadow .2s; }
-  .stat-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.13); }
-  .stat-card .stat-icon {
-    width: 2.6rem; height: 2.6rem; border-radius: .5rem;
-    display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0;
-  }
-  #tbl-lista { font-size: 0.76rem; border-collapse: separate; border-spacing: 0; }
-  #tbl-lista thead tr th {
-    background: #f0f4f8; color: #2c3e50; font-weight: 700; font-size: 0.72rem;
-    text-transform: uppercase; letter-spacing: 0.04em; padding: 0.45rem 0.65rem;
-    border-bottom: 2px solid #c5d5e8; white-space: nowrap;
-  }
-  #tbl-lista tbody tr td {
-    padding: 0.38rem 0.65rem; border-bottom: 1px solid #eef1f4;
-    vertical-align: middle; color: #374151;
-  }
-  #tbl-lista tbody tr:last-child td { border-bottom: none; }
-  #tbl-lista tbody tr.row-item { cursor: pointer; transition: background .1s; }
-  #tbl-lista tbody tr.row-item:hover td { background: #f0f7ff; }
-  .btn-acao {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 1.8rem; height: 1.8rem; border-radius: .4rem; border: 1px solid;
-    font-size: .82rem; transition: background .15s, color .15s; text-decoration: none;
-  }
-  .btn-editar  { color:#1D63A5; border-color:#bee0f5; background:#f0f7ff; }
-  .btn-editar:hover  { background:#1D63A5; color:#fff; }
-  .btn-vincular { color:#0dcaf0; border-color:#b6effb; background:#f0faff; }
-  .btn-vincular:hover { background:#0dcaf0; color:#fff; }
-  .btn-excluir { color:#dc3545; border-color:#f5c6cb; background:#fff5f5; }
-  .btn-excluir:hover { background:#dc3545; color:#fff; }
-  .actions-cell { white-space: nowrap; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
+<div id="fun">
 
-  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-    <div class="hero-icon"><i class="bi bi-people-fill"></i></div>
-    <div class="flex-grow-1">
-      <h4 class="mb-0 fw-bold">Funcionários</h4>
-      <p class="mb-0 opacity-75 small">Gerencie os funcionários cadastrados no sistema.</p>
+  <div class="topo">
+    <div class="topo__l">
+      <span class="topo__t"><i class="bi bi-people-fill"></i> Funcionários
+        <div class="topo__s">Quem trabalha na casa — e quem já saiu</div></span>
+      <a class="bt-t" href="{{ url_for('funcionarios.novo') }}">
+        <i class="bi bi-plus-circle"></i> Novo funcionário</a>
     </div>
-    {% if current_user.nivel == 'admin' %}
-    <a href="{{ url_for('funcionarios.novo') }}"
-       class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
-      <i class="bi bi-plus-circle me-1"></i> Novo Funcionário
-    </a>
-    {% endif %}
   </div>
 
-  {% set total = funcionarios | length %}
-  <div class="row g-3 mb-4">
-    <div class="col-12 col-md-4">
-      <div class="card stat-card h-100">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div class="stat-icon" style="background:#e8f0fb;">
-            <i class="bi bi-people-fill" style="color:#1D63A5;"></i>
-          </div>
-          <div>
-            <div class="fs-4 fw-bold" style="color:#1D63A5;">{{ total }}</div>
-            <div class="text-muted small">Total de Funcionários</div>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+    <div class="flash {{ 'flash--danger' if category == 'danger' else 'flash--warning' if category == 'warning' else '' }}">
+      {{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="g-nums">
+    <div class="n n--azul"><div class="r">Cadastrados</div>
+      <div class="v">{{ totais.todos }}</div></div>
+    <div class="n n--verde"><div class="r">Trabalhando</div>
+      <div class="v">{{ totais.trabalhando }}</div></div>
+    <div class="n {{ 'n--cinza' if totais.desligados else 'n--verde' }}">
+      <div class="r">Desligados</div>
+      <div class="v">{{ totais.desligados }}</div></div>
+  </div>
+
+  <div class="busca">
+    <input type="text" id="fun-busca" placeholder="Buscar por nome, cargo ou CPF…"
+           oninput="funAplica()">
+  </div>
+
+  <div class="abas">
+    <button type="button" class="aba on" data-f="" onclick="funFiltra(this)">
+      Todos <span class="b">{{ totais.todos }}</span></button>
+    <button type="button" class="aba" data-f="on" onclick="funFiltra(this)">
+      Trabalhando <span class="b">{{ totais.trabalhando }}</span></button>
+    <button type="button" class="aba" data-f="off" onclick="funFiltra(this)">
+      Desligados <span class="b">{{ totais.desligados }}</span></button>
+  </div>
+
+  <div class="conta" id="fun-conta"></div>
+
+  <div class="lista" id="fun-lista">
+    {% for f in funcionarios %}
+    {% set fora = f.data_saida %}
+    <div class="c {{ 'c--off' if fora }}" data-off="{{ '1' if fora else '0' }}"
+         data-busca="{{ ((f.nome or '') ~ ' ' ~ (f.cargo or '') ~ ' ' ~ (f.categoria or '') ~ ' ' ~ (f.cpf or '')) | lower }}">
+      <div class="c__h" onclick="funAbre(this)">
+        <span class="c__ic">{{ (f.nome or '?')[:2] | upper }}</span>
+        <div class="c__t">
+          <div class="c__n">{{ f.nome }}</div>
+          <div class="c__f">{{ f.cargo or f.categoria or 'sem cargo' }}
+            {%- if f.posto_nome %} · {{ f.posto_nome }}{% endif -%}</div>
+          <div class="c__s">
+            {% if f.categoria %}
+            <span class="selo selo--cat">{{ f.categoria | lower }}</span>{% endif %}
+            {% if fora %}
+            <span class="selo selo--fora">saiu em
+              {{ f.data_saida.strftime('%d/%m/%Y') }}</span>
+            {% elif f.data_admissao %}
+            <span class="selo selo--novo">desde
+              {{ f.data_admissao.strftime('%m/%Y') }}</span>
+            {% endif %}
           </div>
         </div>
+        <i class="bi bi-chevron-down chev"></i>
       </div>
-    </div>
-  </div>
 
-  <div class="card shadow-sm">
-    <div class="card-header d-flex justify-content-between align-items-center py-2"
-         style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-      <span><i class="bi bi-list me-1"></i> Lista de Funcionários</span>
-      <span class="badge bg-white text-secondary" style="font-size:0.7rem;font-weight:600;">{{ total }}</span>
-    </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table mb-0" id="tbl-lista">
-          <thead>
-            <tr>
-              <th>Nome</th>
-              <th>Categoria</th>
-              <th>CPF</th>
-              <th>Telefone</th>
-              <th>Email</th>
-              <th>Cargo</th>
-              <th>Admissão</th>
-              <th>Salário Base</th>
-              <th class="text-center" style="width:10%">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% if funcionarios %}
-              {% for funcionario in funcionarios %}
-              <tr class="row-item"
-                  data-url="{{ url_for('funcionarios.editar', id=funcionario.id) }}"
-                  title="Clique para editar">
-                <td><strong>{{ funcionario.nome }}</strong></td>
-                <td>
-                  {% if funcionario.categoria %}
-                    <span class="badge bg-info" style="font-size:0.65rem;">{{ funcionario.categoria }}</span>
-                  {% else %}
-                    <span class="badge bg-secondary" style="font-size:0.65rem;">N/A</span>
-                  {% endif %}
-                </td>
-                <td>{{ funcionario.cpf or '-' }}</td>
-                <td>{{ funcionario.telefone or '-' }}</td>
-                <td>{{ funcionario.email or '-' }}</td>
-                <td>{{ funcionario.cargo or '-' }}</td>
-                <td>{{ funcionario.data_admissao.strftime('%d/%m/%Y') if funcionario.data_admissao else '-' }}</td>
-                <td>{{ funcionario.salario_base|formatar_moeda if funcionario.salario_base else '-' }}</td>
-                <td class="text-center actions-cell" onclick="event.stopPropagation()">
-                  <a href="{{ url_for('funcionarios.editar', id=funcionario.id) }}" class="btn-acao btn-editar" title="Editar">
-                    <i class="bi bi-pencil"></i>
-                  </a>
-                  {% if funcionario.categoria_nome == 'MOTORISTA' %}
-                  <a href="{{ url_for('funcionarios.vincular_veiculo', id=funcionario.id) }}" class="btn-acao btn-vincular" title="Vincular Veículo">
-                    <i class="bi bi-truck"></i>
-                  </a>
-                  {% endif %}
-                  <form method="POST" action="{{ url_for('funcionarios.excluir', id=funcionario.id) }}"
-                        style="display:inline;" onsubmit="return confirm('Tem certeza que deseja desativar este funcionário?');">
-                    <button type="submit" class="btn-acao btn-excluir" title="Desativar">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  </form>
-                </td>
-              </tr>
-              {% endfor %}
-            {% else %}
-              <tr>
-                <td colspan="9" class="text-center text-muted py-4">
-                  <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
-                  <div class="mt-2" style="font-size:0.82rem;">Nenhum funcionário cadastrado.</div>
-                </td>
-              </tr>
-            {% endif %}
-          </tbody>
-        </table>
+      <div class="c__c" hidden>
+        <div class="grade">
+          <div class="bloco">
+            <div class="bloco__t">Contato</div>
+            <div class="li"><span class="k">CPF</span>
+              <span class="v">{{ f.cpf or '—' }}</span></div>
+            <div class="li"><span class="k">Telefone</span>
+              <span class="v">{{ f.telefone or '—' }}</span></div>
+            <div class="li"><span class="k">E-mail</span>
+              <span class="v">{{ f.email or '—' }}</span></div>
+          </div>
+          <div class="bloco">
+            <div class="bloco__t">Na casa</div>
+            <div class="li"><span class="k">Admissão</span>
+              <span class="v">{{ f.data_admissao.strftime('%d/%m/%Y') if f.data_admissao else '—' }}</span></div>
+            <div class="li"><span class="k">Saída</span>
+              <span class="v">{{ f.data_saida.strftime('%d/%m/%Y') if f.data_saida else 'continua trabalhando' }}</span></div>
+            <div class="li"><span class="k">Salário base</span>
+              <span class="v">{{ f.salario_base | formatar_moeda if f.salario_base else '—' }}</span></div>
+          </div>
+        </div>
+
+        <div class="acoes">
+          <a class="bt bt--ed" href="{{ url_for('funcionarios.editar', id=f.id) }}">
+            <i class="bi bi-pencil"></i> Editar</a>
+          {% if fora %}
+          <form method="POST" action="{{ url_for('funcionarios.readmitir', id=f.id) }}"
+                onsubmit="return confirm('Tirar a data de saída de {{ f.nome|replace("'", "") }}?');">
+            <button type="submit" class="bt bt--volta">
+              <i class="bi bi-arrow-counterclockwise"></i> Voltou a trabalhar</button>
+          </form>
+          {% else %}
+          <button type="button" class="bt bt--sai" onclick="funDesligar(this)">
+            <i class="bi bi-box-arrow-right"></i> Desligar</button>
+          {% endif %}
+        </div>
+
+        {% if not fora %}
+        {# A data e obrigatoria: e ela que decide de qual mes em diante a
+           pessoa some das listas de escolha. #}
+        <form class="desl" method="POST" hidden
+              action="{{ url_for('funcionarios.desligar', id=f.id) }}">
+          <span>Desligado em</span>
+          <input type="date" name="data_saida" value="{{ hoje.isoformat() }}" required>
+          <button type="submit" class="bt bt--sai">Confirmar desligamento</button>
+          <button type="button" class="bt" onclick="funCancela(this)">Cancelar</button>
+          <div class="dica">Os lançamentos dos meses em que
+            {{ f.nome.split()[0] | title }} trabalhou continuam como estão.</div>
+        </form>
+        {% endif %}
       </div>
     </div>
+    {% else %}
+    <div class="nada">Nenhum funcionário cadastrado.</div>
+    {% endfor %}
   </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-document.querySelectorAll('.row-item[data-url]').forEach(function(row) {
-  row.addEventListener('click', function() { window.location = this.dataset.url; });
-});
+function funAbre(cab){
+  var c = cab.closest('.c');
+  var corpo = c ? c.querySelector('.c__c') : null;
+  if (!corpo) return;
+  corpo.hidden = !corpo.hidden;
+  c.classList.toggle('aberto', !corpo.hidden);
+}
+// O desligamento pede a data antes de acontecer — sem data não dá para saber
+// de que mês em diante a pessoa sai das listas.
+function funDesligar(bt){
+  var f = bt.closest('.c__c').querySelector('.desl');
+  if (f) { f.hidden = false; f.querySelector('input').focus(); }
+}
+function funCancela(bt){
+  var f = bt.closest('.desl');
+  if (f) f.hidden = true;
+}
+var funF = '';
+function funFiltra(bt){
+  var abas = document.querySelectorAll('#fun .aba');
+  for (var i = 0; i < abas.length; i++) abas[i].classList.remove('on');
+  bt.classList.add('on');
+  funF = bt.getAttribute('data-f') || '';
+  funAplica();
+}
+function funAplica(){
+  var campo = document.getElementById('fun-busca');
+  var termo = (campo ? campo.value : '').trim().toLowerCase();
+  var cards = document.querySelectorAll('#fun .lista .c');
+  var vistos = 0;
+  for (var i = 0; i < cards.length; i++){
+    var c = cards[i];
+    var off = c.getAttribute('data-off') === '1';
+    var okF = !funF || (funF === 'off' ? off : !off);
+    var okB = !termo || (c.getAttribute('data-busca') || '').indexOf(termo) >= 0;
+    c.hidden = !(okF && okB);
+    if (!c.hidden) vistos++;
+  }
+  var conta = document.getElementById('fun-conta');
+  if (conta) {
+    conta.textContent = vistos === cards.length
+      ? (cards.length + (cards.length === 1 ? ' funcionário' : ' funcionários'))
+      : (vistos + ' de ' + cards.length);
+  }
+}
+document.addEventListener('DOMContentLoaded', funAplica);
 </script>
 {% endblock %}

@@ -220,7 +220,10 @@ function checkAndLoadFuncionarios() {
                 console.log('Comissões recebidas:', data);
                 return data;
             }),
-        fetch(`/lancamentos-funcionarios/get-funcionarios/${clienteId}`)
+        // o mes vai junto: quem saiu antes dele nao entra na folha
+        const mesSel = (document.getElementById('mes') || {}).value || '';
+        fetch(`/lancamentos-funcionarios/get-funcionarios/${clienteId}`
+              + (mesSel ? `?mes=${encodeURIComponent(mesSel)}` : ''))
             .then(r => {
                 console.log(`Fetching funcionários: /lancamentos-funcionarios/get-funcionarios/${clienteId}`);
                 return r.json();

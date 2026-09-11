@@ -262,7 +262,11 @@ def _get_funcionarios():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT id, nome FROM funcionarios WHERE ativo = 1 ORDER BY nome")
+        # quem ja foi desligado nao aparece para receber uma descarga de hoje
+        cursor.execute("""SELECT id, nome FROM funcionarios
+                           WHERE ativo = 1
+                             AND (data_saida IS NULL OR data_saida >= CURDATE())
+                           ORDER BY nome""")
         return cursor.fetchall()
     except Exception:
         return []

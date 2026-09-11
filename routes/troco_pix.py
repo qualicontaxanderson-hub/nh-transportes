@@ -630,15 +630,22 @@ def novo():
                     nome_completo
             """)
             clientes_pix = cursor.fetchall()
-            
-            # Buscar frentistas ativos (incluindo cliente_id para filtro se a coluna existir)
+
+            # Lancamento novo: o dia e hoje.
+            dia_ref = _hoje_br()
+
+            # Quem estava na casa NAQUELE dia. Desligado nao pode ser
+            # escolhido para um atendimento novo — mas continua aparecendo na
+            # correcao de um lancamento do tempo dele, senao "quem atendeu"
+            # ficaria em branco ao corrigir.
+            cursor.execute("""
+                SELECT id, nome, clienteid
+                  FROM funcionarios
+                 WHERE ativo = 1
+                   AND (data_saida IS NULL OR data_saida >= %s)
+                 ORDER BY nome
+            """, (dia_ref,))
             try:
-                cursor.execute("""
-                    SELECT id, nome, clienteid
-                    FROM funcionarios
-                    WHERE ativo = 1
-                    ORDER BY nome
-                """)
                 frentistas = cursor.fetchall()
             except Exception as col_error:
                 # Se a coluna clienteid não existir, buscar sem ela
@@ -647,8 +654,9 @@ def novo():
                         SELECT id, nome
                         FROM funcionarios
                         WHERE ativo = 1
+                          AND (data_saida IS NULL OR data_saida >= %s)
                         ORDER BY nome
-                    """)
+                    """, (dia_ref,))
                     frentistas_temp = cursor.fetchall()
                     # Adicionar clienteid=None manualmente para compatibilidade
                     frentistas = []
@@ -846,15 +854,22 @@ def editar(troco_pix_id):
                 ORDER BY nome_completo
             """)
             clientes_pix = cursor.fetchall()
-            
-            # Buscar frentistas ativos (incluindo cliente_id para filtro se a coluna existir)
+
+            # Correcao: o dia e o da solicitacao, nao o de hoje.
+            dia_ref = (transacao or {}).get('data') or _hoje_br()
+
+            # Quem estava na casa NAQUELE dia. Desligado nao pode ser
+            # escolhido para um atendimento novo — mas continua aparecendo na
+            # correcao de um lancamento do tempo dele, senao "quem atendeu"
+            # ficaria em branco ao corrigir.
+            cursor.execute("""
+                SELECT id, nome, clienteid
+                  FROM funcionarios
+                 WHERE ativo = 1
+                   AND (data_saida IS NULL OR data_saida >= %s)
+                 ORDER BY nome
+            """, (dia_ref,))
             try:
-                cursor.execute("""
-                    SELECT id, nome, clienteid
-                    FROM funcionarios
-                    WHERE ativo = 1
-                    ORDER BY nome
-                """)
                 frentistas = cursor.fetchall()
             except Exception as col_error:
                 # Se a coluna clienteid não existir, buscar sem ela
@@ -863,8 +878,9 @@ def editar(troco_pix_id):
                         SELECT id, nome
                         FROM funcionarios
                         WHERE ativo = 1
+                          AND (data_saida IS NULL OR data_saida >= %s)
                         ORDER BY nome
-                    """)
+                    """, (dia_ref,))
                     frentistas_temp = cursor.fetchall()
                     # Adicionar clienteid=None manualmente para compatibilidade
                     frentistas = []

@@ -1,129 +1,251 @@
-{% extends 'base.html' %}
-{% block title %}Editar Funcionário - {{ app_name }}{% endblock %}
+{% extends "base.html" %}
+
+{% block title %}{{ funcionario.nome }} – Funcionários{% endblock %}
+
+{#- A ficha da pessoa, no padrao da casa. O campo que esta tela passa a ter e a
+    DATA DE SAIDA: ela nao apaga ninguem, e o que decide de qual mes em diante
+    a pessoa deixa de aparecer nas listas de escolha (troco PIX, folha,
+    descarga). Os lancamentos dos meses trabalhados seguem iguais. -#}
 
 {% block styles %}
 <style>
-  .page-hero {
-    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
-    border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
+body > .container-fluid:has(#fed){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#fed){ padding:.7rem 1rem 0; }
+}
+</style>
+<style>
+  #fed{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#4b5563; --ink:#151d27; --borda:#d9e0e8;
+        color:var(--ink); max-width:100%; padding-bottom:1.5rem; }
+
+  #fed .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .7rem;
+    margin-bottom:.7rem; display:flex; align-items:center; gap:.6rem;
+    flex-wrap:wrap; }
+  #fed .topo__t{ font-weight:800; font-size:1.02rem; flex:1; min-width:0; }
+  #fed .topo__s{ font-size:.74rem; opacity:.96; margin-top:.1rem; }
+  #fed .bt-t{ border:1px solid rgba(255,255,255,.35);
+    background:rgba(255,255,255,.14); color:#fff; border-radius:9px;
+    padding:.34rem .7rem; font-size:.78rem; font-weight:800;
+    text-decoration:none; white-space:nowrap; display:inline-flex; gap:.3rem;
+    align-items:center; }
+  #fed .bt-t:hover{ background:rgba(255,255,255,.26); color:#fff; }
+
+  #fed .flash{ border-radius:11px; padding:.55rem .7rem; font-size:.82rem;
+    font-weight:700; margin-bottom:.7rem; background:#e4f4e8; color:#146c43; }
+  #fed .flash--danger{ background:#fbe9e9; color:var(--danger); }
+  #fed .flash--warning{ background:#fdf0d6; color:var(--ambar); }
+
+  #fed .colunas{ display:grid; gap:.7rem; grid-template-columns:1fr; }
+  @media (min-width:992px){
+    #fed .colunas{ grid-template-columns:1fr 1fr minmax(18rem, 21rem);
+      align-items:start; }
+    #fed .col{ display:flex; flex-direction:column; gap:.7rem; min-width:0; }
+    #fed .lado{ position:sticky; top:.8rem; }
+    #fed .rodape{ display:none; }
   }
-  .page-hero .hero-icon {
-    width: 3rem; height: 3rem; background: rgba(255,255,255,.15); border-radius: .6rem;
-    display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0;
-  }
-  .form-section-title {
-    font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
-    color: #1D63A5; border-left: 3px solid #1D63A5; padding-left: 0.5rem; margin: 1rem 0 0.6rem;
-  }
-  .form-label { font-size: 0.83rem; font-weight: 600; color: #374151; }
-  .form-control-sm, .form-select-sm { font-size: 0.84rem; }
+  #fed .col{ display:flex; flex-direction:column; gap:.7rem; min-width:0; }
+
+  #fed .bloco{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; padding:.75rem .8rem .8rem;
+    box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #fed .bloco__t{ font-size:.7rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--blue-deep); margin-bottom:.55rem;
+    display:flex; align-items:center; gap:.35rem; }
+  #fed .campo{ display:block; margin-bottom:.6rem; }
+  #fed .campo:last-child{ margin-bottom:0; }
+  #fed .campo__r{ display:block; font-size:.78rem; font-weight:800;
+    margin-bottom:.2rem; }
+  #fed .campo__d{ font-size:.72rem; color:var(--muted); margin-top:.2rem; }
+  #fed input[type=text], #fed input[type=email], #fed input[type=date],
+  #fed input[type=number], #fed select{
+    width:100%; border:1px solid var(--borda); border-radius:10px;
+    padding:.55rem .7rem; font-size:.95rem; font-family:inherit;
+    color:var(--ink); background:#fff; }
+  #fed input:focus, #fed select:focus{ outline:2px solid #bcd3ea;
+    border-color:var(--blue); }
+
+  /* o painel da direita: o estado da pessoa na casa */
+  #fed .lado{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; padding:.8rem; display:flex; flex-direction:column;
+    gap:.6rem; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #fed .estado{ border-radius:12px; padding:.6rem .7rem; }
+  #fed .estado--on{ background:#e4f4e8; border:1px solid #a9dfc2; }
+  #fed .estado--off{ background:#fbe9e9; border:1px solid #f0c8c8; }
+  #fed .estado__r{ font-size:.66rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; }
+  #fed .estado--on .estado__r{ color:#146c43; }
+  #fed .estado--off .estado__r{ color:var(--danger); }
+  #fed .estado__v{ font-size:1.05rem; font-weight:800; line-height:1.2; }
+  #fed .estado--on .estado__v{ color:#146c43; }
+  #fed .estado--off .estado__v{ color:var(--danger); }
+  #fed .estado__c{ font-size:.73rem; margin-top:.2rem; color:var(--muted); }
+
+  #fed .regra{ font-size:.76rem; color:var(--muted); }
+  #fed .regra b{ color:var(--ink); }
+  #fed .salvar{ border:0; background:var(--blue); color:#fff;
+    border-radius:12px; padding:.7rem .9rem; font-size:.95rem; font-weight:800;
+    font-family:inherit; cursor:pointer; display:inline-flex; gap:.4rem;
+    align-items:center; justify-content:center; width:100%; }
+  #fed .salvar:hover{ background:var(--blue-deep); }
+  #fed .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:10px; padding:.5rem .8rem; font-size:.84rem; font-weight:700;
+    font-family:inherit; cursor:pointer; text-decoration:none;
+    display:inline-flex; gap:.35rem; align-items:center; justify-content:center; }
+  #fed .bt--sai{ background:#fbe9e9; border-color:#f0c8c8; color:var(--danger); }
+  #fed .bt--volta{ background:#e4f4e8; border-color:#a9dfc2; color:#146c43; }
+  #fed .rodape{ display:flex; gap:.5rem; margin-top:.7rem; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-  <nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb small">
-      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
-      <li class="breadcrumb-item"><a href="{{ url_for('funcionarios.lista') }}" class="text-decoration-none">Funcionários</a></li>
-      <li class="breadcrumb-item active">Editar Funcionário</li>
-    </ol>
-  </nav>
+{% set fora = funcionario.data_saida %}
+<div id="fed">
 
-  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-    <div class="hero-icon"><i class="bi bi-pencil-fill"></i></div>
-    <div class="flex-grow-1">
-      <h4 class="mb-0 fw-bold">Editar Funcionário</h4>
-      <p class="mb-0 opacity-75 small">Atualize os dados do funcionário.</p>
-    </div>
-    <a href="{{ url_for('funcionarios.lista') }}"
-       class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
-      <i class="bi bi-arrow-left me-1"></i> Voltar
-    </a>
+  <div class="topo">
+    <span class="topo__t"><i class="bi bi-person-vcard"></i> {{ funcionario.nome }}
+      <div class="topo__s">{{ funcionario.cargo or funcionario.categoria or 'sem cargo' }}
+        {%- if fora %} · saiu em {{ funcionario.data_saida.strftime('%d/%m/%Y') }}
+        {%- elif funcionario.data_admissao %} · desde
+        {{ funcionario.data_admissao.strftime('%d/%m/%Y') }}{% endif -%}</div></span>
+    <a class="bt-t" href="{{ url_for('funcionarios.lista') }}">
+      <i class="bi bi-arrow-left"></i> Voltar</a>
   </div>
 
-  <div class="card shadow-sm">
-    <div class="card-header d-flex align-items-center py-2"
-         style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-      <i class="bi bi-person-fill me-2"></i> Dados do Funcionário
-    </div>
-    <div class="card-body">
-      <form method="POST">
-        <div class="form-section-title"><i class="bi bi-info-circle me-1"></i>Dados Principais</div>
-        <div class="row">
-          <div class="col-md-6 mb-2">
-            <label class="form-label">Nome <span class="text-danger">*</span></label>
-            <input type="text" name="nome" class="form-control form-control-sm"
-                   value="{{ funcionario.nome }}" required>
-          </div>
-          <div class="col-md-3 mb-2">
-            <label class="form-label">Cliente/Empresa</label>
-            <select name="clienteid" class="form-select form-select-sm">
-              <option value="">Selecione...</option>
-              {% for cliente in clientes %}
-              <option value="{{ cliente.id }}" {% if funcionario.id_cliente == cliente.id %}selected{% endif %}>{{ cliente.nome }}</option>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+    <div class="flash {{ 'flash--danger' if category == 'danger' else 'flash--warning' if category == 'warning' else '' }}">
+      {{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <form method="POST" action="{{ url_for('funcionarios.editar', id=funcionario.id) }}">
+    <div class="colunas">
+      <div class="col">
+        <div class="bloco">
+          <div class="bloco__t"><i class="bi bi-person"></i> Quem é</div>
+          <label class="campo"><span class="campo__r">Nome</span>
+            <input type="text" name="nome" required
+                   value="{{ funcionario.nome or '' }}"></label>
+          <label class="campo"><span class="campo__r">Posto</span>
+            <select name="clienteid">
+              <option value="">— sem posto fixo —</option>
+              {% for c in clientes %}
+              <option value="{{ c.id }}"
+                {{ 'selected' if funcionario.id_cliente == c.id }}>{{ c.nome }}</option>
               {% endfor %}
             </select>
-          </div>
-          <div class="col-md-3 mb-2">
-            <label class="form-label">Categoria <span class="text-danger">*</span></label>
-            <select name="categoria" class="form-select form-select-sm" required>
-              <option value="">Selecione...</option>
-              {% for categoria in categorias %}
-              <option value="{{ categoria.nome }}" {% if funcionario.categoria == categoria.nome %}selected{% endif %}>{{ categoria.nome }}</option>
+            <span class="campo__d">Sem posto fixo, ele aparece em todos.</span></label>
+          <label class="campo"><span class="campo__r">Categoria</span>
+            <select name="categoria" required>
+              <option value="">Selecione…</option>
+              {% for cat in categorias %}
+              <option value="{{ cat.nome }}"
+                {{ 'selected' if funcionario.categoria == cat.nome }}>{{ cat.nome }}</option>
               {% endfor %}
-            </select>
-          </div>
+            </select></label>
         </div>
 
-        <div class="form-section-title"><i class="bi bi-card-text me-1"></i>Documentos e Contato</div>
-        <div class="row">
-          <div class="col-md-3 mb-2">
-            <label class="form-label">CPF</label>
-            <input type="text" name="cpf" class="form-control form-control-sm"
-                   value="{{ funcionario.cpf or '' }}">
-          </div>
-          <div class="col-md-3 mb-2">
-            <label class="form-label">Telefone</label>
-            <input type="text" name="telefone" class="form-control form-control-sm"
-                   value="{{ funcionario.telefone or '' }}">
-          </div>
-          <div class="col-md-6 mb-2">
-            <label class="form-label">E-mail</label>
-            <input type="email" name="email" class="form-control form-control-sm"
-                   value="{{ funcionario.email or '' }}">
-          </div>
+        <div class="bloco">
+          <div class="bloco__t"><i class="bi bi-telephone"></i> Contato</div>
+          <label class="campo"><span class="campo__r">CPF</span>
+            <input type="text" name="cpf" value="{{ funcionario.cpf or '' }}"></label>
+          <label class="campo"><span class="campo__r">Telefone</span>
+            <input type="text" name="telefone" value="{{ funcionario.telefone or '' }}"></label>
+          <label class="campo"><span class="campo__r">E-mail</span>
+            <input type="email" name="email" value="{{ funcionario.email or '' }}"></label>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="bloco">
+          <div class="bloco__t"><i class="bi bi-briefcase"></i> Cargo e salário</div>
+          <label class="campo"><span class="campo__r">Cargo</span>
+            <input type="text" name="cargo" value="{{ funcionario.cargo or '' }}"></label>
+          <label class="campo"><span class="campo__r">Salário base</span>
+            <input type="number" name="salario_base" step="0.01"
+                   value="{{ funcionario.salario_base or '' }}"></label>
         </div>
 
-        <div class="form-section-title"><i class="bi bi-briefcase me-1"></i>Cargo e Remuneração</div>
-        <div class="row">
-          <div class="col-md-4 mb-2">
-            <label class="form-label">Cargo</label>
-            <input type="text" name="cargo" class="form-control form-control-sm"
-                   value="{{ funcionario.cargo or '' }}">
-          </div>
-          <div class="col-md-4 mb-2">
-            <label class="form-label">Data de Admissão</label>
-            <input type="date" name="data_admissao" class="form-control form-control-sm"
-                   value="{{ funcionario.data_admissao.strftime('%Y-%m-%d') if funcionario.data_admissao else '' }}">
-          </div>
-          <div class="col-md-4 mb-2">
-            <label class="form-label">Salário Base (R$)</label>
-            <input type="number" name="salario_base" step="0.01" class="form-control form-control-sm"
-                   value="{{ funcionario.salario_base or '' }}">
-          </div>
+        <div class="bloco">
+          <div class="bloco__t"><i class="bi bi-calendar-check"></i> Entrada e saída</div>
+          <label class="campo"><span class="campo__r">Admissão</span>
+            <input type="date" name="data_admissao"
+                   value="{{ funcionario.data_admissao.strftime('%Y-%m-%d') if funcionario.data_admissao else '' }}"></label>
+          {# A data de saida e o campo que decide onde a pessoa some. Fica
+             aqui, editavel, e tambem no botao da direita — quem esta na lista
+             desliga sem abrir a ficha. #}
+          <label class="campo"><span class="campo__r">Desligamento</span>
+            <input type="date" name="data_saida" id="fed-saida"
+                   value="{{ funcionario.data_saida.strftime('%Y-%m-%d') if funcionario.data_saida else '' }}">
+            <span class="campo__d">Em branco = continua trabalhando. Com data,
+              ela sai das listas de escolha a partir daquele mês.</span></label>
+        </div>
+      </div>
+
+      <aside class="lado">
+        <div class="estado {{ 'estado--off' if fora else 'estado--on' }}">
+          <div class="estado__r">{{ 'Desligado' if fora else 'Trabalhando' }}</div>
+          <div class="estado__v">
+            {%- if fora %}saiu em {{ funcionario.data_saida.strftime('%d/%m/%Y') }}
+            {%- else %}está na casa{% endif -%}</div>
+          <div class="estado__c">
+            {%- if funcionario.data_admissao %}Admitido em
+            {{ funcionario.data_admissao.strftime('%d/%m/%Y') }}.
+            {%- endif %}</div>
         </div>
 
-        <div class="d-flex justify-content-between mt-4 pt-2 border-top">
-          <a href="{{ url_for('funcionarios.lista') }}" class="btn btn-secondary btn-sm">
-            <i class="bi bi-arrow-left me-1"></i> Voltar
-          </a>
-          <button type="submit" class="btn btn-primary btn-sm px-4">
-            <i class="bi bi-check-circle me-1"></i> Salvar
-          </button>
+        <div class="regra">
+          {% if fora %}
+          A partir de <b>{{ funcionario.data_saida.strftime('%m/%Y') }}</b>
+          {{ funcionario.nome.split()[0] | title }} não aparece mais para
+          escolher no troco PIX, na folha nem na descarga. Nos meses anteriores,
+          continua em tudo: lançamentos, valores e relatórios.
+          {% else %}
+          Enquanto não houver data de saída, ele aparece em todas as listas de
+          escolha. Desligar <b>não apaga nada</b> do que já foi lançado.
+          {% endif %}
         </div>
-      </form>
+
+        <button type="submit" class="salvar">
+          <i class="bi bi-check-lg"></i> Salvar</button>
+
+        {% if fora %}
+        <button type="button" class="bt bt--volta"
+                onclick="document.getElementById('fed-saida').value='';
+                         this.closest('form').submit();">
+          <i class="bi bi-arrow-counterclockwise"></i> Voltou a trabalhar</button>
+        {% else %}
+        <button type="button" class="bt bt--sai" onclick="fedDesliga()">
+          <i class="bi bi-box-arrow-right"></i> Desligar hoje</button>
+        {% endif %}
+      </aside>
     </div>
-  </div>
+
+    <div class="rodape">
+      <button type="submit" class="salvar"><i class="bi bi-check-lg"></i> Salvar</button>
+    </div>
+  </form>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// "Desligar hoje" só preenche a data — quem grava é o Salvar, para a pessoa
+// poder conferir (ou trocar por outro dia) antes de valer.
+function fedDesliga(){
+  var campo = document.getElementById('fed-saida');
+  if (!campo) return;
+  var hoje = new Date();
+  campo.value = hoje.getFullYear() + '-' +
+                String(hoje.getMonth() + 1).padStart(2, '0') + '-' +
+                String(hoje.getDate()).padStart(2, '0');
+  campo.focus();
+  campo.scrollIntoView({behavior: 'smooth', block: 'center'});
+}
+</script>
 {% endblock %}

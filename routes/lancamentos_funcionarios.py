@@ -334,10 +334,36 @@ def novo():
         if conn:
             conn.close()
 
+def _limites_do_mes(mes):
+    """('2026-08-01', '2026-08-31') a partir de '08/2026'. None se não der.
+
+    O mes vem da tela como MM/AAAA — e a competencia da folha, nao uma data.
+    """
+    import calendar
+    if not mes:
+        return None, None
+    t = str(mes).replace('-', '/').strip()
+    partes = t.split('/')
+    if len(partes) != 2:
+        return None, None
+    try:
+        m, a = int(partes[0]), int(partes[1])
+        ini = '%04d-%02d-01' % (a, m)
+        fim = '%04d-%02d-%02d' % (a, m, calendar.monthrange(a, m)[1])
+        return ini, fim
+    except (ValueError, calendar.IllegalMonthError):
+        return None, None
+
+
 @bp.route('/get-funcionarios/<int:cliente_id>')
 @login_required
 def get_funcionarios(cliente_id):
-    """API endpoint to get employees by client"""
+    """Os funcionarios daquele posto — e daquele MES, quando ele vem.
+
+    Sem o mes, responde por hoje: e o que serve para uma tela que esta
+    lancando agora.
+    """
+    ini, fim = _limites_do_mes(request.args.get('mes'))
     conn = None
     cursor = None
     
@@ -355,8 +381,15 @@ def get_funcionarios(cliente_id):
                 'funcionario' as tipo
             FROM funcionarios f
             WHERE f.ativo = 1 AND (f.id_cliente = %s OR f.id_cliente IS NULL)
+              -- quem saiu ANTES do mes nao entra na folha dele: a Brena, que
+              -- saiu em 07/2026, nao pode aparecer na folha de 08/2026 — nem
+              -- em outubro, que era o que acontecia. Nos meses em que ela
+              -- trabalhou, continua aparecendo normalmente.
+              AND (%s IS NULL OR f.data_saida IS NULL OR f.data_saida >= %s)
+              -- e quem ainda nem tinha entrado tambem nao
+              AND (%s IS NULL OR f.data_admissao IS NULL OR f.data_admissao <= %s)
             ORDER BY f.nome
-        """, (cliente_id,))
+        """, (cliente_id, ini, ini, fim, fim))
         funcionarios = cursor.fetchall()
         
         # Also get motoristas that receive commission for this client
