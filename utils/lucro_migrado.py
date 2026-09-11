@@ -21,6 +21,14 @@ No S-500 de 09/09/2026, por exemplo, a nota trouxe 12.000 L e a descarga do dia
 foram 5.000 L — o resto desceu depois. Nenhuma das duas está errada; elas
 respondem perguntas diferentes, e misturá-las é o que fazia a variação mentir.
 
+Mas nenhuma das duas é física. A entrada de verdade é a que o TANQUE absorveu, e
+ela se lê da própria medição: `entrou = medição de amanhã − a de hoje + o que se
+vendeu`. É por isso que todo dia traz as três — nota, descarga e entrou. No
+etanol de 05/09/2026 a nota faturou 9.000 L, a descarga registrou 5.000 L e o
+tanque não recebeu nada: a variação DO DIA acusa −9.034 L, e a do período fecha
+em −122 L. O dia sozinho nunca fecha, porque a nota vem num dia e o caminhão no
+outro; o número que vale é o acumulado.
+
 O custo segue a média móvel ponderada (o "custo corrido" do relatório antigo):
 a cada entrada o saldo em reais e em litros somam, e a venda do dia sai pelo
 custo médio daquele momento.
@@ -178,9 +186,18 @@ def _preco_medio(cur, cliente_id, produto_ids, ini, fim):
 def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
     """Dia a dia por produto, na base escolhida.
 
-    Devolve {produto_id: {'dias': [...], 'total': {...}}}. Cada dia traz o que
-    a tela mostra: estoque inicial, entrada, venda, custo corrido, estoque
-    final calculado, estoque final medido e a variação entre os dois.
+    Devolve {produto_id: {'dias': [...], 'total': {...}}}. Cada dia traz as
+    TRES entradas ao mesmo tempo, porque so as tres juntas explicam o dia:
+
+        nota_l    o que o fornecedor faturou naquele dia
+        desc_l    o que a descarga registra ter descido
+        entrou    o que o TANQUE absorveu de verdade:
+                  medicao de amanha - medicao de hoje + o que se vendeu
+
+    A ultima e a unica fisica, e so existe quando as duas medicoes existem.
+    A variacao do dia e sempre `entrou - entrada da base` — por isso ela
+    dispara quando a nota vem num dia e o caminhao no outro, e por isso o
+    numero que vale e o ACUMULADO, que fecha o descompasso.
     """
     if base not in BASES:
         raise ValueError('base deve ser %r' % (BASES,))
@@ -191,8 +208,9 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
     leitura = _leituras(cur, cliente_id, ini, fim)
     venda = _vendas(cur, cliente_id, ini, fim)
     preco = _preco_medio(cur, cliente_id, produto_ids, ini, fim)
-    entrada = (_compras_nota(cur, cliente_id, ini, fim) if base == 'nota'
-               else _compras_descarga(cur, cliente_id, ini, fim, preco))
+    nota = _compras_nota(cur, cliente_id, ini, fim)
+    desc = _compras_descarga(cur, cliente_id, ini, fim, preco)
+    entrada = nota if base == 'nota' else desc
 
     fora = {}
     for pid in produto_ids:
@@ -207,7 +225,10 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
 
         dias, tot = [], {'entrada_l': 0.0, 'entrada_rs': 0.0, 'venda_l': 0.0,
                          'venda_rs': 0.0, 'custo_rs': 0.0, 'lucro_rs': 0.0,
-                         'variacao_l': 0.0}
+                         'variacao_l': 0.0, 'nota_l': 0.0, 'nota_rs': 0.0,
+                         'desc_l': 0.0, 'entrou_l': 0.0, 'dias_entrou': 0}
+        falta_acum = 0.0
+        var_acum = 0.0
         for d in _dias(ini, fim):
             medido = leitura.get((d, pid))
             # A medicao do dia manda no estoque inicial: ela e a realidade.
@@ -226,6 +247,8 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
             ei_medido = medido is not None
 
             ent_l, ent_rs = entrada.get((d, pid), (0.0, 0.0))
+            nota_l, nota_rs = nota.get((d, pid), (0.0, 0.0))
+            desc_l = desc.get((d, pid), (0.0, 0.0))[0]
             ven_l, ven_rs = venda.get((d, pid), (0.0, 0.0))
 
             saldo_l += ent_l
@@ -239,10 +262,25 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
             ef_real = leitura.get((d + timedelta(days=1), pid))
             variacao = (ef_real - ef_calc) if ef_real is not None else None
 
+            # O que o tanque absorveu de verdade. So faz sentido com as duas
+            # medicoes na mao — sem elas, a conta voltaria encadeada e diria
+            # exatamente o que ja se supos, ou seja, nada.
+            entrou = (ef_real - ei + ven_l) if (ef_real is not None
+                                                and ei_medido) else None
+
+            # O que a nota ja cobrou e o caminhao ainda nao trouxe (negativo =
+            # desceu produto de uma nota de antes).
+            falta_acum += nota_l - desc_l
+            if variacao is not None:
+                var_acum += variacao
+
             dias.append({
                 'data': d, 'ei': ei, 'ei_medido': ei_medido,
                 'entrada_l': ent_l, 'entrada_rs': ent_rs,
                 'entrada_unit': (ent_rs / ent_l) if ent_l else 0.0,
+                'nota_l': nota_l, 'nota_rs': nota_rs, 'desc_l': desc_l,
+                'entrou': entrou, 'falta_dia': nota_l - desc_l,
+                'falta_acum': falta_acum, 'var_acum': var_acum,
                 'venda_l': ven_l, 'venda_rs': ven_rs,
                 'venda_unit': (ven_rs / ven_l) if ven_l else 0.0,
                 'custo_unit': custo_unit, 'custo_rs': custo_rs,
@@ -252,12 +290,18 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
             })
             tot['entrada_l'] += ent_l
             tot['entrada_rs'] += ent_rs
+            tot['nota_l'] += nota_l
+            tot['nota_rs'] += nota_rs
+            tot['desc_l'] += desc_l
             tot['venda_l'] += ven_l
             tot['venda_rs'] += ven_rs
             tot['custo_rs'] += custo_rs
             tot['lucro_rs'] += ven_rs - custo_rs
             if variacao is not None:
                 tot['variacao_l'] += variacao
+            if entrou is not None:
+                tot['entrou_l'] += entrou
+                tot['dias_entrou'] += 1
 
         tot['ei'] = dias[0]['ei'] if dias else 0.0
         tot['ei_medido'] = dias[0]['ei_medido'] if dias else False
@@ -266,6 +310,7 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
         tot['ef_real'] = next((x['ef_real'] for x in reversed(dias)
                                if x['ef_real'] is not None), None)
         tot['ef_calc'] = dias[-1]['ef_calc'] if dias else 0.0
+        tot['falta_l'] = falta_acum
         tot['margem_l'] = (tot['lucro_rs'] / tot['venda_l']) if tot['venda_l'] else 0.0
         tot['custo_unit'] = (tot['custo_rs'] / tot['venda_l']) if tot['venda_l'] else 0.0
         tot['entrada_unit'] = ((tot['entrada_rs'] / tot['entrada_l'])
@@ -279,22 +324,24 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
 
 
 def comparar(cur, cliente_id, produto_ids, ini, fim):
-    """As duas bases lado a lado, para ver onde nota e descarga discordam.
+    """As tres entradas lado a lado, para ver onde elas discordam.
 
-    A diferenca entre elas nao e erro: e produto que a nota ja registrou e que
-    ainda nao desceu (ou o contrario). Ver as duas juntas e o que responde
-    "cade o que falta".
+    A diferenca entre nota e descarga nao e erro: e produto que a nota ja
+    registrou e que ainda nao desceu (ou o contrario). E o tanque e o juiz —
+    `entrou_l` e o que ele absorveu, e e contra ele que as outras duas se
+    medem. As tres saem de uma apuracao so, porque nota, descarga e tanque
+    convivem no mesmo dia.
     """
     nota = apurar(cur, cliente_id, produto_ids, ini, fim, 'nota')
-    desc = apurar(cur, cliente_id, produto_ids, ini, fim, 'descarga')
     fora = {}
     for pid in nota:
         tn = nota[pid]['total']
-        td = desc.get(pid, {}).get('total', {})
         fora[pid] = {
-            'nota_l': tn['entrada_l'], 'descarga_l': td.get('entrada_l', 0.0),
-            'diferenca_l': tn['entrada_l'] - td.get('entrada_l', 0.0),
-            'nota_variacao': tn['variacao_l'],
-            'descarga_variacao': td.get('variacao_l', 0.0),
+            'nota_l': tn['nota_l'], 'descarga_l': tn['desc_l'],
+            'entrou_l': tn['entrou_l'],
+            'diferenca_l': tn['nota_l'] - tn['desc_l'],
+            'nota_variacao': tn['entrou_l'] - tn['nota_l'],
+            'descarga_variacao': tn['entrou_l'] - tn['desc_l'],
+            'dias_entrou': tn['dias_entrou'], 'dias': tn['dias'],
         }
     return fora

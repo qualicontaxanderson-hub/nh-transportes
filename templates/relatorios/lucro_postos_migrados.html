@@ -98,7 +98,9 @@ body > .container-fluid:has(#lpm){
   #lpm .resumo{ display:grid; gap:.5rem; padding:0 .8rem .7rem;
     grid-template-columns:repeat(2,1fr); }
   @media (min-width:768px){
-    #lpm .resumo{ grid-template-columns:repeat(4,1fr); } }
+    #lpm .resumo{ grid-template-columns:repeat(3,1fr); } }
+  @media (min-width:1200px){
+    #lpm .resumo{ grid-template-columns:repeat(6,1fr); } }
   #lpm .r{ background:#f7f9fc; border:1px solid #eef1f5; border-radius:11px;
     padding:.5rem .6rem; }
   #lpm .r__r{ font-size:.62rem; font-weight:800; color:var(--muted);
@@ -107,7 +109,7 @@ body > .container-fluid:has(#lpm){
     font-variant-numeric:tabular-nums; }
   #lpm .r__c{ font-size:.66rem; color:var(--muted); }
 
-  /* o dia a dia: tabela mesmo — sao doze colunas de numero que se compara na
+  /* o dia a dia: tabela mesmo — sao dezessete colunas de numero que se compara na
      vertical, e cartao nao serve para isso. Rola de lado no proprio quadro. */
   #lpm .tab{ overflow-x:auto; border-top:1px solid #eef1f5; }
   #lpm table{ width:100%; border-collapse:collapse; font-size:.78rem;
@@ -127,6 +129,14 @@ body > .container-fluid:has(#lpm){
   #lpm tfoot td{ background:#f0f4f8; font-weight:800;
     border-top:2px solid var(--borda); }
   #lpm .semmedir{ color:var(--ambar); font-weight:800; }
+  /* nota, descarga, entrou e a-descer sao uma leitura so: ficam num bloco */
+  #lpm th.ent, #lpm td.ent{ background:#f6f9fd; }
+  #lpm th.ent{ background:#e7eef7; }
+  #lpm td.ent--fim, #lpm th.ent--fim{ border-right:1px solid #dde5ee; }
+  #lpm .tanque{ font-weight:800; color:var(--blue-deep); }
+  #lpm .leg{ padding:.5rem .8rem .7rem; font-size:.72rem; color:var(--muted);
+    line-height:1.45; border-top:1px solid #eef1f5; background:#fafbfd; }
+  #lpm .leg b{ color:var(--ink); }
 
   #lpm .comp{ background:#fff; border:1px solid var(--borda);
     border-radius:14px; padding:.7rem .8rem; margin-bottom:.7rem;
@@ -134,7 +144,8 @@ body > .container-fluid:has(#lpm){
   #lpm .comp__t{ font-size:.7rem; font-weight:800; text-transform:uppercase;
     letter-spacing:.06em; color:var(--blue-deep); margin-bottom:.45rem; }
   #lpm .cl{ display:flex; gap:.6rem; font-size:.82rem; padding:.3rem 0;
-    border-bottom:1px solid #f2f5f8; align-items:baseline; }
+    border-bottom:1px solid #f2f5f8; align-items:baseline; flex-wrap:wrap; }
+  #lpm .cl__n{ min-width:5.5rem; }
   #lpm .cl:last-child{ border-bottom:0; }
   #lpm .cl__n{ flex:1; font-weight:700; }
   #lpm .cl b{ font-variant-numeric:tabular-nums; }
@@ -152,8 +163,8 @@ body > .container-fluid:has(#lpm){
 
   <div class="topo">
     <div class="topo__t"><i class="bi bi-graph-up-arrow"></i> Lucro Postos Migrados</div>
-    <div class="topo__s">Apurado pelas telas novas: leitura de tanque, cupom
-      fiscal, nota do DFe e descarga</div>
+    <div class="topo__s">Nota, descarga e tanque no mesmo dia — e o tanque
+      é quem diz o que entrou de verdade</div>
   </div>
 
   {% if erro %}
@@ -217,25 +228,33 @@ body > .container-fluid:has(#lpm){
       <div class="r">Lucro</div>
       <div class="v">{{ reais(totais.lucro_rs) }}</div></div>
     <div class="n {{ 'n--ambar' if (totais.variacao_l|abs) > 500 else 'n--cinza' }}">
-      <div class="r">Variação</div>
+      <div class="r">Variação no período</div>
       <div class="v">{{ litros(totais.variacao_l) }} L</div></div>
   </div>
 
   {% if comparativo %}
   <div class="comp">
     <div class="comp__t"><i class="bi bi-arrow-left-right"></i>
-      Nota e descarga, lado a lado</div>
+      Nota, descarga e o que o tanque absorveu</div>
     {% for pid, c in comparativo.items() %}
     <div class="cl">
       <span class="cl__n">{{ produtos_nome.get(pid, pid) }}</span>
       <span>nota <b>{{ litros(c.nota_l) }} L</b></span>
       <span>descarga <b>{{ litros(c.descarga_l) }} L</b></span>
-      <span class="{{ 'neg' if c.diferenca_l > 0 else 'pos' if c.diferenca_l < 0 else '' }}">
-        diferença <b>{{ litros(c.diferenca_l) }} L</b></span>
+      <span class="tanque">entrou no tanque <b>{{ litros(c.entrou_l) }} L</b></span>
+      <span class="{{ 'neg' if (c.nota_variacao|abs) > (c.descarga_variacao|abs) else 'pos' }}"
+            title="o que entrou no tanque menos o que a nota faturou">a nota erra
+        <b>{{ litros(c.nota_variacao|abs) }} L</b></span>
+      <span class="{{ 'neg' if (c.descarga_variacao|abs) > (c.nota_variacao|abs) else 'pos' }}"
+            title="o que entrou no tanque menos o que a descarga registra">a descarga erra
+        <b>{{ litros(c.descarga_variacao|abs) }} L</b></span>
     </div>
     {% endfor %}
-    <div class="r__c" style="margin-top:.4rem">A diferença não é erro: é produto
-      faturado que ainda não desceu (ou que desceu de uma nota de antes).</div>
+    <div class="r__c" style="margin-top:.4rem">O tanque é o juiz: <b>entrou</b> é
+      a medição de amanhã menos a de hoje, mais o que se vendeu. Os dois últimos
+      números dizem o quanto a nota e a descarga erram contra ele no período —
+      <b>quem errar menos é a fonte confiável para aquele produto</b>, e é a base
+      que vale a pena escolher lá em cima.</div>
   </div>
   {% endif %}
 
@@ -245,9 +264,10 @@ body > .container-fluid:has(#lpm){
     <div class="ph" onclick="lpmAbre(this)">
       <div>
         <div class="ph__n">{{ produtos_nome.get(pid, 'Produto %s'|format(pid)) }}</div>
-        <div class="ph__d">{{ litros(t.entrada_l) }} L entraram ·
-          {{ litros(t.venda_l) }} L vendidos ·
-          {{ t.dias_medidos }} de {{ t.dias }} dias com tanque medido</div>
+        <div class="ph__d">nota {{ litros(t.nota_l) }} L ·
+          desceu {{ litros(t.desc_l) }} L ·
+          entrou no tanque {{ litros(t.entrou_l) }} L ·
+          {{ litros(t.venda_l) }} L vendidos</div>
       </div>
       <div class="ph__v">
         <div class="ph__l {{ 'ruim' if t.lucro_rs < 0 }}">{{ reais(t.lucro_rs) }}</div>
@@ -260,9 +280,18 @@ body > .container-fluid:has(#lpm){
       <div class="r"><div class="r__r">Estoque inicial</div>
         <div class="r__v">{{ litros(t.ei) }} L</div>
         <div class="r__c">{{ 'medido no tanque' if t.ei_medido else 'sem medição no 1º dia' }}</div></div>
-      <div class="r"><div class="r__r">Entrada ({{ base }})</div>
-        <div class="r__v">{{ litros(t.entrada_l) }} L</div>
-        <div class="r__c">{{ reais(t.entrada_rs) }} · {{ preco(t.entrada_unit) }}/L</div></div>
+      <div class="r"><div class="r__r">Nota</div>
+        <div class="r__v">{{ litros(t.nota_l) }} L</div>
+        <div class="r__c">{{ reais(t.nota_rs) }} · o que foi faturado</div></div>
+      <div class="r"><div class="r__r">Descarga</div>
+        <div class="r__v">{{ litros(t.desc_l) }} L</div>
+        <div class="r__c">
+          {%- if t.falta_l > 1 %}falta descer {{ litros(t.falta_l) }} L
+          {%- elif t.falta_l < -1 %}desceu {{ litros(-t.falta_l) }} L de nota anterior
+          {%- else %}bate com a nota{% endif %}</div></div>
+      <div class="r"><div class="r__r">Entrou no tanque</div>
+        <div class="r__v tanque">{{ litros(t.entrou_l) }} L</div>
+        <div class="r__c">medido em {{ t.dias_entrou }} de {{ t.dias }} dias</div></div>
       <div class="r"><div class="r__r">Venda</div>
         <div class="r__v">{{ reais(t.venda_rs) }}</div>
         <div class="r__c">{{ litros(t.venda_l) }} L · {{ preco(t.venda_unit) }}/L</div></div>
@@ -278,7 +307,10 @@ body > .container-fluid:has(#lpm){
           <tr>
             <th>Dia</th>
             <th>Est. inicial</th>
-            <th>Entrada (L)</th>
+            <th class="ent">Nota (L)</th>
+            <th class="ent">Descarga (L)</th>
+            <th class="ent">Entrou (L)</th>
+            <th class="ent ent--fim">A descer</th>
             <th>Entrada R$</th>
             <th>Preço compra</th>
             <th>Custo corrido</th>
@@ -286,9 +318,9 @@ body > .container-fluid:has(#lpm){
             <th>Preço venda</th>
             <th>Receita</th>
             <th>Margem/L</th>
-            <th>EF calc.</th>
             <th>EF medido</th>
-            <th>Variação</th>
+            <th>Dif. do dia</th>
+            <th>Acumulada</th>
             <th>Lucro do dia</th>
           </tr>
         </thead>
@@ -298,7 +330,11 @@ body > .container-fluid:has(#lpm){
             <td>{{ d.data.strftime('%d/%m') }}
               {%- if not d.ei_medido %} <span class="semmedir" title="sem leitura de tanque neste dia">•</span>{% endif -%}</td>
             <td class="{{ '' if d.ei_medido else 'est' }}">{{ litros(d.ei) }}</td>
-            <td>{{ litros(d.entrada_l) if d.entrada_l else '—' }}</td>
+            <td class="ent">{{ litros(d.nota_l) if d.nota_l else '—' }}</td>
+            <td class="ent">{{ litros(d.desc_l) if d.desc_l else '—' }}</td>
+            <td class="ent tanque">{{ litros(d.entrou) if d.entrou is not none else '—' }}</td>
+            <td class="ent ent--fim {{ 'neg' if d.falta_acum > 1 else 'pos' if d.falta_acum < -1 else 'est' }}">
+              {{ litros(d.falta_acum) }}</td>
             <td>{{ reais(d.entrada_rs) if d.entrada_l else '—' }}</td>
             <td>{{ preco(d.entrada_unit) if d.entrada_l else '—' }}</td>
             <td>{{ preco(d.custo_unit) }}</td>
@@ -306,10 +342,11 @@ body > .container-fluid:has(#lpm){
             <td>{{ preco(d.venda_unit) if d.venda_l else '—' }}</td>
             <td>{{ reais(d.venda_rs) if d.venda_l else '—' }}</td>
             <td>{{ preco(d.margem_l) if d.venda_l else '—' }}</td>
-            <td>{{ litros(d.ef_calc) }}</td>
             <td>{{ litros(d.ef_real) if d.ef_real is not none else '—' }}</td>
-            <td class="{{ 'neg' if d.variacao is not none and d.variacao < -1 else 'pos' if d.variacao is not none and d.variacao > 1 else '' }}">
+            <td class="est" title="o dia sozinho não fecha: a nota vem num dia e o caminhão no outro">
               {{ litros(d.variacao) if d.variacao is not none else '—' }}</td>
+            <td class="{{ 'neg' if d.var_acum < -1 else 'pos' if d.var_acum > 1 else '' }}">
+              {{ litros(d.var_acum) }}</td>
             <td class="{{ 'neg' if d.lucro_rs < 0 }}">{{ reais(d.lucro_rs) }}</td>
           </tr>
           {% endfor %}
@@ -318,7 +355,11 @@ body > .container-fluid:has(#lpm){
           <tr>
             <td>Período</td>
             <td>{{ litros(t.ei) }}</td>
-            <td>{{ litros(t.entrada_l) }}</td>
+            <td class="ent">{{ litros(t.nota_l) }}</td>
+            <td class="ent">{{ litros(t.desc_l) }}</td>
+            <td class="ent tanque">{{ litros(t.entrou_l) }}</td>
+            <td class="ent ent--fim {{ 'neg' if t.falta_l > 1 else 'pos' if t.falta_l < -1 else 'est' }}">
+              {{ litros(t.falta_l) }}</td>
             <td>{{ reais(t.entrada_rs) }}</td>
             <td>{{ preco(t.entrada_unit) }}</td>
             <td>{{ preco(t.custo_unit) }}</td>
@@ -326,14 +367,24 @@ body > .container-fluid:has(#lpm){
             <td>{{ preco(t.venda_unit) }}</td>
             <td>{{ reais(t.venda_rs) }}</td>
             <td>{{ preco(t.margem_l) }}</td>
-            <td>{{ litros(t.ef_calc) }}</td>
             <td>{{ litros(t.ef_real) if t.ef_real is not none else '—' }}</td>
+            <td class="est">—</td>
             <td class="{{ 'neg' if t.variacao_l < -1 else 'pos' if t.variacao_l > 1 else '' }}">
               {{ litros(t.variacao_l) }}</td>
             <td>{{ reais(t.lucro_rs) }}</td>
           </tr>
         </tfoot>
       </table>
+      <div class="leg">
+        <b>Entrou (L)</b> é o que o tanque absorveu: a medição de amanhã menos a
+        de hoje, mais o que se vendeu. É a única entrada física — nota e descarga
+        são o que <i>deveria</i> ter entrado.
+        <b>A descer</b> acumula nota menos descarga: positivo é produto faturado
+        que ainda não chegou, negativo é produto que desceu de uma nota de antes.
+        A <b>diferença do dia</b> fica em cinza de propósito: um dia sozinho nunca
+        fecha, porque a nota vem num dia e o caminhão no outro. O número que vale
+        é a <b>acumulada</b>, que é onde o descompasso se resolve.
+      </div>
     </div>
   </div>
   {% endfor %}
@@ -343,7 +394,7 @@ body > .container-fluid:has(#lpm){
 
 {% block scripts %}
 <script>
-// O dia a dia abre por produto: são catorze colunas, e abrir tudo de uma vez
+// O dia a dia abre por produto: são dezessete colunas, e abrir tudo de uma vez
 // esconderia o resumo, que é o que se olha primeiro.
 function lpmAbre(cab){
   var box = cab.closest('.prodbox');

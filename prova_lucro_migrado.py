@@ -232,6 +232,81 @@ try:
         print('        variação pela nota %.0f L · pela descarga %.0f L'
               % (dia['variacao'] or 0, dia_d['variacao'] or 0))
 
+    # ── o que ENTROU: a unica entrada fisica ──────────────────────────────
+    # Recalculada aqui a partir das leituras cruas, sem passar pelo motor: se
+    # o motor errar a conta, os dois numeros se separam.
+    cur.execute("""SELECT DATE(data_leitura) d, produto_id pid,
+                          SUM(volume_atual) v
+                     FROM leitura_tanque_diaria
+                    WHERE cliente_id = %s AND produto_id IS NOT NULL
+                      AND DATE(data_leitura) BETWEEN %s AND %s
+                    GROUP BY d, produto_id""",
+                (CLIENTE, INI, FIM + timedelta(days=1)))
+    medida = {(r['d'], r['pid']): float(r['v']) for r in cur.fetchall()}
+
+    erros, tinha = [], 0
+    for pid in PRODUTOS:
+        for d in nota[pid]['dias']:
+            hoje_m = medida.get((d['data'], pid))
+            amanha_m = medida.get((d['data'] + timedelta(days=1), pid))
+            if hoje_m is None or amanha_m is None:
+                if d['entrou'] is not None:
+                    erros.append((pid, d['data'], 'inventou um entrou sem medição'))
+                continue
+            tinha += 1
+            esperado = amanha_m - hoje_m + d['venda_l']
+            if d['entrou'] is None or abs(d['entrou'] - esperado) > 0.01:
+                erros.append((pid, d['data'], d['entrou'], esperado))
+    prova('entrou = medição de amanhã - a de hoje + o que se vendeu',
+          not erros and tinha > 0, '%r (dias medidos: %s)' % (erros[:4], tinha))
+
+    erros = []
+    for pid in PRODUTOS:
+        acf, acv = 0.0, 0.0
+        for d in nota[pid]['dias']:
+            acf += d['nota_l'] - d['desc_l']
+            if d['variacao'] is not None:
+                acv += d['variacao']
+            if abs(d['falta_acum'] - acf) > 0.01 or abs(d['var_acum'] - acv) > 0.01:
+                erros.append((pid, d['data']))
+        t = nota[pid]['total']
+        if abs(t['falta_l'] - acf) > 0.01 or abs(t['variacao_l'] - acv) > 0.01:
+            erros.append((pid, 'total'))
+    prova('os acumulados somam de verdade, dia após dia', not erros, '%r' % erros[:5])
+
+    # ── o caso que o Anderson apontou: 05/09, nota de 9.000 L que nao chegou ──
+    # O dia sozinho acusa milhares de litros de variacao; o acumulado do
+    # periodo fecha perto de zero. E esse o ponto do relatorio.
+    et = nota[1]
+    d5 = next((d for d in et['dias'] if d['data'] == date(2026, 9, 5)), None)
+    if d5:
+        print('        05/09 etanol: nota %.0f L · descarga %.0f L · entrou %s L'
+              % (d5['nota_l'], d5['desc_l'],
+                 '%.0f' % d5['entrou'] if d5['entrou'] is not None else '—'))
+        prova('05/09: a nota veio e o produto não',
+              d5['nota_l'] > 5000 and d5['entrou'] is not None
+              and abs(d5['entrou']) < 500,
+              'nota %.0f, entrou %r' % (d5['nota_l'], d5['entrou']))
+        prova('o dia sozinho acusa muito mais do que o período inteiro',
+              abs(d5['variacao'] or 0) > abs(et['total']['variacao_l']) * 5,
+              'dia %.0f L, período %.0f L'
+              % (d5['variacao'] or 0, et['total']['variacao_l']))
+        print('        variação do dia %.0f L · acumulada do período %.0f L'
+              % (d5['variacao'] or 0, et['total']['variacao_l']))
+
+    # o tanque e o juiz: a soma do que entrou tem de ficar entre a nota e a
+    # descarga, ou colada em uma delas — nunca fora das duas por muito
+    for pid in PRODUTOS:
+        t = nota[pid]['total']
+        if t['entrou_l'] or t['nota_l'] or t['desc_l']:
+            folga = max(t['nota_l'], t['desc_l']) * 0.10 + 500
+            prova('produto %s: o que entrou no tanque não foge da nota nem da '
+                  'descarga' % pid,
+                  min(abs(t['entrou_l'] - t['nota_l']),
+                      abs(t['entrou_l'] - t['desc_l'])) <= folga,
+                  'entrou %.0f, nota %.0f, descarga %.0f'
+                  % (t['entrou_l'], t['nota_l'], t['desc_l']))
+
     # ── período sem dado não pode estourar ────────────────────────────────
     vazio = lucro_migrado.apurar(cur, CLIENTE, PRODUTOS,
                                  date(2019, 1, 1), date(2019, 1, 3), 'nota')
@@ -305,7 +380,18 @@ if adm:
           telas['nota'].count('<tbody>') == len(PRODUTOS),
           '%s tabelas' % telas['nota'].count('<tbody>'))
     prova('a tela explica por que nota e descarga discordam',
-          'ainda não desceu' in telas['nota'])
+          'ainda não chegou' in telas['nota'])
+    prova('a tela traz as três entradas: nota, descarga e tanque',
+          '>Nota (L)<' in telas['nota'].replace('\n', ' ')
+          and '>Descarga (L)<' in telas['nota'].replace('\n', ' ')
+          and '>Entrou (L)<' in telas['nota'].replace('\n', ' '),
+          'faltou alguma coluna do bloco de entrada')
+    prova('e a coluna do acumulado, que é a que vale',
+          '>A descer<' in telas['nota'].replace('\n', ' ')
+          and '>Acumulada<' in telas['nota'].replace('\n', ' '))
+    prova('a tela diz que o dia sozinho não fecha',
+          'a nota vem num dia e o caminhão no outro' in
+          ' '.join(telas['nota'].split()))
     prova('e dá o caminho de volta para o relatório antigo',
           '/relatorios/lucro_postos"' in telas['nota']
           or "/relatorios/lucro_postos'" in telas['nota']

@@ -1645,7 +1645,8 @@ def lucro_postos_migrados():
 
     totais = {'entrada_l': 0.0, 'entrada_rs': 0.0, 'venda_l': 0.0,
               'venda_rs': 0.0, 'custo_rs': 0.0, 'lucro_rs': 0.0,
-              'variacao_l': 0.0}
+              'variacao_l': 0.0, 'nota_l': 0.0, 'desc_l': 0.0,
+              'entrou_l': 0.0, 'falta_l': 0.0}
     for pid in apurado:
         for k in totais:
             totais[k] += apurado[pid]['total'][k]
