@@ -116,6 +116,37 @@ body > .container-fluid:has(#tpp){
     background:#fdf0d6; color:var(--ambar); border-radius:11px;
     padding:.55rem .7rem; font-size:.78rem; font-weight:600;
     margin-bottom:.7rem; }
+
+  /* ─── na tela grande, a lista vira grade de cartoes ──────────────────────
+     No celular esta tela esta certa: uma solicitacao por linha, de ponta a
+     ponta. No monitor, a MESMA linha passa a ocupar 1.900 px para mostrar
+     cinco dados, com um vao de mil e poucos pixels no meio — e o dia inteiro
+     cabe em quatro linhas, com a tela vazia embaixo.
+
+     Nada disso muda no HTML: sao as mesmas linhas, remontadas em cartoes pelo
+     `order`. Abaixo de 992 px nenhuma destas regras vale. */
+  @media (min-width:992px){
+    #tpp .lista{ display:grid; gap:.6rem; background:transparent; border:0;
+      box-shadow:none; overflow:visible;
+      grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); }
+    #tpp .c{ background:#fff; border:1px solid var(--borda); border-radius:12px;
+      box-shadow:0 2px 10px rgba(20,35,60,.06); display:flex;
+      flex-direction:column; }
+    #tpp .c:last-child{ border-bottom:1px solid var(--borda); }
+    #tpp .c__l{ flex-wrap:wrap; align-items:baseline; row-gap:.15rem; }
+    #tpp .c__h{ order:1; font-size:1rem; }
+    #tpp .c__t{ order:3; flex:1 1 100%; }
+    /* o valor ganha corpo: e o dado que se procura na lista */
+    #tpp .val{ order:4; flex:1 1 100%; text-align:left; margin-top:.15rem; }
+    #tpp .val__v{ font-size:1.3rem; }
+    #tpp .val__r{ font-size:.68rem; }
+    #tpp .par{ margin-top:.45rem; padding-top:.4rem;
+      border-top:1px solid #eef1f5; gap:.8rem; }
+    #tpp .pe{ margin-top:auto; padding-top:.5rem; }
+    /* o botao de lancar nao precisa de 1.900 px */
+    #tpp .novo{ max-width:22rem; }
+    #tpp .aviso{ max-width:46rem; }
+  }
 </style>
 {% endblock %}
 

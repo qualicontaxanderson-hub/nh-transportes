@@ -30,6 +30,14 @@ os.environ.setdefault('WTF_CSRF_ENABLED', 'False')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from app import app                                    # noqa: E402
 from utils.db import get_db_connection                 # noqa: E402
+# A MESMA funcao que a tela usa. CURDATE() aqui seria o dia do servidor, que
+# roda em UTC: depois das 21h de Brasilia os dois discordam, e a prova mediria
+# um dia que a tela nao mostra — foi exatamente o que aconteceu as 21h de
+# 09/09, com a prova acusando "2 na tela, 0 no banco".
+from routes.troco_pix import _hoje_br                  # noqa: E402
+
+HOJE = _hoje_br()
+INI7 = HOJE - timedelta(days=6)
 
 falhas = []
 
@@ -97,18 +105,18 @@ outros = consulta("""SELECT tp.id, c.razao_social
                        FROM troco_pix tp
                        JOIN clientes c ON c.id = tp.cliente_id
                       WHERE tp.cliente_id <> %s
-                        AND tp.data >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-                      LIMIT 5""", (frentista['cliente_id'],))
+                        AND tp.data >= %s
+                      LIMIT 5""", (frentista['cliente_id'], INI7))
 prova('não aparece solicitação de outro posto',
       not any(('/visualizar/%d' % o['id']) in h for o in outros),
       'apareceu solicitação de outro posto na tela do frentista')
 
 # ── os últimos 7 dias, não só hoje ────────────────────────────────────────
-hoje = consulta("SELECT CURDATE() AS d")[0]['d']
+hoje = HOJE
 sete = consulta("""SELECT tp.id, tp.data FROM troco_pix tp
                     WHERE tp.cliente_id = %s
-                      AND tp.data BETWEEN DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-                                      AND CURDATE()""", (frentista['cliente_id'],))
+                      AND tp.data BETWEEN %s AND %s""",
+                (frentista['cliente_id'], INI7, HOJE))
 de_hoje = [t for t in sete if t['data'] == hoje]
 antes = [t for t in sete if t['data'] != hoje]
 cards = re.findall(r'/visualizar/(\d+)', h)
@@ -156,8 +164,8 @@ def num(rotulo):
 prova('o topo diz quantas foram hoje', num('Hoje') == str(len(de_hoje)),
       'tela: %r, banco: %s' % (num('Hoje'), len(de_hoje)))
 troco_hoje = consulta("""SELECT COALESCE(SUM(troco_pix),0) t FROM troco_pix
-                          WHERE cliente_id = %s AND data = CURDATE()""",
-                      (frentista['cliente_id'],))[0]['t']
+                          WHERE cliente_id = %s AND data = %s""",
+                      (frentista['cliente_id'], HOJE))[0]['t']
 prova('o topo soma o troco PIX de hoje',
       (num('Troco PIX hoje') or '').replace('\xa0', ' ')
       == ('R$ %s' % ('{:,.2f}'.format(float(troco_hoje))
@@ -176,19 +184,17 @@ if not de_hoje:
 enviados = consulta("""SELECT tp.id FROM troco_pix tp
                          JOIN troco_pix_comprovantes cp ON cp.troco_pix_id = tp.id
                         WHERE tp.cliente_id = %s
-                          AND tp.data BETWEEN DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-                                          AND CURDATE()
+                          AND tp.data BETWEEN %s AND %s
                           AND COALESCE(tp.troco_pix,0) > 0""",
-                    (frentista['cliente_id'],))
+                    (frentista['cliente_id'], INI7, HOJE))
 faltando = consulta("""SELECT tp.id FROM troco_pix tp
                         LEFT JOIN troco_pix_comprovantes cp ON cp.troco_pix_id = tp.id
                        WHERE tp.cliente_id = %s
-                         AND tp.data BETWEEN DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-                                         AND CURDATE()
+                         AND tp.data BETWEEN %s AND %s
                          AND COALESCE(tp.troco_pix,0) > 0
                          AND cp.id IS NULL
                          AND tp.bank_transaction_id IS NULL""",
-                    (frentista['cliente_id'],))
+                    (frentista['cliente_id'], INI7, HOJE))
 prova('o troco já enviado leva envelope AZUL',
       h.count('env env--ok') == len(enviados),
       '%s azuis para %s comprovantes no banco'

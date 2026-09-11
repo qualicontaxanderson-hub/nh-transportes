@@ -152,6 +152,63 @@ body > .container-fluid:has(#tpn){
   #tpn .voltar{ display:inline-flex; gap:.3rem; align-items:center;
     color:var(--muted); font-size:.82rem; font-weight:700;
     text-decoration:none; }
+
+  /* ─── a coluna lateral e as tres colunas da tela grande ─────────────────
+     No celular o formulario esta certo: um campo por linha, o polegar desce.
+     No monitor o MESMO desenho vira uma coluna de 1.900 px com uma caixa de
+     1.800 px para digitar "0,00", e o formulario fica com uns 3.000 px de
+     altura — o cliente PIX e o frentista so aparecem depois de rolar tudo.
+
+     A partir de 992 px: duas colunas na ordem da conta e uma terceira com o
+     resultado, parada. Abaixo disso, nenhuma destas regras vale e a coluna
+     lateral nem existe. */
+  #tpn .lado{ display:none; }
+  @media (min-width:992px){
+    #tpn{ padding-bottom:1.5rem; }        /* sem rodape fixo, sem reserva */
+    #tpn .colunas{ display:grid; gap:.7rem; align-items:start;
+      grid-template-columns:1fr 1fr minmax(19rem, 22rem); }
+    #tpn .col{ display:flex; flex-direction:column; gap:.7rem; min-width:0; }
+    #tpn .col .bloco{ margin-bottom:0; }
+    #tpn .rodape{ display:none; }         /* o botao mora na coluna lateral */
+
+    #tpn .lado{ display:flex; flex-direction:column; gap:.6rem;
+      position:sticky; top:.8rem; background:#fff; border:1px solid var(--borda);
+      border-radius:14px; padding:.8rem; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+    #tpn .lado__pix{ background:#e4f4e8; border:1px solid #a9dfc2;
+      border-radius:12px; padding:.6rem .7rem; }
+    #tpn .lado__r{ font-size:.68rem; font-weight:800; text-transform:uppercase;
+      letter-spacing:.05em; color:#146c43; }
+    #tpn .lado__v{ font-size:1.75rem; font-weight:800; color:#146c43;
+      font-variant-numeric:tabular-nums; line-height:1.1; }
+    #tpn .lado__c{ font-size:.72rem; color:#1c6b34; margin-top:.15rem; }
+    #tpn .lado__pix.ruim{ background:#fbe9e9; border-color:#f0c8c8; }
+    #tpn .lado__pix.ruim .lado__r,
+    #tpn .lado__pix.ruim .lado__v,
+    #tpn .lado__pix.ruim .lado__c{ color:var(--danger); }
+
+    /* a conta aberta: de onde saiu aquele numero */
+    #tpn .lc{ display:flex; gap:.6rem; font-size:.82rem; padding:.25rem 0;
+      border-bottom:1px solid #eef1f5; }
+    #tpn .lc span{ flex:1; color:var(--muted); }
+    #tpn .lc b{ font-variant-numeric:tabular-nums; font-weight:700; }
+    #tpn .lc--fim{ border-bottom:0; }
+
+    #tpn .lado__cli{ background:#eaf1f9; border-radius:11px; padding:.55rem .7rem; }
+    #tpn .lado__cli[hidden]{ display:none; }
+    #tpn .lado__n{ font-weight:800; font-size:.85rem; }
+    #tpn .lado__k{ font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,
+      Consolas,'Liberation Mono',monospace; font-weight:700; font-size:.85rem;
+      overflow-wrap:anywhere; margin-top:.1rem; }
+    #tpn .lado__bt{ border:0; background:var(--blue); color:#fff;
+      border-radius:12px; padding:.7rem .9rem; font-size:.95rem; font-weight:800;
+      font-family:inherit; cursor:pointer; display:inline-flex; gap:.4rem;
+      align-items:center; justify-content:center; }
+    #tpn .lado__bt:hover{ background:var(--blue-deep); }
+    #tpn .lado__sair{ text-align:center; font-size:.8rem; font-weight:700;
+      color:var(--muted); text-decoration:none; }
+    #tpn .lado__sair:hover{ color:var(--ink); }
+  }
+
 </style>
 {% endblock %}
 
@@ -178,6 +235,10 @@ body > .container-fluid:has(#tpn){
         action="{% if edit_mode %}{{ url_for('troco_pix.editar', troco_pix_id=troco_pix_id, origem=origem) }}{% else %}{{ url_for('troco_pix.novo', origem=origem) }}{% endif %}">
     <input type="hidden" name="origem" value="{{ origem }}">
 
+    {# As colunas so existem a partir de 992px; no celular elas sao blocos
+       empilhados, e a ordem na tela fica exatamente a de hoje. #}
+    <div class="colunas">
+    <div class="col">
     <!-- ONDE E QUANDO -->
     <div class="bloco">
       <div class="bloco__t"><i class="bi bi-shop"></i> Onde e quando</div>
@@ -241,6 +302,8 @@ body > .container-fluid:has(#tpn){
       </label>
     </div>
 
+    </div><!-- /col -->
+    <div class="col">
     <!-- A VENDA -->
     <div class="bloco">
       <div class="bloco__t"><i class="bi bi-cart3"></i> O que o cliente comprou</div>
@@ -345,6 +408,33 @@ body > .container-fluid:has(#tpn){
       </label>
     </div>
 
+    </div><!-- /col -->
+
+    {# A terceira coluna: a conta aberta, parada na tela enquanto se preenche.
+       No celular ela nao aparece — la quem faz esse papel e o rodape fixo. #}
+    <aside class="lado" aria-label="Resumo da solicitação">
+      <div class="lado__pix" id="tpn-lado-cx">
+        <div class="lado__r">Troco por PIX</div>
+        <div class="lado__v" id="tpn-lado-v">R$ 0,00</div>
+        <div class="lado__c" id="tpn-lado-c">cheque − venda − dinheiro − crédito</div>
+      </div>
+      <div class="lado__conta">
+        <div class="lc"><span>Cheque</span><b id="tpn-l-cheque">R$ 0,00</b></div>
+        <div class="lc"><span>Venda</span><b id="tpn-l-venda">− R$ 0,00</b></div>
+        <div class="lc"><span>Dinheiro na hora</span><b id="tpn-l-din">− R$ 0,00</b></div>
+        <div class="lc lc--fim"><span>Crédito programado</span>
+          <b id="tpn-l-cred">− R$ 0,00</b></div>
+      </div>
+      <div class="lado__cli" id="tpn-lado-cli" hidden>
+        <div class="lado__n" id="tpn-lado-n"></div>
+        <div class="lado__k" id="tpn-lado-k"></div>
+      </div>
+      <button type="submit" class="lado__bt">
+        <i class="bi bi-check-lg"></i> {{ 'Salvar correção' if edit_mode else 'Lançar' }}</button>
+      <a class="lado__sair" href="{{ voltar }}">Sair sem salvar</a>
+    </aside>
+    </div><!-- /colunas -->
+
     <div class="rodape">
       <div class="rodape__l">
         <a class="voltar" href="{{ voltar }}"><i class="bi bi-x-lg"></i> Sair</a>
@@ -384,6 +474,10 @@ function tpnMascara(inp){
   inp.value = tpnFmt(n);
   inp.setAttribute('data-raw-value', n.toFixed(2));
 }
+function tpnTexto(id, txt){
+  var e = document.getElementById(id);
+  if (e) e.textContent = txt;
+}
 function tpnValor(id){
   var e = document.getElementById(id);
   return e ? parseFloat(e.getAttribute('data-raw-value') || '0') || 0 : 0;
@@ -407,9 +501,20 @@ function tpnConta(){
   var rod = document.getElementById('tpn-rod');
   vv.textContent = 'R$ ' + tpnFmt(pix);
   rod.textContent = 'R$ ' + tpnFmt(pix);
+
+  // a coluna lateral mostra a mesma conta, aberta parcela por parcela
+  tpnTexto('tpn-lado-v', 'R$ ' + tpnFmt(pix));
+  tpnTexto('tpn-l-cheque', 'R$ ' + tpnFmt(tpnValor('cheque_valor')));
+  tpnTexto('tpn-l-venda', '− R$ ' + tpnFmt(venda));
+  tpnTexto('tpn-l-din', '− R$ ' + tpnFmt(tpnValor('troco_especie')));
+  tpnTexto('tpn-l-cred', '− R$ ' + tpnFmt(tpnValor('troco_credito_vda_programada')));
+  var ladoCx = document.getElementById('tpn-lado-cx');
+  var ladoC = document.getElementById('tpn-lado-c');
   if (pix < -0.004){
     cx.className = 'pix pix--ruim';
     rod.className = 'rodape__n ruim';
+    if (ladoCx) ladoCx.className = 'lado__pix ruim';
+    if (ladoC) ladoC.textContent = 'O cheque não cobre a venda mais os trocos.';
     // Negativo quer dizer que o cheque nao cobre o que foi lancado — e o erro
     // mais comum: digitar a venda maior que o cheque.
     cc.textContent = 'O cheque não cobre a venda mais os trocos. Confira os valores.';
@@ -417,6 +522,8 @@ function tpnConta(){
     cx.className = 'pix';
     rod.className = 'rodape__n';
     cc.textContent = 'cheque − venda − troco em dinheiro − crédito';
+    if (ladoCx) ladoCx.className = 'lado__pix';
+    if (ladoC) ladoC.textContent = 'cheque − venda − dinheiro − crédito';
   }
   return pix;
 }
@@ -479,6 +586,11 @@ function tpnEscolhe(ev, id){
   document.getElementById('tpn-esc-t').textContent = (c.tipo_chave_pix || '').replace('_', ' ');
   document.getElementById('tpn-esc-k').textContent = c.chave_pix || '';
   cx.hidden = false;
+  // e do lado, para conferir a chave sem procurar o bloco
+  tpnTexto('tpn-lado-n', c.nome_completo || '');
+  tpnTexto('tpn-lado-k', c.chave_pix || '');
+  var lc = document.getElementById('tpn-lado-cli');
+  if (lc) lc.hidden = false;
 }
 
 // ─── frentista: só os do posto escolhido ─────────────────────────────────
