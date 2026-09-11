@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+
+{% block title %}Lucro Postos Migrados{% endblock %}
+
+{#- O mesmo relatorio de sempre, apurado pelas telas novas. Cada numero tem uma
+    fonte so — leitura de tanque, cupom fiscal, nota do DFe, descarga — e a
+    entrada pode ser vista de dois jeitos:
+
+      NOTA      o que o fornecedor faturou (casa com o fiscal)
+      DESCARGA  o que desceu no tanque (casa com a regua)
+
+    A diferenca entre as duas nao e erro: e produto faturado que ainda nao
+    desceu. Misturar as duas e o que fazia a variacao do relatorio antigo
+    mentir. -#}
+
+{% block styles %}
+<style>
+body > .container-fluid:has(#lpm){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#lpm){ padding:.7rem 1rem 0; }
+}
+</style>
+
+{% with esc = '#lpm' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
+<style>
+  #lpm{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#4b5563; --ink:#151d27; --borda:#d9e0e8;
+        --mono:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace; }
+  #lpm{ color:var(--ink); max-width:100%; }
+
+  #lpm .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .7rem;
+    margin-bottom:.7rem; }
+  #lpm .topo__t{ font-weight:800; font-size:1.02rem; }
+  #lpm .topo__s{ font-size:.76rem; opacity:.96; margin-top:.1rem; }
+
+  #lpm .filtro{ background:#fff; border:1px solid var(--borda);
+    border-radius:13px; padding:.7rem .75rem; margin-bottom:.7rem; }
+  #lpm .filtro__g{ display:grid; gap:.5rem; grid-template-columns:1fr 1fr; }
+  @media (min-width:768px){
+    #lpm .filtro__g{ grid-template-columns:repeat(4,1fr); } }
+  #lpm .campo{ display:flex; flex-direction:column; gap:.2rem; min-width:0; }
+  #lpm .campo span{ font-size:.68rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.04em; }
+  #lpm .campo input, #lpm .campo select{ border:1px solid var(--borda);
+    border-radius:9px; padding:.45rem .5rem; font-size:.85rem;
+    font-family:inherit; background:#fff; color:var(--ink); min-width:0; }
+  #lpm .prod{ display:flex; gap:.35rem; flex-wrap:wrap; margin-top:.55rem; }
+  #lpm .prod label{ border:1px solid var(--borda); border-radius:99px;
+    padding:.3rem .7rem; font-size:.8rem; font-weight:800; cursor:pointer;
+    background:#fff; color:#3a4655; display:inline-flex; gap:.35rem;
+    align-items:center; }
+  #lpm .prod label.on{ background:var(--blue); border-color:var(--blue);
+    color:#fff; }
+  #lpm .prod input{ position:absolute; opacity:0; width:0; height:0; }
+  #lpm .filtro__r{ display:flex; gap:.4rem; margin-top:.6rem; flex-wrap:wrap;
+    align-items:center; }
+  #lpm .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:9px; padding:.45rem .8rem; font-size:.83rem; font-weight:700;
+    font-family:inherit; cursor:pointer; text-decoration:none;
+    display:inline-flex; gap:.3rem; align-items:center; }
+  #lpm .bt--sim{ background:var(--blue); border-color:var(--blue); color:#fff; }
+
+  /* as duas bases: e a escolha que mais muda o relatorio */
+  #lpm .bases{ display:flex; gap:.4rem; margin-bottom:.7rem; }
+  #lpm .bases a{ flex:1 1 0; text-align:center; border:1px solid var(--borda);
+    background:#fff; border-radius:12px; padding:.55rem .6rem;
+    text-decoration:none; color:#3a4655; }
+  #lpm .bases a.on{ background:var(--blue); border-color:var(--blue);
+    color:#fff; }
+  #lpm .bases b{ display:block; font-size:.9rem; font-weight:800; }
+  #lpm .bases span{ display:block; font-size:.72rem; opacity:.9; }
+
+  #lpm .aviso{ display:flex; gap:.5rem; align-items:flex-start;
+    background:#eaf1f9; color:var(--blue-deep); border-radius:11px;
+    padding:.55rem .7rem; font-size:.8rem; font-weight:600;
+    margin-bottom:.7rem; }
+  #lpm .aviso--erro{ background:#fbe9e9; color:var(--danger); }
+
+  #lpm .prodbox{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; margin-bottom:.7rem; overflow:hidden;
+    box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #lpm .ph{ display:flex; gap:.6rem; align-items:center; padding:.6rem .8rem;
+    cursor:pointer; flex-wrap:wrap; }
+  #lpm .ph:hover{ background:#fafbfd; }
+  #lpm .ph__n{ font-weight:800; font-size:.95rem; }
+  #lpm .ph__d{ font-size:.72rem; color:var(--muted); }
+  #lpm .ph__v{ margin-left:auto; text-align:right; }
+  #lpm .ph__l{ font-size:1.05rem; font-weight:800; color:#146c43;
+    font-variant-numeric:tabular-nums; }
+  #lpm .ph__l.ruim{ color:var(--danger); }
+  #lpm .ph__r{ font-size:.66rem; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.05em; font-weight:800; }
+
+  #lpm .resumo{ display:grid; gap:.5rem; padding:0 .8rem .7rem;
+    grid-template-columns:repeat(2,1fr); }
+  @media (min-width:768px){
+    #lpm .resumo{ grid-template-columns:repeat(4,1fr); } }
+  #lpm .r{ background:#f7f9fc; border:1px solid #eef1f5; border-radius:11px;
+    padding:.5rem .6rem; }
+  #lpm .r__r{ font-size:.62rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.05em; }
+  #lpm .r__v{ font-size:.95rem; font-weight:800;
+    font-variant-numeric:tabular-nums; }
+  #lpm .r__c{ font-size:.66rem; color:var(--muted); }
+
+  /* o dia a dia: tabela mesmo — sao doze colunas de numero que se compara na
+     vertical, e cartao nao serve para isso. Rola de lado no proprio quadro. */
+  #lpm .tab{ overflow-x:auto; border-top:1px solid #eef1f5; }
+  #lpm table{ width:100%; border-collapse:collapse; font-size:.78rem;
+    font-variant-numeric:tabular-nums; }
+  #lpm th{ background:#f0f4f8; color:#3d4854; font-size:.64rem;
+    text-transform:uppercase; letter-spacing:.04em; font-weight:800;
+    padding:.4rem .5rem; white-space:nowrap; text-align:right;
+    border-bottom:1px solid var(--borda); position:sticky; top:0; }
+  #lpm th:first-child{ text-align:left; }
+  #lpm td{ padding:.35rem .5rem; text-align:right; white-space:nowrap;
+    border-bottom:1px solid #f2f5f8; }
+  #lpm td:first-child{ text-align:left; font-weight:700; }
+  #lpm tr:hover td{ background:#fafbfd; }
+  #lpm .neg{ color:var(--danger); font-weight:700; }
+  #lpm .pos{ color:#146c43; font-weight:700; }
+  #lpm .est{ color:var(--muted); }
+  #lpm tfoot td{ background:#f0f4f8; font-weight:800;
+    border-top:2px solid var(--borda); }
+  #lpm .semmedir{ color:var(--ambar); font-weight:800; }
+
+  #lpm .comp{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; padding:.7rem .8rem; margin-bottom:.7rem;
+    box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #lpm .comp__t{ font-size:.7rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--blue-deep); margin-bottom:.45rem; }
+  #lpm .cl{ display:flex; gap:.6rem; font-size:.82rem; padding:.3rem 0;
+    border-bottom:1px solid #f2f5f8; align-items:baseline; }
+  #lpm .cl:last-child{ border-bottom:0; }
+  #lpm .cl__n{ flex:1; font-weight:700; }
+  #lpm .cl b{ font-variant-numeric:tabular-nums; }
+  #lpm .nada{ padding:1.6rem .8rem; text-align:center; color:var(--muted);
+    font-size:.88rem; background:#fff; border:1px solid var(--borda);
+    border-radius:14px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% macro litros(v) %}{{ '{:,.0f}'.format(v or 0).replace(',', '.') }}{% endmacro %}
+{% macro reais(v) %}{{ (v or 0) | formatar_moeda }}{% endmacro %}
+{% macro preco(v) %}{{ 'R$ %.4f'|format(v or 0) | replace('.', ',') }}{% endmacro %}
+<div id="lpm">
+
+  <div class="topo">
+    <div class="topo__t"><i class="bi bi-graph-up-arrow"></i> Lucro Postos Migrados</div>
+    <div class="topo__s">Apurado pelas telas novas: leitura de tanque, cupom
+      fiscal, nota do DFe e descarga</div>
+  </div>
+
+  {% if erro %}
+  <div class="aviso aviso--erro"><i class="bi bi-exclamation-triangle-fill"></i>
+    <span>Não deu para apurar: {{ erro }}</span></div>
+  {% endif %}
+
+  <form class="filtro" method="GET">
+    <input type="hidden" name="base" value="{{ base }}">
+    <div class="filtro__g">
+      <label class="campo"><span>De</span>
+        <input type="date" name="data_inicio" value="{{ data_inicio }}"></label>
+      <label class="campo"><span>Até</span>
+        <input type="date" name="data_fim" value="{{ data_fim }}"></label>
+      <label class="campo" style="grid-column:span 2"><span>Posto</span>
+        <select name="cliente_id">
+          {% for c in clientes_disponiveis %}
+          <option value="{{ c.id }}" {{ 'selected' if cliente_id == c.id }}>
+            {{ c.razao_social }}</option>
+          {% endfor %}
+        </select></label>
+    </div>
+    <div class="prod">
+      {% for p in produtos_disponiveis %}
+      <label class="{{ 'on' if p.id in produto_ids }}">
+        <input type="checkbox" name="produto_ids[]" value="{{ p.id }}"
+               {{ 'checked' if p.id in produto_ids }}
+               onchange="this.parentNode.classList.toggle('on', this.checked)">
+        {{ p.nome }}</label>
+      {% endfor %}
+    </div>
+    <div class="filtro__r">
+      <button type="submit" class="bt bt--sim"><i class="bi bi-search"></i> Apurar</button>
+      <a class="bt" href="{{ url_for('relatorios.lucro_postos') }}">
+        <i class="bi bi-clock-history"></i> Ver o relatório antigo</a>
+    </div>
+  </form>
+
+  {# A escolha que mais muda o relatorio fica em cima, sempre visivel. #}
+  <div class="bases">
+    <a class="{{ 'on' if base == 'nota' }}"
+       href="{{ url_for('relatorios.lucro_postos_migrados', data_inicio=data_inicio,
+                data_fim=data_fim, cliente_id=cliente_id, base='nota', **{'produto_ids[]': produto_ids}) }}">
+      <b>Pela nota</b><span>o que o fornecedor faturou</span></a>
+    <a class="{{ 'on' if base == 'descarga' }}"
+       href="{{ url_for('relatorios.lucro_postos_migrados', data_inicio=data_inicio,
+                data_fim=data_fim, cliente_id=cliente_id, base='descarga', **{'produto_ids[]': produto_ids}) }}">
+      <b>Pela descarga</b><span>o que desceu no tanque</span></a>
+  </div>
+
+  {% if not filtrou %}
+  <div class="nada">Escolha o posto e ao menos um produto para apurar.</div>
+  {% else %}
+
+  <div class="g-nums">
+    <div class="n n--azul"><div class="r">Entrada ({{ base }})</div>
+      <div class="v">{{ litros(totais.entrada_l) }} L</div></div>
+    <div class="n n--azul"><div class="r">Vendido</div>
+      <div class="v">{{ litros(totais.venda_l) }} L</div></div>
+    <div class="n {{ 'n--verde' if totais.lucro_rs >= 0 else 'n--verm' }}">
+      <div class="r">Lucro</div>
+      <div class="v">{{ reais(totais.lucro_rs) }}</div></div>
+    <div class="n {{ 'n--ambar' if (totais.variacao_l|abs) > 500 else 'n--cinza' }}">
+      <div class="r">Variação</div>
+      <div class="v">{{ litros(totais.variacao_l) }} L</div></div>
+  </div>
+
+  {% if comparativo %}
+  <div class="comp">
+    <div class="comp__t"><i class="bi bi-arrow-left-right"></i>
+      Nota e descarga, lado a lado</div>
+    {% for pid, c in comparativo.items() %}
+    <div class="cl">
+      <span class="cl__n">{{ produtos_nome.get(pid, pid) }}</span>
+      <span>nota <b>{{ litros(c.nota_l) }} L</b></span>
+      <span>descarga <b>{{ litros(c.descarga_l) }} L</b></span>
+      <span class="{{ 'neg' if c.diferenca_l > 0 else 'pos' if c.diferenca_l < 0 else '' }}">
+        diferença <b>{{ litros(c.diferenca_l) }} L</b></span>
+    </div>
+    {% endfor %}
+    <div class="r__c" style="margin-top:.4rem">A diferença não é erro: é produto
+      faturado que ainda não desceu (ou que desceu de uma nota de antes).</div>
+  </div>
+  {% endif %}
+
+  {% for pid, dados in apurado.items() %}
+  {% set t = dados.total %}
+  <div class="prodbox">
+    <div class="ph" onclick="lpmAbre(this)">
+      <div>
+        <div class="ph__n">{{ produtos_nome.get(pid, 'Produto %s'|format(pid)) }}</div>
+        <div class="ph__d">{{ litros(t.entrada_l) }} L entraram ·
+          {{ litros(t.venda_l) }} L vendidos ·
+          {{ t.dias_medidos }} de {{ t.dias }} dias com tanque medido</div>
+      </div>
+      <div class="ph__v">
+        <div class="ph__l {{ 'ruim' if t.lucro_rs < 0 }}">{{ reais(t.lucro_rs) }}</div>
+        <div class="ph__r">lucro · {{ preco(t.margem_l) }}/L</div>
+      </div>
+      <i class="bi bi-chevron-down"></i>
+    </div>
+
+    <div class="resumo">
+      <div class="r"><div class="r__r">Estoque inicial</div>
+        <div class="r__v">{{ litros(t.ei) }} L</div>
+        <div class="r__c">{{ 'medido no tanque' if t.ei_medido else 'sem medição no 1º dia' }}</div></div>
+      <div class="r"><div class="r__r">Entrada ({{ base }})</div>
+        <div class="r__v">{{ litros(t.entrada_l) }} L</div>
+        <div class="r__c">{{ reais(t.entrada_rs) }} · {{ preco(t.entrada_unit) }}/L</div></div>
+      <div class="r"><div class="r__r">Venda</div>
+        <div class="r__v">{{ reais(t.venda_rs) }}</div>
+        <div class="r__c">{{ litros(t.venda_l) }} L · {{ preco(t.venda_unit) }}/L</div></div>
+      <div class="r"><div class="r__r">Estoque final</div>
+        <div class="r__v">{{ litros(t.ef_real if t.ef_real is not none else t.ef_calc) }} L</div>
+        <div class="r__c">{{ 'medido' if t.ef_real is not none else 'calculado — sem medição' }}
+          · variação {{ litros(t.variacao_l) }} L</div></div>
+    </div>
+
+    <div class="tab" hidden>
+      <table>
+        <thead>
+          <tr>
+            <th>Dia</th>
+            <th>Est. inicial</th>
+            <th>Entrada (L)</th>
+            <th>Entrada R$</th>
+            <th>Preço compra</th>
+            <th>Custo corrido</th>
+            <th>Vendas (L)</th>
+            <th>Preço venda</th>
+            <th>Receita</th>
+            <th>Margem/L</th>
+            <th>EF calc.</th>
+            <th>EF medido</th>
+            <th>Variação</th>
+            <th>Lucro do dia</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in dados.dias %}
+          <tr>
+            <td>{{ d.data.strftime('%d/%m') }}
+              {%- if not d.ei_medido %} <span class="semmedir" title="sem leitura de tanque neste dia">•</span>{% endif -%}</td>
+            <td class="{{ '' if d.ei_medido else 'est' }}">{{ litros(d.ei) }}</td>
+            <td>{{ litros(d.entrada_l) if d.entrada_l else '—' }}</td>
+            <td>{{ reais(d.entrada_rs) if d.entrada_l else '—' }}</td>
+            <td>{{ preco(d.entrada_unit) if d.entrada_l else '—' }}</td>
+            <td>{{ preco(d.custo_unit) }}</td>
+            <td>{{ litros(d.venda_l) if d.venda_l else '—' }}</td>
+            <td>{{ preco(d.venda_unit) if d.venda_l else '—' }}</td>
+            <td>{{ reais(d.venda_rs) if d.venda_l else '—' }}</td>
+            <td>{{ preco(d.margem_l) if d.venda_l else '—' }}</td>
+            <td>{{ litros(d.ef_calc) }}</td>
+            <td>{{ litros(d.ef_real) if d.ef_real is not none else '—' }}</td>
+            <td class="{{ 'neg' if d.variacao is not none and d.variacao < -1 else 'pos' if d.variacao is not none and d.variacao > 1 else '' }}">
+              {{ litros(d.variacao) if d.variacao is not none else '—' }}</td>
+            <td class="{{ 'neg' if d.lucro_rs < 0 }}">{{ reais(d.lucro_rs) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>Período</td>
+            <td>{{ litros(t.ei) }}</td>
+            <td>{{ litros(t.entrada_l) }}</td>
+            <td>{{ reais(t.entrada_rs) }}</td>
+            <td>{{ preco(t.entrada_unit) }}</td>
+            <td>{{ preco(t.custo_unit) }}</td>
+            <td>{{ litros(t.venda_l) }}</td>
+            <td>{{ preco(t.venda_unit) }}</td>
+            <td>{{ reais(t.venda_rs) }}</td>
+            <td>{{ preco(t.margem_l) }}</td>
+            <td>{{ litros(t.ef_calc) }}</td>
+            <td>{{ litros(t.ef_real) if t.ef_real is not none else '—' }}</td>
+            <td class="{{ 'neg' if t.variacao_l < -1 else 'pos' if t.variacao_l > 1 else '' }}">
+              {{ litros(t.variacao_l) }}</td>
+            <td>{{ reais(t.lucro_rs) }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// O dia a dia abre por produto: são catorze colunas, e abrir tudo de uma vez
+// esconderia o resumo, que é o que se olha primeiro.
+function lpmAbre(cab){
+  var box = cab.closest('.prodbox');
+  var tab = box ? box.querySelector('.tab') : null;
+  if (!tab) return;
+  tab.hidden = !tab.hidden;
+  var ico = cab.querySelector('.bi-chevron-down, .bi-chevron-up');
+  if (ico) ico.className = tab.hidden ? 'bi bi-chevron-down' : 'bi bi-chevron-up';
+}
+</script>
+{% endblock %}

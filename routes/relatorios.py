@@ -1545,3 +1545,119 @@ def _exportar_csv(resultados_por_cliente, consolidado, label):
         mimetype='text/csv; charset=utf-8',
         headers={'Content-Disposition': f'attachment; filename={filename}'},
     )
+
+
+# ===========================================================================
+# Lucro Postos Migrados — a apuração pelas telas novas
+# ===========================================================================
+
+@bp.route('/lucro_postos_migrados', methods=['GET'])
+@admin_required
+def lucro_postos_migrados():
+    """O lucro do posto apurado pelas telas novas, em duas bases.
+
+    O relatório antigo nasceu quando a descarga era lançada de outro jeito, e a
+    variação dele saía muito errada. Aqui cada número tem uma fonte só —
+    leitura de tanque, cupom fiscal, nota do DFe, descarga — e a entrada pode
+    ser vista de dois jeitos, que respondem perguntas diferentes:
+
+      NOTA      o que o fornecedor faturou. Casa com o fiscal e com o que se paga.
+      DESCARGA  o que desceu no tanque. Casa com a régua.
+
+    Em 09/09/2026 o S-500 teve 12.000 L de nota e 5.000 L de descarga: o resto
+    desceu depois. Misturar as duas coisas é o que fazia a variação mentir.
+    """
+    from utils import lucro_migrado
+
+    hoje = date.today()
+    ini_padrao = date(hoje.year, hoje.month, 1)
+    fim_padrao = date(hoje.year, hoje.month,
+                      calendar.monthrange(hoje.year, hoje.month)[1])
+
+    def _data(nome, padrao):
+        try:
+            return datetime.strptime(request.args.get(nome, ''), '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            return padrao
+
+    data_inicio = _data('data_inicio', ini_padrao)
+    data_fim = _data('data_fim', fim_padrao)
+    if data_fim < data_inicio:
+        data_fim = data_inicio
+
+    base = (request.args.get('base') or 'nota').lower()
+    if base not in lucro_migrado.BASES:
+        base = 'nota'
+
+    try:
+        cliente_id = int(request.args.get('cliente_id') or 0)
+    except (TypeError, ValueError):
+        cliente_id = 0
+    produto_ids = [int(p) for p in request.args.getlist('produto_ids[]') if p.isdigit()]
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    apurado, comparativo, produtos_nome = {}, {}, {}
+    try:
+        cur.execute("""
+            SELECT DISTINCT c.id, c.razao_social
+              FROM clientes c
+              JOIN cliente_produtos cp ON cp.cliente_id = c.id AND cp.ativo = 1
+             ORDER BY c.razao_social
+        """)
+        clientes_disponiveis = cur.fetchall()
+
+        # Só os produtos que a apuração sabe medir: combustível com tanque
+        # medido. Óleo e conveniência não têm leitura de tanque, e entrariam
+        # com estoque zero — um lucro que não quer dizer nada.
+        cur.execute("""
+            SELECT DISTINCT p.id, p.nome
+              FROM produto p
+              JOIN leitura_tanque_diaria l ON l.produto_id = p.id
+             ORDER BY p.nome
+        """)
+        produtos_disponiveis = cur.fetchall()
+        produtos_nome = {p['id']: p['nome'] for p in produtos_disponiveis}
+
+        if not cliente_id and len(clientes_disponiveis) == 1:
+            cliente_id = clientes_disponiveis[0]['id']
+        if not produto_ids:
+            produto_ids = [p['id'] for p in produtos_disponiveis]
+
+        filtrou = bool(cliente_id and produto_ids)
+        if filtrou:
+            apurado = lucro_migrado.apurar(cur, cliente_id, produto_ids,
+                                           data_inicio, data_fim, base)
+            comparativo = lucro_migrado.comparar(cur, cliente_id, produto_ids,
+                                                 data_inicio, data_fim)
+    except Exception as e:
+        logging.getLogger(__name__).exception('[lucro_migrado] falha ao apurar')
+        return render_template('relatorios/lucro_postos_migrados.html',
+                               erro=str(e), data_inicio=data_inicio,
+                               data_fim=data_fim, base=base,
+                               clientes_disponiveis=[], produtos_disponiveis=[],
+                               cliente_id=cliente_id, produto_ids=[],
+                               apurado={}, comparativo={}, produtos_nome={},
+                               totais={}, filtrou=False)
+    finally:
+        cur.close()
+        conn.close()
+
+    totais = {'entrada_l': 0.0, 'entrada_rs': 0.0, 'venda_l': 0.0,
+              'venda_rs': 0.0, 'custo_rs': 0.0, 'lucro_rs': 0.0,
+              'variacao_l': 0.0}
+    for pid in apurado:
+        for k in totais:
+            totais[k] += apurado[pid]['total'][k]
+    totais['margem_l'] = (totais['lucro_rs'] / totais['venda_l']
+                          if totais['venda_l'] else 0.0)
+
+    return render_template(
+        'relatorios/lucro_postos_migrados.html',
+        data_inicio=data_inicio, data_fim=data_fim, base=base,
+        clientes_disponiveis=clientes_disponiveis,
+        produtos_disponiveis=produtos_disponiveis,
+        cliente_id=cliente_id, produto_ids=produto_ids,
+        apurado=apurado, comparativo=comparativo, produtos_nome=produtos_nome,
+        totais=totais, filtrou=filtrou, erro=None,
+    )

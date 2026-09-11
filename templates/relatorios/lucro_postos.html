@@ -139,6 +139,17 @@ td.sec-result   { background:#f0fdf4; }
             <a href="{{ url_for('relatorios.lucro_postos') }}" class="btn btn-outline-secondary btn-sm px-3">
               <i class="bi bi-x-circle me-1"></i> Limpar
             </a>
+            {# O mesmo periodo e os mesmos filtros, apurados pelas telas novas:
+               leitura de tanque, cupom fiscal, nota do DFe e descarga. E onde a
+               variacao para de mentir, porque a entrada pela NOTA e a entrada
+               pela DESCARGA passam a ser duas colunas, e nao uma so misturada. #}
+            <a class="btn btn-outline-primary btn-sm px-3"
+               href="{{ url_for('relatorios.lucro_postos_migrados',
+                        data_inicio=data_inicio, data_fim=data_fim,
+                        cliente_id=(cliente_ids[0] if cliente_ids else None),
+                        **{'produto_ids[]': produto_ids}) }}">
+              <i class="bi bi-arrow-up-right-circle me-1"></i> Lucro Postos Migrados
+            </a>
             {% if filtrou %}
             <button type="submit" name="exportar" value="csv"
                     class="btn btn-outline-success btn-sm px-3 ms-auto">

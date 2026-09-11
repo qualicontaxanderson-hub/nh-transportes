@@ -1,0 +1,344 @@
+# -*- coding: utf-8 -*-
+"""Prova do motor do Lucro Postos Migrados, contra os números reais.
+
+Aqui não se prova tela: prova-se a CONTA. Cada número tem de sair da sua fonte
+e a soma tem de fechar com o que está no banco — e as duas bases (nota e
+descarga) têm de discordar exatamente onde o produto ainda não desceu.
+
+Não escreve nada: só lê.
+
+    python prova_lucro_migrado.py
+"""
+import io
+import os
+import re
+import secrets
+import sys
+from datetime import date, timedelta
+
+if not os.environ.get('DB_PASSWORD') and os.path.exists('bakup_railway.bat'):
+    _m = re.search(r'set DBPASS=(.+)',
+                   io.open('bakup_railway.bat', encoding='latin-1').read(), re.I)
+    if _m:
+        os.environ['DB_PASSWORD'] = _m.group(1).strip()
+os.environ.setdefault('SECRET_KEY', secrets.token_hex(32))
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from utils.db import get_db_connection                 # noqa: E402
+from utils import lucro_migrado                        # noqa: E402
+
+CLIENTE = 1                     # Posto Novo Horizonte Goiatuba
+INI = date(2026, 9, 1)
+FIM = date(2026, 9, 10)
+PRODUTOS = [1, 2, 4, 5]         # etanol, gasolina, S-500, S-10
+
+falhas = []
+
+
+def _erro(fn):
+    """True quando a chamada levanta erro — o que aqui e o comportamento certo."""
+    try:
+        fn()
+        return False
+    except Exception:
+        return True
+
+
+def prova(titulo, ok, detalhe=''):
+    print('%-6s %s' % ('OK' if ok else 'FALHA', titulo))
+    if not ok:
+        if detalhe:
+            print('        %s' % detalhe)
+        falhas.append(titulo)
+
+
+conn = get_db_connection()
+cur = conn.cursor(dictionary=True)
+
+
+def um(sql, args=()):
+    cur.execute(sql, args)
+    return cur.fetchone()
+
+
+try:
+    nota = lucro_migrado.apurar(cur, CLIENTE, PRODUTOS, INI, FIM, 'nota')
+    desc = lucro_migrado.apurar(cur, CLIENTE, PRODUTOS, INI, FIM, 'descarga')
+    prova('a apuração responde pelos quatro produtos',
+          set(nota) == set(PRODUTOS) and set(desc) == set(PRODUTOS),
+          'nota: %r, descarga: %r' % (sorted(nota), sorted(desc)))
+    prova('e por todos os dias do período',
+          all(len(nota[p]['dias']) == (FIM - INI).days + 1 for p in nota),
+          '%s dias' % {p: len(nota[p]['dias']) for p in nota})
+
+    # ── cada número vem da sua fonte ──────────────────────────────────────
+    for pid in PRODUTOS:
+        banco = um("""SELECT COALESCE(SUM(i.quantidade),0) l,
+                             COALESCE(SUM(i.valor_total),0) v
+                        FROM dfe_itens i
+                        JOIN dfe_documentos doc ON doc.id = i.documento_id
+                       WHERE doc.cliente_id = %s
+                         AND DATE(doc.dh_emissao) BETWEEN %s AND %s
+                         AND i.classificado_produto_id = %s""",
+                   (CLIENTE, INI, FIM, pid))
+        tot = nota[pid]['total']
+        prova('produto %s: a entrada pela nota é a soma das notas' % pid,
+              abs(tot['entrada_l'] - float(banco['l'])) < 0.01
+              and abs(tot['entrada_rs'] - float(banco['v'])) < 0.01,
+              'motor %.3f L / R$ %.2f, banco %.3f L / R$ %.2f'
+              % (tot['entrada_l'], tot['entrada_rs'],
+                 float(banco['l']), float(banco['v'])))
+
+        bd = um("""SELECT COALESCE(SUM(COALESCE(NULLIF(d.volume_descarregado,0),
+                                                d.volume_descarga)),0) l
+                     FROM descargas d JOIN fretes f ON f.id = d.frete_id
+                    WHERE f.clientes_id = %s AND d.data_descarga BETWEEN %s AND %s
+                      AND f.produto_id = %s""", (CLIENTE, INI, FIM, pid))
+        prova('produto %s: a entrada pela descarga é o que desceu' % pid,
+              abs(desc[pid]['total']['entrada_l'] - float(bd['l'])) < 0.01,
+              'motor %.3f, banco %.3f'
+              % (desc[pid]['total']['entrada_l'], float(bd['l'])))
+
+        # Cupom cancelado NAO e venda: o produto voltou para o tanque. O
+        # motor exclui, e por isso a conferencia exclui tambem — comparar com
+        # a soma crua acusaria o motor de perder litros que ele esta certo em
+        # nao contar.
+        bv = um("""SELECT COALESCE(SUM(i.quantidade),0) l,
+                          COALESCE(SUM(i.valor_total),0) v
+                     FROM vendas_xml vx JOIN vendas_xml_itens i ON i.venda_id = vx.id
+                    WHERE DATE(vx.dh_emissao) BETWEEN %s AND %s
+                      AND i.produto_id = %s
+                      AND UPPER(COALESCE(vx.situacao,'')) NOT LIKE '%%CANCEL%%'""",
+                (INI, FIM, pid))
+        prova('produto %s: a venda é a soma dos cupons' % pid,
+              abs(tot['venda_l'] - float(bv['l'])) < 0.01
+              and abs(tot['venda_rs'] - float(bv['v'])) < 0.01,
+              'motor %.3f L / R$ %.2f, banco %.3f L / R$ %.2f'
+              % (tot['venda_l'], tot['venda_rs'],
+                 float(bv['l']), float(bv['v'])))
+
+    # ── cupom cancelado não pode virar venda ──────────────────────────────
+    canc = um("""SELECT COALESCE(SUM(i.quantidade),0) l
+                   FROM vendas_xml vx JOIN vendas_xml_itens i ON i.venda_id = vx.id
+                  WHERE DATE(vx.dh_emissao) BETWEEN %s AND %s
+                    AND i.produto_id IS NOT NULL
+                    AND UPPER(COALESCE(vx.situacao,'')) LIKE '%%CANCEL%%'""",
+              (INI, FIM))
+    cru = um("""SELECT COALESCE(SUM(i.quantidade),0) l
+                  FROM vendas_xml vx JOIN vendas_xml_itens i ON i.venda_id = vx.id
+                 WHERE DATE(vx.dh_emissao) BETWEEN %s AND %s
+                   AND i.produto_id IN (1,2,4,5)""", (INI, FIM))
+    somado = sum(nota[p]['total']['venda_l'] for p in PRODUTOS)
+    prova('o cancelado fica de fora da venda (%.0f L no período)' % float(canc['l']),
+          float(canc['l']) > 0 and abs((float(cru['l']) - somado)
+                                       - float(canc['l'])) < 1.0,
+          'cru %.1f - motor %.1f = %.1f, cancelado %.1f'
+          % (float(cru['l']), somado, float(cru['l']) - somado, float(canc['l'])))
+
+    # ── a conta do dia fecha ──────────────────────────────────────────────
+    erros = []
+    for pid in PRODUTOS:
+        for d in nota[pid]['dias']:
+            esperado = d['ei'] + d['entrada_l'] - d['venda_l']
+            if abs(d['ef_calc'] - esperado) > 0.01:
+                erros.append((pid, d['data']))
+    prova('estoque final calculado = inicial + entrada - venda, todo dia',
+          not erros, 'falhou em: %r' % erros[:5])
+
+    erros = []
+    for pid in PRODUTOS:
+        for d in nota[pid]['dias']:
+            if d['ef_real'] is None:
+                continue
+            if abs(d['variacao'] - (d['ef_real'] - d['ef_calc'])) > 0.01:
+                erros.append((pid, d['data']))
+    prova('a variação é a medição menos o calculado', not erros,
+          'falhou em: %r' % erros[:5])
+
+    # o estoque inicial de cada dia tem de ser a medição daquele dia
+    erros = []
+    for pid in PRODUTOS:
+        for d in nota[pid]['dias']:
+            m = um("""SELECT SUM(volume_atual) v FROM leitura_tanque_diaria
+                       WHERE cliente_id=%s AND DATE(data_leitura)=%s
+                         AND produto_id=%s""", (CLIENTE, d['data'], pid))
+            medido = float(m['v']) if m and m['v'] is not None else None
+            if medido is None:
+                if d['ei_medido']:
+                    erros.append((pid, d['data'], 'disse medido sem medição'))
+            elif abs(d['ei'] - medido) > 0.01:
+                erros.append((pid, d['data'], 'ei %.1f != medição %.1f'
+                              % (d['ei'], medido)))
+    prova('o estoque inicial do dia é a medição do tanque daquele dia',
+          not erros, 'falhou: %r' % erros[:4])
+
+    # ── lucro e margem ────────────────────────────────────────────────────
+    erros = []
+    for pid in PRODUTOS:
+        for d in nota[pid]['dias']:
+            if abs(d['lucro_rs'] - (d['venda_rs'] - d['custo_rs'])) > 0.01:
+                erros.append((pid, d['data']))
+    prova('lucro do dia = receita - custo', not erros, '%r' % erros[:5])
+
+    erros = [pid for pid in PRODUTOS
+             if abs(nota[pid]['total']['lucro_rs']
+                    - sum(d['lucro_rs'] for d in nota[pid]['dias'])) > 0.05]
+    prova('o total do período é a soma dos dias', not erros, '%r' % erros)
+
+    # custo corrido: o custo unitario tem de ficar entre o menor e o maior
+    # preco de compra do periodo — se sair disso, a media movel furou
+    for pid in PRODUTOS:
+        precos = [d['entrada_unit'] for d in nota[pid]['dias'] if d['entrada_l']]
+        if not precos:
+            continue
+        custos = [d['custo_unit'] for d in nota[pid]['dias'] if d['venda_l']]
+        if not custos:
+            continue
+        folga = 0.25          # o estoque de abertura entra por preço médio
+        prova('produto %s: o custo corrido anda junto do preço de compra' % pid,
+              min(custos) >= min(precos) * (1 - folga)
+              and max(custos) <= max(precos) * (1 + folga),
+              'compra entre %.4f e %.4f, custo entre %.4f e %.4f'
+              % (min(precos), max(precos), min(custos), max(custos)))
+
+    # ── as duas bases: onde elas discordam, e por quê ─────────────────────
+    comp = lucro_migrado.comparar(cur, CLIENTE, PRODUTOS, INI, FIM)
+    prova('a comparação responde pelos quatro produtos',
+          set(comp) == set(PRODUTOS))
+    achou = [pid for pid in comp if abs(comp[pid]['diferenca_l']) > 1]
+    prova('nota e descarga discordam em pelo menos um produto (é o esperado)',
+          bool(achou),
+          'as duas bases deram igual — ou não há descarga no período')
+    for pid in achou[:2]:
+        c = comp[pid]
+        print('        produto %s: nota %.0f L, descarga %.0f L, diferença %.0f L'
+              % (pid, c['nota_l'], c['descarga_l'], c['diferenca_l']))
+
+    # a venda é a mesma nas duas bases: o que muda é só a entrada
+    iguais = all(abs(nota[p]['total']['venda_l'] - desc[p]['total']['venda_l']) < 0.01
+                 for p in PRODUTOS)
+    prova('a venda não muda de uma base para a outra', iguais)
+
+    # ── o caso que motivou o relatório ────────────────────────────────────
+    # S-500 em 09/09: a nota trouxe 12.000 L e a descarga do dia foram 5.000 L
+    dia = next((d for d in nota[4]['dias'] if d['data'] == date(2026, 9, 9)), None)
+    dia_d = next((d for d in desc[4]['dias'] if d['data'] == date(2026, 9, 9)), None)
+    if dia and dia_d:
+        prova('o S-500 de 09/09 mostra a diferença entre nota e descarga',
+              dia['entrada_l'] > dia_d['entrada_l'] + 1000,
+              'nota %.0f L, descarga %.0f L' % (dia['entrada_l'], dia_d['entrada_l']))
+        print('        09/09 S-500: EI %.0f · nota %.0f · descarga %.0f · venda %.0f'
+              % (dia['ei'], dia['entrada_l'], dia_d['entrada_l'], dia['venda_l']))
+        print('        variação pela nota %.0f L · pela descarga %.0f L'
+              % (dia['variacao'] or 0, dia_d['variacao'] or 0))
+
+    # ── período sem dado não pode estourar ────────────────────────────────
+    vazio = lucro_migrado.apurar(cur, CLIENTE, PRODUTOS,
+                                 date(2019, 1, 1), date(2019, 1, 3), 'nota')
+    prova('período sem movimento nenhum responde zerado, sem quebrar',
+          all(v['total']['venda_l'] == 0 and v['total']['entrada_l'] == 0
+              for v in vazio.values()))
+    prova('base inválida é recusada',
+          _erro(lambda: lucro_migrado.apurar(cur, CLIENTE, PRODUTOS, INI, FIM, 'xpto')))
+finally:
+    cur.close()
+    conn.close()
+
+# ── a tela ────────────────────────────────────────────────────────────────
+# O motor acima está provado contra o banco. Aqui prova-se que a tela mostra
+# o que ele apurou, nas duas bases.
+os.environ.setdefault('WTF_CSRF_ENABLED', 'False')
+from app import app                                    # noqa: E402
+
+conn2 = get_db_connection()
+cur2 = conn2.cursor(dictionary=True)
+cur2.execute("""SELECT id FROM usuarios WHERE ativo = 1
+                 AND UPPER(nivel) = 'ADMIN' LIMIT 1""")
+adm = cur2.fetchone()
+
+if adm:
+    app.config['WTF_CSRF_ENABLED'] = False
+    cli = app.test_client()
+    with cli.session_transaction() as sess:
+        sess['_user_id'] = str(adm['id'])
+        sess['_fresh'] = True
+
+    url = ('/relatorios/lucro_postos_migrados?data_inicio=%s&data_fim=%s'
+           '&cliente_id=%s' % (INI, FIM, CLIENTE))
+    for _p in PRODUTOS:
+        url += '&produto_ids[]=%s' % _p
+
+    telas = {}
+    for base in ('nota', 'descarga'):
+        r = cli.get(url + '&base=' + base, follow_redirects=True)
+        h = r.get_data(as_text=True)
+        telas[base] = h
+        prova('a tela abre na base %s (200)' % base, r.status_code == 200,
+              'codigo %s' % r.status_code)
+        prova('e não caiu no aviso de erro (%s)' % base,
+              'Não deu para apurar' not in h and 'id="lpm"' in h)
+        prova('há um quadro por produto na base %s' % base,
+              h.count('class="prodbox"') == len(PRODUTOS),
+              '%s quadros para %s produtos'
+              % (h.count('class="prodbox"'), len(PRODUTOS)))
+
+    # os números da tela são os do motor — nas duas bases
+    for base in ('nota', 'descarga'):
+        ap = lucro_migrado.apurar(cur2, CLIENTE, PRODUTOS, INI, FIM, base)
+        faltou = []
+        for pid, dados in ap.items():
+            for campo in ('venda_l', 'entrada_l'):
+                v = '{:,.0f}'.format(dados['total'][campo]).replace(',', '.')
+                if v not in telas[base]:
+                    faltou.append((base, pid, campo, v))
+        prova('os litros da base %s aparecem na tela, produto a produto' % base,
+              not faltou, 'não achei: %r' % faltou[:4])
+
+    # a entrada MUDA de uma base para a outra — é para isso que elas existem
+    dif = [pid for pid, c in lucro_migrado.comparar(cur2, CLIENTE, PRODUTOS,
+                                                    INI, FIM).items()
+           if abs(c['diferenca_l']) > 1]
+    prova('a tela das duas bases não mostra o mesmo número',
+          bool(dif) and telas['nota'] != telas['descarga'],
+          'as duas telas saíram iguais')
+    prova('a tabela do dia a dia está lá, uma por produto',
+          telas['nota'].count('<tbody>') == len(PRODUTOS),
+          '%s tabelas' % telas['nota'].count('<tbody>'))
+    prova('a tela explica por que nota e descarga discordam',
+          'ainda não desceu' in telas['nota'])
+    prova('e dá o caminho de volta para o relatório antigo',
+          '/relatorios/lucro_postos"' in telas['nota']
+          or "/relatorios/lucro_postos'" in telas['nota']
+          or '/relatorios/lucro_postos<' in telas['nota']
+          or 'lucro_postos?' in telas['nota']
+          or '/relatorios/lucro_postos' in telas['nota'])
+    # Dia sem leitura de tanque tem de ficar marcado — mas só quando existe
+    # um. No período provado o ELS mandou os 11 dias completos, e exigir o
+    # marcador aqui reprovaria uma tela certa; então a prova procura um
+    # período que realmente tenha buraco.
+    cur2.execute("""SELECT MIN(DATE(data_leitura)) ini, MAX(DATE(data_leitura)) fim,
+                           COUNT(DISTINCT DATE(data_leitura)) dias
+                      FROM leitura_tanque_diaria WHERE cliente_id = %s""",
+                 (CLIENTE,))
+    faixa = cur2.fetchone()
+    total_dias = (faixa['fim'] - faixa['ini']).days + 1 if faixa['ini'] else 0
+    if total_dias and faixa['dias'] < total_dias:
+        u = ('/relatorios/lucro_postos_migrados?data_inicio=%s&data_fim=%s'
+             '&cliente_id=%s&base=nota' % (faixa['ini'], faixa['fim'], CLIENTE))
+        for _p in PRODUTOS:
+            u += '&produto_ids[]=%s' % _p
+        hb = cli.get(u, follow_redirects=True).get_data(as_text=True)
+        prova('o dia sem medição de tanque vem marcado na tabela',
+              'sem leitura de tanque neste dia' in hb,
+              'há %s dias sem leitura entre %s e %s, e nenhum foi marcado'
+              % (total_dias - faixa['dias'], faixa['ini'], faixa['fim']))
+    else:
+        print('OK     (no período medido não falta nenhum dia de leitura —'
+              ' nada a marcar)')
+
+cur2.close()
+conn2.close()
+
+print('\n%s' % ('TUDO OK' if not falhas else '%d FALHA(S): %s'
+                % (len(falhas), '; '.join(falhas))))
+sys.exit(1 if falhas else 0)
