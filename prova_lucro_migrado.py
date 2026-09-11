@@ -339,6 +339,22 @@ if adm:
 cur2.close()
 conn2.close()
 
+# ── o menu Relatorios tem de levar ate ele ────────────────────────────────
+# O botao dentro do relatorio antigo nao basta: quem abre o menu do topo
+# procura o relatorio pelo nome, e ate agora ele nao estava la.
+hm = cli.get('/relatorios/lucro_postos', follow_redirects=True).get_data(as_text=True)
+itens = re.findall(r'<a class="dropdown-item" href="([^"]+)"[^>]*>(.*?)</a>', hm, re.S)
+menu = [(u, re.sub(r'<[^>]+>|\s+', ' ', t).strip()) for u, t in itens]
+prova('o menu Relatorios leva ao Lucro Postos Migrados',
+      any(u == '/relatorios/lucro_postos_migrados' for u, _ in menu),
+      'nao achei no menu; tem %s itens' % len(menu))
+prova('e com o nome que o usuario procura',
+      any(u == '/relatorios/lucro_postos_migrados'
+          and 'Lucro Postos Migrados' in t for u, t in menu),
+      'achei o link mas com outro texto')
+prova('o antigo continua no menu, no lugar dele',
+      any(u == '/relatorios/lucro_postos' for u, _ in menu))
+
 print('\n%s' % ('TUDO OK' if not falhas else '%d FALHA(S): %s'
                 % (len(falhas), '; '.join(falhas))))
 sys.exit(1 if falhas else 0)
