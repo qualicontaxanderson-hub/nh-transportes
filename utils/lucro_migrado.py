@@ -326,6 +326,7 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
                          'desc_l': 0.0, 'entrou_l': 0.0, 'dias_entrou': 0}
         falta_acum = 0.0
         var_acum = 0.0
+        lucro_acum = 0.0
         for d in _dias(ini, fim):
             medido = leitura.get((d, pid))
             # A medicao do dia manda no estoque inicial: ela e a realidade.
@@ -371,6 +372,7 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
             falta_acum = pendente.get((d, pid), 0.0)
             if variacao is not None:
                 var_acum += variacao
+            lucro_acum += ven_rs - custo_rs
 
             dias.append({
                 'data': d, 'ei': ei, 'ei_medido': ei_medido,
@@ -383,7 +385,7 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
                 'venda_l': ven_l, 'venda_rs': ven_rs,
                 'venda_unit': (ven_rs / ven_l) if ven_l else 0.0,
                 'custo_unit': custo_unit, 'custo_rs': custo_rs,
-                'lucro_rs': ven_rs - custo_rs,
+                'lucro_rs': ven_rs - custo_rs, 'lucro_acum': lucro_acum,
                 'margem_l': ((ven_rs - custo_rs) / ven_l) if ven_l else 0.0,
                 'ef_calc': ef_calc, 'ef_real': ef_real, 'variacao': variacao,
             })

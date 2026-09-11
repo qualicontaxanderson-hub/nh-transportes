@@ -1551,6 +1551,16 @@ def _exportar_csv(resultados_por_cliente, consolidado, label):
 # Lucro Postos Migrados — a apuração pelas telas novas
 # ===========================================================================
 
+# A cor de cada combustivel e a mesma da conciliacao de estoque: o usuario ja
+# reconhece o produto por ela, e trocar a cor entre telas custa uma leitura.
+CORES_PRODUTO = {
+    2: '#BA7517',    # gasolina
+    1: '#639922',    # etanol
+    4: '#185FA5',    # S-500
+    5: '#534AB7',    # S-10
+}
+
+
 @bp.route('/lucro_postos_migrados', methods=['GET'])
 @admin_required
 def lucro_postos_migrados():
@@ -1638,6 +1648,7 @@ def lucro_postos_migrados():
                                clientes_disponiveis=[], produtos_disponiveis=[],
                                cliente_id=cliente_id, produto_ids=[],
                                apurado={}, comparativo={}, produtos_nome={},
+                               cores_produto={}, geral={'dias': []}, ranking=[],
                                totais={}, filtrou=False)
     finally:
         cur.close()
@@ -1653,6 +1664,59 @@ def lucro_postos_migrados():
     totais['margem_l'] = (totais['lucro_rs'] / totais['venda_l']
                           if totais['venda_l'] else 0.0)
 
+    # ── o resumo geral: todos os produtos na mesma linha do dia ───────────
+    # O lucro do posto nao e de um combustivel: e da pista inteira. Aqui os
+    # quatro viram uma conta so, dia a dia, com o acumulado correndo ao lado —
+    # que e o numero que se olha para saber se o mes esta indo.
+    geral = {'dias': [], 'total': dict(totais)}
+    if apurado:
+        qual = next(iter(apurado))
+        acum = 0.0
+        for k, ref in enumerate(apurado[qual]['dias']):
+            linha = {'data': ref['data'], 'venda_l': 0.0, 'venda_rs': 0.0,
+                     'custo_rs': 0.0, 'lucro_rs': 0.0, 'entrada_l': 0.0,
+                     'entrada_rs': 0.0, 'nota_l': 0.0, 'desc_l': 0.0,
+                     'entrou': None, 'variacao': None}
+            for pid in apurado:
+                d = apurado[pid]['dias'][k]
+                for campo in ('venda_l', 'venda_rs', 'custo_rs', 'lucro_rs',
+                              'entrada_l', 'entrada_rs', 'nota_l', 'desc_l'):
+                    linha[campo] += d[campo]
+                # entrou e variacao so existem com medicao; um produto sem ela
+                # nao pode zerar o dia dos outros
+                for campo in ('entrou', 'variacao'):
+                    if d[campo] is not None:
+                        linha[campo] = (linha[campo] or 0.0) + d[campo]
+            acum += linha['lucro_rs']
+            linha['lucro_acum'] = acum
+            linha['margem_l'] = (linha['lucro_rs'] / linha['venda_l']
+                                 if linha['venda_l'] else 0.0)
+            linha['venda_unit'] = (linha['venda_rs'] / linha['venda_l']
+                                   if linha['venda_l'] else 0.0)
+            geral['dias'].append(linha)
+
+    # a barra do lucro do dia precisa de uma escala; sem o maior do periodo
+    # ela nao teria com o que se comparar
+    geral['max_lucro'] = max([abs(d['lucro_rs']) for d in geral['dias']] or [0])
+    geral['dias_com_venda'] = sum(1 for d in geral['dias'] if d['venda_l'] > 0)
+
+    # ── quanto cada produto pesa no lucro ─────────────────────────────────
+    # Ordenado pelo lucro, com a fatia de cada um: e o que responde "de onde
+    # vem o dinheiro" sem precisar abrir os quatro quadros.
+    maior = max([abs(apurado[p]['total']['lucro_rs']) for p in apurado] or [0])
+    ranking = []
+    for pid in sorted(apurado, key=lambda x: -apurado[x]['total']['lucro_rs']):
+        t = apurado[pid]['total']
+        ranking.append({
+            'pid': pid, 'nome': produtos_nome.get(pid, 'Produto %s' % pid),
+            'cor': CORES_PRODUTO.get(pid, '#4b5563'),
+            'lucro_rs': t['lucro_rs'], 'venda_l': t['venda_l'],
+            'venda_rs': t['venda_rs'], 'margem_l': t['margem_l'],
+            'fatia': (t['lucro_rs'] / totais['lucro_rs'] * 100)
+                     if totais['lucro_rs'] else 0.0,
+            'barra': (abs(t['lucro_rs']) / maior * 100) if maior else 0.0,
+        })
+
     return render_template(
         'relatorios/lucro_postos_migrados.html',
         data_inicio=data_inicio, data_fim=data_fim, base=base,
@@ -1660,5 +1724,6 @@ def lucro_postos_migrados():
         produtos_disponiveis=produtos_disponiveis,
         cliente_id=cliente_id, produto_ids=produto_ids,
         apurado=apurado, comparativo=comparativo, produtos_nome=produtos_nome,
+        cores_produto=CORES_PRODUTO, geral=geral, ranking=ranking,
         totais=totais, filtrou=filtrou, erro=None,
     )

@@ -97,10 +97,13 @@ def formatar_moeda(valor):
     except Exception:
         return '-'
 
-    inteiro = int(abs(num))
-    centavos = int(round((abs(num) - inteiro) * 100))
+    # Arredonda para centavos ANTES de separar as partes. Separar primeiro e
+    # arredondar depois produz ",100": 7143,9995 dava inteiro 7143 e centavos
+    # 100, e a tela mostrava "R$ 7.143,100". O vai-um tem de subir.
+    total_cent = int(round(abs(num) * 100))
+    inteiro, centavos = divmod(total_cent, 100)
     inteiro_str = f"{inteiro:,}".replace(',', '.')
-    sinal = '-' if num < 0 else ''
+    sinal = '-' if (num < 0 and total_cent) else ''
     return f"{sinal}R$ {inteiro_str},{centavos:02d}"
 
 

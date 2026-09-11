@@ -49,6 +49,11 @@ def _erro(fn):
         return True
 
 
+# O mesmo formatador que a tela usa: reescrever o formato aqui daria uma
+# prova que passa com a tela errada, ou que falha com ela certa.
+from utils.formatadores import formatar_moeda as _moeda   # noqa: E402
+
+
 def prova(titulo, ok, detalhe=''):
     print('%-6s %s' % ('OK' if ok else 'FALHA', titulo))
     if not ok:
@@ -484,9 +489,9 @@ if adm:
         prova('e não caiu no aviso de erro (%s)' % base,
               'Não deu para apurar' not in h and 'id="lpm"' in h)
         prova('há um quadro por produto na base %s' % base,
-              h.count('class="prodbox"') == len(PRODUTOS),
+              h.count('onclick="lpmAbre(this)"') == len(PRODUTOS),
               '%s quadros para %s produtos'
-              % (h.count('class="prodbox"'), len(PRODUTOS)))
+              % (h.count('onclick="lpmAbre(this)"'), len(PRODUTOS)))
 
     # os números da tela são os do motor — nas duas bases
     for base in ('nota', 'descarga'):
@@ -507,8 +512,9 @@ if adm:
     prova('a tela das duas bases não mostra o mesmo número',
           bool(dif) and telas['nota'] != telas['descarga'],
           'as duas telas saíram iguais')
+    # uma por produto, mais a do posto inteiro e a da conferencia das fontes
     prova('a tabela do dia a dia está lá, uma por produto',
-          telas['nota'].count('<tbody>') == len(PRODUTOS),
+          telas['nota'].count('<tbody>') == len(PRODUTOS) + 2,
           '%s tabelas' % telas['nota'].count('<tbody>'))
     prova('a tela explica de onde vem cada entrada',
           'ainda não desceu' in telas['nota']
@@ -524,6 +530,54 @@ if adm:
     prova('a tela diz que o dia sozinho não fecha',
           'a nota vem num dia e o caminhão no outro' in
           ' '.join(telas['nota'].split()))
+    # ── o resumo geral, que junta todos os produtos ───────────────────
+    liso = ' '.join(telas['nota'].split())
+    prova('a tela abre pelo posto inteiro, antes de qualquer produto',
+          'Lucro do período' in liso and 'De onde vem o lucro' in liso
+          and 'Dia a dia do posto' in liso,
+          'faltou algum bloco do resumo geral')
+    ger = lucro_migrado.apurar(cur2, CLIENTE, PRODUTOS, INI, FIM, 'nota')
+    lucro_total = sum(ger[p]['total']['lucro_rs'] for p in ger)
+    venda_total = sum(ger[p]['total']['venda_l'] for p in ger)
+    prova('o lucro do posto é a soma dos combustíveis, e está na tela',
+          _moeda(lucro_total) in liso,
+          'não achei %s (lucro somado dos %s produtos)'
+          % (_moeda(lucro_total), len(PRODUTOS)))
+    prova('e os litros vendidos do posto também',
+          '{:,.0f}'.format(venda_total).replace(',', '.') in liso,
+          'não achei %s L' % venda_total)
+    print('        posto inteiro: %s de lucro em %s L vendidos'
+          % (_moeda(lucro_total), '{:,.0f}'.format(venda_total).replace(',', '.')))
+
+    # cada produto tem de aparecer no "de onde vem o lucro", com sua fatia
+    faltou = [pid for pid in PRODUTOS
+              if _moeda(ger[pid]['total']['lucro_rs']) not in liso]
+    prova('cada combustível aparece com o lucro dele no resumo geral',
+          not faltou, 'faltaram: %r' % faltou)
+    prova('o resumo geral tem a coluna do lucro acumulado',
+          liso.count('>Lucro acumulado<') >= 1)
+
+    # o acumulado do ultimo dia TEM de ser o lucro do periodo — se ele somar
+    # errado, o numero que o usuario olha para saber se o mes esta indo mente
+    ultimo = None
+    for k in range(len((ger[PRODUTOS[0]]['dias']))):
+        soma = sum(ger[pid]['dias'][k]['lucro_rs'] for pid in PRODUTOS)
+        ultimo = (ultimo or 0.0) + soma
+    prova('o acumulado do último dia é o lucro do período',
+          abs((ultimo or 0.0) - lucro_total) < 0.01,
+          'acumulado %.2f, período %.2f' % (ultimo or 0.0, lucro_total))
+
+    # e o acumulado de cada produto tambem
+    erros = []
+    for pid in PRODUTOS:
+        acu = 0.0
+        for d in ger[pid]['dias']:
+            acu += d['lucro_rs']
+            if abs(d['lucro_acum'] - acu) > 0.01:
+                erros.append((pid, d['data']))
+    prova('o lucro acumulado de cada produto soma dia a dia',
+          not erros, '%r' % erros[:4])
+
     prova('e dá o caminho de volta para o relatório antigo',
           '/relatorios/lucro_postos"' in telas['nota']
           or "/relatorios/lucro_postos'" in telas['nota']

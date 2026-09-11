@@ -11,7 +11,11 @@
       ENTROU    o que o tanque absorveu: a unica entrada fisica
 
     A diferenca entre as tres e de dezenas de litros — perda de temperatura.
-    Quando dava milhares, era fonte errada. -#}
+    Quando dava milhares, era fonte errada.
+
+    A tela le de cima para baixo: primeiro o posto inteiro (o lucro do periodo,
+    de onde ele vem, e o dia a dia somado), depois a conferencia das fontes, e
+    so entao cada combustivel em separado. -#}
 
 {% block styles %}
 <style>
@@ -26,8 +30,9 @@ body > .container-fluid:has(#lpm){
 
 {% with esc = '#lpm' %}{% include 'includes/gaveta_css.html' %}{% endwith %}
 <style>
-  #lpm{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#17963C; --danger:#a32d2d;
+  #lpm{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#146c43; --danger:#a32d2d;
         --ambar:#8a5a00; --muted:#4b5563; --ink:#151d27; --borda:#d9e0e8;
+        --linha:#eef1f5;
         --mono:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace; }
   #lpm{ color:var(--ink); max-width:100%; }
 
@@ -51,10 +56,12 @@ body > .container-fluid:has(#lpm){
   #lpm .prod{ display:flex; gap:.35rem; flex-wrap:wrap; margin-top:.55rem; }
   #lpm .prod label{ border:1px solid var(--borda); border-radius:99px;
     padding:.3rem .7rem; font-size:.8rem; font-weight:800; cursor:pointer;
-    background:#fff; color:#3a4655; display:inline-flex; gap:.35rem;
+    background:#fff; color:#3a4655; display:inline-flex; gap:.4rem;
     align-items:center; }
   #lpm .prod label.on{ background:var(--blue); border-color:var(--blue);
     color:#fff; }
+  #lpm .pt{ width:.55rem; height:.55rem; border-radius:99px;
+    display:inline-block; flex:0 0 auto; }
   #lpm .prod input{ position:absolute; opacity:0; width:0; height:0; }
   #lpm .filtro__r{ display:flex; gap:.4rem; margin-top:.6rem; flex-wrap:wrap;
     align-items:center; }
@@ -80,16 +87,72 @@ body > .container-fluid:has(#lpm){
     margin-bottom:.7rem; }
   #lpm .aviso--erro{ background:#fbe9e9; color:var(--danger); }
 
-  #lpm .prodbox{ background:#fff; border:1px solid var(--borda);
+  /* ---- o painel do posto inteiro ------------------------------------- */
+  #lpm .painel{ background:#fff; border:1px solid var(--borda);
+    border-radius:16px; margin-bottom:.7rem; overflow:hidden;
+    box-shadow:0 3px 14px rgba(20,35,60,.07); }
+  #lpm .painel__c{ display:grid; gap:0; }
+  @media (min-width:992px){
+    #lpm .painel__c{ grid-template-columns:minmax(270px,.85fr) 1.3fr; } }
+  #lpm .lucro{ padding:.9rem 1rem 1rem;
+    background:linear-gradient(160deg,#f4f9f5,#edf5ef 70%,#e8f2ec);
+    border-bottom:1px solid var(--linha); }
+  @media (min-width:992px){
+    #lpm .lucro{ border-bottom:0; border-right:1px solid var(--linha); } }
+  #lpm .lucro--neg{ background:linear-gradient(160deg,#fcf4f4,#f9eded); }
+  #lpm .lucro__r{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.07em; }
+  #lpm .lucro__v{ font-size:1.85rem; font-weight:800; line-height:1.1;
+    color:var(--ok); font-variant-numeric:tabular-nums; margin-top:.1rem; }
+  #lpm .lucro--neg .lucro__v{ color:var(--danger); }
+  #lpm .lucro__s{ font-size:.76rem; color:#3a4655; margin-top:.2rem;
+    font-weight:600; }
+  #lpm .mini{ display:grid; grid-template-columns:1fr 1fr; gap:.4rem;
+    margin-top:.7rem; }
+  #lpm .mini div{ background:#fff; border:1px solid var(--borda);
+    border-radius:10px; padding:.4rem .55rem; }
+  #lpm .mini b{ display:block; font-size:.86rem; font-weight:800;
+    font-variant-numeric:tabular-nums; }
+  #lpm .mini span{ font-size:.62rem; color:var(--muted); font-weight:800;
+    text-transform:uppercase; letter-spacing:.05em; }
+
+  /* de onde vem o lucro */
+  #lpm .rank{ padding:.85rem 1rem .9rem; }
+  #lpm .rank__t{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.07em; margin-bottom:.6rem; }
+  #lpm .rk{ display:grid; grid-template-columns:1fr auto; gap:.15rem .6rem;
+    align-items:baseline; margin-bottom:.6rem; }
+  #lpm .rk:last-child{ margin-bottom:0; }
+  #lpm .rk__n{ font-weight:800; font-size:.85rem; display:flex; gap:.4rem;
+    align-items:center; }
+  #lpm .rk__v{ font-weight:800; font-size:.88rem; text-align:right;
+    font-variant-numeric:tabular-nums; }
+  #lpm .rk__b{ grid-column:1/-1; height:7px; border-radius:99px;
+    background:#eef1f5; overflow:hidden; }
+  #lpm .rk__b i{ display:block; height:100%; border-radius:99px; }
+  #lpm .rk__d{ grid-column:1/-1; font-size:.68rem; color:var(--muted);
+    display:flex; gap:.7rem; flex-wrap:wrap;
+    font-variant-numeric:tabular-nums; }
+
+  /* ---- quadros ------------------------------------------------------- */
+  #lpm .cx{ background:#fff; border:1px solid var(--borda);
     border-radius:14px; margin-bottom:.7rem; overflow:hidden;
     box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #lpm .cx__t{ display:flex; gap:.5rem; align-items:center;
+    padding:.6rem .8rem; font-size:.7rem; font-weight:800;
+    text-transform:uppercase; letter-spacing:.06em; color:var(--blue-deep);
+    background:#f7fafd; border-bottom:1px solid var(--linha);
+    border-top:1px solid var(--linha); }
+  #lpm .cx__t .dir{ margin-left:auto; text-transform:none; letter-spacing:0;
+    font-size:.72rem; color:var(--muted); font-weight:600; }
+
   #lpm .ph{ display:flex; gap:.6rem; align-items:center; padding:.6rem .8rem;
-    cursor:pointer; flex-wrap:wrap; }
+    cursor:pointer; flex-wrap:wrap; border-left:4px solid transparent; }
   #lpm .ph:hover{ background:#fafbfd; }
   #lpm .ph__n{ font-weight:800; font-size:.95rem; }
   #lpm .ph__d{ font-size:.72rem; color:var(--muted); }
   #lpm .ph__v{ margin-left:auto; text-align:right; }
-  #lpm .ph__l{ font-size:1.05rem; font-weight:800; color:#146c43;
+  #lpm .ph__l{ font-size:1.05rem; font-weight:800; color:var(--ok);
     font-variant-numeric:tabular-nums; }
   #lpm .ph__l.ruim{ color:var(--danger); }
   #lpm .ph__r{ font-size:.66rem; color:var(--muted); text-transform:uppercase;
@@ -101,7 +164,7 @@ body > .container-fluid:has(#lpm){
     #lpm .resumo{ grid-template-columns:repeat(3,1fr); } }
   @media (min-width:1200px){
     #lpm .resumo{ grid-template-columns:repeat(6,1fr); } }
-  #lpm .r{ background:#f7f9fc; border:1px solid #eef1f5; border-radius:11px;
+  #lpm .r{ background:#f7f9fc; border:1px solid var(--linha); border-radius:11px;
     padding:.5rem .6rem; }
   #lpm .r__r{ font-size:.62rem; font-weight:800; color:var(--muted);
     text-transform:uppercase; letter-spacing:.05em; }
@@ -109,23 +172,23 @@ body > .container-fluid:has(#lpm){
     font-variant-numeric:tabular-nums; }
   #lpm .r__c{ font-size:.66rem; color:var(--muted); }
 
-  /* o dia a dia: tabela mesmo — sao dezessete colunas de numero que se compara na
-     vertical, e cartao nao serve para isso. Rola de lado no proprio quadro. */
-  #lpm .tab{ overflow-x:auto; border-top:1px solid #eef1f5; }
+  /* ---- tabelas ------------------------------------------------------- */
+  #lpm .tab{ overflow-x:auto; border-top:1px solid var(--linha); }
   #lpm table{ width:100%; border-collapse:collapse; font-size:.78rem;
     font-variant-numeric:tabular-nums; }
   #lpm th{ background:#f0f4f8; color:#3d4854; font-size:.64rem;
     text-transform:uppercase; letter-spacing:.04em; font-weight:800;
     padding:.4rem .5rem; white-space:nowrap; text-align:right;
-    border-bottom:1px solid var(--borda); position:sticky; top:0; }
+    border-bottom:1px solid var(--borda); position:sticky; top:0; z-index:1; }
   #lpm th:first-child{ text-align:left; }
   #lpm td{ padding:.35rem .5rem; text-align:right; white-space:nowrap;
-    border-bottom:1px solid #f2f5f8; }
+    border-bottom:1px solid #f4f6f9; }
   #lpm td:first-child{ text-align:left; font-weight:700; }
   #lpm tr:hover td{ background:#fafbfd; }
   #lpm .neg{ color:var(--danger); font-weight:700; }
-  #lpm .pos{ color:#146c43; font-weight:700; }
+  #lpm .pos{ color:var(--ok); font-weight:700; }
   #lpm .est{ color:var(--muted); }
+  #lpm .forte{ font-weight:800; }
   #lpm tfoot td{ background:#f0f4f8; font-weight:800;
     border-top:2px solid var(--borda); }
   #lpm .semmedir{ color:var(--ambar); font-weight:800; }
@@ -134,21 +197,20 @@ body > .container-fluid:has(#lpm){
   #lpm th.ent{ background:#e7eef7; }
   #lpm td.ent--fim, #lpm th.ent--fim{ border-right:1px solid #dde5ee; }
   #lpm .tanque{ font-weight:800; color:var(--blue-deep); }
+  #lpm .dom{ color:#8a94a2; }
+
+  /* a barra do lucro do dia, dentro da propria celula */
+  #lpm .bar{ display:block; height:5px; border-radius:99px; background:#e4ebe6;
+    margin-top:.2rem; overflow:hidden; }
+  #lpm .bar i{ display:block; height:100%; background:var(--ok);
+    border-radius:99px; }
+  #lpm .bar.b--neg{ background:#f3e3e3; }
+  #lpm .bar.b--neg i{ background:var(--danger); }
+
   #lpm .leg{ padding:.5rem .8rem .7rem; font-size:.72rem; color:var(--muted);
-    line-height:1.45; border-top:1px solid #eef1f5; background:#fafbfd; }
+    line-height:1.45; border-top:1px solid var(--linha); background:#fafbfd; }
   #lpm .leg b{ color:var(--ink); }
 
-  #lpm .comp{ background:#fff; border:1px solid var(--borda);
-    border-radius:14px; padding:.7rem .8rem; margin-bottom:.7rem;
-    box-shadow:0 2px 10px rgba(20,35,60,.06); }
-  #lpm .comp__t{ font-size:.7rem; font-weight:800; text-transform:uppercase;
-    letter-spacing:.06em; color:var(--blue-deep); margin-bottom:.45rem; }
-  #lpm .cl{ display:flex; gap:.6rem; font-size:.82rem; padding:.3rem 0;
-    border-bottom:1px solid #f2f5f8; align-items:baseline; flex-wrap:wrap; }
-  #lpm .cl__n{ min-width:5.5rem; }
-  #lpm .cl:last-child{ border-bottom:0; }
-  #lpm .cl__n{ flex:1; font-weight:700; }
-  #lpm .cl b{ font-variant-numeric:tabular-nums; }
   #lpm .nada{ padding:1.6rem .8rem; text-align:center; color:var(--muted);
     font-size:.88rem; background:#fff; border:1px solid var(--borda);
     border-radius:14px; }
@@ -193,6 +255,7 @@ body > .container-fluid:has(#lpm){
         <input type="checkbox" name="produto_ids[]" value="{{ p.id }}"
                {{ 'checked' if p.id in produto_ids }}
                onchange="this.parentNode.classList.toggle('on', this.checked)">
+        <i class="pt" style="background:{{ cores_produto.get(p.id, '#9aa3ad') }}"></i>
         {{ p.nome }}</label>
       {% endfor %}
     </div>
@@ -219,50 +282,149 @@ body > .container-fluid:has(#lpm){
   <div class="nada">Escolha o posto e ao menos um produto para apurar.</div>
   {% else %}
 
-  <div class="g-nums">
-    <div class="n n--azul"><div class="r">Entrada ({{ base }})</div>
-      <div class="v">{{ litros(totais.entrada_l) }} L</div></div>
-    <div class="n n--azul"><div class="r">Vendido</div>
-      <div class="v">{{ litros(totais.venda_l) }} L</div></div>
-    <div class="n {{ 'n--verde' if totais.lucro_rs >= 0 else 'n--verm' }}">
-      <div class="r">Lucro</div>
-      <div class="v">{{ reais(totais.lucro_rs) }}</div></div>
-    <div class="n {{ 'n--ambar' if (totais.variacao_l|abs) > 500 else 'n--cinza' }}">
-      <div class="r">Variação no período</div>
-      <div class="v">{{ litros(totais.variacao_l) }} L</div></div>
+  {# ---- o posto inteiro, antes de qualquer produto --------------------- #}
+  <div class="painel">
+    <div class="painel__c">
+      <div class="lucro {{ 'lucro--neg' if totais.lucro_rs < 0 }}">
+        <div class="lucro__r">Lucro do período</div>
+        <div class="lucro__v">{{ reais(totais.lucro_rs) }}</div>
+        <div class="lucro__s">{{ preco(totais.margem_l) }} por litro ·
+          {{ geral.dias_com_venda }} dias com venda</div>
+        <div class="mini">
+          <div><span>Vendido</span><b>{{ litros(totais.venda_l) }} L</b></div>
+          <div><span>Receita</span><b>{{ reais(totais.venda_rs) }}</b></div>
+          <div><span>Entrou no tanque</span><b>{{ litros(totais.entrou_l) }} L</b></div>
+          <div><span>Variação</span>
+            <b class="{{ 'neg' if totais.variacao_l < -1 else 'pos' if totais.variacao_l > 1 }}">
+              {{ litros(totais.variacao_l) }} L</b></div>
+        </div>
+      </div>
+
+      <div class="rank">
+        <div class="rank__t">De onde vem o lucro</div>
+        {% for r in ranking %}
+        <div class="rk">
+          <div class="rk__n"><i class="pt" style="background:{{ r.cor }}"></i>{{ r.nome }}</div>
+          <div class="rk__v {{ 'neg' if r.lucro_rs < 0 }}">{{ reais(r.lucro_rs) }}</div>
+          <div class="rk__b"><i style="width:{{ '%.1f'|format(r.barra) }}%;
+            background:{{ r.cor }}"></i></div>
+          <div class="rk__d">
+            <span>{{ '%.0f'|format(r.fatia) }}% do lucro</span>
+            <span>{{ litros(r.venda_l) }} L vendidos</span>
+            <span>{{ preco(r.margem_l) }}/L</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# o dia a dia somado: os quatro combustiveis numa conta so #}
+    <div class="cx__t"><i class="bi bi-calendar3"></i> Dia a dia do posto
+      <span class="dir">o acumulado é o que diz se o mês está indo</span></div>
+    <div class="tab" style="border-top:0">
+      <table>
+        <thead>
+          <tr>
+            <th>Dia</th>
+            <th>Vendas (L)</th>
+            <th>Receita</th>
+            <th>Custo</th>
+            <th>Margem/L</th>
+            <th>Entrou (L)</th>
+            <th>Variação</th>
+            <th>Lucro do dia</th>
+            <th>Lucro acumulado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in geral.dias %}
+          <tr>
+            <td class="{{ 'dom' if d.data.weekday() == 6 }}">{{ d.data.strftime('%d/%m') }}</td>
+            <td>{{ litros(d.venda_l) if d.venda_l else '—' }}</td>
+            <td>{{ reais(d.venda_rs) if d.venda_l else '—' }}</td>
+            <td>{{ reais(d.custo_rs) if d.venda_l else '—' }}</td>
+            <td>{{ preco(d.margem_l) if d.venda_l else '—' }}</td>
+            <td class="tanque">{{ litros(d.entrou) if d.entrou is not none else '—' }}</td>
+            <td class="{{ 'neg' if d.variacao is not none and d.variacao < -1 else 'pos' if d.variacao is not none and d.variacao > 1 else 'est' }}">
+              {{ litros(d.variacao) if d.variacao is not none else '—' }}</td>
+            <td class="{{ 'neg' if d.lucro_rs < 0 else 'pos' if d.lucro_rs > 0 }}">
+              {{ reais(d.lucro_rs) if d.venda_l else '—' }}
+              {%- if d.venda_l and geral.max_lucro %}
+              <span class="bar {{ 'b--neg' if d.lucro_rs < 0 }}"><i
+                style="width:{{ '%.1f'|format(d.lucro_rs|abs / geral.max_lucro * 100) }}%"></i></span>
+              {%- endif %}</td>
+            <td class="forte {{ 'neg' if d.lucro_acum < 0 }}">{{ reais(d.lucro_acum) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>Período</td>
+            <td>{{ litros(totais.venda_l) }}</td>
+            <td>{{ reais(totais.venda_rs) }}</td>
+            <td>{{ reais(totais.custo_rs) }}</td>
+            <td>{{ preco(totais.margem_l) }}</td>
+            <td>{{ litros(totais.entrou_l) }}</td>
+            <td class="{{ 'neg' if totais.variacao_l < -1 else 'pos' if totais.variacao_l > 1 }}">
+              {{ litros(totais.variacao_l) }}</td>
+            <td class="{{ 'neg' if totais.lucro_rs < 0 }}">{{ reais(totais.lucro_rs) }}</td>
+            <td class="{{ 'neg' if totais.lucro_rs < 0 }}">{{ reais(totais.lucro_rs) }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
   </div>
 
+  {# ---- a conferencia das fontes --------------------------------------- #}
   {% if comparativo %}
-  <div class="comp">
-    <div class="comp__t"><i class="bi bi-arrow-left-right"></i>
-      Nota, descarga e o que o tanque absorveu</div>
-    {% for pid, c in comparativo.items() %}
-    <div class="cl">
-      <span class="cl__n">{{ produtos_nome.get(pid, pid) }}</span>
-      <span>nota <b>{{ litros(c.nota_l) }} L</b></span>
-      <span>descarga <b>{{ litros(c.descarga_l) }} L</b></span>
-      <span class="tanque">entrou no tanque <b>{{ litros(c.entrou_l) }} L</b></span>
-      <span class="{{ 'neg' if (c.nota_variacao|abs) > (c.descarga_variacao|abs) else 'pos' }}"
-            title="o que entrou no tanque menos o que a nota faturou">a nota erra
-        <b>{{ litros(c.nota_variacao|abs) }} L</b></span>
-      <span class="{{ 'neg' if (c.descarga_variacao|abs) > (c.nota_variacao|abs) else 'pos' }}"
-            title="o que entrou no tanque menos o que a descarga registra">a descarga erra
-        <b>{{ litros(c.descarga_variacao|abs) }} L</b></span>
+  <div class="cx">
+    <div class="cx__t" style="border-top:0"><i class="bi bi-arrow-left-right"></i>
+      Nota, descarga e o que o tanque absorveu
+      <span class="dir">quem erra menos é a fonte confiável</span></div>
+    <div class="tab" style="border-top:0">
+      <table>
+        <thead>
+          <tr>
+            <th>Produto</th>
+            <th>Nota (L)</th>
+            <th>Descarga (L)</th>
+            <th>Entrou no tanque (L)</th>
+            <th>A nota erra</th>
+            <th>A régua erra</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pid, c in comparativo.items() %}
+          <tr>
+            <td><i class="pt" style="background:{{ cores_produto.get(pid, '#9aa3ad') }};
+              margin-right:.35rem"></i>{{ produtos_nome.get(pid, pid) }}</td>
+            <td>{{ litros(c.nota_l) }}</td>
+            <td>{{ litros(c.descarga_l) }}</td>
+            <td class="tanque">{{ litros(c.entrou_l) }}</td>
+            <td class="{{ 'neg' if (c.nota_variacao|abs) > (c.descarga_variacao|abs) else 'pos' }}">
+              {{ litros(c.nota_variacao|abs) }} L</td>
+            <td class="{{ 'neg' if (c.descarga_variacao|abs) > (c.nota_variacao|abs) else 'pos' }}">
+              {{ litros(c.descarga_variacao|abs) }} L</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-    {% endfor %}
-    <div class="r__c" style="margin-top:.4rem">O tanque é o juiz: <b>entrou</b> é
-      a medição de amanhã menos a de hoje, mais o que se vendeu — não depende de
-      nenhum lançamento. Os dois últimos números dizem o quanto a nota e a régua
-      erram contra ele no período; a diferença normal é de dezenas de litros, a
-      perda de temperatura. <b>Quem errar menos é a fonte confiável para aquele
-      produto</b>, e é a base que vale a pena escolher lá em cima.</div>
+    <div class="leg">O tanque é o juiz: <b>entrou</b> é a medição de amanhã menos
+      a de hoje, mais o que se vendeu — não depende de nenhum lançamento. As duas
+      últimas colunas dizem o quanto a nota e a régua erram contra ele no período;
+      a diferença normal é de dezenas de litros, a perda de temperatura.
+      <b>Quem errar menos é a fonte confiável para aquele produto</b>, e é a base
+      que vale a pena escolher lá em cima.</div>
   </div>
   {% endif %}
 
+  {# ---- e agora, um combustivel de cada vez ---------------------------- #}
   {% for pid, dados in apurado.items() %}
   {% set t = dados.total %}
-  <div class="prodbox">
-    <div class="ph" onclick="lpmAbre(this)">
+  {% set cor = cores_produto.get(pid, '#9aa3ad') %}
+  <div class="cx">
+    <div class="ph" style="border-left-color:{{ cor }}" onclick="lpmAbre(this)">
       <div>
         <div class="ph__n">{{ produtos_nome.get(pid, 'Produto %s'|format(pid)) }}</div>
         <div class="ph__d">nota {{ litros(t.nota_l) }} L ·
@@ -322,12 +484,13 @@ body > .container-fluid:has(#lpm){
             <th>Dif. do dia</th>
             <th>Acumulada</th>
             <th>Lucro do dia</th>
+            <th>Lucro acumulado</th>
           </tr>
         </thead>
         <tbody>
           {% for d in dados.dias %}
           <tr>
-            <td>{{ d.data.strftime('%d/%m') }}
+            <td class="{{ 'dom' if d.data.weekday() == 6 }}">{{ d.data.strftime('%d/%m') }}
               {%- if not d.ei_medido %} <span class="semmedir" title="sem leitura de tanque neste dia">•</span>{% endif -%}</td>
             <td class="{{ '' if d.ei_medido else 'est' }}">{{ litros(d.ei) }}</td>
             <td class="ent">{{ litros(d.nota_l) if d.nota_l else '—' }}</td>
@@ -348,6 +511,7 @@ body > .container-fluid:has(#lpm){
             <td class="{{ 'neg' if d.var_acum < -1 else 'pos' if d.var_acum > 1 else '' }}">
               {{ litros(d.var_acum) }}</td>
             <td class="{{ 'neg' if d.lucro_rs < 0 }}">{{ reais(d.lucro_rs) }}</td>
+            <td class="forte {{ 'neg' if d.lucro_acum < 0 }}">{{ reais(d.lucro_acum) }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -372,6 +536,7 @@ body > .container-fluid:has(#lpm){
             <td class="{{ 'neg' if t.variacao_l < -1 else 'pos' if t.variacao_l > 1 else '' }}">
               {{ litros(t.variacao_l) }}</td>
             <td>{{ reais(t.lucro_rs) }}</td>
+            <td class="{{ 'neg' if t.lucro_rs < 0 }}">{{ reais(t.lucro_rs) }}</td>
           </tr>
         </tfoot>
       </table>
@@ -398,10 +563,11 @@ body > .container-fluid:has(#lpm){
 
 {% block scripts %}
 <script>
-// O dia a dia abre por produto: são dezessete colunas, e abrir tudo de uma vez
-// esconderia o resumo, que é o que se olha primeiro.
+// O dia a dia de cada combustível abre por produto: são dezoito colunas, e
+// abrir os quatro de uma vez empurraria para baixo o que se olha primeiro,
+// que é o posto inteiro.
 function lpmAbre(cab){
-  var box = cab.closest('.prodbox');
+  var box = cab.closest('.cx');
   var tab = box ? box.querySelector('.tab') : null;
   if (!tab) return;
   tab.hidden = !tab.hidden;
