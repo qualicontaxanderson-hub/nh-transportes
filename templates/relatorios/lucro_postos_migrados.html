@@ -2,16 +2,16 @@
 
 {% block title %}Lucro Postos Migrados{% endblock %}
 
-{#- O mesmo relatorio de sempre, apurado pelas telas novas. Cada numero tem uma
-    fonte so — leitura de tanque, cupom fiscal, nota do DFe, descarga — e a
-    entrada pode ser vista de dois jeitos:
+{#- O mesmo relatorio de sempre, apurado pelas telas novas. A descarga vem de
+    /estoque?tab=descargas — a regua — e a nota vem do vinculo que o usuario
+    faz ali mesmo, entrando pelo dia em que DESCEU, nao pelo dia da emissao.
 
-      NOTA      o que o fornecedor faturou (casa com o fiscal)
-      DESCARGA  o que desceu no tanque (casa com a regua)
+      NOTA      o que a nota daquela descarga diz (casa com o fiscal)
+      DESCARGA  o que a regua mediu (casa com o tanque)
+      ENTROU    o que o tanque absorveu: a unica entrada fisica
 
-    A diferenca entre as duas nao e erro: e produto faturado que ainda nao
-    desceu. Misturar as duas e o que fazia a variacao do relatorio antigo
-    mentir. -#}
+    A diferenca entre as tres e de dezenas de litros — perda de temperatura.
+    Quando dava milhares, era fonte errada. -#}
 
 {% block styles %}
 <style>
@@ -208,11 +208,11 @@ body > .container-fluid:has(#lpm){
     <a class="{{ 'on' if base == 'nota' }}"
        href="{{ url_for('relatorios.lucro_postos_migrados', data_inicio=data_inicio,
                 data_fim=data_fim, cliente_id=cliente_id, base='nota', **{'produto_ids[]': produto_ids}) }}">
-      <b>Pela nota</b><span>o que o fornecedor faturou</span></a>
+      <b>Pela nota</b><span>o que a nota da descarga diz</span></a>
     <a class="{{ 'on' if base == 'descarga' }}"
        href="{{ url_for('relatorios.lucro_postos_migrados', data_inicio=data_inicio,
                 data_fim=data_fim, cliente_id=cliente_id, base='descarga', **{'produto_ids[]': produto_ids}) }}">
-      <b>Pela descarga</b><span>o que desceu no tanque</span></a>
+      <b>Pela descarga</b><span>o que a régua mediu descer</span></a>
   </div>
 
   {% if not filtrou %}
@@ -251,10 +251,11 @@ body > .container-fluid:has(#lpm){
     </div>
     {% endfor %}
     <div class="r__c" style="margin-top:.4rem">O tanque é o juiz: <b>entrou</b> é
-      a medição de amanhã menos a de hoje, mais o que se vendeu. Os dois últimos
-      números dizem o quanto a nota e a descarga erram contra ele no período —
-      <b>quem errar menos é a fonte confiável para aquele produto</b>, e é a base
-      que vale a pena escolher lá em cima.</div>
+      a medição de amanhã menos a de hoje, mais o que se vendeu — não depende de
+      nenhum lançamento. Os dois últimos números dizem o quanto a nota e a régua
+      erram contra ele no período; a diferença normal é de dezenas de litros, a
+      perda de temperatura. <b>Quem errar menos é a fonte confiável para aquele
+      produto</b>, e é a base que vale a pena escolher lá em cima.</div>
   </div>
   {% endif %}
 
@@ -282,13 +283,12 @@ body > .container-fluid:has(#lpm){
         <div class="r__c">{{ 'medido no tanque' if t.ei_medido else 'sem medição no 1º dia' }}</div></div>
       <div class="r"><div class="r__r">Nota</div>
         <div class="r__v">{{ litros(t.nota_l) }} L</div>
-        <div class="r__c">{{ reais(t.nota_rs) }} · o que foi faturado</div></div>
+        <div class="r__c">{{ reais(t.nota_rs) }} · a nota que desceu</div></div>
       <div class="r"><div class="r__r">Descarga</div>
         <div class="r__v">{{ litros(t.desc_l) }} L</div>
-        <div class="r__c">
-          {%- if t.falta_l > 1 %}falta descer {{ litros(t.falta_l) }} L
-          {%- elif t.falta_l < -1 %}desceu {{ litros(-t.falta_l) }} L de nota anterior
-          {%- else %}bate com a nota{% endif %}</div></div>
+        <div class="r__c">medido na régua
+          {%- if t.falta_l > 1 %} · falta descer {{ litros(t.falta_l) }} L de nota
+          {%- endif %}</div></div>
       <div class="r"><div class="r__r">Entrou no tanque</div>
         <div class="r__v tanque">{{ litros(t.entrou_l) }} L</div>
         <div class="r__c">medido em {{ t.dias_entrou }} de {{ t.dias }} dias</div></div>
@@ -376,14 +376,18 @@ body > .container-fluid:has(#lpm){
         </tfoot>
       </table>
       <div class="leg">
+        <b>Nota (L)</b> é a nota que você escolheu ao lançar a descarga daquele
+        dia — entra pelo dia em que desceu, não pelo dia da emissão.
+        <b>Descarga (L)</b> é o que a régua mediu em <i>/estoque → descargas</i>.
         <b>Entrou (L)</b> é o que o tanque absorveu: a medição de amanhã menos a
-        de hoje, mais o que se vendeu. É a única entrada física — nota e descarga
-        são o que <i>deveria</i> ter entrado.
-        <b>A descer</b> acumula nota menos descarga: positivo é produto faturado
-        que ainda não chegou, negativo é produto que desceu de uma nota de antes.
-        A <b>diferença do dia</b> fica em cinza de propósito: um dia sozinho nunca
-        fecha, porque a nota vem num dia e o caminhão no outro. O número que vale
-        é a <b>acumulada</b>, que é onde o descompasso se resolve.
+        de hoje, mais o que se vendeu — a única que não depende de lançamento.
+        As três só divergem por dezenas de litros, que é a perda de temperatura.
+        <b>A descer</b> é o saldo de nota já faturada que ainda não desceu: ele
+        baixa sozinho no dia em que o caminhão chega. Negativo é o contrário —
+        a descarga foi lançada antes de a nota ser registrada, e se acerta no
+        dia seguinte.
+        A <b>diferença do dia</b> e a <b>acumulada</b> medem a base escolhida
+        contra o tanque.
       </div>
     </div>
   </div>

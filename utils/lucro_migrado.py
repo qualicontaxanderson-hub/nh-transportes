@@ -3,31 +3,39 @@
 
 O relatório antigo (/relatorios/lucro_postos) nasceu quando a descarga era
 lançada de outro jeito, e a variação dele saía muito errada. As telas novas
-resolveram isso na origem, e cada número agora tem uma fonte só:
+resolveram isso na origem, e cada número aqui tem uma fonte só — e é a fonte
+da tela que o usuário opera:
 
-    estoque   leitura_tanque_diaria   (a medição do tanque, pelo ELS)
-    vendas    vendas_xml + itens      (o cupom fiscal, litro a litro)
-    compras   dfe_itens               (a NOTA de compra, pelo DFe)
-    descarga  descargas + fretes      (o que DESCEU no tanque)
+    estoque   leitura_tanque_diaria (ABERTURA)   a medição do tanque, pelo ELS
+    vendas    vendas_xml + itens                 o cupom fiscal, litro a litro
+    descarga  descargas_pendentes                a régua, em /estoque?tab=descargas
+    nota      descarga_nota -> dfe_itens         a nota que o usuário escolheu
+                                                 ao lançar aquela descarga
 
-Compra e descarga são coisas diferentes, e é por isso que existem duas bases:
+A armadilha que custou uma versão inteira deste relatório: existem DUAS tabelas
+de descarga. `descargas` é a do frete — guarda o que o caminhão carregou, na
+data do frete. `descargas_pendentes` é a da tela de estoque — guarda o que a
+régua mediu descer, no dia em que desceu. Só a segunda serve para estoque; com
+a primeira o relatório acusava milhares de litros de sobra que nunca existiram.
 
-  base='nota'      a entrada é o que a nota diz. É a visão fiscal: casa com o
-                   livro e com o que se paga ao fornecedor.
-  base='descarga'  a entrada é o que desceu no tanque. É a visão física: casa
-                   com a régua.
+E a nota entra pelo dia em que DESCEU, não pelo dia em que foi emitida. O
+vínculo mora em `descarga_nota`, e a alocação é a mesma da conciliação de
+estoque — **a nota manda**: quando um item desce em parcelas, a última leva
+todo o resto, para a nota fechar exatamente na sua quantidade.
 
-No S-500 de 09/09/2026, por exemplo, a nota trouxe 12.000 L e a descarga do dia
-foram 5.000 L — o resto desceu depois. Nenhuma das duas está errada; elas
-respondem perguntas diferentes, e misturá-las é o que fazia a variação mentir.
+Daí as duas bases, que agora respondem a mesma pergunta por dois caminhos:
 
-Mas nenhuma das duas é física. A entrada de verdade é a que o TANQUE absorveu, e
-ela se lê da própria medição: `entrou = medição de amanhã − a de hoje + o que se
-vendeu`. É por isso que todo dia traz as três — nota, descarga e entrou. No
-etanol de 05/09/2026 a nota faturou 9.000 L, a descarga registrou 5.000 L e o
-tanque não recebeu nada: a variação DO DIA acusa −9.034 L, e a do período fecha
-em −122 L. O dia sozinho nunca fecha, porque a nota vem num dia e o caminhão no
-outro; o número que vale é o acumulado.
+  base='nota'      a entrada é o que a nota daquela descarga diz. Casa com o
+                   fiscal e com o que se paga ao fornecedor.
+  base='descarga'  a entrada é o que a régua mediu. Casa com o tanque.
+
+A diferença entre elas é a perda de temperatura: no etanol de 01/09/2026 a nota
+trouxe 8.000 L, a régua mediu 7.960 L e o tanque absorveu 7.995 L. É disso que
+se trata — dezenas de litros, não milhares.
+
+Cada dia traz ainda `entrou`, que é a única entrada física e não depende de
+nenhum lançamento: `medição de amanhã − a de hoje + o que se vendeu`. É contra
+ela que a nota e a régua se medem.
 
 O custo segue a média móvel ponderada (o "custo corrido" do relatório antigo):
 a cada entrada o saldo em reais e em litros somam, e a venda do dia sai pelo
@@ -58,6 +66,9 @@ def _dias(ini, fim):
 def _leituras(cur, cliente_id, ini, fim):
     """{(dia, produto_id): litros} — a medição de ABERTURA de cada tanque.
 
+    So ABERTURA: se um dia tiver tambem a leitura de fechamento, somar as duas
+    dobraria o estoque. A conciliacao de estoque filtra igual.
+
     Vai até fim+1: o estoque final de um dia é a abertura do dia seguinte, e é
     com ela que a variação é medida.
     """
@@ -65,6 +76,7 @@ def _leituras(cur, cliente_id, ini, fim):
         SELECT DATE(data_leitura) AS d, produto_id, SUM(volume_atual) AS litros
           FROM leitura_tanque_diaria
          WHERE cliente_id = %s
+           AND UPPER(TRIM(titulo)) = 'ABERTURA'
            AND DATE(data_leitura) BETWEEN %s AND %s
            AND produto_id IS NOT NULL
          GROUP BY d, produto_id
@@ -97,57 +109,135 @@ def _vendas(cur, cliente_id, ini, fim):
             for r in cur.fetchall()}
 
 
-def _compras_nota(cur, cliente_id, ini, fim):
-    """{(dia, produto_id): (litros, reais)} pela NOTA de compra (DFe)."""
+def _descargas(cur, cliente_id, ini, fim):
+    """{(dia, produto_id): litros} — o que a REGUA mediu descer.
+
+    Vem de `descargas_pendentes`, a tabela da tela /estoque?tab=descargas, onde
+    o usuario mede a descarga e escolhe a nota dela. Nao e a tabela `descargas`
+    do frete: aquela guarda o volume que o caminhao carregou, e e por isso que o
+    relatorio saia com milhares de litros de sobra.
+    """
     cur.execute("""
-        SELECT DATE(doc.dh_emissao) AS d, i.classificado_produto_id AS pid,
-               SUM(i.quantidade)  AS litros,
-               SUM(i.valor_total) AS reais
+        SELECT DATE(COALESCE(d.data_descarga, d.data_final, d.data_inicial)) AS d,
+               d.produto_id AS pid, SUM(d.total_descarga) AS litros
+          FROM descargas_pendentes d
+         WHERE d.cliente_id = %s
+           AND d.produto_id IS NOT NULL
+           AND DATE(COALESCE(d.data_descarga, d.data_final, d.data_inicial))
+               BETWEEN %s AND %s
+         GROUP BY d, pid
+    """, (cliente_id, ini, fim))
+    return {(r['d'], r['pid']): _f(r['litros']) for r in cur.fetchall()}
+
+
+def _notas(cur, cliente_id, produto_ids, ini, fim):
+    """A nota pelo dia em que ela DESCEU, e o que dela ainda nao desceu.
+
+    Devolve (descidas, pendente):
+
+        descidas   {(dia, produto_id): (litros, reais)} — o litro da nota
+                   alocado ao dia da descarga que a consumiu
+        pendente   {(dia, produto_id): litros} — saldo no fim daquele dia do
+                   que ja foi faturado e ainda nao desceu
+
+    O vinculo mora em `descarga_nota` (item da nota <-> descarga medida), e a
+    alocacao e a mesma da conciliacao de estoque: **a nota manda**. Quando um
+    item desce em parcelas, cada parcela leva o litro que registrou e a ULTIMA
+    leva todo o resto, para a nota fechar exatamente na sua quantidade — a
+    regua mede com perda de temperatura, e essa perda nao pode virar estoque.
+
+    Repare no que isto muda: a nota de 9.000 L emitida em 05/09 nao entra em
+    05/09. Ela entra no dia em que o caminhao desceu. E e por isso que os dois
+    lados passam a fechar.
+    """
+    marcas = ','.join(['%s'] * len(produto_ids))
+
+    # Os itens de nota que interessam: os que desceram no periodo (o vinculo
+    # diz quais) e os emitidos perto dele (para o saldo pendente).
+    cur.execute("""
+        SELECT i.id, DATE(doc.dh_emissao) AS emissao,
+               i.classificado_produto_id AS pid,
+               i.quantidade AS litros, i.valor_total AS reais
           FROM dfe_itens i
           JOIN dfe_documentos doc ON doc.id = i.documento_id
          WHERE doc.cliente_id = %s
            AND DATE(doc.dh_emissao) BETWEEN %s AND %s
-           AND i.classificado_produto_id IS NOT NULL
+           AND i.classificado_produto_id IN (""" + marcas + """)
            AND (doc.situacao IS NULL OR UPPER(doc.situacao) NOT LIKE '%%CANCEL%%')
-         GROUP BY d, i.classificado_produto_id
-    """, (cliente_id, ini, fim))
-    return {(r['d'], r['pid']): (_f(r['litros']), _f(r['reais']))
-            for r in cur.fetchall()}
+    """, [cliente_id, ini - timedelta(days=90), fim] + list(produto_ids))
+    itens = {r['id']: {'emissao': r['emissao'], 'pid': r['pid'],
+                       'litros': _f(r['litros']), 'reais': _f(r['reais'])}
+             for r in cur.fetchall()}
 
-
-def _compras_descarga(cur, cliente_id, ini, fim, preco):
-    """{(dia, produto_id): (litros, reais)} pelo que DESCEU no tanque.
-
-    O litro vem da descarga; o preco vem da nota daquele produto — a descarga
-    mede volume, nao dinheiro. Quando ha nota vinculada (descarga_nota), vale o
-    preco dela; senao, o preco medio de compra do produto no periodo, que e a
-    melhor aproximacao disponivel e fica dita na tela.
-    """
+    # Os vinculos INTEIROS de cada item — inclusive os de fora do periodo, sem
+    # os quais a ultima parcela nao fecharia certo.
     cur.execute("""
-        SELECT d.data_descarga AS d, f.produto_id AS pid,
-               SUM(COALESCE(NULLIF(d.volume_descarregado, 0),
-                            d.volume_descarga)) AS litros,
-               SUM(COALESCE(dn.litros, 0))      AS litros_com_nota,
-               SUM(COALESCE(di.valor_unitario, 0) * COALESCE(dn.litros, 0)) AS reais_nota
-          FROM descargas d
-          JOIN fretes f ON f.id = d.frete_id
-          LEFT JOIN descarga_nota dn ON dn.descarga_id = d.id
-          LEFT JOIN dfe_itens di ON di.id = dn.item_id
-         WHERE f.clientes_id = %s
-           AND d.data_descarga BETWEEN %s AND %s
-           AND f.produto_id IS NOT NULL
-         GROUP BY d.data_descarga, f.produto_id
-    """, (cliente_id, ini, fim))
-    fora = {}
+        SELECT dn.item_id, dn.litros AS vinc_l,
+               DATE(COALESCE(dp.data_descarga, dp.data_final,
+                             dp.data_inicial)) AS d,
+               dp.produto_id AS pid
+          FROM descarga_nota dn
+          JOIN descargas_pendentes dp ON dp.id = dn.descarga_id
+         WHERE dp.cliente_id = %s
+           AND dp.produto_id IN (""" + marcas + """)
+         ORDER BY dn.item_id, d, dn.id
+    """, [cliente_id] + list(produto_ids))
+    por_item = {}
     for r in cur.fetchall():
-        litros = _f(r['litros'])
-        com_nota = _f(r['litros_com_nota'])
-        reais = _f(r['reais_nota'])
-        # o que desceu sem nota vinculada entra pelo preco medio do periodo
-        sobra = max(0.0, litros - com_nota)
-        reais += sobra * preco.get(r['pid'], 0.0)
-        fora[(r['d'], r['pid'])] = (litros, reais)
-    return fora
+        por_item.setdefault(r['item_id'], []).append(r)
+
+    descidas, baixa = {}, {}   # baixa: por item, depois por (dia, produto)
+    for item_id, vs in por_item.items():
+        it = itens.get(item_id)
+        if not it or not it['litros']:
+            continue
+        unit = it['reais'] / it['litros']
+        resto = it['litros']
+        for k, r in enumerate(vs):
+            if len(vs) == 1:
+                usar = it['litros']
+            elif k < len(vs) - 1:
+                usar = min(_f(r['vinc_l']), max(resto, 0.0))
+            else:
+                usar = resto                      # a ultima fecha a nota
+            resto -= usar
+            ky = (r['d'], r['pid'])
+            baixa.setdefault(item_id, {})
+            baixa[item_id][ky] = baixa[item_id].get(ky, 0.0) + usar
+            if ini <= r['d'] <= fim:
+                l, rs = descidas.get(ky, (0.0, 0.0))
+                descidas[ky] = (l + usar, rs + usar * unit)
+
+    # O saldo do que falta descer. So contam as notas emitidas ate 30 dias
+    # antes do periodo: antes da tela de descargas existir (28/07/2026) nao ha
+    # vinculo nenhum, e essas notas ficariam pendentes para sempre.
+    corte = ini - timedelta(days=30)
+    saldo, emitidas_dia, baixa_dia = {}, {}, {}
+    for item_id, it in itens.items():
+        # So os itens da janela: antes da tela de descargas existir nao ha
+        # vinculo nenhum, e aquelas notas ficariam pendentes para sempre. E a
+        # baixa so conta para o item que entrou na conta — subtrair a baixa de
+        # um item que nunca foi somado derruba o saldo para milhares negativos.
+        if not (corte <= it['emissao'] <= fim):
+            continue
+        if it['emissao'] < ini:
+            saldo[it['pid']] = saldo.get(it['pid'], 0.0) + it['litros']
+        else:
+            ky = (it['emissao'], it['pid'])
+            emitidas_dia[ky] = emitidas_dia.get(ky, 0.0) + it['litros']
+        for (d, pid), l in baixa.get(item_id, {}).items():
+            if d < ini:
+                saldo[pid] = saldo.get(pid, 0.0) - l
+            elif d <= fim:
+                baixa_dia[(d, pid)] = baixa_dia.get((d, pid), 0.0) + l
+
+    pendente = {}
+    for pid in produto_ids:
+        acu = saldo.get(pid, 0.0)
+        for d in _dias(ini, fim):
+            acu += emitidas_dia.get((d, pid), 0.0) - baixa_dia.get((d, pid), 0.0)
+            pendente[(d, pid)] = acu
+    return descidas, pendente
 
 
 def _preco_medio(cur, cliente_id, produto_ids, ini, fim):
@@ -208,8 +298,15 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
     leitura = _leituras(cur, cliente_id, ini, fim)
     venda = _vendas(cur, cliente_id, ini, fim)
     preco = _preco_medio(cur, cliente_id, produto_ids, ini, fim)
-    nota = _compras_nota(cur, cliente_id, ini, fim)
-    desc = _compras_descarga(cur, cliente_id, ini, fim, preco)
+    nota, pendente = _notas(cur, cliente_id, produto_ids, ini, fim)
+    medido_l = _descargas(cur, cliente_id, ini, fim)
+    # A descarga mede volume, nao dinheiro: o preco do litro que desceu e o da
+    # nota que desceu com ele. Sem vinculo, o preco medio de compra do periodo.
+    desc = {}
+    for ky, litros in medido_l.items():
+        nl, nrs = nota.get(ky, (0.0, 0.0))
+        unit = (nrs / nl) if nl else preco.get(ky[1], 0.0)
+        desc[ky] = (litros, litros * unit)
     entrada = nota if base == 'nota' else desc
 
     fora = {}
@@ -248,7 +345,7 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
 
             ent_l, ent_rs = entrada.get((d, pid), (0.0, 0.0))
             nota_l, nota_rs = nota.get((d, pid), (0.0, 0.0))
-            desc_l = desc.get((d, pid), (0.0, 0.0))[0]
+            desc_l = medido_l.get((d, pid), 0.0)
             ven_l, ven_rs = venda.get((d, pid), (0.0, 0.0))
 
             saldo_l += ent_l
@@ -268,9 +365,10 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
             entrou = (ef_real - ei + ven_l) if (ef_real is not None
                                                 and ei_medido) else None
 
-            # O que a nota ja cobrou e o caminhao ainda nao trouxe (negativo =
-            # desceu produto de uma nota de antes).
-            falta_acum += nota_l - desc_l
+            # O que ja foi faturado e ainda nao desceu, no fim daquele dia.
+            # Nao e acumulado de coluna: vem do saldo real de cada item de
+            # nota, que so baixa quando a descarga o consome.
+            falta_acum = pendente.get((d, pid), 0.0)
             if variacao is not None:
                 var_acum += variacao
 
@@ -280,6 +378,7 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
                 'entrada_unit': (ent_rs / ent_l) if ent_l else 0.0,
                 'nota_l': nota_l, 'nota_rs': nota_rs, 'desc_l': desc_l,
                 'entrou': entrou, 'falta_dia': nota_l - desc_l,
+                'medido_l': desc_l,
                 'falta_acum': falta_acum, 'var_acum': var_acum,
                 'venda_l': ven_l, 'venda_rs': ven_rs,
                 'venda_unit': (ven_rs / ven_l) if ven_l else 0.0,

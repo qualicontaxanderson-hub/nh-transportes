@@ -2,8 +2,13 @@
 """Prova do motor do Lucro Postos Migrados, contra os números reais.
 
 Aqui não se prova tela: prova-se a CONTA. Cada número tem de sair da sua fonte
-e a soma tem de fechar com o que está no banco — e as duas bases (nota e
-descarga) têm de discordar exatamente onde o produto ainda não desceu.
+— e a fonte é a da tela que o usuário opera, /estoque?tab=descargas.
+
+A prova que manda é a última: em dois meses inteiros, nenhum dia medido pode
+acusar milhares de litros de sobra ou de perda. Foi exatamente isso que a
+versão anterior fazia, porque lia a descarga da tabela errada (`descargas`, do
+frete, que guarda o que o caminhão CARREGOU) em vez de `descargas_pendentes`,
+que guarda o que a régua mediu DESCER.
 
 Não escreve nada: só lê.
 
@@ -73,31 +78,45 @@ try:
 
     # ── cada número vem da sua fonte ──────────────────────────────────────
     for pid in PRODUTOS:
-        banco = um("""SELECT COALESCE(SUM(i.quantidade),0) l,
-                             COALESCE(SUM(i.valor_total),0) v
-                        FROM dfe_itens i
-                        JOIN dfe_documentos doc ON doc.id = i.documento_id
-                       WHERE doc.cliente_id = %s
-                         AND DATE(doc.dh_emissao) BETWEEN %s AND %s
-                         AND i.classificado_produto_id = %s""",
-                   (CLIENTE, INI, FIM, pid))
+        # A NOTA entra pelo dia da descarga que a consumiu, e a soma do
+        # periodo tem de bater com os vinculos daquele periodo.
+        banco = um("""SELECT COALESCE(SUM(dn.litros),0) l
+                        FROM descarga_nota dn
+                        JOIN descargas_pendentes dp ON dp.id = dn.descarga_id
+                       WHERE dp.cliente_id = %s AND dp.produto_id = %s
+                         AND DATE(COALESCE(dp.data_descarga, dp.data_final,
+                                           dp.data_inicial)) BETWEEN %s AND %s""",
+                   (CLIENTE, pid, INI, FIM))
         tot = nota[pid]['total']
-        prova('produto %s: a entrada pela nota é a soma das notas' % pid,
-              abs(tot['entrada_l'] - float(banco['l'])) < 0.01
-              and abs(tot['entrada_rs'] - float(banco['v'])) < 0.01,
-              'motor %.3f L / R$ %.2f, banco %.3f L / R$ %.2f'
-              % (tot['entrada_l'], tot['entrada_rs'],
-                 float(banco['l']), float(banco['v'])))
+        # o vinculo grava o litro MEDIDO; a alocacao devolve o litro da NOTA,
+        # entao os dois andam juntos mas nao sao iguais ao litro
+        prova('produto %s: a entrada pela nota é a nota daquelas descargas' % pid,
+              abs(tot['entrada_l'] - float(banco['l'])) <= max(
+                  float(banco['l']) * 0.05, 50),
+              'motor %.1f L, vínculos %.1f L' % (tot['entrada_l'], float(banco['l'])))
 
-        bd = um("""SELECT COALESCE(SUM(COALESCE(NULLIF(d.volume_descarregado,0),
+        # A DESCARGA e a regua de /estoque?tab=descargas — nao a tabela do frete.
+        bd = um("""SELECT COALESCE(SUM(d.total_descarga),0) l
+                     FROM descargas_pendentes d
+                    WHERE d.cliente_id = %s AND d.produto_id = %s
+                      AND DATE(COALESCE(d.data_descarga, d.data_final,
+                                        d.data_inicial)) BETWEEN %s AND %s""",
+                (CLIENTE, pid, INI, FIM))
+        prova('produto %s: a entrada pela descarga é o que a régua mediu' % pid,
+              abs(desc[pid]['total']['entrada_l'] - float(bd['l'])) < 0.01,
+              'motor %.3f, régua %.3f'
+              % (desc[pid]['total']['entrada_l'], float(bd['l'])))
+
+        # e NAO pode ser a tabela do frete, que foi o erro da versao anterior
+        bf = um("""SELECT COALESCE(SUM(COALESCE(NULLIF(d.volume_descarregado,0),
                                                 d.volume_descarga)),0) l
                      FROM descargas d JOIN fretes f ON f.id = d.frete_id
                     WHERE f.clientes_id = %s AND d.data_descarga BETWEEN %s AND %s
                       AND f.produto_id = %s""", (CLIENTE, INI, FIM, pid))
-        prova('produto %s: a entrada pela descarga é o que desceu' % pid,
-              abs(desc[pid]['total']['entrada_l'] - float(bd['l'])) < 0.01,
-              'motor %.3f, banco %.3f'
-              % (desc[pid]['total']['entrada_l'], float(bd['l'])))
+        if abs(float(bf['l']) - float(bd['l'])) > 1:
+            prova('produto %s: não é o volume do frete que está sendo usado' % pid,
+                  abs(desc[pid]['total']['entrada_l'] - float(bf['l'])) > 1,
+                  'o motor voltou a ler a tabela `descargas` do frete')
 
         # Cupom cancelado NAO e venda: o produto voltou para o tanque. O
         # motor exclui, e por isso a conferencia exclui tambem — comparar com
@@ -134,6 +153,32 @@ try:
                                        - float(canc['l'])) < 1.0,
           'cru %.1f - motor %.1f = %.1f, cancelado %.1f'
           % (float(cru['l']), somado, float(cru['l']) - somado, float(canc['l'])))
+
+    # ── a alocação "a nota manda" ─────────────────────────────────────────
+    # Um item de nota que desce em parcelas tem de fechar EXATAMENTE na sua
+    # quantidade: a régua mede com perda de temperatura, e essa perda não pode
+    # virar litro de estoque nem sumir do custo.
+    cur.execute("""SELECT dn.item_id, i.quantidade nota_l,
+                          COUNT(*) parcelas, SUM(dn.litros) medido
+                     FROM descarga_nota dn
+                     JOIN dfe_itens i ON i.id = dn.item_id
+                     JOIN descargas_pendentes dp ON dp.id = dn.descarga_id
+                    WHERE dp.cliente_id = %s AND dp.produto_id IN (1,2,4,5)
+                      AND DATE(COALESCE(dp.data_descarga, dp.data_final,
+                                        dp.data_inicial)) BETWEEN %s AND %s
+                    GROUP BY dn.item_id, i.quantidade""", (CLIENTE, INI, FIM))
+    vincs = cur.fetchall()
+    parcelados = [v for v in vincs if v['parcelas'] > 1]
+    difs = [v for v in vincs if abs(float(v['nota_l']) - float(v['medido'])) > 1]
+    prova('há nota descendo em mais de uma parcela no período (é o caso difícil)',
+          bool(parcelados) or bool(difs),
+          'nenhuma nota parcelada nem com perda — a prova não testaria nada')
+    soma_nota = sum(float(v['nota_l']) for v in vincs)
+    soma_motor = sum(nota[p]['total']['entrada_l'] for p in PRODUTOS)
+    prova('a alocação devolve o litro da NOTA, não o da régua',
+          abs(soma_motor - soma_nota) <= max(soma_nota * 0.02, 100),
+          'motor %.0f L, notas vinculadas %.0f L, régua %.0f L'
+          % (soma_motor, soma_nota, sum(float(v['medido']) for v in vincs)))
 
     # ── a conta do dia fecha ──────────────────────────────────────────────
     erros = []
@@ -219,18 +264,38 @@ try:
                  for p in PRODUTOS)
     prova('a venda não muda de uma base para a outra', iguais)
 
-    # ── o caso que motivou o relatório ────────────────────────────────────
-    # S-500 em 09/09: a nota trouxe 12.000 L e a descarga do dia foram 5.000 L
-    dia = next((d for d in nota[4]['dias'] if d['data'] == date(2026, 9, 9)), None)
-    dia_d = next((d for d in desc[4]['dias'] if d['data'] == date(2026, 9, 9)), None)
-    if dia and dia_d:
-        prova('o S-500 de 09/09 mostra a diferença entre nota e descarga',
-              dia['entrada_l'] > dia_d['entrada_l'] + 1000,
-              'nota %.0f L, descarga %.0f L' % (dia['entrada_l'], dia_d['entrada_l']))
-        print('        09/09 S-500: EI %.0f · nota %.0f · descarga %.0f · venda %.0f'
-              % (dia['ei'], dia['entrada_l'], dia_d['entrada_l'], dia['venda_l']))
-        print('        variação pela nota %.0f L · pela descarga %.0f L'
-              % (dia['variacao'] or 0, dia_d['variacao'] or 0))
+    # ── a nota e a régua têm de andar coladas, dia a dia ──────────────────
+    # Antes a nota entrava pelo dia da emissão e a descarga vinha do frete: as
+    # duas se descolavam por milhares de litros. Lidas do vínculo, a distância
+    # entre elas é só a perda de temperatura.
+    # O guarda mais forte contra a fonte errada: as duas bases tem de ter
+    # entrada nos MESMOS dias. Lendo a descarga da tabela do frete, os dias
+    # nem coincidiam — era assim que 05/09 ganhava 9.000 L que nao desceram.
+    dias_so_um = []
+    for pid in PRODUTOS:
+        for dn_, dd_ in zip(nota[pid]['dias'], desc[pid]['dias']):
+            if bool(dn_['entrada_l'] > 1) != bool(dd_['entrada_l'] > 1):
+                dias_so_um.append((pid, dn_['data'], dn_['entrada_l'],
+                                   dd_['entrada_l']))
+    prova('nota e régua entram exatamente nos mesmos dias',
+          not dias_so_um, '%r' % dias_so_um[:4])
+
+    # E a distancia entre elas e a perda de temperatura: alguns por cento. Um
+    # dia ruim de regua pode passar disso, mas o TIPICO nao pode.
+    difs = []
+    for pid in PRODUTOS:
+        for dn_, dd_ in zip(nota[pid]['dias'], desc[pid]['dias']):
+            maior = max(dn_['entrada_l'], dd_['entrada_l'])
+            if maior > 1:
+                difs.append(abs(dn_['entrada_l'] - dd_['entrada_l']) / maior)
+    difs.sort()
+    mediana = difs[len(difs) // 2] if difs else 0.0
+    prova('a distância típica entre a nota e a régua é de poucos por cento',
+          bool(difs) and mediana < 0.03 and max(difs) < 0.20,
+          'mediana %.2f%%, pior %.2f%% em %s descargas'
+          % (mediana * 100, (max(difs) if difs else 0) * 100, len(difs)))
+    print('        nota x régua: mediana %.2f%%, pior dia %.2f%% (%s descargas)'
+          % (mediana * 100, (max(difs) if difs else 0) * 100, len(difs)))
 
     # ── o que ENTROU: a unica entrada fisica ──────────────────────────────
     # Recalculada aqui a partir das leituras cruas, sem passar pelo motor: se
@@ -262,37 +327,78 @@ try:
 
     erros = []
     for pid in PRODUTOS:
-        acf, acv = 0.0, 0.0
+        acv = 0.0
         for d in nota[pid]['dias']:
-            acf += d['nota_l'] - d['desc_l']
             if d['variacao'] is not None:
                 acv += d['variacao']
-            if abs(d['falta_acum'] - acf) > 0.01 or abs(d['var_acum'] - acv) > 0.01:
+            if abs(d['var_acum'] - acv) > 0.01:
                 erros.append((pid, d['data']))
-        t = nota[pid]['total']
-        if abs(t['falta_l'] - acf) > 0.01 or abs(t['variacao_l'] - acv) > 0.01:
+        if abs(nota[pid]['total']['variacao_l'] - acv) > 0.01:
             erros.append((pid, 'total'))
-    prova('os acumulados somam de verdade, dia após dia', not erros, '%r' % erros[:5])
+    prova('a variação acumulada soma de verdade, dia após dia',
+          not erros, '%r' % erros[:5])
 
-    # ── o caso que o Anderson apontou: 05/09, nota de 9.000 L que nao chegou ──
-    # O dia sozinho acusa milhares de litros de variacao; o acumulado do
-    # periodo fecha perto de zero. E esse o ponto do relatorio.
+    # "A descer" e um SALDO, nao um acumulado de coluna: sobe quando a nota e
+    # emitida e baixa no dia em que o caminhao chega. Ele PODE ficar negativo,
+    # mas so por um motivo: o produto desceu antes de a nota ser registrada.
+    # Se ficar negativo sem isso, a baixa esta comendo nota que nao existe.
+    adiantadas = um("""SELECT COUNT(*) n FROM descarga_nota dn
+                         JOIN descargas_pendentes dp ON dp.id = dn.descarga_id
+                         JOIN dfe_itens i ON i.id = dn.item_id
+                         JOIN dfe_documentos doc ON doc.id = i.documento_id
+                        WHERE dp.cliente_id = %s
+                          AND DATE(COALESCE(dp.data_descarga, dp.data_final,
+                                            dp.data_inicial))
+                              < DATE(doc.dh_emissao)""", (CLIENTE,))
+    negativos = [(pid, d['data'], round(d['falta_acum']))
+                 for pid in PRODUTOS for d in nota[pid]['dias']
+                 if d['falta_acum'] < -1]
+    prova('o saldo a descer só fica negativo quando a descarga chega antes '
+          'da nota',
+          (not negativos) or int(adiantadas['n']) > 0,
+          'ficou negativo em %r e não há descarga anterior à nota' % (negativos[:3],))
+    if negativos:
+        print('        %s dia(s) com saldo negativo — há %s descarga(s) '
+              'lançada(s) antes da nota' % (len(negativos), adiantadas['n']))
+    baixou = []
+    for pid in PRODUTOS:
+        ds = nota[pid]['dias']
+        for k in range(1, len(ds)):
+            if ds[k]['desc_l'] > 100 and ds[k]['falta_acum'] < ds[k - 1]['falta_acum']:
+                baixou.append(pid)
+                break
+    prova('e baixa no dia em que a descarga chega', len(baixou) >= 2,
+          'baixou em %r de %r produtos' % (len(baixou), len(PRODUTOS)))
+
+    # ── o caso que o Anderson apontou: a nota de 9.000 L de 05/09 ─────────
+    # Ela foi EMITIDA em 05/09 e desceu depois. Antes, o relatorio a jogava em
+    # 05/09 e o dia acusava -9.034 L. Agora ela entra no dia da descarga, e
+    # 05/09 — um dia em que nao desceu nada — tem de ficar limpo.
     et = nota[1]
     d5 = next((d for d in et['dias'] if d['data'] == date(2026, 9, 5)), None)
     if d5:
-        print('        05/09 etanol: nota %.0f L · descarga %.0f L · entrou %s L'
-              % (d5['nota_l'], d5['desc_l'],
+        print('        05/09 etanol: nota %.0f L · régua %.0f L · entrou %s L'
+              % (d5['nota_l'], d5['medido_l'],
                  '%.0f' % d5['entrou'] if d5['entrou'] is not None else '—'))
-        prova('05/09: a nota veio e o produto não',
-              d5['nota_l'] > 5000 and d5['entrou'] is not None
-              and abs(d5['entrou']) < 500,
-              'nota %.0f, entrou %r' % (d5['nota_l'], d5['entrou']))
-        prova('o dia sozinho acusa muito mais do que o período inteiro',
-              abs(d5['variacao'] or 0) > abs(et['total']['variacao_l']) * 5,
-              'dia %.0f L, período %.0f L'
+        prova('05/09 não recebeu nada, e o relatório concorda',
+              d5['nota_l'] == 0 and d5['medido_l'] == 0
+              and d5['entrou'] is not None and abs(d5['entrou']) < 300,
+              'nota %.0f, régua %.0f, entrou %r'
+              % (d5['nota_l'], d5['medido_l'], d5['entrou']))
+        prova('o dia de 05/09 parou de acusar milhares de litros',
+              abs(d5['variacao'] or 0) < 300,
+              'variação do dia %.0f L' % (d5['variacao'] or 0))
+        print('        variação do dia %.0f L · do período %.0f L'
               % (d5['variacao'] or 0, et['total']['variacao_l']))
-        print('        variação do dia %.0f L · acumulada do período %.0f L'
-              % (d5['variacao'] or 0, et['total']['variacao_l']))
+        # a nota de 9.000 L existe, e desceu — nos dias 08 e 09
+        emitida = um("""SELECT COALESCE(SUM(i.quantidade),0) l
+                          FROM dfe_itens i
+                          JOIN dfe_documentos doc ON doc.id = i.documento_id
+                         WHERE doc.cliente_id = %s AND i.classificado_produto_id = 1
+                           AND DATE(doc.dh_emissao) = '2026-09-05'""", (CLIENTE,))
+        prova('a nota de 05/09 existe mesmo — ela só não entrou naquele dia',
+              float(emitida['l']) > 5000,
+              'a nota emitida em 05/09 soma %.0f L' % float(emitida['l']))
 
     # o tanque e o juiz: a soma do que entrou tem de ficar entre a nota e a
     # descarga, ou colada em uma delas — nunca fora das duas por muito
@@ -306,6 +412,31 @@ try:
                       abs(t['entrou_l'] - t['desc_l'])) <= folga,
                   'entrou %.0f, nota %.0f, descarga %.0f'
                   % (t['entrou_l'], t['nota_l'], t['desc_l']))
+
+    # ── a prova que manda: dois meses, e nenhum dia absurdo ───────────────
+    # "nunca tem + 4000 de sobra ou perca" — Anderson. Um dia de posto perde
+    # ou sobra dezenas de litros, nao milhares. Se voltar a aparecer um dia de
+    # milhares, a fonte esta errada de novo, e esta prova cai.
+    LARGO_INI, LARGO_FIM, TETO = date(2026, 8, 1), date(2026, 9, 30), 800
+    for base in ('nota', 'descarga'):
+        largo = lucro_migrado.apurar(cur, CLIENTE, PRODUTOS,
+                                     LARGO_INI, LARGO_FIM, base)
+        absurdos, medidos, pior = [], 0, (0.0, None, None)
+        for pid in PRODUTOS:
+            for d in largo[pid]['dias']:
+                if d['variacao'] is None:
+                    continue
+                medidos += 1
+                if abs(d['variacao']) > abs(pior[0]):
+                    pior = (d['variacao'], pid, d['data'])
+                if abs(d['variacao']) > TETO:
+                    absurdos.append((pid, d['data'], round(d['variacao'])))
+        prova('base %s: em %s dias medidos, nenhum acusa mais de %s L'
+              % (base, medidos, TETO),
+              not absurdos and medidos > 100,
+              '%s dia(s) fora: %r' % (len(absurdos), absurdos[:5]))
+        print('        pior dia da base %s: %.0f L (produto %s em %s)'
+              % (base, pior[0], pior[1], pior[2]))
 
     # ── período sem dado não pode estourar ────────────────────────────────
     vazio = lucro_migrado.apurar(cur, CLIENTE, PRODUTOS,
@@ -379,8 +510,9 @@ if adm:
     prova('a tabela do dia a dia está lá, uma por produto',
           telas['nota'].count('<tbody>') == len(PRODUTOS),
           '%s tabelas' % telas['nota'].count('<tbody>'))
-    prova('a tela explica por que nota e descarga discordam',
-          'ainda não chegou' in telas['nota'])
+    prova('a tela explica de onde vem cada entrada',
+          'ainda não desceu' in telas['nota']
+          and '/estoque → descargas' in telas['nota'])
     prova('a tela traz as três entradas: nota, descarga e tanque',
           '>Nota (L)<' in telas['nota'].replace('\n', ' ')
           and '>Descarga (L)<' in telas['nota'].replace('\n', ' ')
