@@ -211,6 +211,67 @@ body > .container-fluid:has(#lpm){
     line-height:1.45; border-top:1px solid var(--linha); background:#fafbfd; }
   #lpm .leg b{ color:var(--ink); }
 
+  /* ---- o celular ------------------------------------------------------
+     Uma tabela de dezoito colunas num telefone e uma tabela ilegivel: rolar
+     de lado para achar o lucro do dia nao e usar, e sofrer. Entao no celular
+     cada DIA vira um cartao — e a tabela cheia continua a um toque, para
+     quem precisa da coluna que ficou de fora. */
+  #lpm .so-fone{ display:none; }
+  #lpm .vertudo{ display:none; }
+  @media (max-width:767px){
+    #lpm .so-fone{ display:block; }
+    #lpm .so-tela{ display:none; }
+    #lpm .vertudo{ display:inline-flex; }
+
+    /* a tabela de cada produto vira lista de cartoes */
+    #lpm .tab--prod table, #lpm .tab--prod tbody, #lpm .tab--prod tr,
+    #lpm .tab--prod td{ display:block; width:auto; }
+    #lpm .tab--prod thead, #lpm .tab--prod tfoot{ display:none; }
+    #lpm .tab--prod tr{ border:1px solid var(--borda); border-radius:11px;
+      margin:.45rem .55rem; overflow:hidden; background:#fff; }
+    #lpm .tab--prod td{ display:flex; justify-content:space-between;
+      gap:.7rem; text-align:right; padding:.26rem .6rem; border:0;
+      font-size:.8rem; }
+    #lpm .tab--prod td::before{ content:attr(data-r); text-align:left;
+      font-size:.64rem; font-weight:800; letter-spacing:.04em;
+      text-transform:uppercase; color:var(--muted); white-space:nowrap; }
+    #lpm .tab--prod td:first-child{ background:#f2f6fa; font-weight:800;
+      font-size:.88rem; padding:.4rem .6rem;
+      border-bottom:1px solid var(--linha); }
+    #lpm .tab--prod td:first-child::before{ content:none; }
+    #lpm .tab--prod td.ent, #lpm .tab--prod td.ent--fim{ background:#f6f9fd;
+      border:0; }
+    #lpm .tab--prod tr:hover td{ background:inherit; }
+    /* o que nao cabe no bolso some — ate o "ver tudo" */
+    #lpm .tab--prod td.sec{ display:none; }
+    #lpm .tab--prod.cheia table, #lpm .tab--prod.cheia tbody,
+    #lpm .tab--prod.cheia tr, #lpm .tab--prod.cheia td{ display:revert; }
+    #lpm .tab--prod.cheia thead, #lpm .tab--prod.cheia tfoot{ display:revert; }
+    #lpm .tab--prod.cheia td::before{ content:none; }
+    #lpm .tab--prod.cheia td{ text-align:right; }
+    #lpm .tab--prod.cheia td:first-child{ text-align:left; background:none; }
+
+    #lpm .resumo{ gap:.4rem; }
+    #lpm .lucro__v{ font-size:1.6rem; }
+    #lpm .cx__t .dir{ display:none; }
+  }
+
+  /* o cartao de um dia, no celular */
+  #lpm .dc{ border:1px solid var(--borda); border-radius:11px;
+    padding:.5rem .6rem; margin-bottom:.4rem; background:#f7f9fc; }
+  #lpm .dc:last-child{ margin-bottom:0; }
+  #lpm .dias{ padding:.55rem .6rem .65rem; }
+  #lpm .dc__1{ display:flex; align-items:baseline; gap:.5rem; }
+  #lpm .dc__d{ font-weight:800; font-size:.84rem; }
+  #lpm .dc__l{ margin-left:auto; font-weight:800; font-size:.95rem;
+    color:var(--ok); font-variant-numeric:tabular-nums; }
+  #lpm .dc__l.neg{ color:var(--danger); }
+  #lpm .dc__2{ display:flex; gap:.55rem; flex-wrap:wrap; font-size:.68rem;
+    color:var(--muted); margin-top:.2rem;
+    font-variant-numeric:tabular-nums; }
+  #lpm .dc__a{ font-weight:800; color:var(--ink); }
+  #lpm .bt--mini{ padding:.3rem .6rem; font-size:.74rem; margin:.1rem .55rem .6rem; }
+
   #lpm .nada{ padding:1.6rem .8rem; text-align:center; color:var(--muted);
     font-size:.88rem; background:#fff; border:1px solid var(--borda);
     border-radius:14px; }
@@ -321,7 +382,7 @@ body > .container-fluid:has(#lpm){
     {# o dia a dia somado: os quatro combustiveis numa conta so #}
     <div class="cx__t"><i class="bi bi-calendar3"></i> Dia a dia do posto
       <span class="dir">o acumulado é o que diz se o mês está indo</span></div>
-    <div class="tab" style="border-top:0">
+    <div class="tab so-tela" style="border-top:0">
       <table>
         <thead>
           <tr>
@@ -372,6 +433,40 @@ body > .container-fluid:has(#lpm){
           </tr>
         </tfoot>
       </table>
+    </div>
+
+    {# No celular o mesmo dia a dia, em cartao: o lucro grande e o acumulado
+       ao lado, que sao os dois numeros que se procura no telefone. #}
+    <div class="dias so-fone">
+      {% for d in geral.dias %}{% if d.venda_l %}
+      <div class="dc">
+        <div class="dc__1">
+          <span class="dc__d">{{ d.data.strftime('%d/%m') }}</span>
+          <span class="dc__l {{ 'neg' if d.lucro_rs < 0 }}">{{ reais(d.lucro_rs) }}</span>
+        </div>
+        <div class="dc__2">
+          <span>{{ litros(d.venda_l) }} L</span>
+          <span>{{ preco(d.margem_l) }}/L</span>
+          {%- if d.variacao is not none %}
+          <span class="{{ 'neg' if d.variacao < -1 else 'pos' if d.variacao > 1 }}">
+            {{ litros(d.variacao) }} L</span>
+          {%- endif %}
+          <span class="dc__a">acum. {{ reais(d.lucro_acum) }}</span>
+        </div>
+      </div>
+      {% endif %}{% endfor %}
+      <div class="dc" style="background:#eef4fb;border-color:#cbdcec">
+        <div class="dc__1">
+          <span class="dc__d">Período</span>
+          <span class="dc__l {{ 'neg' if totais.lucro_rs < 0 }}">{{ reais(totais.lucro_rs) }}</span>
+        </div>
+        <div class="dc__2">
+          <span>{{ litros(totais.venda_l) }} L</span>
+          <span>{{ preco(totais.margem_l) }}/L</span>
+          <span class="{{ 'neg' if totais.variacao_l < -1 else 'pos' if totais.variacao_l > 1 }}">
+            {{ litros(totais.variacao_l) }} L</span>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -463,7 +558,9 @@ body > .container-fluid:has(#lpm){
           · variação {{ litros(t.variacao_l) }} L</div></div>
     </div>
 
-    <div class="tab" hidden>
+    <div class="tab tab--prod" hidden>
+      <button type="button" class="bt bt--mini vertudo" onclick="lpmTudo(this)">
+        <i class="bi bi-table"></i> Ver a tabela completa</button>
       <table>
         <thead>
           <tr>
@@ -492,26 +589,26 @@ body > .container-fluid:has(#lpm){
           <tr>
             <td class="{{ 'dom' if d.data.weekday() == 6 }}">{{ d.data.strftime('%d/%m') }}
               {%- if not d.ei_medido %} <span class="semmedir" title="sem leitura de tanque neste dia">•</span>{% endif -%}</td>
-            <td class="{{ '' if d.ei_medido else 'est' }}">{{ litros(d.ei) }}</td>
-            <td class="ent">{{ litros(d.nota_l) if d.nota_l else '—' }}</td>
-            <td class="ent">{{ litros(d.desc_l) if d.desc_l else '—' }}</td>
-            <td class="ent tanque">{{ litros(d.entrou) if d.entrou is not none else '—' }}</td>
-            <td class="ent ent--fim {{ 'neg' if d.falta_acum > 1 else 'pos' if d.falta_acum < -1 else 'est' }}">
+            <td data-r="Est. inicial" class="sec {{ '' if d.ei_medido else 'est' }}">{{ litros(d.ei) }}</td>
+            <td data-r="Nota (L)" class="ent">{{ litros(d.nota_l) if d.nota_l else '—' }}</td>
+            <td data-r="Descarga (L)" class="ent">{{ litros(d.desc_l) if d.desc_l else '—' }}</td>
+            <td data-r="Entrou (L)" class="ent tanque">{{ litros(d.entrou) if d.entrou is not none else '—' }}</td>
+            <td data-r="A descer" class="sec ent ent--fim {{ 'neg' if d.falta_acum > 1 else 'pos' if d.falta_acum < -1 else 'est' }}">
               {{ litros(d.falta_acum) }}</td>
-            <td>{{ reais(d.entrada_rs) if d.entrada_l else '—' }}</td>
-            <td>{{ preco(d.entrada_unit) if d.entrada_l else '—' }}</td>
-            <td>{{ preco(d.custo_unit) }}</td>
-            <td>{{ litros(d.venda_l) if d.venda_l else '—' }}</td>
-            <td>{{ preco(d.venda_unit) if d.venda_l else '—' }}</td>
-            <td>{{ reais(d.venda_rs) if d.venda_l else '—' }}</td>
-            <td>{{ preco(d.margem_l) if d.venda_l else '—' }}</td>
-            <td>{{ litros(d.ef_real) if d.ef_real is not none else '—' }}</td>
-            <td class="est" title="o dia sozinho não fecha: a nota vem num dia e o caminhão no outro">
+            <td class="sec" data-r="Entrada R$">{{ reais(d.entrada_rs) if d.entrada_l else '—' }}</td>
+            <td class="sec" data-r="Preço compra">{{ preco(d.entrada_unit) if d.entrada_l else '—' }}</td>
+            <td class="sec" data-r="Custo corrido">{{ preco(d.custo_unit) }}</td>
+            <td data-r="Vendas (L)">{{ litros(d.venda_l) if d.venda_l else '—' }}</td>
+            <td class="sec" data-r="Preço venda">{{ preco(d.venda_unit) if d.venda_l else '—' }}</td>
+            <td class="sec" data-r="Receita">{{ reais(d.venda_rs) if d.venda_l else '—' }}</td>
+            <td data-r="Margem/L">{{ preco(d.margem_l) if d.venda_l else '—' }}</td>
+            <td class="sec" data-r="EF medido">{{ litros(d.ef_real) if d.ef_real is not none else '—' }}</td>
+            <td data-r="Dif. do dia" class="sec est" title="o dia sozinho não fecha: a nota vem num dia e o caminhão no outro">
               {{ litros(d.variacao) if d.variacao is not none else '—' }}</td>
-            <td class="{{ 'neg' if d.var_acum < -1 else 'pos' if d.var_acum > 1 else '' }}">
+            <td data-r="Acumulada" class="{{ 'neg' if d.var_acum < -1 else 'pos' if d.var_acum > 1 else '' }}">
               {{ litros(d.var_acum) }}</td>
-            <td class="{{ 'neg' if d.lucro_rs < 0 }}">{{ reais(d.lucro_rs) }}</td>
-            <td class="forte {{ 'neg' if d.lucro_acum < 0 }}">{{ reais(d.lucro_acum) }}</td>
+            <td data-r="Lucro do dia" class="{{ 'neg' if d.lucro_rs < 0 }}">{{ reais(d.lucro_rs) }}</td>
+            <td data-r="Lucro acumulado" class="forte {{ 'neg' if d.lucro_acum < 0 }}">{{ reais(d.lucro_acum) }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -566,6 +663,18 @@ body > .container-fluid:has(#lpm){
 // O dia a dia de cada combustível abre por produto: são dezoito colunas, e
 // abrir os quatro de uma vez empurraria para baixo o que se olha primeiro,
 // que é o posto inteiro.
+// No celular a tabela do produto vira cartao por dia. Quem precisa de uma
+// coluna que ficou de fora pede a tabela cheia aqui, e ela volta a rolar de
+// lado — a escolha e de quem esta olhando, nao minha.
+function lpmTudo(bt){
+  var tab = bt.closest('.tab');
+  if (!tab) return;
+  var cheia = tab.classList.toggle('cheia');
+  bt.innerHTML = cheia
+    ? '<i class="bi bi-card-list"></i> Voltar para os cartões'
+    : '<i class="bi bi-table"></i> Ver a tabela completa';
+}
+
 function lpmAbre(cab){
   var box = cab.closest('.cx');
   var tab = box ? box.querySelector('.tab') : null;

@@ -578,6 +578,49 @@ if adm:
     prova('o lucro acumulado de cada produto soma dia a dia',
           not erros, '%r' % erros[:4])
 
+    # ── o celular ─────────────────────────────────────────────────────
+    # No telefone a tabela vira cartao. Duas coisas tem de valer, ou o
+    # cartao fica pior que a tabela: TODA celula que sobrevive precisa do
+    # rotulo (senao e um numero solto), e o dia a dia do posto precisa
+    # existir em cartao, nao so em tabela.
+    corpo = telas['nota']
+    tabs = re.findall(r'<div class="tab tab--prod"[^>]*>(.*?)</table>',
+                      corpo, re.S)
+    prova('cada produto tem a tabela que vira cartão no celular',
+          len(tabs) == len(PRODUTOS), '%s de %s' % (len(tabs), len(PRODUTOS)))
+    sem_rotulo = []
+    for bloco in tabs:
+        linha = re.search(r'<tbody>(.*?)</tr>', bloco, re.S)
+        if not linha:
+            continue
+        celulas = re.findall(r'<td([^>]*)>', linha.group(1))
+        for k, atrs in enumerate(celulas[1:], 1):   # a 1a e a data, e o topo
+            if 'data-r=' not in atrs:
+                sem_rotulo.append(atrs.strip()[:60])
+    prova('no cartão do celular nenhum número fica sem o nome dele',
+          not sem_rotulo, 'sem rótulo: %r' % sem_rotulo[:4])
+    escondidas = sum(1 for b in tabs[:1]
+                     for a_ in re.findall(r'<td([^>]*)>',
+                                          re.search(r'<tbody>(.*?)</tr>', b,
+                                                    re.S).group(1))
+                     if 'sec' in a_)
+    prova('as colunas que não cabem no bolso ficam de fora por padrão',
+          escondidas >= 5, 'só %s coluna(s) escondida(s)' % escondidas)
+    prova('e a tabela cheia continua a um toque',
+          corpo.count('lpmTudo(this)') == len(PRODUTOS)
+          and 'Ver a tabela completa' in corpo)
+
+    cartoes = re.findall(r'<div class="dc">', corpo)
+    com_venda = sum(1 for d in ger[PRODUTOS[0]]['dias']
+                    if sum(ger[p_]['dias'][ger[PRODUTOS[0]]['dias'].index(d)]
+                           ['venda_l'] for p_ in PRODUTOS) > 0)
+    prova('o dia a dia do posto existe em cartão, um por dia com venda',
+          len(cartoes) == com_venda,
+          '%s cartões para %s dias com venda' % (len(cartoes), com_venda))
+    prova('e o cartão do período fecha a lista com o lucro total',
+          _moeda(lucro_total) in ' '.join(
+              corpo[corpo.index('class="dias so-fone"'):].split()))
+
     prova('e dá o caminho de volta para o relatório antigo',
           '/relatorios/lucro_postos"' in telas['nota']
           or "/relatorios/lucro_postos'" in telas['nota']
