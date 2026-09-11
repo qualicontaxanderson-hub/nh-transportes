@@ -20,3 +20,4 @@ ofx_inbox/processados/*.OFX
 # O que se distribui e o ZIP, e ele vai para o Dropbox (/BANCOS/NHROBO), nao
 # para o git — repositorio nao e lugar de binario que se regenera com um comando.
 agente_nhrobo/build/
+_lucro_migrado.html

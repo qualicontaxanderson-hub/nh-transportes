@@ -211,6 +211,54 @@ body > .container-fluid:has(#lpm){
     line-height:1.45; border-top:1px solid var(--linha); background:#fafbfd; }
   #lpm .leg b{ color:var(--ink); }
 
+  /* ===== MODELO A — a cor identifica o combustivel =====================
+     A cor nunca decora aqui: onde ela aparece, e porque aquilo e do S-500 ou
+     do etanol. E e a mesma cor da conciliacao de estoque, para o produto ser
+     o mesmo objeto nas duas telas. */
+  #lpm .ph{ border-left-width:6px; }
+  #lpm .rk__b i, #lpm .pt{ background:var(--c); }
+  /* os quatro quadrinhos do painel, cada um no seu tom */
+  #lpm .mini div:nth-child(1){ border-color:#cfe0c8; background:#f3f8f0; }
+  #lpm .mini div:nth-child(2){ border-color:#cbdcec; background:#eff5fb; }
+  #lpm .mini div:nth-child(3){ border-color:#d3cfe8; background:#f2f0fa; }
+  #lpm .mini div:nth-child(4){ border-color:#e8d9bd; background:#fbf6ec; }
+
+  /* ===== MODELO B — o painel escuro ====================================
+     So o painel de cima muda. Do "Dia a dia" para baixo tudo continua claro:
+     numero se le melhor em papel branco, e e numero que se vem ler aqui. */
+  #lpm.escuro .lucro{ background:linear-gradient(155deg,#132033,#0d1926 60%,#0a1420);
+    border-right-color:#0a1420; }
+  #lpm.escuro .lucro--neg{ background:linear-gradient(155deg,#2a1620,#1e1015 60%,#170c10); }
+  #lpm.escuro .lucro__r, #lpm.escuro .lucro__s{ color:#9fb3c8; }
+  #lpm.escuro .lucro__v{ color:#5fd79a; }
+  #lpm.escuro .lucro--neg .lucro__v{ color:#ff9d9d; }
+  #lpm.escuro .mini div{ background:rgba(255,255,255,.07);
+    border-color:rgba(255,255,255,.14); }
+  #lpm.escuro .mini span{ color:#9fb3c8; }
+  #lpm.escuro .mini b{ color:#eaf2fb; }
+  #lpm.escuro .mini b.neg{ color:#ff9d9d; }
+  #lpm.escuro .mini b.pos{ color:#5fd79a; }
+  #lpm.escuro .painel__c{ background:#0f1b29; }
+  #lpm.escuro .rank{ background:#0f1b29; color:#eaf2fb; }
+  #lpm.escuro .rank__t{ color:#9fb3c8; }
+  #lpm.escuro .rk__v{ color:#eaf2fb; }
+  #lpm.escuro .rk__v.neg{ color:#ff9d9d; }
+  #lpm.escuro .rk__d{ color:#9fb3c8; }
+  #lpm.escuro .rk__b{ background:rgba(255,255,255,.10); }
+  #lpm.escuro .rk__b i, #lpm.escuro .rk__n .pt{ background:var(--c2); }
+  #lpm.escuro .painel .cx__t{ background:#132033; color:#cfe2f5;
+    border-color:#0a1420; }
+  #lpm.escuro .painel .cx__t .dir{ color:#9fb3c8; }
+
+  /* a chave que troca os dois */
+  #lpm .tema{ display:inline-flex; border:1px solid var(--borda);
+    border-radius:9px; overflow:hidden; margin-left:auto; }
+  #lpm .tema button{ border:0; background:#fff; color:#3a4655; font-family:inherit;
+    font-size:.76rem; font-weight:800; padding:.42rem .7rem; cursor:pointer;
+    display:inline-flex; gap:.3rem; align-items:center; }
+  #lpm .tema button.on{ background:var(--blue); color:#fff; }
+  @media (max-width:767px){ #lpm .tema{ margin-left:0; } }
+
   /* ---- o celular ------------------------------------------------------
      Uma tabela de dezoito colunas num telefone e uma tabela ilegivel: rolar
      de lado para achar o lucro do dia nao e usar, e sofrer. Entao no celular
@@ -283,6 +331,16 @@ body > .container-fluid:has(#lpm){
 {% macro reais(v) %}{{ (v or 0) | formatar_moeda }}{% endmacro %}
 {% macro preco(v) %}{{ 'R$ %.4f'|format(v or 0) | replace('.', ',') }}{% endmacro %}
 <div id="lpm">
+<script>
+// Roda durante a leitura da pagina, antes do painel existir: se esperasse o
+// fim do corpo, quem escolheu escuro veria a tela nascer clara e virar.
+(function(){
+  try{
+    if (localStorage.getItem('lpm_tema') === 'escuro')
+      document.getElementById('lpm').classList.add('escuro');
+  }catch(e){}
+})();
+</script>
 
   <div class="topo">
     <div class="topo__t"><i class="bi bi-graph-up-arrow"></i> Lucro Postos Migrados</div>
@@ -316,7 +374,7 @@ body > .container-fluid:has(#lpm){
         <input type="checkbox" name="produto_ids[]" value="{{ p.id }}"
                {{ 'checked' if p.id in produto_ids }}
                onchange="this.parentNode.classList.toggle('on', this.checked)">
-        <i class="pt" style="background:{{ cores_produto.get(p.id, '#9aa3ad') }}"></i>
+        <i class="pt" style="--c:{{ cores_produto.get(p.id, '#9aa3ad') }}"></i>
         {{ p.nome }}</label>
       {% endfor %}
     </div>
@@ -324,6 +382,14 @@ body > .container-fluid:has(#lpm){
       <button type="submit" class="bt bt--sim"><i class="bi bi-search"></i> Apurar</button>
       <a class="bt" href="{{ url_for('relatorios.lucro_postos') }}">
         <i class="bi bi-clock-history"></i> Ver o relatório antigo</a>
+      {# A escolha e de quem esta olhando, e fica guardada no proprio
+         navegador: nao e dado do posto para ir ao banco. #}
+      <div class="tema" role="group" aria-label="Aparência do painel">
+        <button type="button" class="on" data-tema="claro" onclick="lpmTema('claro')">
+          <i class="bi bi-sun-fill"></i> Claro</button>
+        <button type="button" data-tema="escuro" onclick="lpmTema('escuro')">
+          <i class="bi bi-moon-stars-fill"></i> Escuro</button>
+      </div>
     </div>
   </form>
 
@@ -364,11 +430,10 @@ body > .container-fluid:has(#lpm){
       <div class="rank">
         <div class="rank__t">De onde vem o lucro</div>
         {% for r in ranking %}
-        <div class="rk">
-          <div class="rk__n"><i class="pt" style="background:{{ r.cor }}"></i>{{ r.nome }}</div>
+        <div class="rk" style="--c:{{ r.cor }};--c2:{{ r.cor_acesa }}">
+          <div class="rk__n"><i class="pt"></i>{{ r.nome }}</div>
           <div class="rk__v {{ 'neg' if r.lucro_rs < 0 }}">{{ reais(r.lucro_rs) }}</div>
-          <div class="rk__b"><i style="width:{{ '%.1f'|format(r.barra) }}%;
-            background:{{ r.cor }}"></i></div>
+          <div class="rk__b"><i style="width:{{ '%.1f'|format(r.barra) }}%"></i></div>
           <div class="rk__d">
             <span>{{ '%.0f'|format(r.fatia) }}% do lucro</span>
             <span>{{ litros(r.venda_l) }} L vendidos</span>
@@ -491,7 +556,7 @@ body > .container-fluid:has(#lpm){
         <tbody>
           {% for pid, c in comparativo.items() %}
           <tr>
-            <td><i class="pt" style="background:{{ cores_produto.get(pid, '#9aa3ad') }};
+            <td><i class="pt" style="--c:{{ cores_produto.get(pid, '#9aa3ad') }};
               margin-right:.35rem"></i>{{ produtos_nome.get(pid, pid) }}</td>
             <td>{{ litros(c.nota_l) }}</td>
             <td>{{ litros(c.descarga_l) }}</td>
@@ -663,6 +728,28 @@ body > .container-fluid:has(#lpm){
 // O dia a dia de cada combustível abre por produto: são dezoito colunas, e
 // abrir os quatro de uma vez empurraria para baixo o que se olha primeiro,
 // que é o posto inteiro.
+// Os dois modelos aprovados: claro e o painel escuro. So o painel muda; a
+// escolha fica no navegador de quem olha, e nao no banco — e gosto, nao dado.
+function lpmTema(qual){
+  var cx = document.getElementById('lpm');
+  if (!cx) return;
+  cx.classList.toggle('escuro', qual === 'escuro');
+  var bts = cx.querySelectorAll('.tema button');
+  for (var i = 0; i < bts.length; i++)
+    bts[i].classList.toggle('on', bts[i].getAttribute('data-tema') === qual);
+  try{ localStorage.setItem('lpm_tema', qual); }catch(e){}
+}
+
+// e, ao abrir, a chave tem de mostrar o que esta valendo
+(function(){
+  var cx = document.getElementById('lpm');
+  if (!cx) return;
+  var qual = cx.classList.contains('escuro') ? 'escuro' : 'claro';
+  var bts = cx.querySelectorAll('.tema button');
+  for (var i = 0; i < bts.length; i++)
+    bts[i].classList.toggle('on', bts[i].getAttribute('data-tema') === qual);
+})();
+
 // No celular a tabela do produto vira cartao por dia. Quem precisa de uma
 // coluna que ficou de fora pede a tabela cheia aqui, e ela volta a rolar de
 // lado — a escolha e de quem esta olhando, nao minha.

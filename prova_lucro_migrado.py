@@ -621,6 +621,29 @@ if adm:
           _moeda(lucro_total) in ' '.join(
               corpo[corpo.index('class="dias so-fone"'):].split()))
 
+    # ── os dois modelos aprovados ─────────────────────────────────────
+    # O escuro so pode existir atras da classe: se uma regra dele escapar
+    # para fora, quem escolheu o claro ganha um pedaco escuro sem pedir.
+    css = corpo[corpo.index('#lpm .topo{'):corpo.index('</style>',
+                                                        corpo.index('#lpm .nada{'))]
+    regras_escuras = [l for l in css.splitlines()
+                      if ('#0d1926' in l or '#0f1b29' in l or '#5fd79a' in l
+                          or '#9fb3c8' in l or '#132033' in l)]
+    prova('o painel escuro existe no CSS', len(regras_escuras) >= 6,
+          'só %s regra(s) do escuro' % len(regras_escuras))
+    vazadas = [l.strip()[:70] for l in regras_escuras
+               if '#lpm.escuro' not in l and not l.strip().startswith(('border',
+               'background', 'color', '}', '/*', '*'))]
+    prova('e toda regra dele está presa à classe .escuro',
+          not vazadas, 'escaparam: %r' % vazadas)
+    prova('a chave dos dois modelos está na tela',
+          'data-tema="claro"' in corpo and 'data-tema="escuro"' in corpo
+          and 'lpmTema(' in corpo)
+    prova('e a escolha é aplicada antes do painel, para não piscar',
+          corpo.index("localStorage.getItem('lpm_tema')")
+          < corpo.index('class="painel"'),
+          'o script do tema roda depois do painel — a tela nasceria clara')
+
     prova('e dá o caminho de volta para o relatório antigo',
           '/relatorios/lucro_postos"' in telas['nota']
           or "/relatorios/lucro_postos'" in telas['nota']
@@ -650,6 +673,13 @@ if adm:
     else:
         print('OK     (no período medido não falta nenhum dia de leitura —'
               ' nada a marcar)')
+
+    # A prova de clique (prova_lucro_tema.js) roda sobre o HTML de verdade;
+    # guardar aqui evita que ela teste uma copia que envelhece.
+    if '--html' in sys.argv:
+        alvo = sys.argv[sys.argv.index('--html') + 1]
+        io.open(alvo, 'w', encoding='utf-8').write(telas['nota'])
+        print('       (tela guardada em %s)' % alvo)
 
 cur2.close()
 conn2.close()

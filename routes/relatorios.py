@@ -1560,6 +1560,16 @@ CORES_PRODUTO = {
     5: '#534AB7',    # S-10
 }
 
+# A mesma cor nao serve nos dois fundos: sobre o painel escuro do Modelo B as
+# de cima somem. Cada produto leva entao a sua versao acesa, e o CSS escolhe
+# qual usar pela variavel -- a cor viaja no elemento, nao na regra.
+CORES_PRODUTO_ACESA = {
+    2: '#f0a63a',
+    1: '#8fd14f',
+    4: '#4d9ae6',
+    5: '#9b91ff',
+}
+
 
 @bp.route('/lucro_postos_migrados', methods=['GET'])
 @admin_required
@@ -1648,7 +1658,8 @@ def lucro_postos_migrados():
                                clientes_disponiveis=[], produtos_disponiveis=[],
                                cliente_id=cliente_id, produto_ids=[],
                                apurado={}, comparativo={}, produtos_nome={},
-                               cores_produto={}, geral={'dias': []}, ranking=[],
+                               cores_produto={}, cores_acesas={},
+                               geral={'dias': []}, ranking=[],
                                totais={}, filtrou=False)
     finally:
         cur.close()
@@ -1710,6 +1721,7 @@ def lucro_postos_migrados():
         ranking.append({
             'pid': pid, 'nome': produtos_nome.get(pid, 'Produto %s' % pid),
             'cor': CORES_PRODUTO.get(pid, '#4b5563'),
+            'cor_acesa': CORES_PRODUTO_ACESA.get(pid, '#9aa5b1'),
             'lucro_rs': t['lucro_rs'], 'venda_l': t['venda_l'],
             'venda_rs': t['venda_rs'], 'margem_l': t['margem_l'],
             'fatia': (t['lucro_rs'] / totais['lucro_rs'] * 100)
@@ -1724,6 +1736,7 @@ def lucro_postos_migrados():
         produtos_disponiveis=produtos_disponiveis,
         cliente_id=cliente_id, produto_ids=produto_ids,
         apurado=apurado, comparativo=comparativo, produtos_nome=produtos_nome,
-        cores_produto=CORES_PRODUTO, geral=geral, ranking=ranking,
+        cores_produto=CORES_PRODUTO, cores_acesas=CORES_PRODUTO_ACESA,
+        geral=geral, ranking=ranking,
         totais=totais, filtrou=filtrou, erro=None,
     )
