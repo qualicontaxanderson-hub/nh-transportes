@@ -621,6 +621,36 @@ if adm:
           _moeda(lucro_total) in ' '.join(
               corpo[corpo.index('class="dias so-fone"'):].split()))
 
+    # ── o filtro so pode oferecer POSTO ───────────────────────────────
+    # A tela abria na FRESH START HOLDING, primeira em ordem alfabetica, que
+    # nunca teve um litro: a lista vinha de cliente_produtos e trazia holding
+    # e contabilidade junto.
+    sel = re.search(r'<select[^>]*name="cliente_id".*?</select>', corpo, re.S)
+    prova('o filtro tem a lista de postos', bool(sel))
+    oferecidos = re.findall(r'value="(\d+)"', sel.group(0)) if sel else []
+    cur2.execute("""SELECT DISTINCT cliente_id FROM leitura_tanque_diaria""")
+    com_tanque = {str(r['cliente_id']) for r in cur2.fetchall()}
+    intrusos = [o for o in oferecidos if o not in com_tanque]
+    prova('e so oferece quem tem tanque medido', not intrusos,
+          'oferece cliente(s) sem leitura de tanque: %r' % intrusos)
+    prova('nenhuma holding ou contabilidade na lista',
+          'HOLDING' not in sel.group(0).upper()
+          and 'CONTABIL' not in sel.group(0).upper(),
+          re.sub(r'\s+', ' ', sel.group(0))[:200])
+    cur2.execute("""SELECT DISTINCT c.id FROM clientes c
+                      JOIN cliente_produtos cp ON cp.cliente_id = c.id
+                       AND cp.ativo = 1""")
+    antiga = {str(r['id']) for r in cur2.fetchall()}
+    prova('a lista antiga trazia mesmo quem não é posto — o teste não passa à toa',
+          len(antiga - com_tanque) > 0,
+          'as duas listas dariam igual: não haveria o que corrigir')
+    print('        o filtro oferecia %s empresa(s) e agora oferece %s posto(s)'
+          % (len(antiga), len(oferecidos)))
+    prova('e o campo do posto usa a classe larga da casa',
+          'class="campo campo--w"' in corpo)
+    prova('os produtos viram um campo com nome, como os outros',
+          '<span>Produtos</span>' in corpo)
+
     # ── os dois modelos aprovados ─────────────────────────────────────
     # O escuro so pode existir atras da classe: se uma regra dele escapar
     # para fora, quem escolheu o claro ganha um pedaco escuro sem pedir.

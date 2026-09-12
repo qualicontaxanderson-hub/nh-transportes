@@ -1619,28 +1619,38 @@ def lucro_postos_migrados():
     cur = conn.cursor(dictionary=True)
     apurado, comparativo, produtos_nome = {}, {}, {}
     try:
+        # Só POSTO entra na lista. O critério é ter tanque medido: o
+        # relatório inteiro se apoia na leitura de tanque, e sem ela não há o
+        # que apurar. A lista antiga vinha de cliente_produtos e trazia
+        # holding e escritório de contabilidade junto — e, como ordenava por
+        # nome, a tela abria numa empresa que nunca teve um litro.
         cur.execute("""
             SELECT DISTINCT c.id, c.razao_social
               FROM clientes c
-              JOIN cliente_produtos cp ON cp.cliente_id = c.id AND cp.ativo = 1
+              JOIN leitura_tanque_diaria l ON l.cliente_id = c.id
              ORDER BY c.razao_social
         """)
         clientes_disponiveis = cur.fetchall()
 
-        # Só os produtos que a apuração sabe medir: combustível com tanque
-        # medido. Óleo e conveniência não têm leitura de tanque, e entrariam
-        # com estoque zero — um lucro que não quer dizer nada.
+        if not cliente_id and len(clientes_disponiveis) == 1:
+            cliente_id = clientes_disponiveis[0]['id']
+
+        # E só os produtos que AQUELE posto mede. Óleo e conveniência não têm
+        # leitura de tanque e entrariam com estoque zero — um lucro que não
+        # quer dizer nada; e o produto de um posto não é o do outro.
         cur.execute("""
             SELECT DISTINCT p.id, p.nome
               FROM produto p
               JOIN leitura_tanque_diaria l ON l.produto_id = p.id
+             WHERE (%s = 0 OR l.cliente_id = %s)
              ORDER BY p.nome
-        """)
+        """, (cliente_id, cliente_id))
         produtos_disponiveis = cur.fetchall()
         produtos_nome = {p['id']: p['nome'] for p in produtos_disponiveis}
 
-        if not cliente_id and len(clientes_disponiveis) == 1:
-            cliente_id = clientes_disponiveis[0]['id']
+        # um produto que nao e daquele posto nao pode ficar marcado no filtro
+        validos = {p['id'] for p in produtos_disponiveis}
+        produto_ids = [p for p in produto_ids if p in validos]
         if not produto_ids:
             produto_ids = [p['id'] for p in produtos_disponiveis]
 

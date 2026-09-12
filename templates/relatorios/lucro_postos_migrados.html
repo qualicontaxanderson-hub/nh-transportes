@@ -51,9 +51,10 @@ body > .container-fluid:has(#lpm){
   #lpm .campo span{ font-size:.68rem; font-weight:800; color:var(--muted);
     text-transform:uppercase; letter-spacing:.04em; }
   #lpm .campo input, #lpm .campo select{ border:1px solid var(--borda);
-    border-radius:9px; padding:.45rem .5rem; font-size:.85rem;
+    border-radius:9px; padding:.42rem .5rem; font-size:.82rem;
     font-family:inherit; background:#fff; color:var(--ink); min-width:0; }
-  #lpm .prod{ display:flex; gap:.35rem; flex-wrap:wrap; margin-top:.55rem; }
+  #lpm .campo--w{ grid-column:1 / -1; }
+  #lpm .prod{ display:flex; gap:.35rem; flex-wrap:wrap; margin-top:.25rem; }
   #lpm .prod label{ border:1px solid var(--borda); border-radius:99px;
     padding:.3rem .7rem; font-size:.8rem; font-weight:800; cursor:pointer;
     background:#fff; color:#3a4655; display:inline-flex; gap:.4rem;
@@ -360,7 +361,7 @@ body > .container-fluid:has(#lpm){
         <input type="date" name="data_inicio" value="{{ data_inicio }}"></label>
       <label class="campo"><span>Até</span>
         <input type="date" name="data_fim" value="{{ data_fim }}"></label>
-      <label class="campo" style="grid-column:span 2"><span>Posto</span>
+      <label class="campo campo--w"><span>Posto</span>
         <select name="cliente_id">
           {% for c in clientes_disponiveis %}
           <option value="{{ c.id }}" {{ 'selected' if cliente_id == c.id }}>
@@ -368,7 +369,9 @@ body > .container-fluid:has(#lpm){
           {% endfor %}
         </select></label>
     </div>
-    <div class="prod">
+    <div class="campo" style="margin-top:.55rem">
+      <span>Produtos</span>
+      <div class="prod">
       {% for p in produtos_disponiveis %}
       <label class="{{ 'on' if p.id in produto_ids }}">
         <input type="checkbox" name="produto_ids[]" value="{{ p.id }}"
@@ -377,6 +380,7 @@ body > .container-fluid:has(#lpm){
         <i class="pt" style="--c:{{ cores_produto.get(p.id, '#9aa3ad') }}"></i>
         {{ p.nome }}</label>
       {% endfor %}
+      </div>
     </div>
     <div class="filtro__r">
       <button type="submit" class="bt bt--sim"><i class="bi bi-search"></i> Apurar</button>
