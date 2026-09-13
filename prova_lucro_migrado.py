@@ -165,6 +165,81 @@ try:
           'cru %.1f - motor %.1f = %.1f, cancelado %.1f'
           % (float(cru['l']), somado, float(cru['l']) - somado, float(canc['l'])))
 
+    # ── o custo e o TOTAL da nota, nao a linha do produto ─────────────
+    # "se pegar o valor do produto vezes a quantidade nao da o total da nota,
+    # entao o custo fica errado" — Anderson, e ele estava certo. No
+    # combustivel o ICMS-ST vem por fora em varios fornecedores: a nota 1684
+    # da Tabocao traz 8.000 L somando R$ 22.235,54 na linha e R$ 23.600,00 no
+    # total. Ignorar os R$ 1.364,46 barateia a compra e infla o lucro.
+    cur.execute("""SELECT d.id, d.numero, d.valor_total td,
+                          SUM(i.valor_total) si, SUM(i.quantidade) ql,
+                          COUNT(i.id) itens
+                     FROM dfe_documentos d JOIN dfe_itens i ON i.documento_id=d.id
+                    WHERE d.cliente_id = %s
+                      AND DATE(d.dh_emissao) BETWEEN %s AND %s
+                      AND (d.situacao IS NULL
+                           OR UPPER(d.situacao) NOT LIKE '%%CANCEL%%')
+                    GROUP BY d.id
+                   HAVING SUM(CASE WHEN i.classificado_produto_id IN (1,2,4,5)
+                                   THEN 1 ELSE 0 END) > 0""",
+                (CLIENTE, INI - timedelta(days=90), FIM))
+    notas_fiscais = cur.fetchall()
+    com_st = [x for x in notas_fiscais
+              if float(x['td'] or 0) > float(x['si'] or 0) + 0.01]
+    prova('há nota de combustível cobrando mais que a linha do produto',
+          bool(com_st),
+          'nenhuma nota tem ST por fora — a prova não testaria nada')
+    st_total = sum(float(x['td']) - float(x['si']) for x in com_st)
+    print('        %s de %s notas cobram além da linha do produto: R$ %s a mais'
+          % (len(com_st), len(notas_fiscais), _moeda(st_total)[3:]))
+
+    # o motor tem de cobrar o total da nota, nao a linha
+    soma_prod = sum(nota[p_]['total']['nota_produto_rs'] for p_ in PRODUTOS)
+    soma_nota = sum(nota[p_]['total']['nota_rs'] for p_ in PRODUTOS)
+    prova('o custo apurado é maior que a linha do produto',
+          soma_nota > soma_prod + 1,
+          'motor cobrou %s de produto e %s de nota — não pegou o ST'
+          % (_moeda(soma_prod), _moeda(soma_nota)))
+
+    # e a conta de cada dia tem de fechar com a NOTA de verdade
+    erros = []
+    for pid in PRODUTOS:
+        for d in nota[pid]['dias']:
+            if not d['nota_l']:
+                continue
+            if abs((d['nota_produto_rs'] + d['nota_st_rs']) - d['nota_rs']) > 0.01:
+                erros.append((pid, d['data']))
+            if d['nota_st_rs'] < -0.01:
+                erros.append((pid, d['data'], 'ST negativo'))
+    prova('produto + ST = o que a nota cobra, todo dia', not erros,
+          '%r' % erros[:4])
+
+    # o caso concreto: 8.000 L de etanol em 01/09 tem de custar a nota inteira
+    d1 = next((d for d in nota[1]['dias'] if d['data'] == date(2026, 9, 1)), None)
+    if d1 and d1['nota_l']:
+        cur.execute("""SELECT d.valor_total td, SUM(i.valor_total) si
+                         FROM dfe_documentos d JOIN dfe_itens i ON i.documento_id=d.id
+                        WHERE d.cliente_id=%s AND DATE(d.dh_emissao)='2026-09-01'
+                          AND EXISTS (SELECT 1 FROM dfe_itens y
+                                       WHERE y.documento_id=d.id
+                                         AND y.classificado_produto_id=1)
+                        GROUP BY d.id""", (CLIENTE,))
+        nf = cur.fetchone()
+        if nf:
+            prova('01/09 etanol: o motor cobra o total da nota, não a linha',
+                  abs(d1['nota_rs'] - float(nf['td'])) < 1.0,
+                  'nota R$ %s, motor R$ %s' % (nf['td'], d1['nota_rs']))
+            print('        01/09: linha R$ %s + ST R$ %s = nota R$ %s'
+                  % (_moeda(float(nf['si']))[3:], _moeda(d1['nota_st_rs'])[3:],
+                     _moeda(d1['nota_rs'])[3:]))
+
+    # o preco de compra do dia e a entrada dividida pelos litros
+    erros = [(pid, d['data']) for pid in PRODUTOS for d in nota[pid]['dias']
+             if d['entrada_l'] > 1
+             and abs(d['entrada_unit'] - d['entrada_rs'] / d['entrada_l']) > 0.0001]
+    prova('preço de compra = entrada R$ ÷ litros que desceram', not erros,
+          '%r' % erros[:3])
+
     # ── a alocação "a nota manda" ─────────────────────────────────────────
     # Um item de nota que desce em parcelas tem de fechar EXATAMENTE na sua
     # quantidade: a régua mede com perda de temperatura, e essa perda não pode
@@ -522,6 +597,16 @@ if adm:
     prova('a tabela do dia a dia está lá, uma por produto',
           telas['nota'].count('<tbody>') == len(PRODUTOS) + 2,
           '%s tabelas' % telas['nota'].count('<tbody>'))
+    tela = telas['nota']
+    prova('a tela não fala mais em "régua" — quem mede é o ELS',
+          'régua' not in tela and 'regua' not in tela,
+          'sobrou "régua" na tela; o frentista não mede nada, é o ELS por e-mail')
+    prova('e a tela explica de onde vem o dinheiro',
+          'com o ICMS-ST' in tela and 'média móvel ponderada' in tela,
+          'falta a explicação de Entrada R$, Preço compra e Custo corrido')
+    prova('o ICMS-ST aparece separado, em vez de sumir no custo',
+          'ST ' in tela)
+
     prova('a tela explica de onde vem cada entrada',
           'ainda não desceu' in telas['nota']
           and '/estoque → descargas' in telas['nota'])

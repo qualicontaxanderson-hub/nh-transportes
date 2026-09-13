@@ -133,12 +133,16 @@ def _descargas(cur, cliente_id, ini, fim):
 def _notas(cur, cliente_id, produto_ids, ini, fim):
     """A nota pelo dia em que ela DESCEU, e o que dela ainda nao desceu.
 
-    Devolve (descidas, pendente):
+    Devolve (descidas, pendente, produto):
 
         descidas   {(dia, produto_id): (litros, reais)} — o litro da nota
-                   alocado ao dia da descarga que a consumiu
+                   alocado ao dia da descarga que a consumiu, ao custo CHEIO
+                   da nota (com o ICMS-ST)
         pendente   {(dia, produto_id): litros} — saldo no fim daquele dia do
                    que ja foi faturado e ainda nao desceu
+        produto    {(dia, produto_id): reais} — so a linha do produto, sem o
+                   que a nota cobra por cima; serve para a tela mostrar a
+                   diferenca em vez de esconde-la
 
     O vinculo mora em `descarga_nota` (item da nota <-> descarga medida), e a
     alocacao e a mesma da conciliacao de estoque: **a nota manda**. Quando um
@@ -157,7 +161,10 @@ def _notas(cur, cliente_id, produto_ids, ini, fim):
     cur.execute("""
         SELECT i.id, DATE(doc.dh_emissao) AS emissao,
                i.classificado_produto_id AS pid,
-               i.quantidade AS litros, i.valor_total AS reais
+               i.quantidade AS litros, i.valor_total AS reais,
+               doc.valor_total AS nota_total,
+               (SELECT SUM(x.valor_total) FROM dfe_itens x
+                 WHERE x.documento_id = doc.id) AS itens_total
           FROM dfe_itens i
           JOIN dfe_documentos doc ON doc.id = i.documento_id
          WHERE doc.cliente_id = %s
@@ -165,9 +172,15 @@ def _notas(cur, cliente_id, produto_ids, ini, fim):
            AND i.classificado_produto_id IN (""" + marcas + """)
            AND (doc.situacao IS NULL OR UPPER(doc.situacao) NOT LIKE '%%CANCEL%%')
     """, [cliente_id, ini - timedelta(days=90), fim] + list(produto_ids))
-    itens = {r['id']: {'emissao': r['emissao'], 'pid': r['pid'],
-                       'litros': _f(r['litros']), 'reais': _f(r['reais'])}
-             for r in cur.fetchall()}
+    itens = {}
+    for r in cur.fetchall():
+        itens[r['id']] = {
+            'emissao': r['emissao'], 'pid': r['pid'],
+            'litros': _f(r['litros']),
+            'reais': _custo_do_item(_f(r['reais']), _f(r['nota_total']),
+                                    _f(r['itens_total'])),
+            'produto_rs': _f(r['reais']),
+        }
 
     # Os vinculos INTEIROS de cada item — inclusive os de fora do periodo, sem
     # os quais a ultima parcela nao fecharia certo.
@@ -186,12 +199,13 @@ def _notas(cur, cliente_id, produto_ids, ini, fim):
     for r in cur.fetchall():
         por_item.setdefault(r['item_id'], []).append(r)
 
-    descidas, baixa = {}, {}   # baixa: por item, depois por (dia, produto)
+    descidas, baixa, produto = {}, {}, {}   # baixa: por item, (dia, produto)
     for item_id, vs in por_item.items():
         it = itens.get(item_id)
         if not it or not it['litros']:
             continue
         unit = it['reais'] / it['litros']
+        unit_prod = it['produto_rs'] / it['litros']
         resto = it['litros']
         for k, r in enumerate(vs):
             if len(vs) == 1:
@@ -207,6 +221,7 @@ def _notas(cur, cliente_id, produto_ids, ini, fim):
             if ini <= r['d'] <= fim:
                 l, rs = descidas.get(ky, (0.0, 0.0))
                 descidas[ky] = (l + usar, rs + usar * unit)
+                produto[ky] = produto.get(ky, 0.0) + usar * unit_prod
 
     # O saldo do que falta descer. So contam as notas emitidas ate 30 dias
     # antes do periodo: antes da tela de descargas existir (28/07/2026) nao ha
@@ -237,7 +252,33 @@ def _notas(cur, cliente_id, produto_ids, ini, fim):
         for d in _dias(ini, fim):
             acu += emitidas_dia.get((d, pid), 0.0) - baixa_dia.get((d, pid), 0.0)
             pendente[(d, pid)] = acu
-    return descidas, pendente
+    return descidas, pendente, produto
+
+
+def _custo_do_item(produto_rs, nota_total, itens_total):
+    """O que aquele item custa de verdade: a NOTA, nao a linha do produto.
+
+    O valor da linha e quantidade x preco do produto. O que se paga e o total
+    da nota — e nela entra o ICMS-ST, que no combustivel e dinheiro de
+    verdade e sai do caixa junto. Na nota 1684 da Tabocao, 8.000 L de etanol
+    somam R$ 22.235,54 na linha e R$ 23.600,00 no total: R$ 1.364,46 a mais,
+    R$ 0,17 por litro. Ignorar isso barateia a compra e infla o lucro.
+
+    Nem todo fornecedor faz assim — nove dos dezoito fecham a linha igual ao
+    total da nota, e ai a conta nao muda nada. Por isso a regra e sempre a
+    mesma e nao depende de adivinhar quem cobra ST: vale o total da nota.
+
+    Quando a nota tem mais de um item, cada um leva a sua parte da diferenca
+    na proporcao do que representa. E quando o total da nota falta, ou vem
+    MENOR que a soma dos itens (nota de devolucao, desconto, resumo sem
+    valor), nao ha o que ratear: vale a linha do produto, que e o certo que
+    se tem.
+    """
+    if not produto_rs or not itens_total or itens_total <= 0:
+        return produto_rs
+    if not nota_total or nota_total <= itens_total:
+        return produto_rs
+    return produto_rs + (nota_total - itens_total) * (produto_rs / itens_total)
 
 
 def _preco_medio(cur, cliente_id, produto_ids, ini, fim):
@@ -252,20 +293,30 @@ def _preco_medio(cur, cliente_id, produto_ids, ini, fim):
     preco = {}
     for janela_ini, janela_fim in ((ini, fim),
                                    (ini - timedelta(days=60), ini - timedelta(days=1))):
+        # pelo mesmo criterio do custo: o que a nota cobra, com o ST dentro
         cur.execute("""
-            SELECT i.classificado_produto_id AS pid,
-                   SUM(i.valor_total) AS reais, SUM(i.quantidade) AS litros
+            SELECT i.classificado_produto_id AS pid, i.quantidade AS litros,
+                   i.valor_total AS reais, doc.valor_total AS nota_total,
+                   (SELECT SUM(x.valor_total) FROM dfe_itens x
+                     WHERE x.documento_id = doc.id) AS itens_total
               FROM dfe_itens i
               JOIN dfe_documentos doc ON doc.id = i.documento_id
              WHERE doc.cliente_id = %s
                AND DATE(doc.dh_emissao) BETWEEN %s AND %s
                AND i.classificado_produto_id IN (""" + marcas + """)
-             GROUP BY i.classificado_produto_id
+               AND (doc.situacao IS NULL
+                    OR UPPER(doc.situacao) NOT LIKE '%%CANCEL%%')
         """, [cliente_id, janela_ini, janela_fim] + list(produto_ids))
+        soma = {}
         for r in cur.fetchall():
-            litros = _f(r['litros'])
-            if litros and r['pid'] not in preco:
-                preco[r['pid']] = _f(r['reais']) / litros
+            l, rs = soma.get(r['pid'], (0.0, 0.0))
+            soma[r['pid']] = (l + _f(r['litros']),
+                              rs + _custo_do_item(_f(r['reais']),
+                                                  _f(r['nota_total']),
+                                                  _f(r['itens_total'])))
+        for pid, (litros, reais) in soma.items():
+            if litros and pid not in preco:
+                preco[pid] = reais / litros
     return preco
 
 
@@ -298,7 +349,8 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
     leitura = _leituras(cur, cliente_id, ini, fim)
     venda = _vendas(cur, cliente_id, ini, fim)
     preco = _preco_medio(cur, cliente_id, produto_ids, ini, fim)
-    nota, pendente = _notas(cur, cliente_id, produto_ids, ini, fim)
+    nota, pendente, nota_produto = _notas(cur, cliente_id, produto_ids,
+                                          ini, fim)
     medido_l = _descargas(cur, cliente_id, ini, fim)
     # A descarga mede volume, nao dinheiro: o preco do litro que desceu e o da
     # nota que desceu com ele. Sem vinculo, o preco medio de compra do periodo.
@@ -323,7 +375,8 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
         dias, tot = [], {'entrada_l': 0.0, 'entrada_rs': 0.0, 'venda_l': 0.0,
                          'venda_rs': 0.0, 'custo_rs': 0.0, 'lucro_rs': 0.0,
                          'variacao_l': 0.0, 'nota_l': 0.0, 'nota_rs': 0.0,
-                         'desc_l': 0.0, 'entrou_l': 0.0, 'dias_entrou': 0}
+                         'desc_l': 0.0, 'entrou_l': 0.0, 'dias_entrou': 0,
+                         'nota_produto_rs': 0.0}
         falta_acum = 0.0
         var_acum = 0.0
         lucro_acum = 0.0
@@ -346,6 +399,7 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
 
             ent_l, ent_rs = entrada.get((d, pid), (0.0, 0.0))
             nota_l, nota_rs = nota.get((d, pid), (0.0, 0.0))
+            nota_prod_rs = nota_produto.get((d, pid), 0.0)
             desc_l = medido_l.get((d, pid), 0.0)
             ven_l, ven_rs = venda.get((d, pid), (0.0, 0.0))
 
@@ -379,6 +433,8 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
                 'entrada_l': ent_l, 'entrada_rs': ent_rs,
                 'entrada_unit': (ent_rs / ent_l) if ent_l else 0.0,
                 'nota_l': nota_l, 'nota_rs': nota_rs, 'desc_l': desc_l,
+                'nota_produto_rs': nota_prod_rs,
+                'nota_st_rs': nota_rs - nota_prod_rs,
                 'entrou': entrou, 'falta_dia': nota_l - desc_l,
                 'medido_l': desc_l,
                 'falta_acum': falta_acum, 'var_acum': var_acum,
@@ -393,6 +449,7 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
             tot['entrada_rs'] += ent_rs
             tot['nota_l'] += nota_l
             tot['nota_rs'] += nota_rs
+            tot['nota_produto_rs'] += nota_prod_rs
             tot['desc_l'] += desc_l
             tot['venda_l'] += ven_l
             tot['venda_rs'] += ven_rs
@@ -412,6 +469,12 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
                                if x['ef_real'] is not None), None)
         tot['ef_calc'] = dias[-1]['ef_calc'] if dias else 0.0
         tot['falta_l'] = falta_acum
+        # o que a nota cobrou alem do produto — ICMS-ST, quase sempre
+        tot['nota_st_rs'] = tot['nota_rs'] - tot['nota_produto_rs']
+        tot['nota_produto_unit'] = ((tot['nota_produto_rs'] / tot['nota_l'])
+                                    if tot['nota_l'] else 0.0)
+        tot['nota_unit'] = ((tot['nota_rs'] / tot['nota_l'])
+                            if tot['nota_l'] else 0.0)
         tot['margem_l'] = (tot['lucro_rs'] / tot['venda_l']) if tot['venda_l'] else 0.0
         tot['custo_unit'] = (tot['custo_rs'] / tot['venda_l']) if tot['venda_l'] else 0.0
         tot['entrada_unit'] = ((tot['entrada_rs'] / tot['entrada_l'])

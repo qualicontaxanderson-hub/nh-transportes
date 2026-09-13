@@ -3,15 +3,19 @@
 {% block title %}Lucro Postos Migrados{% endblock %}
 
 {#- O mesmo relatorio de sempre, apurado pelas telas novas. A descarga vem de
-    /estoque?tab=descargas — a regua — e a nota vem do vinculo que o usuario
-    faz ali mesmo, entrando pelo dia em que DESCEU, nao pelo dia da emissao.
+    /estoque?tab=descargas — o ELS medindo o tanque antes e depois da descarga,
+    por e-mail, sem ninguem digitar — e a nota vem do vinculo que o usuario faz
+    ali mesmo, entrando pelo dia em que DESCEU, nao pelo dia da emissao.
 
       NOTA      o que a nota daquela descarga diz (casa com o fiscal)
-      DESCARGA  o que a regua mediu (casa com o tanque)
+      DESCARGA  o que o ELS mediu naquela descarga
       ENTROU    o que o tanque absorveu: a unica entrada fisica
 
-    A diferenca entre as tres e de dezenas de litros — perda de temperatura.
-    Quando dava milhares, era fonte errada.
+    A diferenca entre as tres e de dezenas de litros. Quando dava milhares, era
+    fonte errada.
+
+    E o CUSTO e o total da nota, nao a linha do produto: no combustivel o
+    ICMS-ST vem por fora em varios fornecedores, e e dinheiro que sai do caixa.
 
     A tela le de cima para baixo: primeiro o posto inteiro (o lucro do periodo,
     de onde ele vem, e o dia a dia somado), depois a conferencia das fontes, e
@@ -408,7 +412,7 @@ body > .container-fluid:has(#lpm){
     <a class="{{ 'on' if base == 'descarga' }}"
        href="{{ url_for('relatorios.lucro_postos_migrados', data_inicio=data_inicio,
                 data_fim=data_fim, cliente_id=cliente_id, base='descarga', **{'produto_ids[]': produto_ids}) }}">
-      <b>Pela descarga</b><span>o que a régua mediu descer</span></a>
+      <b>Pela descarga</b><span>o que o ELS mediu descer</span></a>
   </div>
 
   {% if not filtrou %}
@@ -546,17 +550,17 @@ body > .container-fluid:has(#lpm){
   <div class="cx">
     <div class="cx__t" style="border-top:0"><i class="bi bi-arrow-left-right"></i>
       A mesma carga contada de três jeitos
-      <span class="dir">só os dias em que o tanque foi medido dos dois lados</span></div>
+      <span class="dir">o instrumento que errar menos é em quem confiar</span></div>
     <div class="tab" style="border-top:0">
       <table>
         <thead>
           <tr>
             <th>Produto</th>
             <th>1. A nota diz</th>
-            <th>2. A régua mediu</th>
-            <th>3. O tanque recebeu</th>
+            <th>2. O ELS mediu na descarga</th>
+            <th>3. O tanque recebeu no dia</th>
             <th>Nota − tanque</th>
-            <th>Régua − tanque</th>
+            <th>Descarga − tanque</th>
           </tr>
         </thead>
         <tbody>
@@ -571,7 +575,7 @@ body > .container-fluid:has(#lpm){
                 title="o tanque recebeu {{ litros(c.entrou_l) }} L e a nota cobrou {{ litros(c.nota_l) }} L">
               {{ litros(c.nota_variacao|abs) }} L</td>
             <td class="{{ 'neg' if (c.descarga_variacao|abs) > (c.nota_variacao|abs) else 'pos' }}"
-                title="o tanque recebeu {{ litros(c.entrou_l) }} L e a régua mediu {{ litros(c.descarga_l) }} L">
+                title="o tanque recebeu {{ litros(c.entrou_l) }} L e a descarga mediu {{ litros(c.descarga_l) }} L">
               {{ litros(c.descarga_variacao|abs) }} L</td>
           </tr>
           {%- if c.espera %}
@@ -590,15 +594,21 @@ body > .container-fluid:has(#lpm){
       </table>
     </div>
     <div class="leg">
-      <b>Cada carga é contada três vezes, por três pessoas diferentes.</b>
-      A <b>nota</b> é o que o fornecedor cobrou. A <b>régua</b> é o que o seu
-      frentista mediu no tanque ao descarregar, em <i>/estoque → descargas</i>.
-      O <b>tanque</b> é o que a leitura do ELS mostra que realmente entrou:
-      a medição de amanhã menos a de hoje, mais o que se vendeu no dia — esta
-      não depende de ninguém lançar nada, e por isso é o juiz.<br>
-      As duas últimas colunas são a distância de cada uma até o tanque.
-      Diferença de dezenas ou poucas centenas de litros é normal: combustível
-      encolhe com a temperatura, e a régua tem sua margem.
+      <b>A mesma carga, medida por três instrumentos diferentes.</b><br>
+      <b>1. A nota</b> é o que o fornecedor cobrou — o total do documento,
+      com o ICMS-ST dentro.<br>
+      <b>2. A descarga</b> é o ELS medindo o tanque antes e depois de o
+      caminhão descarregar, e mandando por e-mail. Ninguém digita: é o próprio
+      equipamento registrando aquela descarga, e é o que você vê em
+      <i>/estoque → descargas</i>.<br>
+      <b>3. O tanque</b> é a mesma medição do ELS, mas pela leitura de
+      <i>abertura</i> de cada dia: a de amanhã menos a de hoje, mais o que se
+      vendeu no dia.<br>
+      As duas últimas colunas são a distância de cada uma até a nº 3. As duas
+      primeiras podem errar: a nota é emitida na saída da distribuidora e o
+      combustível encolhe no caminho, e a descarga não enxerga o que foi
+      vendido pelas bombas enquanto o caminhão descarregava. Diferença de
+      dezenas ou poucas centenas de litros é o normal.
       <b>Quem estiver mais perto de zero é a fonte confiável para aquele
       produto</b> — e é a base que vale a pena escolher lá em cima.
       A conta anda só pelos dias em que houve as duas leituras de tanque, senão
@@ -632,10 +642,13 @@ body > .container-fluid:has(#lpm){
         <div class="r__c">{{ 'medido no tanque' if t.ei_medido else 'sem medição no 1º dia' }}</div></div>
       <div class="r"><div class="r__r">Nota</div>
         <div class="r__v">{{ litros(t.nota_l) }} L</div>
-        <div class="r__c">{{ reais(t.nota_rs) }} · a nota que desceu</div></div>
+        <div class="r__c">{{ reais(t.nota_rs) }} ·
+          {%- if t.nota_st_rs > 1 %} produto {{ reais(t.nota_produto_rs) }}
+          + ST {{ reais(t.nota_st_rs) }}
+          {%- else %} a nota que desceu{% endif %}</div></div>
       <div class="r"><div class="r__r">Descarga</div>
         <div class="r__v">{{ litros(t.desc_l) }} L</div>
-        <div class="r__c">medido na régua
+        <div class="r__c">medido pelo ELS na descarga
           {%- if t.falta_l > 1 %} · falta descer {{ litros(t.falta_l) }} L de nota
           {%- endif %}</div></div>
       <div class="r"><div class="r__r">Entrou no tanque</div>
@@ -732,7 +745,8 @@ body > .container-fluid:has(#lpm){
       <div class="leg">
         <b>Nota (L)</b> é a nota que você escolheu ao lançar a descarga daquele
         dia — entra pelo dia em que desceu, não pelo dia da emissão.
-        <b>Descarga (L)</b> é o que a régua mediu em <i>/estoque → descargas</i>.
+        <b>Descarga (L)</b> é o que o ELS mediu naquela descarga — tanque antes
+        e depois do caminhão descarregar, em <i>/estoque → descargas</i>.
         <b>Entrou (L)</b> é o que o tanque absorveu: a medição de amanhã menos a
         de hoje, mais o que se vendeu — a única que não depende de lançamento.
         As três só divergem por dezenas de litros, que é a perda de temperatura.
@@ -742,6 +756,19 @@ body > .container-fluid:has(#lpm){
         dia seguinte.
         A <b>diferença do dia</b> e a <b>acumulada</b> medem a base escolhida
         contra o tanque.
+        <br><br>
+        <b>De onde sai o dinheiro.</b>
+        <b>Entrada R$</b> é o total das notas que desceram naquele dia —
+        o total do documento, <i>com o ICMS-ST</i>, não a linha do produto.
+        Numa nota de 8.000 L de etanol a linha soma R$ 22.235,54 e a nota é de
+        R$ 23.600,00: os R$ 1.364,46 de ST são dinheiro que sai do caixa, e
+        entram no custo. <b>Preço compra</b> é essa Entrada R$ dividida pelos
+        litros que desceram — o custo cheio do litro naquela carga.
+        <b>Custo corrido</b> é a média móvel ponderada do que está no tanque:
+        a cada carga, somam-se os litros e os reais ao que já havia, e a venda
+        do dia sai por essa média. É por isso que ele anda devagar e não pula
+        para o preço da última compra. O <b>lucro do dia</b> é a receita menos
+        os litros vendidos ao custo corrido daquele momento.
       </div>
     </div>
   </div>
