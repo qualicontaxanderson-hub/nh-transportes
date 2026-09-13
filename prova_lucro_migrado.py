@@ -834,6 +834,27 @@ if adm:
     prova('nenhuma fonte erra mais de 2% contra o tanque',
           not longe, 'fora: %r' % longe)
 
+    # ── enquanto esta em teste, so ADMIN entra ────────────────────────
+    # Pedido do Anderson: "o relatorio e o ponto fica so no admin por enquanto
+    # ate testar". O menu ja esconde, mas esconder item nao protege nada --
+    # quem souber a URL entra. Esta prova falha no dia em que o decorador sair
+    # sem querer; no dia em que SAIR DE PROPOSITO, e so apagar este bloco.
+    cur2.execute("""SELECT id, username, nivel FROM usuarios
+                     WHERE ativo = 1 AND UPPER(nivel) <> 'ADMIN' LIMIT 1""")
+    nao_admin = cur2.fetchall()
+    prova('há usuário não-admin para testar a trava', bool(nao_admin),
+          'sem ele esta prova não testaria nada')
+    if nao_admin:
+        outro = app.test_client()
+        with outro.session_transaction() as s3:
+            s3['_user_id'] = str(nao_admin[0]['id'])
+            s3['_fresh'] = True
+        passou = [u for u in ('/relatorios/lucro_postos_migrados',
+                              '/relatorios/lucro_postos')
+                  if outro.get(u, follow_redirects=False).status_code == 200]
+        prova('usuário %s não abre os relatórios de lucro'
+              % nao_admin[0]['nivel'], not passou, 'entrou em: %r' % passou)
+
     # ── o filtro so pode oferecer POSTO ───────────────────────────────
     # A tela abria na FRESH START HOLDING, primeira em ordem alfabetica, que
     # nunca teve um litro: a lista vinha de cliente_produtos e trazia holding
