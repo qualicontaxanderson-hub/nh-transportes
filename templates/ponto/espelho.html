@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}Espelho de ponto{% endblock %}
+
+{#- A tela do gestor. O que ela precisa fazer bem e uma coisa so: mostrar as
+    FOTOS em sequencia. Horario e nome qualquer caderno tem; e olhando os
+    rostos um ao lado do outro que "o Joao bateu pelo Marcelo" aparece sem
+    ninguem precisar procurar. Por isso a foto e grande e vem primeiro, e o
+    horario e o resto vem por baixo dela. -#}
+
+{% block styles %}
+<style>
+body > .container-fluid:has(#pte){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){ body > .container-fluid:has(#pte){ padding:.7rem 1rem 0; } }
+</style>
+<style>
+  #pte{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#146c43; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#4b5563; --ink:#151d27; --borda:#d9e0e8;
+        --linha:#eef1f5; color:var(--ink); max-width:100%; }
+
+  #pte .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .7rem;
+    margin-bottom:.7rem; }
+  #pte .topo__t{ font-weight:800; font-size:1.02rem; }
+  #pte .topo__s{ font-size:.76rem; opacity:.96; margin-top:.1rem; }
+
+  #pte .filtro{ background:#fff; border:1px solid var(--borda);
+    border-radius:13px; padding:.7rem .75rem; margin-bottom:.7rem; }
+  #pte .filtro__g{ display:grid; gap:.5rem; grid-template-columns:1fr 1fr; }
+  @media (min-width:768px){ #pte .filtro__g{ grid-template-columns:repeat(4,1fr); } }
+  #pte .campo{ display:flex; flex-direction:column; gap:.2rem; min-width:0; }
+  #pte .campo span{ font-size:.68rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.04em; }
+  #pte .campo input, #pte .campo select{ border:1px solid var(--borda);
+    border-radius:9px; padding:.42rem .5rem; font-size:.82rem;
+    font-family:inherit; background:#fff; color:var(--ink); min-width:0; }
+  #pte .campo--w{ grid-column:1 / -1; }
+  #pte .filtro__r{ display:flex; gap:.4rem; margin-top:.6rem; flex-wrap:wrap; }
+  #pte .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:9px; padding:.45rem .8rem; font-size:.83rem; font-weight:700;
+    font-family:inherit; cursor:pointer; text-decoration:none;
+    display:inline-flex; gap:.3rem; align-items:center; }
+  #pte .bt--sim{ background:var(--blue); border-color:var(--blue); color:#fff; }
+
+  #pte .g-nums{ display:grid; gap:.5rem; grid-template-columns:repeat(3,1fr);
+    margin-bottom:.7rem; }
+  #pte .n{ background:#fff; border:1px solid var(--borda); border-radius:12px;
+    padding:.55rem .65rem; }
+  #pte .n .r{ font-size:.62rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.05em; }
+  #pte .n .v{ font-size:1.15rem; font-weight:800;
+    font-variant-numeric:tabular-nums; }
+  #pte .n--amb .v{ color:var(--ambar); }
+
+  #pte .dia{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; margin-bottom:.7rem; overflow:hidden;
+    box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #pte .dia__t{ padding:.55rem .8rem; background:#f7fafd;
+    border-bottom:1px solid var(--linha); font-weight:800; font-size:.8rem;
+    color:var(--blue-deep); text-transform:uppercase; letter-spacing:.05em; }
+
+  #pte .pes{ padding:.65rem .8rem; border-bottom:1px solid var(--linha); }
+  #pte .pes:last-child{ border-bottom:0; }
+  #pte .pes__c{ display:flex; align-items:baseline; gap:.6rem;
+    margin-bottom:.5rem; flex-wrap:wrap; }
+  #pte .pes__n{ font-weight:800; font-size:.95rem; }
+  #pte .pes__h{ margin-left:auto; font-weight:800;
+    font-variant-numeric:tabular-nums; }
+  #pte .pes__a{ font-size:.68rem; font-weight:800; color:var(--ambar);
+    background:#fbf1e0; border-radius:99px; padding:.18rem .5rem;
+    text-transform:uppercase; letter-spacing:.04em; }
+
+  /* a fila de fotos — e ela o relatorio */
+  #pte .fotos{ display:flex; gap:.5rem; overflow-x:auto; padding-bottom:.2rem; }
+  #pte .b{ flex:0 0 118px; }
+  #pte .b img{ width:118px; height:118px; object-fit:cover; border-radius:11px;
+    border:2px solid var(--ok); background:#eef1f5; display:block;
+    transform:scaleX(-1); }
+  #pte .b--sai img{ border-color:#b26a00; }
+  #pte .b__h{ font-weight:800; font-size:.88rem; margin-top:.2rem;
+    font-variant-numeric:tabular-nums; }
+  #pte .b__t{ font-size:.66rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.04em; color:var(--ok); }
+  #pte .b--sai .b__t{ color:#8a5a00; }
+  #pte .b__g{ font-size:.64rem; color:var(--muted); }
+  #pte .b__g a{ color:var(--blue-deep); }
+  #pte .b__g.ruim{ color:var(--danger); font-weight:700; }
+
+  #pte .nada{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; padding:1.8rem .9rem; text-align:center;
+    color:var(--muted); }
+  #pte .leg{ font-size:.74rem; color:var(--muted); line-height:1.5;
+    padding:.2rem .3rem 1rem; }
+  #pte .leg b{ color:var(--ink); }
+
+  /* a foto grande, ao tocar */
+  #pte .lupa{ position:fixed; inset:0; z-index:1090; background:rgba(8,12,18,.94);
+    display:grid; place-items:center; padding:1rem; }
+  #pte .lupa[hidden]{ display:none; }
+  #pte .lupa img{ max-width:100%; max-height:78vh; border-radius:12px;
+    transform:scaleX(-1); }
+  #pte .lupa .cap{ color:#fff; text-align:center; margin-top:.6rem;
+    font-size:.9rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="pte">
+
+  <div class="topo">
+    <div class="topo__t"><i class="bi bi-fingerprint"></i> Espelho de ponto</div>
+    <div class="topo__s">A foto é o que confere — hora e nome qualquer caderno tem</div>
+  </div>
+
+  <form class="filtro" method="GET">
+    <div class="filtro__g">
+      <label class="campo"><span>De</span>
+        <input type="date" name="data_inicio" value="{{ data_inicio }}"></label>
+      <label class="campo"><span>Até</span>
+        <input type="date" name="data_fim" value="{{ data_fim }}"></label>
+      <label class="campo campo--w"><span>Funcionário</span>
+        <select name="funcionario_id">
+          <option value="0">Todos</option>
+          {% for f in funcionarios %}
+          <option value="{{ f.id }}" {{ 'selected' if funcionario_id == f.id }}>
+            {{ f.nome }}</option>
+          {% endfor %}
+        </select></label>
+    </div>
+    <div class="filtro__r">
+      <button type="submit" class="bt bt--sim"><i class="bi bi-search"></i> Ver</button>
+      <a class="bt" href="{{ url_for('ponto.index') }}">
+        <i class="bi bi-fingerprint"></i> Tela de bater</a>
+    </div>
+  </form>
+
+  <div class="g-nums">
+    <div class="n"><div class="r">Batidas</div><div class="v">{{ total_batidas }}</div></div>
+    <div class="n"><div class="r">Horas no período</div><div class="v">{{ total_txt }}</div></div>
+    <div class="n {{ 'n--amb' if sem_local }}"><div class="r">Sem localização</div>
+      <div class="v">{{ sem_local }}</div></div>
+  </div>
+
+  {% if not dias %}
+  <div class="nada">Nenhuma batida no período escolhido.</div>
+  {% else %}
+  {% for d in dias %}
+  <div class="dia">
+    <div class="dia__t">{{ d.data.strftime('%d/%m/%Y') }}</div>
+    {% for p in d.pessoas %}
+    <div class="pes">
+      <div class="pes__c">
+        <span class="pes__n">{{ p.nome }}</span>
+        {% if p.aberto %}<span class="pes__a">entrada sem saída</span>{% endif %}
+        <span class="pes__h">{{ p.horas_txt }} h</span>
+      </div>
+      <div class="fotos">
+        {% for b in p.batidas %}
+        <div class="b {{ 'b--sai' if b.tipo == 'SAIDA' }}">
+          <img src="{{ url_for('ponto.foto', batida_id=b.id) }}" loading="lazy"
+               alt="{{ p.nome }} às {{ b.hora }}"
+               onclick="pteLupa(this, '{{ p.nome }}', '{{ b.hora }}')">
+          <div class="b__h">{{ b.hora }}</div>
+          <div class="b__t">{{ 'Saída' if b.tipo == 'SAIDA' else 'Entrada' }}</div>
+          {% if b.geo_negada %}
+          <div class="b__g ruim"><i class="bi bi-geo-alt-fill"></i> sem local</div>
+          {% else %}
+          <div class="b__g">
+            <a href="https://www.google.com/maps?q={{ b.lat }},{{ b.lng }}"
+               target="_blank" rel="noopener">
+              <i class="bi bi-geo-alt-fill"></i> no mapa</a>
+            {%- if b.precisao_m %} ±{{ b.precisao_m }}m{% endif %}
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <div class="leg">
+    A <b>hora é a do servidor</b>, não a do aparelho — relógio de celular se
+    muda no ajuste de data e hora. A <b>foto é obrigatória</b>: sem ela a
+    batida nem é gravada. <b>Sem local</b> quer dizer que o aparelho não
+    deixou pegar a localização naquela batida; o ponto vale do mesmo jeito,
+    mas fica marcado. Nenhuma tela altera o horário de uma batida depois de
+    gravada.
+  </div>
+
+  <div class="lupa" id="pte-lupa" hidden onclick="this.hidden = true">
+    <div>
+      <img id="pte-lupa-img" alt="">
+      <div class="cap" id="pte-lupa-cap"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// A foto grande e o unico jeito de conferir um rosto de verdade; o cartao de
+// 118px serve para varrer a fila, nao para reconhecer alguem.
+function pteLupa(img, nome, hora){
+  document.getElementById('pte-lupa-img').src = img.src;
+  document.getElementById('pte-lupa-cap').textContent = nome + ' · ' + hora;
+  document.getElementById('pte-lupa').hidden = false;
+}
+</script>
+{% endblock %}

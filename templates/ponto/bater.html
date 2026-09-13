@@ -1,0 +1,358 @@
+{% extends "base.html" %}
+
+{% block title %}Bater ponto{% endblock %}
+
+{#- A tela do aparelho do posto. Tres toques e acabou: o nome, a foto, o
+    confirma. Nada de escolher entrada ou saida -- o servidor sabe qual e a
+    proxima, e escolher a mao numa tela compartilhada e so mais uma chance de
+    errar.
+
+    A camera abre pela frente (selfie). Se o navegador nao deixar, cai no
+    input de arquivo com capture, que no celular tambem abre a camera. -#}
+
+{% block styles %}
+<style>
+body > .container-fluid:has(#pto){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){ body > .container-fluid:has(#pto){ padding:.7rem 1rem 0; } }
+</style>
+<style>
+  #pto{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#146c43; --danger:#a32d2d;
+        --muted:#4b5563; --ink:#151d27; --borda:#d9e0e8; --linha:#eef1f5;
+        color:var(--ink); max-width:760px; margin:0 auto; }
+
+  #pto .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.8rem .9rem .75rem;
+    margin-bottom:.7rem; display:flex; align-items:center; gap:.7rem; }
+  #pto .topo__t{ font-weight:800; font-size:1.05rem; }
+  #pto .topo__s{ font-size:.78rem; opacity:.95; }
+  #pto .relogio{ margin-left:auto; text-align:right; }
+  #pto .relogio b{ display:block; font-size:1.5rem; font-weight:800;
+    line-height:1; font-variant-numeric:tabular-nums; }
+  #pto .relogio span{ font-size:.68rem; opacity:.9; }
+
+  #pto .gente{ display:grid; gap:.5rem; grid-template-columns:1fr; }
+  @media (min-width:560px){ #pto .gente{ grid-template-columns:1fr 1fr; } }
+  #pto .p{ display:flex; align-items:center; gap:.65rem; width:100%;
+    background:#fff; border:1px solid var(--borda); border-radius:14px;
+    padding:.7rem .8rem; text-align:left; font-family:inherit; cursor:pointer;
+    box-shadow:0 2px 8px rgba(20,35,60,.05); }
+  #pto .p:active{ transform:scale(.99); }
+  #pto .p__i{ flex:0 0 44px; height:44px; border-radius:12px; display:grid;
+    place-items:center; font-weight:800; font-size:1.05rem; color:#fff;
+    background:var(--ok); }
+  #pto .p--sai .p__i{ background:#b26a00; }
+  #pto .p__n{ flex:1; min-width:0; }
+  #pto .p__nome{ font-weight:800; font-size:.98rem; line-height:1.25;
+    overflow-wrap:anywhere; }
+  #pto .p__f{ font-size:.74rem; color:var(--muted); margin-top:.1rem; }
+  #pto .p__a{ font-size:.68rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; padding:.22rem .5rem; border-radius:99px;
+    background:#e8f4ec; color:var(--ok); white-space:nowrap; }
+  #pto .p--sai .p__a{ background:#fbf1e0; color:#8a5a00; }
+
+  #pto .nada{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; padding:1.6rem .9rem; text-align:center;
+    color:var(--muted); }
+
+  /* ---- a camera ---- */
+  #pto .cam{ position:fixed; inset:0; z-index:1080; background:#0b1018;
+    display:flex; flex-direction:column; }
+  #pto .cam[hidden]{ display:none; }
+  #pto .cam__t{ color:#fff; padding:.7rem .9rem; display:flex; gap:.6rem;
+    align-items:center; background:rgba(0,0,0,.35); }
+  #pto .cam__t b{ font-size:1rem; }
+  #pto .cam__t span{ font-size:.74rem; opacity:.85; display:block; }
+  #pto .cam__x{ margin-left:auto; background:rgba(255,255,255,.14); border:0;
+    color:#fff; border-radius:10px; padding:.45rem .8rem; font-family:inherit;
+    font-weight:800; font-size:.82rem; cursor:pointer; }
+  #pto .cam__v{ flex:1; position:relative; overflow:hidden;
+    display:grid; place-items:center; background:#000; }
+  #pto .cam__v video, #pto .cam__v img{ max-width:100%; max-height:100%;
+    object-fit:contain; transform:scaleX(-1); }
+  #pto .cam__b{ padding:.8rem .9rem 1.1rem; display:flex; gap:.6rem;
+    background:rgba(0,0,0,.35); }
+  #pto .bt{ flex:1; border:0; border-radius:12px; padding:.85rem .8rem;
+    font-family:inherit; font-weight:800; font-size:.95rem; cursor:pointer;
+    display:inline-flex; gap:.4rem; align-items:center; justify-content:center; }
+  #pto .bt--foto{ background:#fff; color:#0b1018; }
+  #pto .bt--ok{ background:var(--ok); color:#fff; }
+  #pto .bt--re{ background:rgba(255,255,255,.16); color:#fff; flex:0 0 auto;
+    padding:.85rem 1rem; }
+  #pto .bt[disabled]{ opacity:.55; }
+  #pto .cam__e{ color:#ffd9d9; font-size:.8rem; padding:0 .9rem .6rem;
+    text-align:center; }
+
+  /* ---- o aviso do fim ---- */
+  #pto .ok{ position:fixed; inset:0; z-index:1090; display:grid;
+    place-items:center; background:rgba(8,20,14,.94); color:#fff;
+    text-align:center; padding:1.2rem; }
+  #pto .ok[hidden]{ display:none; }
+  #pto .ok i{ font-size:3.4rem; color:#5fd79a; }
+  #pto .ok b{ display:block; font-size:1.5rem; margin-top:.4rem; }
+  #pto .ok .h{ font-size:2.6rem; font-weight:800; font-variant-numeric:tabular-nums;
+    margin:.2rem 0; }
+  #pto .ok .q{ font-size:1rem; opacity:.92; }
+  #pto .ok .aviso{ margin-top:.7rem; font-size:.82rem; color:#ffd9a0; }
+
+  #pto .rodape{ margin-top:.8rem; font-size:.74rem; color:var(--muted);
+    text-align:center; line-height:1.5; }
+  #pto .rodape a{ color:var(--blue-deep); font-weight:700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="pto">
+
+  <div class="topo">
+    <div>
+      <div class="topo__t"><i class="bi bi-fingerprint"></i> Bater ponto</div>
+      <div class="topo__s">{{ hoje.strftime('%d/%m/%Y') }} · toque no seu nome</div>
+    </div>
+    <div class="relogio"><b id="pto-hora">{{ agora.strftime('%H:%M') }}</b>
+      <span>horário do sistema</span></div>
+  </div>
+
+  {% if gente %}
+  <div class="gente">
+    {% for g in gente %}
+    <button type="button" class="p {{ 'p--sai' if g.proxima == 'SAIDA' }}"
+            data-id="{{ g.id }}" data-nome="{{ g.nome }}"
+            data-acao="{{ 'Saída' if g.proxima == 'SAIDA' else 'Entrada' }}"
+            onclick="ptoAbre(this)">
+      <span class="p__i">
+        <i class="bi bi-box-arrow-{{ 'right' if g.proxima == 'SAIDA' else 'in-left' }}"></i>
+      </span>
+      <span class="p__n">
+        <span class="p__nome">{{ g.nome }}</span>
+        <span class="p__f">
+          {%- if g.ultima_hora %}{{ 'entrou' if g.ultima_tipo == 'ENTRADA' else 'saiu' }}
+          às {{ g.ultima_hora }}{% else %}ainda não bateu hoje{% endif -%}
+        </span>
+      </span>
+      <span class="p__a">{{ 'Saída' if g.proxima == 'SAIDA' else 'Entrada' }}</span>
+    </button>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="nada">Nenhum funcionário ativo para hoje.</div>
+  {% endif %}
+
+  <div class="rodape">
+    A hora é a do sistema, não a do aparelho. A foto é obrigatória.
+    {% if admin %}<br><a href="{{ url_for('ponto.espelho') }}">Ver o espelho de ponto</a>{% endif %}
+  </div>
+
+  <!-- ---- a câmera ---- -->
+  <div class="cam" id="pto-cam" hidden>
+    <div class="cam__t">
+      <div><b id="pto-cam-nome">—</b><span id="pto-cam-acao">—</span></div>
+      <button type="button" class="cam__x" onclick="ptoFecha()">Cancelar</button>
+    </div>
+    <div class="cam__v">
+      <video id="pto-video" playsinline autoplay muted></video>
+      <img id="pto-previa" hidden alt="Foto para o ponto">
+    </div>
+    <div class="cam__e" id="pto-erro" hidden></div>
+    <div class="cam__b" id="pto-botoes">
+      <button type="button" class="bt bt--foto" id="pto-tirar" onclick="ptoTira()">
+        <i class="bi bi-camera-fill"></i> Tirar foto</button>
+    </div>
+    <div class="cam__b" id="pto-confirma" hidden>
+      <button type="button" class="bt bt--re" onclick="ptoDeNovo()">
+        <i class="bi bi-arrow-counterclockwise"></i></button>
+      <button type="button" class="bt bt--ok" id="pto-grava" onclick="ptoGrava()">
+        <i class="bi bi-check-lg"></i> Confirmar</button>
+    </div>
+    <input type="file" id="pto-arquivo" accept="image/*" capture="user"
+           hidden onchange="ptoDoArquivo(this)">
+  </div>
+
+  <div class="ok" id="pto-ok" hidden>
+    <div>
+      <i class="bi bi-check-circle-fill"></i>
+      <b id="pto-ok-nome">—</b>
+      <div class="h" id="pto-ok-hora">—</div>
+      <div class="q" id="pto-ok-tipo">—</div>
+      <div class="aviso" id="pto-ok-aviso" hidden>
+        <i class="bi bi-geo-alt"></i> sem localização — o aparelho não deixou
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// A foto e o ponto todo: e ela que impede um bater pelo outro. Por isso a
+// camera abre aqui dentro (getUserMedia) em vez de mandar para o app de
+// fotos: assim nao da para escolher uma imagem da galeria.
+var ptoQuem = null, ptoStream = null, ptoFoto = null, ptoGeo = null;
+
+function $p(id){ return document.getElementById(id); }
+
+function ptoRelogio(){
+  // De propósito NAO usa a hora do aparelho para o registro -- so para o
+  // relogio da tela andar. Quem carimba a batida e o servidor.
+  var d = new Date();
+  $p('pto-hora').textContent =
+    ('0'+d.getHours()).slice(-2) + ':' + ('0'+d.getMinutes()).slice(-2);
+}
+setInterval(ptoRelogio, 15000);
+
+function ptoPedeLocal(){
+  // Pede cedo, enquanto a pessoa tira a foto: o GPS demora, e esperar por
+  // ele depois do clique faria a tela parecer travada.
+  ptoGeo = null;
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(function(p){
+    ptoGeo = {lat: p.coords.latitude, lng: p.coords.longitude,
+              precisao: p.coords.accuracy};
+  }, function(){ ptoGeo = null; },
+  {enableHighAccuracy: true, timeout: 12000, maximumAge: 60000});
+}
+
+function ptoAbre(bt){
+  ptoQuem = {id: bt.getAttribute('data-id'),
+             nome: bt.getAttribute('data-nome'),
+             acao: bt.getAttribute('data-acao')};
+  $p('pto-cam-nome').textContent = ptoQuem.nome;
+  $p('pto-cam-acao').textContent = 'Registrando ' + ptoQuem.acao.toLowerCase();
+  $p('pto-cam').hidden = false;
+  $p('pto-erro').hidden = true;
+  ptoDeNovo();
+  ptoPedeLocal();
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    return ptoSemCamera('Este navegador não abre a câmera aqui.');
+  }
+  navigator.mediaDevices.getUserMedia({video: {facingMode: 'user',
+      width: {ideal: 960}}, audio: false})
+    .then(function(s){
+      ptoStream = s;
+      var v = $p('pto-video');
+      v.srcObject = s;
+      v.hidden = false;
+      v.play();
+    })
+    .catch(function(){
+      ptoSemCamera('Não consegui abrir a câmera. Use o botão abaixo.');
+    });
+}
+
+function ptoSemCamera(msg){
+  // Sem getUserMedia ainda da para bater: o input com capture abre a camera
+  // do celular. E o caminho de recuo, nao o principal.
+  var e = $p('pto-erro');
+  e.textContent = msg;
+  e.hidden = false;
+  $p('pto-video').hidden = true;
+  $p('pto-tirar').innerHTML = '<i class="bi bi-camera-fill"></i> Abrir a câmera';
+  $p('pto-tirar').onclick = function(){ $p('pto-arquivo').click(); };
+}
+
+function ptoPara(){
+  if (ptoStream){
+    ptoStream.getTracks().forEach(function(t){ t.stop(); });
+    ptoStream = null;
+  }
+}
+
+function ptoFecha(){
+  ptoPara();
+  $p('pto-cam').hidden = true;
+  ptoQuem = null; ptoFoto = null;
+}
+
+function ptoDeNovo(){
+  ptoFoto = null;
+  $p('pto-previa').hidden = true;
+  $p('pto-video').hidden = false;
+  $p('pto-botoes').hidden = false;
+  $p('pto-confirma').hidden = true;
+  $p('pto-grava').disabled = false;
+  $p('pto-grava').innerHTML = '<i class="bi bi-check-lg"></i> Confirmar';
+}
+
+function ptoGuarda(canvas){
+  // 480px e qualidade 0.6: da uns 30 KB. Rosto se reconhece bem nisso, e a
+  // foto vai para o banco -- mandar 3 MB de camera de celular encheria a
+  // tabela em semanas.
+  ptoFoto = canvas.toDataURL('image/jpeg', 0.6);
+  var img = $p('pto-previa');
+  img.src = ptoFoto;
+  img.hidden = false;
+  $p('pto-video').hidden = true;
+  $p('pto-botoes').hidden = true;
+  $p('pto-confirma').hidden = false;
+}
+
+function ptoTira(){
+  var v = $p('pto-video');
+  if (!v.videoWidth) return;
+  var largura = 480;
+  var altura = Math.round(v.videoHeight * (largura / v.videoWidth));
+  var c = document.createElement('canvas');
+  c.width = largura; c.height = altura;
+  c.getContext('2d').drawImage(v, 0, 0, largura, altura);
+  ptoGuarda(c);
+}
+
+function ptoDoArquivo(input){
+  var f = input.files && input.files[0];
+  if (!f) return;
+  var img = new Image();
+  img.onload = function(){
+    var largura = 480;
+    var altura = Math.round(img.height * (largura / img.width));
+    var c = document.createElement('canvas');
+    c.width = largura; c.height = altura;
+    c.getContext('2d').drawImage(img, 0, 0, largura, altura);
+    ptoGuarda(c);
+    URL.revokeObjectURL(img.src);
+  };
+  img.src = URL.createObjectURL(f);
+  input.value = '';
+}
+
+function ptoGrava(){
+  if (!ptoQuem || !ptoFoto) return;
+  var bt = $p('pto-grava');
+  bt.disabled = true;
+  bt.innerHTML = '<i class="bi bi-hourglass-split"></i> Gravando…';
+  fetch('{{ url_for("ponto.bater") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      funcionario_id: ptoQuem.id,
+      foto: ptoFoto,
+      lat: ptoGeo ? ptoGeo.lat : null,
+      lng: ptoGeo ? ptoGeo.lng : null,
+      precisao: ptoGeo ? ptoGeo.precisao : null
+    })
+  }).then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.ok) throw new Error(d.erro || 'não deu para gravar');
+      ptoPara();
+      $p('pto-cam').hidden = true;
+      $p('pto-ok-nome').textContent = d.nome;
+      $p('pto-ok-hora').textContent = d.hora;
+      $p('pto-ok-tipo').textContent = (d.tipo === 'SAIDA' ? 'Saída' : 'Entrada')
+        + ' registrada';
+      $p('pto-ok-aviso').hidden = !d.sem_local;
+      $p('pto-ok').hidden = false;
+      // volta sozinho para a lista: numa tela de posto ninguem fecha aviso
+      setTimeout(function(){ window.location.reload(); }, 2600);
+    })
+    .catch(function(e){
+      var el = $p('pto-erro');
+      el.textContent = e.message;
+      el.hidden = false;
+      bt.disabled = false;
+      bt.innerHTML = '<i class="bi bi-check-lg"></i> Confirmar';
+    });
+}
+</script>
+{% endblock %}
