@@ -257,6 +257,63 @@ def _chave(nome):
     return re.sub(r"\s+", " ", t).strip().upper()
 
 
+# Terminacoes de razao social que o aviso do banco traz e o cadastro nem
+# sempre: "MARCIO MENDES LTDA" no e-mail e "MARCIO MENDES" na tela. Sao
+# retiradas do FIM, e em cadeia -- "LTDA ME" sai inteiro.
+_SUFIXOS = ('LTDA ME', 'LTDA EPP', 'LTDA', 'LIMITADA', 'EIRELI', 'EPP',
+            'MEI', 'ME', 'S A', 'SA', 'CIA', 'E CIA', 'EI', 'SS')
+
+
+def _nucleo(nome):
+    """O nome sem a terminacao da razao social.
+
+    Existe porque o Anderson viu dois PIX com o envelope vermelho e a causa
+    era so essa: o e-mail da Cora diz "MENESES E MENESES TRANSPORTES LTDA" e
+    o cliente PIX esta cadastrado como "MENESES E MENESES TRANSPORTES".
+
+    Retira so do fim, e nunca ate ficar curto demais: sobrando menos de duas
+    palavras ou menos de seis letras, o corte e desfeito. "MARIA SA" tem de
+    continuar "MARIA SA" -- SA ali e sobrenome, nao sociedade anonima, e
+    reduzir para "MARIA" colaria essa pessoa em qualquer outra Maria.
+    """
+    t = _chave(nome)
+    mudou = True
+    while mudou and t:
+        mudou = False
+        for suf in _SUFIXOS:
+            if t.endswith(' ' + suf):
+                curto = t[: -(len(suf) + 1)].strip()
+                if len(curto.split()) >= 2 or len(curto) >= 6:
+                    t, mudou = curto, True
+                    break
+    return t
+
+
+def _mesmo_nome(a, b):
+    """Os dois nomes sao da mesma pessoa?
+
+    Tres graus, do mais firme ao mais frouxo. Quem casa no primeiro nao chega
+    ao terceiro -- e o terceiro so e usado depois de o valor e a data ja
+    terem estreitado para um punhado de candidatos.
+    """
+    ca, cb = _chave(a), _chave(b)
+    if not ca or not cb:
+        return 0
+    if ca == cb:
+        return 3                      # identicos
+    na, nb = _nucleo(a), _nucleo(b)
+    if na and na == nb:
+        return 2                      # so a terminacao difere
+    # um e o comeco do outro, em palavras inteiras: o cadastro abreviou.
+    # Exige nome de gente grande o bastante para nao colar "JOSE" em
+    # "JOSE CARLOS DA SILVA".
+    curto, longo = (na, nb) if len(na) <= len(nb) else (nb, na)
+    if (len(curto) >= 10 and len(curto.split()) >= 2
+            and longo.startswith(curto + ' ')):
+        return 1
+    return 0
+
+
 def _buscar(dias=2, apenas_nao_lidos=True):
     """[(uid, message_id, assunto, quando, texto)] dos avisos do banco.
 
@@ -382,13 +439,20 @@ def casar(cur, valor, favorecido, quando, dias=None):
            AND cp.id IS NULL
          ORDER BY tp.data DESC, tp.id DESC
     """, (ini, fim, valor))
-    alvo = _chave(favorecido)
     candidatos = cur.fetchall()
+    # Do mais firme para o mais frouxo: um nome identico noutra solicitacao
+    # tem de ganhar de um que so bate pelo comeco.
+    melhor, melhor_id = 0, None
     for row in candidatos:
         rid = row["id"] if isinstance(row, dict) else row[0]
         nome = row["nome_completo"] if isinstance(row, dict) else row[1]
-        if alvo and _chave(nome) == alvo:
-            return rid
+        grau = _mesmo_nome(favorecido, nome)
+        if grau > melhor:
+            melhor, melhor_id = grau, rid
+            if grau == 3:
+                break
+    if melhor:
+        return melhor_id
     # Sem nome batendo nao vale chutar pelo valor: o comprovante fica gravado
     # e sem dono, e aparece assim que a solicitacao certa for lancada.
     return None
