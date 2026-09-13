@@ -20,6 +20,12 @@ Duas telas: /ponto, que roda no aparelho do posto e e onde se bate; e
 /ponto/espelho, do gestor, que mostra as batidas do periodo com as fotos lado
 a lado -- e e olhando as fotos em sequencia que "um batendo pelo outro"
 aparece sozinho.
+
+POR ENQUANTO TUDO E SO PARA ADMIN, por decisao do Anderson enquanto o ponto
+esta em teste. Isso vale para as QUATRO rotas, inclusive a da foto: esconder
+o item do menu nao protege nada, quem souber a URL entra. Quando abrir para a
+pista, o que muda e o decorador de /ponto e /ponto/bater -- o espelho e a
+foto seguem sendo do gestor, porque sao a foto dos outros.
 """
 import base64
 import binascii
@@ -30,6 +36,7 @@ import pytz
 from flask import (Blueprint, Response, jsonify, render_template, request)
 from flask_login import current_user, login_required
 
+from routes.auth import admin_required
 from utils.db import get_db_connection
 
 ponto_bp = Blueprint('ponto', __name__, url_prefix='/ponto')
@@ -122,7 +129,7 @@ def _funcionarios_do_dia(cur, dia):
 
 
 @ponto_bp.route('/', methods=['GET'])
-@login_required
+@admin_required
 def index():
     """O aparelho do posto: toca no nome, tira a foto, bate."""
     conn = get_db_connection()
@@ -138,7 +145,7 @@ def index():
 
 
 @ponto_bp.route('/bater', methods=['POST'])
-@login_required
+@admin_required
 def bater():
     """Grava a batida. Sem foto, nao grava.
 
@@ -224,7 +231,7 @@ def bater():
 # ==========================================================================
 
 @ponto_bp.route('/foto/<int:batida_id>', methods=['GET'])
-@login_required
+@admin_required
 def foto(batida_id):
     """A foto de uma batida. Sem login nao sai daqui."""
     conn = get_db_connection()
@@ -260,7 +267,7 @@ def _horas(batidas):
 
 
 @ponto_bp.route('/espelho', methods=['GET'])
-@login_required
+@admin_required
 def espelho():
     """As batidas do periodo, com as fotos — e e nas fotos que se confere."""
     def _data(nome, padrao):

@@ -117,6 +117,7 @@ prova('a localização aceita faltar',
       'GPS negado não pode impedir o funcionário de bater')
 
 antes = consulta("SELECT COUNT(*) n FROM ponto_batidas")[0]['n']
+corte = consulta("SELECT COALESCE(MAX(id), 0) m FROM ponto_batidas")[0]['m']
 
 # ── a tela de bater ──────────────────────────────────────────────────────
 r = cli.get('/ponto/', follow_redirects=True)
@@ -210,7 +211,7 @@ try:
     r = cli.post('/ponto/bater', json={'funcionario_id': alvo['id'],
                                        'foto': foto})
     prova('sem localização a batida acontece mesmo assim', r.status_code == 200,
-          'o trabalho não pode parar na porta por causa de uma permissão')
+          'código %s: %s' % (r.status_code, r.get_data(as_text=True)[:300]))
     ter = consulta("""SELECT * FROM ponto_batidas WHERE funcionario_id = %s
                        ORDER BY id DESC LIMIT 1""", (alvo['id'],))[0]
     criadas.append(ter['id'])
@@ -237,6 +238,37 @@ try:
     prova('com o nome de quem bateu', alvo['nome'] in ' '.join(he.split()))
     prova('e avisando qual batida ficou sem localização', 'sem local' in he)
 
+    # ── por enquanto, so admin ───────────────────────────────────────────
+    # Esconder o item do menu nao protege nada: quem souber a URL entra. As
+    # QUATRO rotas tem de recusar — inclusive a da foto, que e a foto de uma
+    # pessoa. Quando o ponto abrir para a pista, esta prova avisa.
+    nao_admin = consulta("""SELECT id, username, nivel FROM usuarios
+                             WHERE ativo = 1 AND UPPER(nivel) <> 'ADMIN'
+                             LIMIT 1""")
+    prova('há usuário não-admin para testar a trava', bool(nao_admin),
+          'sem ele a prova da permissão não testaria nada')
+    if nao_admin:
+        outro = app.test_client()
+        with outro.session_transaction() as s2:
+            s2['_user_id'] = str(nao_admin[0]['id'])
+            s2['_fresh'] = True
+        barradas = []
+        for metodo, url in (('get', '/ponto/'),
+                            ('get', '/ponto/espelho'),
+                            ('get', '/ponto/foto/%s' % nova['id']),
+                            ('post', '/ponto/bater')):
+            r = getattr(outro, metodo)(url, follow_redirects=False)
+            if r.status_code == 200:
+                barradas.append((url, r.status_code))
+        prova('usuário %s não entra em nenhuma tela do ponto'
+              % nao_admin[0]['nivel'],
+              not barradas, 'passou em: %r' % barradas)
+        antes_dele = consulta("SELECT COUNT(*) n FROM ponto_batidas")[0]['n']
+        outro.post('/ponto/bater', json={'funcionario_id': alvo['id'],
+                                         'foto': foto})
+        prova('e não consegue gravar batida nenhuma',
+              consulta("SELECT COUNT(*) n FROM ponto_batidas")[0]['n'] == antes_dele)
+
     # ── desligado nao bate ───────────────────────────────────────────────
     saida_antes = consulta("SELECT data_saida FROM funcionarios WHERE id = %s",
                            (alvo['id'],))[0]['data_saida']
@@ -260,8 +292,9 @@ try:
           'antes %r, agora %r' % (saida_antes, volta))
 
 finally:
-    for bid in criadas:
-        executa("DELETE FROM ponto_batidas WHERE id = %s", (bid,))
+    # tudo que nasceu nesta prova sai, tenha a prova visto nascer ou nao
+    apagadas = executa("DELETE FROM ponto_batidas WHERE id > %s", (corte,))
+    print('\n(limpeza: %s batida(s) de prova apagadas)' % apagadas)
 
 depois = consulta("SELECT COUNT(*) n FROM ponto_batidas")[0]['n']
 prova('a prova não deixou batida nenhuma para trás', depois == antes,
