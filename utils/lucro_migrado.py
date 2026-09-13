@@ -425,24 +425,44 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
 
 
 def comparar(cur, cliente_id, produto_ids, ini, fim):
-    """As tres entradas lado a lado, para ver onde elas discordam.
+    """As tres entradas lado a lado, SOBRE OS MESMOS DIAS.
 
-    A diferenca entre nota e descarga nao e erro: e produto que a nota ja
-    registrou e que ainda nao desceu (ou o contrario). E o tanque e o juiz —
-    `entrou_l` e o que ele absorveu, e e contra ele que as outras duas se
-    medem. As tres saem de uma apuracao so, porque nota, descarga e tanque
-    convivem no mesmo dia.
+    O "mesmos dias" nao e detalhe: e a conta inteira. `entrou` so existe onde
+    ha as duas medicoes de tanque — a de hoje e a de amanha —, e o ultimo dia
+    do periodo nunca tem a de amanha ainda. Somar a nota do mes inteiro contra
+    um `entrou` que para um dia antes acusa uma diferenca que nao existe: no
+    etanol de 12/09/2026 desceram 10.000 L de nota que o tanque ainda nao
+    tinha como confirmar, e a tela dizia "a nota erra 9.831 L".
+
+    Entao a comparacao anda so pelos dias medidos, e devolve o que ficou de
+    fora para a tela poder dizer isso em portugues.
+
+    A diferenca que sobra e real: a regua mede com perda de temperatura, e a
+    nota nao. O tanque e o juiz dos dois.
     """
     nota = apurar(cur, cliente_id, produto_ids, ini, fim, 'nota')
     fora = {}
     for pid in nota:
         tn = nota[pid]['total']
+        medidos = [d for d in nota[pid]['dias'] if d['entrou'] is not None]
+        nota_l = sum(d['nota_l'] for d in medidos)
+        desc_l = sum(d['desc_l'] for d in medidos)
+        entrou_l = sum(d['entrou'] for d in medidos)
+        # o que entrou mas o tanque ainda nao confirmou
+        espera_n = tn['nota_l'] - nota_l
+        espera_d = tn['desc_l'] - desc_l
         fora[pid] = {
-            'nota_l': tn['nota_l'], 'descarga_l': tn['desc_l'],
-            'entrou_l': tn['entrou_l'],
-            'diferenca_l': tn['nota_l'] - tn['desc_l'],
-            'nota_variacao': tn['entrou_l'] - tn['nota_l'],
-            'descarga_variacao': tn['entrou_l'] - tn['desc_l'],
-            'dias_entrou': tn['dias_entrou'], 'dias': tn['dias'],
+            'nota_l': nota_l, 'descarga_l': desc_l, 'entrou_l': entrou_l,
+            'diferenca_l': nota_l - desc_l,
+            'nota_variacao': entrou_l - nota_l,
+            'descarga_variacao': entrou_l - desc_l,
+            'espera_nota_l': espera_n, 'espera_desc_l': espera_d,
+            'espera': espera_n > 1 or espera_d > 1,
+            'dia_espera': next((d['data'] for d in reversed(nota[pid]['dias'])
+                                if d['entrou'] is None
+                                and (d['nota_l'] or d['desc_l'])), None),
+            'dias_entrou': len(medidos), 'dias': tn['dias'],
+            # os totais do periodo inteiro continuam a mao, para quem quiser
+            'nota_periodo_l': tn['nota_l'], 'descarga_periodo_l': tn['desc_l'],
         }
     return fora

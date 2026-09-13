@@ -54,6 +54,12 @@ def _erro(fn):
 from utils.formatadores import formatar_moeda as _moeda   # noqa: E402
 
 
+def _hoje_br():
+    """O MySQL roda em UTC; depois das 21h de Brasilia CURDATE() ja virou."""
+    from datetime import datetime, timedelta, timezone
+    return (datetime.now(timezone.utc) - timedelta(hours=3)).date()
+
+
 def prova(titulo, ok, detalhe=''):
     print('%-6s %s' % ('OK' if ok else 'FALHA', titulo))
     if not ok:
@@ -620,6 +626,81 @@ if adm:
     prova('e o cartão do período fecha a lista com o lucro total',
           _moeda(lucro_total) in ' '.join(
               corpo[corpo.index('class="dias so-fone"'):].split()))
+
+    # ── a comparacao tem de andar pelos MESMOS dias ───────────────────
+    # Foi o defeito que o Anderson achou: `entrou` so existe onde ha as duas
+    # medicoes de tanque, e o ultimo dia nunca tem a de amanha. Somando a nota
+    # do mes inteiro contra um `entrou` que para um dia antes, a tela dizia
+    # "a nota erra 9.831 L" no etanol — eram 10.000 L que desceram hoje e que
+    # o tanque so confirma amanha.
+    cmp2 = lucro_migrado.comparar(cur2, CLIENTE, PRODUTOS, INI, FIM)
+    ap2 = lucro_migrado.apurar(cur2, CLIENTE, PRODUTOS, INI, FIM, 'nota')
+    erros = []
+    for pid in PRODUTOS:
+        medidos = [d for d in ap2[pid]['dias'] if d['entrou'] is not None]
+        for campo, esperado in (('nota_l', sum(d['nota_l'] for d in medidos)),
+                                ('descarga_l', sum(d['desc_l'] for d in medidos)),
+                                ('entrou_l', sum(d['entrou'] for d in medidos))):
+            if abs(cmp2[pid][campo] - esperado) > 0.01:
+                erros.append((pid, campo, cmp2[pid][campo], esperado))
+    prova('as três colunas da comparação somam os mesmos dias',
+          not erros, '%r' % erros[:4])
+
+    # e o que ficou de fora tem de estar declarado, nao sumido
+    erros = []
+    for pid in PRODUTOS:
+        t, c2 = ap2[pid]['total'], cmp2[pid]
+        if abs((c2['nota_l'] + c2['espera_nota_l']) - t['nota_l']) > 0.01:
+            erros.append((pid, 'nota'))
+        if abs((c2['descarga_l'] + c2['espera_desc_l']) - t['desc_l']) > 0.01:
+            erros.append((pid, 'descarga'))
+    prova('e o que ficou de fora é declarado, não some da conta',
+          not erros, '%r' % erros)
+
+    # O aviso so aparece quando ha carga esperando medicao, e no periodo
+    # provado acima nao ha — a ultima leitura existe. Entao a prova vai
+    # buscar o periodo que TEM: o que termina hoje, que foi onde o defeito
+    # apareceu. Sem isso, o aviso ficaria sem prova nenhuma.
+    hoje_br = _hoje_br()
+    m_ini = hoje_br.replace(day=1)
+    cmp_hoje = lucro_migrado.comparar(cur2, CLIENTE, PRODUTOS, m_ini, hoje_br)
+    esperando = [pid for pid in PRODUTOS if cmp_hoje[pid]['espera']]
+    if esperando:
+        print('        no mes corrente, %s produto(s) com carga aguardando a '
+              'leitura de amanha' % len(esperando))
+        u = ('/relatorios/lucro_postos_migrados?data_inicio=%s&data_fim=%s'
+             '&cliente_id=%s&base=nota' % (m_ini, hoje_br, CLIENTE))
+        for _p in PRODUTOS:
+            u += '&produto_ids[]=%s' % _p
+        hj = ' '.join(cli.get(u, follow_redirects=True)
+                      .get_data(as_text=True).split())
+        prova('a tela avisa, em português, o que está esperando medição',
+              'ainda estão fora desta conta' in hj,
+              'há carga sem medir e a tela não conta isso a ninguém')
+        pid0 = esperando[0]
+        prova('e diz quantos litros e de que dia',
+              '{:,.0f}'.format(cmp_hoje[pid0]['espera_nota_l']).replace(',', '.')
+              in hj and cmp_hoje[pid0]['dia_espera'].strftime('%d/%m') in hj,
+              'o aviso não traz o volume nem a data')
+        # o erro que o Anderson viu: a coluna acusava milhares de litros
+        pior = max(min(abs(cmp_hoje[p_]['nota_variacao']),
+                       abs(cmp_hoje[p_]['descarga_variacao']))
+                   for p_ in PRODUTOS)
+        prova('e mesmo com carga esperando, nenhuma fonte erra milhares de '
+              'litros', pior < 2000, 'a pior distância até o tanque é %.0f L'
+              % pior)
+    else:
+        print('OK     (hoje não há carga esperando medição — nada a avisar)')
+
+    # o numero que enganava: nenhuma fonte pode "errar" milhares de litros
+    # contra o tanque num mes normal
+    longe = [(pid, round(cmp2[pid]['nota_variacao']),
+              round(cmp2[pid]['descarga_variacao'])) for pid in PRODUTOS
+             if min(abs(cmp2[pid]['nota_variacao']),
+                    abs(cmp2[pid]['descarga_variacao']))
+             > max(cmp2[pid]['entrou_l'] * 0.02, 500)]
+    prova('nenhuma fonte erra mais de 2% contra o tanque',
+          not longe, 'fora: %r' % longe)
 
     # ── o filtro so pode oferecer POSTO ───────────────────────────────
     # A tela abria na FRESH START HOLDING, primeira em ordem alfabetica, que

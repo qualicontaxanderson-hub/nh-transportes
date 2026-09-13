@@ -211,6 +211,8 @@ body > .container-fluid:has(#lpm){
   #lpm .leg{ padding:.5rem .8rem .7rem; font-size:.72rem; color:var(--muted);
     line-height:1.45; border-top:1px solid var(--linha); background:#fafbfd; }
   #lpm .leg b{ color:var(--ink); }
+  #lpm td.espera{ text-align:left; background:#fbf6ec; color:var(--ambar);
+    font-weight:600; font-size:.74rem; white-space:normal; }
 
   /* ===== MODELO A — a cor identifica o combustivel =====================
      A cor nunca decora aqui: onde ela aparece, e porque aquilo e do S-500 ou
@@ -543,18 +545,18 @@ body > .container-fluid:has(#lpm){
   {% if comparativo %}
   <div class="cx">
     <div class="cx__t" style="border-top:0"><i class="bi bi-arrow-left-right"></i>
-      Nota, descarga e o que o tanque absorveu
-      <span class="dir">quem erra menos é a fonte confiável</span></div>
+      A mesma carga contada de três jeitos
+      <span class="dir">só os dias em que o tanque foi medido dos dois lados</span></div>
     <div class="tab" style="border-top:0">
       <table>
         <thead>
           <tr>
             <th>Produto</th>
-            <th>Nota (L)</th>
-            <th>Descarga (L)</th>
-            <th>Entrou no tanque (L)</th>
-            <th>A nota erra</th>
-            <th>A régua erra</th>
+            <th>1. A nota diz</th>
+            <th>2. A régua mediu</th>
+            <th>3. O tanque recebeu</th>
+            <th>Nota − tanque</th>
+            <th>Régua − tanque</th>
           </tr>
         </thead>
         <tbody>
@@ -565,21 +567,42 @@ body > .container-fluid:has(#lpm){
             <td>{{ litros(c.nota_l) }}</td>
             <td>{{ litros(c.descarga_l) }}</td>
             <td class="tanque">{{ litros(c.entrou_l) }}</td>
-            <td class="{{ 'neg' if (c.nota_variacao|abs) > (c.descarga_variacao|abs) else 'pos' }}">
+            <td class="{{ 'neg' if (c.nota_variacao|abs) > (c.descarga_variacao|abs) else 'pos' }}"
+                title="o tanque recebeu {{ litros(c.entrou_l) }} L e a nota cobrou {{ litros(c.nota_l) }} L">
               {{ litros(c.nota_variacao|abs) }} L</td>
-            <td class="{{ 'neg' if (c.descarga_variacao|abs) > (c.nota_variacao|abs) else 'pos' }}">
+            <td class="{{ 'neg' if (c.descarga_variacao|abs) > (c.nota_variacao|abs) else 'pos' }}"
+                title="o tanque recebeu {{ litros(c.entrou_l) }} L e a régua mediu {{ litros(c.descarga_l) }} L">
               {{ litros(c.descarga_variacao|abs) }} L</td>
           </tr>
+          {%- if c.espera %}
+          <tr>
+            <td colspan="6" class="espera">
+              <i class="bi bi-hourglass-split"></i>
+              {{ produtos_nome.get(pid, pid) }}: mais
+              {{ litros(c.espera_nota_l) }} L de nota desceram em
+              {{ c.dia_espera.strftime('%d/%m') }} e ainda estão fora desta
+              conta — o tanque só confirma amanhã de manhã, na próxima leitura.
+            </td>
+          </tr>
+          {%- endif %}
           {% endfor %}
         </tbody>
       </table>
     </div>
-    <div class="leg">O tanque é o juiz: <b>entrou</b> é a medição de amanhã menos
-      a de hoje, mais o que se vendeu — não depende de nenhum lançamento. As duas
-      últimas colunas dizem o quanto a nota e a régua erram contra ele no período;
-      a diferença normal é de dezenas de litros, a perda de temperatura.
-      <b>Quem errar menos é a fonte confiável para aquele produto</b>, e é a base
-      que vale a pena escolher lá em cima.</div>
+    <div class="leg">
+      <b>Cada carga é contada três vezes, por três pessoas diferentes.</b>
+      A <b>nota</b> é o que o fornecedor cobrou. A <b>régua</b> é o que o seu
+      frentista mediu no tanque ao descarregar, em <i>/estoque → descargas</i>.
+      O <b>tanque</b> é o que a leitura do ELS mostra que realmente entrou:
+      a medição de amanhã menos a de hoje, mais o que se vendeu no dia — esta
+      não depende de ninguém lançar nada, e por isso é o juiz.<br>
+      As duas últimas colunas são a distância de cada uma até o tanque.
+      Diferença de dezenas ou poucas centenas de litros é normal: combustível
+      encolhe com a temperatura, e a régua tem sua margem.
+      <b>Quem estiver mais perto de zero é a fonte confiável para aquele
+      produto</b> — e é a base que vale a pena escolher lá em cima.
+      A conta anda só pelos dias em que houve as duas leituras de tanque, senão
+      compararia períodos diferentes.</div>
   </div>
   {% endif %}
 
