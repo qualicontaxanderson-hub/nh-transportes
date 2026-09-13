@@ -46,6 +46,13 @@ from datetime import date, timedelta
 
 BASES = ('nota', 'descarga')
 
+# Quantos dias a conta corre ANTES do periodo pedido, so para chegar no
+# primeiro dia com o custo medio ja formado. Sem isso o mesmo 12/09 mostra um
+# custo quando se filtra o mes e outro quando se filtra o dia — e um relatorio
+# que muda de resposta conforme quem pergunta nao serve para decidir nada.
+# Sessenta dias cobrem varias trocas de tanque em qualquer combustivel.
+AQUECIMENTO = 60
+
 
 def _f(v):
     """Decimal/None do banco vira float — Decimal com float estoura no meio."""
@@ -130,7 +137,7 @@ def _descargas(cur, cliente_id, ini, fim):
     return {(r['d'], r['pid']): _f(r['litros']) for r in cur.fetchall()}
 
 
-def _notas(cur, cliente_id, produto_ids, ini, fim):
+def _notas(cur, cliente_id, produto_ids, ini, fim, pend_ini=None):
     """A nota pelo dia em que ela DESCEU, e o que dela ainda nao desceu.
 
     Devolve (descidas, pendente, produto):
@@ -226,7 +233,9 @@ def _notas(cur, cliente_id, produto_ids, ini, fim):
     # O saldo do que falta descer. So contam as notas emitidas ate 30 dias
     # antes do periodo: antes da tela de descargas existir (28/07/2026) nao ha
     # vinculo nenhum, e essas notas ficariam pendentes para sempre.
-    corte = ini - timedelta(days=30)
+    # o saldo a descer e do periodo que o usuario pediu, nao do aquecimento
+    pend_ini = pend_ini or ini
+    corte = pend_ini - timedelta(days=30)
     saldo, emitidas_dia, baixa_dia = {}, {}, {}
     for item_id, it in itens.items():
         # So os itens da janela: antes da tela de descargas existir nao ha
@@ -235,13 +244,13 @@ def _notas(cur, cliente_id, produto_ids, ini, fim):
         # um item que nunca foi somado derruba o saldo para milhares negativos.
         if not (corte <= it['emissao'] <= fim):
             continue
-        if it['emissao'] < ini:
+        if it['emissao'] < pend_ini:
             saldo[it['pid']] = saldo.get(it['pid'], 0.0) + it['litros']
         else:
             ky = (it['emissao'], it['pid'])
             emitidas_dia[ky] = emitidas_dia.get(ky, 0.0) + it['litros']
         for (d, pid), l in baixa.get(item_id, {}).items():
-            if d < ini:
+            if d < pend_ini:
                 saldo[pid] = saldo.get(pid, 0.0) - l
             elif d <= fim:
                 baixa_dia[(d, pid)] = baixa_dia.get((d, pid), 0.0) + l
@@ -249,7 +258,7 @@ def _notas(cur, cliente_id, produto_ids, ini, fim):
     pendente = {}
     for pid in produto_ids:
         acu = saldo.get(pid, 0.0)
-        for d in _dias(ini, fim):
+        for d in _dias(pend_ini, fim):
             acu += emitidas_dia.get((d, pid), 0.0) - baixa_dia.get((d, pid), 0.0)
             pendente[(d, pid)] = acu
     return descidas, pendente, produto
@@ -282,15 +291,27 @@ def _custo_do_item(produto_rs, nota_total, itens_total):
 
 
 def _preco_medio(cur, cliente_id, produto_ids, ini, fim):
-    """{produto_id: R$/L} das compras do período — e, na falta, dos 60 dias antes.
+    """Dois precos medios por produto: (do periodo, da abertura).
 
-    Serve para dois lugares: precificar descarga sem nota e dar um custo ao
-    estoque que ja estava no tanque quando o periodo comecou.
+    Sao dois porque respondem coisas diferentes, e confundi-los estraga o
+    custo de quem filtra poucos dias:
+
+      do periodo   as compras de dentro do periodo. Precifica descarga que
+                   nao tem nota vinculada.
+      da abertura  as compras dos 60 dias ANTERIORES ao periodo. E com ela
+                   que se valoriza o combustivel que ja estava no tanque
+                   quando o periodo comecou — porque ele foi comprado antes.
+
+    Usar o preco do periodo na abertura faz o custo de um dia unico colar no
+    preco da compra daquele dia: o tanque cheio de ontem passa a valer o que
+    se pagou hoje. Num mes isso se dilui; num dia, mente.
+
+    Cada um cai no outro quando a sua janela nao tem compra nenhuma.
     """
     if not produto_ids:
-        return {}
+        return {}, {}
     marcas = ','.join(['%s'] * len(produto_ids))
-    preco = {}
+    janelas = {}
     for janela_ini, janela_fim in ((ini, fim),
                                    (ini - timedelta(days=60), ini - timedelta(days=1))):
         # pelo mesmo criterio do custo: o que a nota cobra, com o ST dentro
@@ -314,10 +335,16 @@ def _preco_medio(cur, cliente_id, produto_ids, ini, fim):
                               rs + _custo_do_item(_f(r['reais']),
                                                   _f(r['nota_total']),
                                                   _f(r['itens_total'])))
-        for pid, (litros, reais) in soma.items():
-            if litros and pid not in preco:
-                preco[pid] = reais / litros
-    return preco
+        janelas[(janela_ini, janela_fim)] = {
+            pid: (reais / litros) for pid, (litros, reais) in soma.items()
+            if litros}
+
+    do_periodo = janelas[(ini, fim)]
+    da_abertura = janelas[(ini - timedelta(days=60), ini - timedelta(days=1))]
+    # cada um cobre a falta do outro
+    periodo = dict(da_abertura); periodo.update(do_periodo)
+    abertura = dict(do_periodo); abertura.update(da_abertura)
+    return periodo, abertura
 
 
 # ===========================================================================
@@ -346,12 +373,16 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
     if not produto_ids:
         return {}
 
-    leitura = _leituras(cur, cliente_id, ini, fim)
-    venda = _vendas(cur, cliente_id, ini, fim)
-    preco = _preco_medio(cur, cliente_id, produto_ids, ini, fim)
+    # A conta corre desde antes do periodo para o custo medio chegar formado
+    # ao primeiro dia da tela; so o que e do periodo aparece.
+    aquece = ini - timedelta(days=AQUECIMENTO)
+    leitura = _leituras(cur, cliente_id, aquece, fim)
+    venda = _vendas(cur, cliente_id, aquece, fim)
+    preco, preco_abertura = _preco_medio(cur, cliente_id, produto_ids,
+                                         aquece, fim)
     nota, pendente, nota_produto = _notas(cur, cliente_id, produto_ids,
-                                          ini, fim)
-    medido_l = _descargas(cur, cliente_id, ini, fim)
+                                          aquece, fim, pend_ini=ini)
+    medido_l = _descargas(cur, cliente_id, aquece, fim)
     # A descarga mede volume, nao dinheiro: o preco do litro que desceu e o da
     # nota que desceu com ele. Sem vinculo, o preco medio de compra do periodo.
     desc = {}
@@ -366,11 +397,11 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
         # O estoque que ja estava no tanque: litros medidos, ao preco medio de
         # compra. E uma estimativa, e a tela diz isso — o tanque nao guarda
         # nota fiscal.
-        saldo_l = leitura.get((ini, pid))
-        encadeado = saldo_l is None
+        saldo_l = leitura.get((aquece, pid))
         if saldo_l is None:
             saldo_l = 0.0
-        saldo_rs = saldo_l * preco.get(pid, 0.0)
+        saldo_rs = saldo_l * preco_abertura.get(pid, 0.0)
+        encadeado = leitura.get((ini, pid)) is None
 
         dias, tot = [], {'entrada_l': 0.0, 'entrada_rs': 0.0, 'venda_l': 0.0,
                          'venda_rs': 0.0, 'custo_rs': 0.0, 'lucro_rs': 0.0,
@@ -380,12 +411,12 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
         falta_acum = 0.0
         var_acum = 0.0
         lucro_acum = 0.0
-        for d in _dias(ini, fim):
+        for d in _dias(aquece, fim):
             medido = leitura.get((d, pid))
             # A medicao do dia manda no estoque inicial: ela e a realidade.
             # Quando falta (o e-mail do ELS nao chegou), o dia encadeia com o
             # final calculado do dia anterior, e a tela marca isso.
-            if medido is not None and d != ini:
+            if medido is not None and d != aquece:
                 # a diferenca entre o calculado de ontem e a medicao de hoje ja
                 # foi contada como variacao de ontem; aqui o saldo se corrige
                 if saldo_l:
@@ -423,6 +454,12 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
             # O que ja foi faturado e ainda nao desceu, no fim daquele dia.
             # Nao e acumulado de coluna: vem do saldo real de cada item de
             # nota, que so baixa quando a descarga o consome.
+            # O aquecimento serve ao CUSTO, e so a ele. Os acumulados sao do
+            # periodo que o usuario pediu: somar os 60 dias de antes faria a
+            # tela abrir o dia 1 com um lucro acumulado que ninguem pediu.
+            if d < ini:
+                continue
+
             falta_acum = pendente.get((d, pid), 0.0)
             if variacao is not None:
                 var_acum += variacao

@@ -165,6 +165,53 @@ try:
           'cru %.1f - motor %.1f = %.1f, cancelado %.1f'
           % (float(cru['l']), somado, float(cru['l']) - somado, float(canc['l'])))
 
+    # ── o custo de um dia nao pode mudar com o filtro ─────────────────
+    # Foi o que apareceu comparando com o sistema do posto: apurando so o dia
+    # 12/09, o estoque que ja estava no tanque era valorizado pelo preco da
+    # compra DAQUELE dia, e o custo colava nela. A conta agora corre 60 dias
+    # antes do periodo pedido; se voltar a depender do filtro, esta prova cai.
+    ALVO = date(2026, 9, 12)
+    janelas = ((ALVO, ALVO), (date(2026, 9, 1), date(2026, 9, 30)),
+               (date(2026, 8, 1), date(2026, 9, 30)))
+    linhas = []
+    for i_, f_ in janelas:
+        ap = lucro_migrado.apurar(cur, CLIENTE, PRODUTOS, i_, f_, 'nota')
+        linhas.append({pid: next((d for d in ap[pid]['dias']
+                                  if d['data'] == ALVO), None)
+                       for pid in PRODUTOS})
+    erros = []
+    for pid in PRODUTOS:
+        base = linhas[0][pid]
+        if base is None:
+            erros.append((pid, 'o dia sumiu da apuracao'))
+            continue
+        for outro in linhas[1:]:
+            o = outro[pid]
+            if o is None:
+                erros.append((pid, 'ausente noutra janela'))
+            else:
+                for campo in ('custo_unit', 'lucro_rs', 'ei', 'venda_l'):
+                    if abs(base[campo] - o[campo]) > 0.01:
+                        erros.append((pid, campo, base[campo], o[campo]))
+    prova('o mesmo dia dá o mesmo custo em qualquer filtro', not erros,
+          '%r' % erros[:4])
+    if not erros:
+        print('        12/09 custo corrido: ' + ' · '.join(
+            '%s R$ %.4f' % (p_, linhas[0][p_]['custo_unit']) for p_ in PRODUTOS))
+
+    # e o aquecimento nao pode vazar para a tela
+    ap1 = lucro_migrado.apurar(cur, CLIENTE, PRODUTOS, ALVO, ALVO, 'nota')
+    prova('o aquecimento não aparece: a tela começa no dia pedido',
+          all(len(ap1[p_]['dias']) == 1
+              and ap1[p_]['dias'][0]['data'] == ALVO for p_ in PRODUTOS),
+          '%r' % {p_: len(ap1[p_]['dias']) for p_ in PRODUTOS})
+    erros = [(p_, ap1[p_]['total']['venda_l'], ap1[p_]['dias'][0]['venda_l'])
+             for p_ in PRODUTOS
+             if abs(ap1[p_]['total']['venda_l']
+                    - ap1[p_]['dias'][0]['venda_l']) > 0.01]
+    prova('e os totais contam só o período, não os 60 dias de aquecimento',
+          not erros, '%r' % erros)
+
     # ── o custo e o TOTAL da nota, nao a linha do produto ─────────────
     # "se pegar o valor do produto vezes a quantidade nao da o total da nota,
     # entao o custo fica errado" — Anderson, e ele estava certo. No
