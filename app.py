@@ -416,6 +416,12 @@ def create_app():
     # Registrar filtro e helpers de template
     app.jinja_env.filters['formatar_moeda'] = formatar_moeda
 
+    # O porteiro: cada nivel so alcanca o que ve no menu. Fica DEPOIS do
+    # registro das rotas de proposito -- ele nao depende de nenhuma, e assim
+    # vale para todas, inclusive as que nascerem amanha.
+    from utils.acesso import registrar as _registrar_acesso
+    _registrar_acesso(app)
+
     def _fmtnum(v, dec=3):
         """Formata número em PT-BR com separador de milhar e decimais configuráveis."""
         try:
