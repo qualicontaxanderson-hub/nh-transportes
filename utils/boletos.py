@@ -31,11 +31,17 @@ from utils.db import get_db_connection
 # NUNCA DOIS BOLETOS PARA O MESMO FRETE (14/09/2026)
 #
 # O frete #2830 saiu com duas cobranças (1061410292 e 1061410386), mesmo
-# valor, mesmo vencimento, mesmo item. O caminho de UM frete
-# (emitir_boleto_frete) não conferia se já havia cobrança ativa — só o
-# caminho de vários conferia — e nada impedia duas requisições ao mesmo
-# tempo (a primeira demora: cria a charge, associa o boleto, baixa o PDF,
-# manda o e-mail; se o navegador desiste antes, o usuário clica de novo).
+# valor, mesmo vencimento, mesmo item — e o cliente pagou uma.
+#
+# As duas nasceram pelo caminho de VÁRIOS fretes, que é o que a tela usa
+# mesmo quando se emite um só: ele grava cobrancas.frete_id = NULL e guarda
+# o vínculo em cobrancas_freites. A conferência que existia olhava só a
+# coluna frete_id — nula em todas as 217 emissões desse caminho — então o
+# cinto não prendia nada. O caminho de UM frete (emitir_boleto_frete) não
+# conferia cobrança ativa de jeito nenhum. E nada impedia duas requisições
+# ao mesmo tempo (a primeira demora: cria a charge, associa o boleto, baixa
+# o PDF, manda o e-mail; se o navegador desiste antes, o usuário clica de
+# novo).
 # Três cintos, no servidor, onde a decisão é definitiva:
 #   1. trava por frete (GET_LOCK) durante toda a emissão;
 #   2. recusa se o frete já tem cobrança não cancelada ou boleto_emitido;
@@ -81,15 +87,22 @@ def _cobranca_ativa_do_frete(cursor, frete_id):
     r = cursor.fetchone()
     if r:
         return r
-    try:
-        cursor.execute(
-            "SELECT c.id, c.charge_id, c.status FROM cobrancas c "
-            "  JOIN cobrancas_freites cf ON cf.cobranca_id = c.id "
-            " WHERE cf.frete_id = %s AND (c.status IS NULL OR c.status <> 'cancelado') "
-            " ORDER BY c.id DESC LIMIT 1", (int(frete_id),))
-        return cursor.fetchone()
-    except Exception:
-        return None
+    # as duas pontes: cobrancas_freites (com o erro de grafia) carrega 649
+    # vinculos e e a usada em producao; cobrancas_fretes tem 10. Olhar so uma
+    # deixaria passar exatamente o caso que esta trava existe para barrar.
+    for _ponte in ("cobrancas_freites", "cobrancas_fretes"):
+        try:
+            cursor.execute(
+                "SELECT c.id, c.charge_id, c.status FROM cobrancas c "
+                "  JOIN %s cf ON cf.cobranca_id = c.id "
+                " WHERE cf.frete_id = %%s AND (c.status IS NULL OR c.status <> 'cancelado') "
+                " ORDER BY c.id DESC LIMIT 1" % _ponte, (int(frete_id),))
+            r = cursor.fetchone()
+            if r:
+                return r
+        except Exception:
+            logger.exception("_cobranca_ativa_do_frete: falha em %s (segue)", _ponte)
+    return None
 
 
 def _registrar_charge_orfa(conn, frete, charge_id, data_vencimento, motivo):
@@ -1268,13 +1281,41 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
         cliente_id = clientes_ids.pop()
         client_data = rows[0]  # usar dados do cliente do primeiro frete
 
-        # verificar se algum frete já tem cobrança não-cancelada / boleto_emitido
-        q = f"SELECT frete_id, status FROM cobrancas WHERE frete_id IN ({format_ids}) AND (status IS NULL OR status != 'cancelado')"
+        # cinto 2: algum frete já tem cobrança não-cancelada?
+        #
+        # Este caminho SEMPRE grava cobrancas.frete_id = NULL e guarda o vínculo
+        # em cobrancas_freites. Conferir só a coluna frete_id era um cinto que
+        # não prendia nada: foi por aqui que o frete #2830 saiu duas vezes.
+        # Agora as duas pontes são olhadas, e a resposta diz qual cobrança
+        # barrou — sem isso ninguém sabe o que cancelar.
+        existing = []
+        q = (f"SELECT frete_id, id AS cobranca_id, charge_id, status FROM cobrancas "
+             f" WHERE frete_id IN ({format_ids}) "
+             f"   AND (status IS NULL OR status != 'cancelado')")
         cursor.execute(q, tuple(ids))
-        existing = cursor.fetchall()
+        existing.extend(cursor.fetchall() or [])
+        for _ponte in ("cobrancas_freites", "cobrancas_fretes"):
+            try:
+                cursor.execute(
+                    f"SELECT cf.frete_id, c.id AS cobranca_id, c.charge_id, c.status "
+                    f"  FROM {_ponte} cf JOIN cobrancas c ON c.id = cf.cobranca_id "
+                    f" WHERE cf.frete_id IN ({format_ids}) "
+                    f"   AND (c.status IS NULL OR c.status != 'cancelado')", tuple(ids))
+                existing.extend(cursor.fetchall() or [])
+            except Exception:
+                logger.exception("cinto 2: falha consultando %s (segue)", _ponte)
         if existing:
-            bad_ids = [str(r.get("frete_id")) for r in existing if r.get("frete_id")]
-            return {"success": False, "error": f"Existem cobranças ativas para os fretes: {','.join(bad_ids)}. Cancele-as antes de emitir."}
+            vistos = {}
+            for r in existing:
+                vistos.setdefault(int(r.get("frete_id")),
+                                  "#%s → cobrança %s (%s)"
+                                  % (r.get("frete_id"),
+                                     r.get("charge_id") or r.get("cobranca_id"),
+                                     r.get("status") or "pendente"))
+            return {"success": False,
+                    "error": "Estes fretes já têm cobrança ativa: "
+                             + "; ".join(vistos[k] for k in sorted(vistos))
+                             + ". Cancele em Recebimentos antes de emitir outra."}
 
         # montar items (cada frete como item), incluindo produto/quantidade/data na descrição
         items = []
