@@ -504,7 +504,11 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
                 'venda_bomba_unit': (ven_prod / ven_l) if ven_l else 0.0,
                 'custo_unit': custo_unit, 'custo_rs': custo_rs,
                 'lucro_rs': ven_rs - custo_rs, 'lucro_acum': lucro_acum,
-                'margem_l': ((ven_rs - custo_rs) / ven_l) if ven_l else 0.0,
+                # A margem e a da BOMBA: o preco do painel menos o custo
+                # corrido. O acrescimo do cartao e do prazo fica de fora
+                # porque ele existe para cobrir a taxa da operadora -- entra
+                # no lucro e no faturamento, nao na conta de pista.
+                'margem_l': ((ven_prod - custo_rs) / ven_l) if ven_l else 0.0,
                 'ef_calc': ef_calc, 'ef_real': ef_real, 'variacao': variacao,
             })
             tot['entrada_l'] += ent_l
@@ -547,7 +551,8 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
                                     if tot['nota_l'] else 0.0)
         tot['nota_unit'] = ((tot['nota_rs'] / tot['nota_l'])
                             if tot['nota_l'] else 0.0)
-        tot['margem_l'] = (tot['lucro_rs'] / tot['venda_l']) if tot['venda_l'] else 0.0
+        tot['margem_l'] = (((tot['venda_produto_rs'] - tot['custo_rs'])
+                            / tot['venda_l']) if tot['venda_l'] else 0.0)
         tot['custo_unit'] = (tot['custo_rs'] / tot['venda_l']) if tot['venda_l'] else 0.0
         tot['entrada_unit'] = ((tot['entrada_rs'] / tot['entrada_l'])
                                if tot['entrada_l'] else 0.0)

@@ -436,7 +436,7 @@ body > .container-fluid:has(#lpm){
       <div class="lucro {{ 'lucro--neg' if totais.lucro_rs < 0 }}">
         <div class="lucro__r">Lucro do período</div>
         <div class="lucro__v">{{ reais(totais.lucro_rs) }}</div>
-        <div class="lucro__s">{{ preco(totais.margem_l) }} por litro ·
+        <div class="lucro__s">margem de {{ preco(totais.margem_l) }}/L na bomba ·
           {{ geral.dias_com_venda }} dias com venda</div>
         <div class="mini">
           <div><span>Vendido</span><b>{{ litros(totais.venda_l) }} L</b></div>
@@ -458,7 +458,7 @@ body > .container-fluid:has(#lpm){
           <div class="rk__d">
             <span>{{ '%.0f'|format(r.fatia) }}% do lucro</span>
             <span>{{ litros(r.venda_l) }} L vendidos</span>
-            <span>{{ preco(r.margem_l) }}/L</span>
+            <span>margem {{ preco(r.margem_l) }}/L</span>
           </div>
         </div>
         {% endfor %}
@@ -532,7 +532,7 @@ body > .container-fluid:has(#lpm){
         </div>
         <div class="dc__2">
           <span>{{ litros(d.venda_l) }} L</span>
-          <span>{{ preco(d.margem_l) }}/L</span>
+          <span>margem {{ preco(d.margem_l) }}/L</span>
           {%- if d.variacao is not none %}
           <span class="{{ 'neg' if d.variacao < -1 else 'pos' if d.variacao > 1 }}">
             {{ litros(d.variacao) }} L</span>
@@ -548,7 +548,7 @@ body > .container-fluid:has(#lpm){
         </div>
         <div class="dc__2">
           <span>{{ litros(totais.venda_l) }} L</span>
-          <span>{{ preco(totais.margem_l) }}/L</span>
+          <span>margem {{ preco(totais.margem_l) }}/L</span>
           <span class="{{ 'neg' if totais.variacao_l < -1 else 'pos' if totais.variacao_l > 1 }}">
             {{ litros(totais.variacao_l) }} L</span>
         </div>
@@ -638,7 +638,7 @@ body > .container-fluid:has(#lpm){
       </div>
       <div class="ph__v">
         <div class="ph__l {{ 'ruim' if t.lucro_rs < 0 }}">{{ reais(t.lucro_rs) }}</div>
-        <div class="ph__r">lucro · {{ preco(t.margem_l) }}/L</div>
+        <div class="ph__r">lucro · margem {{ preco(t.margem_l) }}/L na bomba</div>
       </div>
       <i class="bi bi-chevron-down"></i>
     </div>
@@ -793,7 +793,12 @@ body > .container-fluid:has(#lpm){
         <b>Acréscimo</b> é o que o cartão e o prazo somam por cima — no cupom
         7350 o S-10 saiu por 490 L × R$ 6,49 = R$ 3.180,21 e o cliente pagou
         R$ 3.425,22 porque foi a prazo; esses R$ 245 são seus.
-        <b>Recebido</b> é a soma das três partes, e é ele que vira lucro.
+        <b>Recebido</b> é a soma das três partes: é ele que vira lucro e
+        é ele o faturamento. <b>Margem/L</b> é outra conta, a de pista:
+        <i>preço de bomba menos custo corrido</i>, sem o acréscimo. Ele fica
+        de fora porque existe para cobrir a taxa da operadora — e a taxa
+        também não está descontada aqui, então os dois saem juntos. Por isso
+        Margem/L × litros não dá o Lucro do dia: a diferença é o acréscimo.
         <b>Custo corrido</b> é a média móvel ponderada do que está no tanque:
         a cada carga, somam-se os litros e os reais ao que já havia, e a venda
         do dia sai por essa média. É por isso que ele anda devagar e não pula

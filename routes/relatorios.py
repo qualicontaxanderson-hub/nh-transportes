@@ -1676,14 +1676,16 @@ def lucro_postos_migrados():
         conn.close()
 
     totais = {'entrada_l': 0.0, 'entrada_rs': 0.0, 'venda_l': 0.0,
-              'venda_rs': 0.0, 'custo_rs': 0.0, 'lucro_rs': 0.0,
+              'venda_rs': 0.0, 'venda_produto_rs': 0.0,
+              'custo_rs': 0.0, 'lucro_rs': 0.0,
               'variacao_l': 0.0, 'nota_l': 0.0, 'desc_l': 0.0,
               'entrou_l': 0.0, 'falta_l': 0.0}
     for pid in apurado:
         for k in totais:
             totais[k] += apurado[pid]['total'][k]
-    totais['margem_l'] = (totais['lucro_rs'] / totais['venda_l']
-                          if totais['venda_l'] else 0.0)
+    # margem = bomba - custo; o acrescimo esta no lucro, nao aqui
+    totais['margem_l'] = ((totais['venda_produto_rs'] - totais['custo_rs'])
+                          / totais['venda_l'] if totais['venda_l'] else 0.0)
 
     # ── o resumo geral: todos os produtos na mesma linha do dia ───────────
     # O lucro do posto nao e de um combustivel: e da pista inteira. Aqui os
@@ -1695,12 +1697,14 @@ def lucro_postos_migrados():
         acum = 0.0
         for k, ref in enumerate(apurado[qual]['dias']):
             linha = {'data': ref['data'], 'venda_l': 0.0, 'venda_rs': 0.0,
+                     'venda_produto_rs': 0.0,
                      'custo_rs': 0.0, 'lucro_rs': 0.0, 'entrada_l': 0.0,
                      'entrada_rs': 0.0, 'nota_l': 0.0, 'desc_l': 0.0,
                      'entrou': None, 'variacao': None}
             for pid in apurado:
                 d = apurado[pid]['dias'][k]
-                for campo in ('venda_l', 'venda_rs', 'custo_rs', 'lucro_rs',
+                for campo in ('venda_l', 'venda_rs', 'venda_produto_rs',
+                              'custo_rs', 'lucro_rs',
                               'entrada_l', 'entrada_rs', 'nota_l', 'desc_l'):
                     linha[campo] += d[campo]
                 # entrou e variacao so existem com medicao; um produto sem ela
@@ -1710,8 +1714,8 @@ def lucro_postos_migrados():
                         linha[campo] = (linha[campo] or 0.0) + d[campo]
             acum += linha['lucro_rs']
             linha['lucro_acum'] = acum
-            linha['margem_l'] = (linha['lucro_rs'] / linha['venda_l']
-                                 if linha['venda_l'] else 0.0)
+            linha['margem_l'] = ((linha['venda_produto_rs'] - linha['custo_rs'])
+                                 / linha['venda_l'] if linha['venda_l'] else 0.0)
             linha['venda_unit'] = (linha['venda_rs'] / linha['venda_l']
                                    if linha['venda_l'] else 0.0)
             geral['dias'].append(linha)
