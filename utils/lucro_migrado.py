@@ -92,16 +92,25 @@ def _leituras(cur, cliente_id, ini, fim):
 
 
 def _vendas(cur, cliente_id, ini, fim):
-    """{(dia, produto_id): (litros, reais)} do cupom fiscal.
+    """{(dia, produto_id): (litros, reais, produto, acrescimo, desconto)}.
 
     O cupom nao carrega cliente_id: quem diz de que posto ele e o CNPJ do
     emitente. Sem esse laco, um segundo posto misturaria as vendas no mesmo
     relatorio.
+
+    `reais` e o que ENTROU: a linha do produto mais o acrescimo, menos o
+    desconto. O acrescimo nao e detalhe -- e o preco do cartao e do prazo,
+    que no posto vem fora da linha do produto. No cupom 7350 o S-10 sai por
+    490 L x R$ 6,49 = R$ 3.180,21 e o cliente paga R$ 3.425,22, porque foi a
+    prazo. Somar so a linha esconde R$ 245 que entraram no caixa -- em
+    setembro inteiro, R$ 7.650 de lucro que o relatorio nao via.
     """
     cur.execute("""
         SELECT DATE(v.dh_emissao) AS d, i.produto_id,
                SUM(i.quantidade)  AS litros,
-               SUM(i.valor_total) AS reais
+               SUM(i.valor_total) AS reais,
+               SUM(COALESCE(i.vlr_acrescimo, 0)) AS acrescimo,
+               SUM(COALESCE(i.vlr_desconto, 0))  AS desconto
           FROM vendas_xml v
           JOIN vendas_xml_itens i ON i.venda_id = v.id
           LEFT JOIN clientes c ON REPLACE(REPLACE(REPLACE(c.cnpj,'.',''),'/',''),'-','')
@@ -112,7 +121,10 @@ def _vendas(cur, cliente_id, ini, fim):
            AND (v.situacao IS NULL OR UPPER(v.situacao) <> 'CANCELADA')
          GROUP BY d, i.produto_id
     """, (ini, fim, cliente_id))
-    return {(r['d'], r['produto_id']): (_f(r['litros']), _f(r['reais']))
+    return {(r['d'], r['produto_id']):
+            (_f(r['litros']),
+             _f(r['reais']) + _f(r['acrescimo']) - _f(r['desconto']),
+             _f(r['reais']), _f(r['acrescimo']), _f(r['desconto']))
             for r in cur.fetchall()}
 
 
@@ -407,7 +419,8 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
                          'venda_rs': 0.0, 'custo_rs': 0.0, 'lucro_rs': 0.0,
                          'variacao_l': 0.0, 'nota_l': 0.0, 'nota_rs': 0.0,
                          'desc_l': 0.0, 'entrou_l': 0.0, 'dias_entrou': 0,
-                         'nota_produto_rs': 0.0}
+                         'nota_produto_rs': 0.0, 'venda_produto_rs': 0.0,
+                         'venda_acr_rs': 0.0, 'venda_desc_rs': 0.0}
         falta_acum = 0.0
         var_acum = 0.0
         lucro_acum = 0.0
@@ -439,7 +452,8 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
             nota_l, nota_rs = nota.get((d, pid), (0.0, 0.0))
             nota_prod_rs = nota_produto.get((d, pid), 0.0)
             desc_l = medido_l.get((d, pid), 0.0)
-            ven_l, ven_rs = venda.get((d, pid), (0.0, 0.0))
+            ven_l, ven_rs, ven_prod, ven_acr, ven_desc = venda.get(
+                (d, pid), (0.0, 0.0, 0.0, 0.0, 0.0))
 
             saldo_l += ent_l
             saldo_rs += ent_rs
@@ -484,7 +498,10 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
                 'medido_l': desc_l,
                 'falta_acum': falta_acum, 'var_acum': var_acum,
                 'venda_l': ven_l, 'venda_rs': ven_rs,
+                'venda_produto_rs': ven_prod, 'venda_acr_rs': ven_acr,
+                'venda_desc_rs': ven_desc,
                 'venda_unit': (ven_rs / ven_l) if ven_l else 0.0,
+                'venda_bomba_unit': (ven_prod / ven_l) if ven_l else 0.0,
                 'custo_unit': custo_unit, 'custo_rs': custo_rs,
                 'lucro_rs': ven_rs - custo_rs, 'lucro_acum': lucro_acum,
                 'margem_l': ((ven_rs - custo_rs) / ven_l) if ven_l else 0.0,
@@ -498,6 +515,9 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
             tot['desc_l'] += desc_l
             tot['venda_l'] += ven_l
             tot['venda_rs'] += ven_rs
+            tot['venda_produto_rs'] += ven_prod
+            tot['venda_acr_rs'] += ven_acr
+            tot['venda_desc_rs'] += ven_desc
             tot['custo_rs'] += custo_rs
             tot['lucro_rs'] += ven_rs - custo_rs
             if variacao is not None:
@@ -533,6 +553,8 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
                                if tot['entrada_l'] else 0.0)
         tot['venda_unit'] = ((tot['venda_rs'] / tot['venda_l'])
                              if tot['venda_l'] else 0.0)
+        tot['venda_bomba_unit'] = ((tot['venda_produto_rs'] / tot['venda_l'])
+                                   if tot['venda_l'] else 0.0)
         tot['dias_medidos'] = sum(1 for x in dias if x['ei_medido'])
         tot['dias'] = len(dias)
         fora[pid] = {'dias': dias, 'total': tot}

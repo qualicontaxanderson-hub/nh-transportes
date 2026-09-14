@@ -134,13 +134,16 @@ try:
         # a soma crua acusaria o motor de perder litros que ele esta certo em
         # nao contar.
         bv = um("""SELECT COALESCE(SUM(i.quantidade),0) l,
-                          COALESCE(SUM(i.valor_total),0) v
+                          COALESCE(SUM(i.valor_total),0)
+                          + COALESCE(SUM(i.vlr_acrescimo),0)
+                          - COALESCE(SUM(i.vlr_desconto),0) v
                      FROM vendas_xml vx JOIN vendas_xml_itens i ON i.venda_id = vx.id
                     WHERE DATE(vx.dh_emissao) BETWEEN %s AND %s
                       AND i.produto_id = %s
                       AND UPPER(COALESCE(vx.situacao,'')) NOT LIKE '%%CANCEL%%'""",
                 (INI, FIM, pid))
-        prova('produto %s: a venda é a soma dos cupons' % pid,
+        prova('produto %s: a venda é o que entrou no caixa '
+              '(produto + acréscimo - desconto)' % pid,
               abs(tot['venda_l'] - float(bv['l'])) < 0.01
               and abs(tot['venda_rs'] - float(bv['v'])) < 0.01,
               'motor %.3f L / R$ %.2f, banco %.3f L / R$ %.2f'
@@ -647,6 +650,9 @@ if adm:
     tela = telas['nota']
     # ── o quadro do combustivel, no formato aprovado ──────────────────
     liso_t = ' '.join(telas['nota'].split())
+    # ger nasce AQUI, antes de qualquer uso: e a apuracao contra a qual os
+    # numeros da tela sao conferidos daqui para baixo.
+    ger = lucro_migrado.apurar(cur2, CLIENTE, PRODUTOS, INI, FIM, 'nota')
     prova('o estoque inicial e o final trazem o valor em R$',
           all(_moeda(ger[p_]['total']['ei_rs']) in liso_t
               and _moeda(ger[p_]['total']['ef_rs']) in liso_t
@@ -677,11 +683,15 @@ if adm:
               'continua na tela')
     prova('e "medido em N de M dias" saiu também',
           not re.search(r'medido em \d+ de \d+ dias', liso_t))
-    prova('a venda mostra litros, preço por litro e total, nessa ordem',
-          re.search(r'Venda</div>\s*<div class="r__v">[\d.]+ L</div>\s*'
+    prova('a venda na bomba mostra litros, preço por litro e total, nessa ordem',
+          re.search(r'Venda na bomba</div>\s*<div class="r__v">[\d.]+ L</div>\s*'
                     r'<div class="r__c">R\$[^<]+/L</div>\s*'
                     r'<div class="r__d">', telas['nota']),
           'a ordem da venda não é litros -> R$/L -> total')
+    prova('e o acréscimo tem quadro próprio, com o desconto e o recebido',
+          'Acréscimo e desconto' in telas['nota']
+          and 'recebido' in telas['nota'],
+          'o acréscimo voltou a ficar escondido dentro da venda')
     prova('o litro leva a cor do combustível (Modelo 3)',
           '#lpm .r__v{ font-size:.95rem; font-weight:800; color:var(--c);' in telas['nota']
           and telas['nota'].count('class="cx" style="--c:#') == len(PRODUTOS),
@@ -716,7 +726,6 @@ if adm:
           'Lucro do período' in liso and 'De onde vem o lucro' in liso
           and 'Dia a dia do posto' in liso,
           'faltou algum bloco do resumo geral')
-    ger = lucro_migrado.apurar(cur2, CLIENTE, PRODUTOS, INI, FIM, 'nota')
     lucro_total = sum(ger[p]['total']['lucro_rs'] for p in ger)
     venda_total = sum(ger[p]['total']['venda_l'] for p in ger)
     prova('o lucro do posto é a soma dos combustíveis, e está na tela',

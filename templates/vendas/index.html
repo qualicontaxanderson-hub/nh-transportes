@@ -30,7 +30,8 @@
   /* Números em degradê */
   #vendas .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem;
     margin-bottom:.7rem; }
-  @media (min-width:768px){ #vendas .nums{ grid-template-columns:repeat(4,1fr); } }
+  @media (min-width:768px){ #vendas .nums{ grid-template-columns:repeat(3,1fr); } }
+  @media (min-width:1100px){ #vendas .nums{ grid-template-columns:repeat(5,1fr); } }
   #vendas .nums .n{ border-radius:13px; padding:.55rem .75rem; color:#fff;
     box-shadow:0 2px 8px rgba(20,35,60,.12); }
   #vendas .nums .r{ font-size:.66rem; font-weight:800; text-transform:uppercase;
@@ -42,6 +43,15 @@
   #vendas .n--canc{ background:linear-gradient(135deg,#5B6B7F,#465565); }
   #vendas .n--canc.tem{ background:linear-gradient(135deg,#C2504A,#A32D2D); }
   #vendas .n--tick{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
+  /* o acrescimo e receita, entao anda junto do verde do valor -- mas em tom
+     proprio, porque quem procura "quanto vendi" nao quer somar dois verdes */
+  #vendas .n--acr{ background:linear-gradient(135deg,#6E8F3A,#5B7A2C); }
+  #vendas .c-acr{ display:block; font-size:.66rem; font-weight:700;
+    color:#5B7A2C; font-variant-numeric:tabular-nums; }
+  #vendas .c-dsc{ display:block; font-size:.66rem; font-weight:700;
+    color:#a32d2d; font-variant-numeric:tabular-nums; }
+  #vendas .nums .sub{ font-size:.66rem; font-weight:700; opacity:.85;
+    font-variant-numeric:tabular-nums; margin-top:.05rem; }
 
   /* Filtro em passos (gaveta) — mesmo desenho do Rec Frete */
   #vendas .escuro{ position:fixed; inset:0; background:rgba(12,25,42,.45);
@@ -241,8 +251,22 @@
   <div class="nums">
     <div class="n n--notas"><div class="r">Notas</div>
       <div class="v">{{ '{:,}'.format(totais.notas).replace(',', '.') }}</div></div>
+    {# O valor do cupom ja traz o acrescimo dentro. As tres partes ficam
+       separadas aqui porque no posto o acrescimo NAO e detalhe: e o preco do
+       cartao e do prazo, e em setembro deu R$ 8.129,90 -- dinheiro que
+       ninguem via somado. #}
     <div class="n n--valor"><div class="r">Valor (autorizadas)</div>
-      <div class="v">{{ (totais.valor or 0) | formatar_moeda }}</div></div>
+      <div class="v">{{ (totais.valor or 0) | formatar_moeda }}</div>
+      {%- if (totais.acrescimo or 0) > 1 or (totais.desconto or 0) > 1 %}
+      <div class="sub">produtos {{ (totais.produtos or 0) | formatar_moeda }}</div>
+      {%- endif %}</div>
+    {% if (totais.acrescimo or 0) > 1 or (totais.desconto or 0) > 1 %}
+    <div class="n n--acr"><div class="r">Acréscimo · cartão e prazo</div>
+      <div class="v">{{ (totais.acrescimo or 0) | formatar_moeda }}</div>
+      {%- if (totais.desconto or 0) > 1 %}
+      <div class="sub">desconto −{{ (totais.desconto or 0) | formatar_moeda }}</div>
+      {%- endif %}</div>
+    {% endif %}
     <div class="n n--canc{{ ' tem' if totais.canceladas }}"><div class="r">Canceladas</div>
       <div class="v">{{ totais.canceladas }}</div></div>
     <div class="n n--tick"><div class="r">Ticket médio</div>
@@ -287,7 +311,16 @@
         {%- endif %}
       </span>
       <span class="c-oque">{% if itens %}{{ itens[0].produto_xml or '—' }}{% if itens[0].unidade == 'L' %} · {{ '%.2f'|format(itens[0].quantidade or 0)|replace('.', ',') }} L{% endif %}{% if itens|length > 1 %} · +{{ itens|length - 1 }}{% endif %}{% endif %}{% if n.cliente_nome %}<span class="cli"> · {{ n.cliente_nome }}</span>{% endif %}</span>
-      <span class="c-valor">{{ (n.valor_total or 0) | formatar_moeda }}</span>
+      <span class="c-valor">{{ (n.valor_total or 0) | formatar_moeda }}
+        {%- if (n.vlr_acrescimo or 0) > 0.005 %}
+        {# O acrescimo vem DENTRO do valor do cupom. Mostrar aqui evita a
+           pergunta de sempre: por que este cupom deu mais caro que a bomba. #}
+        <span class="c-acr" title="acréscimo de cartão ou prazo, já dentro do valor">
+          +{{ (n.vlr_acrescimo or 0) | formatar_moeda }}</span>
+        {%- elif (n.vlr_desconto or 0) > 0.005 %}
+        <span class="c-dsc" title="desconto, já descontado do valor">
+          −{{ (n.vlr_desconto or 0) | formatar_moeda }}</span>
+        {%- endif %}</span>
     </div>
     {% endfor %}
   {% endif %}

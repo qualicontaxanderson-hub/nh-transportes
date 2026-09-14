@@ -167,8 +167,9 @@ body > .container-fluid:has(#lpm){
     grid-template-columns:repeat(2,1fr); }
   @media (min-width:768px){
     #lpm .resumo{ grid-template-columns:repeat(3,1fr); } }
+  /* sete quadros: auto-fit evita deixar um sozinho esticado na ultima linha */
   @media (min-width:1200px){
-    #lpm .resumo{ grid-template-columns:repeat(6,1fr); } }
+    #lpm .resumo{ grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); } }
   /* Modelo 3, aprovado: o LITRO toma a cor do combustivel e o dinheiro
      fica na cor do texto. Assim a cor diz em qual produto voce esta sem
      precisar ler o nome, e sem competir com o valor. */
@@ -658,10 +659,18 @@ body > .container-fluid:has(#lpm){
         <div class="r__v">{{ litros(t.entrou_l) }} L</div></div>
       {# Venda na ordem que o Anderson pediu: litros, preco por litro, total.
          E a ordem em que a conta acontece -- vendi tanto, a tanto, deu isso. #}
-      <div class="r"><div class="r__r">Venda</div>
+      {# Dois quadros, e nao um: o primeiro e o que a bomba marcou, o
+         segundo e o que o cartao e o prazo somaram por cima. Juntos eles
+         mentiriam um preco de bomba que ninguem cobrou. #}
+      <div class="r"><div class="r__r">Venda na bomba</div>
         <div class="r__v">{{ litros(t.venda_l) }} L</div>
-        <div class="r__c">{{ preco(t.venda_unit) }}/L</div>
-        <div class="r__d">{{ reais(t.venda_rs) }}</div></div>
+        <div class="r__c">{{ preco(t.venda_bomba_unit) }}/L</div>
+        <div class="r__d">{{ reais(t.venda_produto_rs) }}</div></div>
+      <div class="r"><div class="r__r">Acréscimo e desconto</div>
+        <div class="r__v" style="color:var(--ok)">+ {{ reais(t.venda_acr_rs) }}</div>
+        <div class="r__c {{ 'neg' if t.venda_desc_rs > 0 }}">
+          − {{ reais(t.venda_desc_rs) }} de desconto</div>
+        <div class="r__d">= {{ reais(t.venda_rs) }} recebido</div></div>
       <div class="r"><div class="r__r">Estoque final</div>
         <div class="r__v">{{ litros(t.ef_real if t.ef_real is not none else t.ef_calc) }} L</div>
         <div class="r__d">{{ reais(t.ef_rs) }}</div></div>
@@ -683,8 +692,11 @@ body > .container-fluid:has(#lpm){
             <th>Preço compra</th>
             <th>Custo corrido</th>
             <th>Vendas (L)</th>
-            <th>Preço venda</th>
-            <th>Receita</th>
+            <th>Preço bomba</th>
+            <th>Venda bomba</th>
+            <th>Acréscimo</th>
+            <th>Desconto</th>
+            <th>Recebido</th>
             <th>Margem/L</th>
             <th>EF medido</th>
             <th>Dif. do dia</th>
@@ -708,8 +720,13 @@ body > .container-fluid:has(#lpm){
             <td class="sec" data-r="Preço compra">{{ preco(d.entrada_unit) if d.entrada_l else '—' }}</td>
             <td class="sec" data-r="Custo corrido">{{ preco(d.custo_unit) }}</td>
             <td data-r="Vendas (L)">{{ litros(d.venda_l) if d.venda_l else '—' }}</td>
-            <td class="sec" data-r="Preço venda">{{ preco(d.venda_unit) if d.venda_l else '—' }}</td>
-            <td class="sec" data-r="Receita">{{ reais(d.venda_rs) if d.venda_l else '—' }}</td>
+            <td class="sec" data-r="Preço bomba">{{ preco(d.venda_bomba_unit) if d.venda_l else '—' }}</td>
+            <td class="sec" data-r="Venda bomba">{{ reais(d.venda_produto_rs) if d.venda_l else '—' }}</td>
+            <td data-r="Acréscimo" class="{{ 'pos' if d.venda_acr_rs > 0 }}">
+              {{ reais(d.venda_acr_rs) if d.venda_acr_rs else '—' }}</td>
+            <td data-r="Desconto" class="{{ 'neg' if d.venda_desc_rs > 0 }}">
+              {{ reais(d.venda_desc_rs) if d.venda_desc_rs else '—' }}</td>
+            <td data-r="Recebido">{{ reais(d.venda_rs) if d.venda_l else '—' }}</td>
             <td data-r="Margem/L">{{ preco(d.margem_l) if d.venda_l else '—' }}</td>
             <td class="sec" data-r="EF medido">{{ litros(d.ef_real) if d.ef_real is not none else '—' }}</td>
             <td data-r="Dif. do dia" class="sec est" title="o dia sozinho não fecha: a nota vem num dia e o caminhão no outro">
@@ -734,7 +751,10 @@ body > .container-fluid:has(#lpm){
             <td>{{ preco(t.entrada_unit) }}</td>
             <td>{{ preco(t.custo_unit) }}</td>
             <td>{{ litros(t.venda_l) }}</td>
-            <td>{{ preco(t.venda_unit) }}</td>
+            <td>{{ preco(t.venda_bomba_unit) }}</td>
+            <td>{{ reais(t.venda_produto_rs) }}</td>
+            <td class="{{ 'pos' if t.venda_acr_rs > 0 }}">{{ reais(t.venda_acr_rs) }}</td>
+            <td class="{{ 'neg' if t.venda_desc_rs > 0 }}">{{ reais(t.venda_desc_rs) }}</td>
             <td>{{ reais(t.venda_rs) }}</td>
             <td>{{ preco(t.margem_l) }}</td>
             <td>{{ litros(t.ef_real) if t.ef_real is not none else '—' }}</td>
@@ -768,6 +788,12 @@ body > .container-fluid:has(#lpm){
         R$ 23.600,00: os R$ 1.364,46 de ST são dinheiro que sai do caixa, e
         entram no custo. <b>Preço compra</b> é essa Entrada R$ dividida pelos
         litros que desceram — o custo cheio do litro naquela carga.
+<b>Preço bomba</b> é o que estava no painel quando o cliente
+        abasteceu, e <b>Venda bomba</b> é esse preço vezes os litros.
+        <b>Acréscimo</b> é o que o cartão e o prazo somam por cima — no cupom
+        7350 o S-10 saiu por 490 L × R$ 6,49 = R$ 3.180,21 e o cliente pagou
+        R$ 3.425,22 porque foi a prazo; esses R$ 245 são seus.
+        <b>Recebido</b> é a soma das três partes, e é ele que vira lucro.
         <b>Custo corrido</b> é a média móvel ponderada do que está no tanque:
         a cada carga, somam-se os litros e os reais ao que já havia, e a venda
         do dia sai por essa média. É por isso que ele anda devagar e não pula
@@ -783,7 +809,7 @@ body > .container-fluid:has(#lpm){
 
 {% block scripts %}
 <script>
-// O dia a dia de cada combustível abre por produto: são dezoito colunas, e
+// O dia a dia de cada combustível abre por produto: são vinte e uma colunas, e
 // abrir os quatro de uma vez empurraria para baixo o que se olha primeiro,
 // que é o posto inteiro.
 // Os dois modelos aprovados: claro e o painel escuro. So o painel muda; a

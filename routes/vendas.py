@@ -119,7 +119,13 @@ def index():
                    COALESCE(SUM(CASE WHEN v.situacao <> 'cancelada'
                                      THEN v.valor_total ELSE 0 END), 0) AS total_valor,
                    COALESCE(SUM(CASE WHEN v.situacao = 'cancelada'
-                                     THEN 1 ELSE 0 END), 0) AS total_canceladas
+                                     THEN 1 ELSE 0 END), 0) AS total_canceladas,
+                   COALESCE(SUM(CASE WHEN v.situacao <> 'cancelada'
+                                     THEN COALESCE(v.vlr_acrescimo, 0)
+                                     ELSE 0 END), 0) AS total_acrescimo,
+                   COALESCE(SUM(CASE WHEN v.situacao <> 'cancelada'
+                                     THEN COALESCE(v.vlr_desconto, 0)
+                                     ELSE 0 END), 0) AS total_desconto
             FROM vendas_xml v
             {where_sql}
             """,
@@ -130,7 +136,16 @@ def index():
             'notas':      agg.get('total_notas') or 0,
             'valor':      agg.get('total_valor') or 0,
             'canceladas': agg.get('total_canceladas') or 0,
+            'acrescimo':  agg.get('total_acrescimo') or 0,
+            'desconto':   agg.get('total_desconto') or 0,
         }
+        # O valor do cupom ja traz o acrescimo dentro e o desconto fora. Para
+        # mostrar as tres partes separadas, o dos PRODUTOS sai por diferenca:
+        # e o unico jeito que fecha com o total sem somar item por item de
+        # 31 mil notas so para pintar um cartao.
+        totais['produtos'] = (float(totais['valor'])
+                              - float(totais['acrescimo'])
+                              + float(totais['desconto']))
         # COUNT vem int, mas SUM(CASE...) vem Decimal — sem o int(),
         # float/Decimal estoura TypeError (500 em producao, 19/08).
         totais['canceladas'] = int(totais['canceladas'])
@@ -151,6 +166,7 @@ def index():
             SELECT v.id, v.chave, v.modelo, v.serie, v.numero, v.dh_emissao,
                    v.cnpj_emitente, v.vendedor_raw, v.cliente_doc, v.cliente_nome,
                    v.valor_total, v.forma_pagamento, v.situacao, v.origem,
+                   v.vlr_acrescimo, v.vlr_desconto,
                    v.card_bandeira, v.card_credenciadora, v.card_autorizacao, v.tef_terminal
             FROM vendas_xml v
             {where_sql}
