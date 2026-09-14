@@ -645,6 +645,48 @@ if adm:
           telas['nota'].count('<tbody>') == len(PRODUTOS) + 2,
           '%s tabelas' % telas['nota'].count('<tbody>'))
     tela = telas['nota']
+    # ── o quadro do combustivel, no formato aprovado ──────────────────
+    liso_t = ' '.join(telas['nota'].split())
+    prova('o estoque inicial e o final trazem o valor em R$',
+          all(_moeda(ger[p_]['total']['ei_rs']) in liso_t
+              and _moeda(ger[p_]['total']['ef_rs']) in liso_t
+              for p_ in PRODUTOS),
+          'faltou o R$ do estoque em algum produto')
+    # e o R$ tem de ser os litros da tela vezes um custo plausivel, nao um
+    # numero solto: se soltar do custo, vira decoracao
+    erros = []
+    for p_ in PRODUTOS:
+        t = ger[p_]['total']
+        if t['ei'] > 1:
+            unit = t['ei_rs'] / t['ei']
+            if not (0.5 < unit < 15):
+                erros.append((p_, 'ei', unit))
+        ef = t['ef_real'] if t['ef_real'] is not None else t['ef_calc']
+        if ef > 1 and abs(t['ef_rs'] - ef * t['ef_unit']) > 0.01:
+            erros.append((p_, 'ef', t['ef_rs'], ef * t['ef_unit']))
+    prova('o R$ do estoque é os litros vezes o custo, não um número solto',
+          not erros, '%r' % erros)
+
+    prova('saiu a linha repetida do topo do quadro',
+          'entrou no tanque' not in liso_t.split('A mesma carga')[-1][:400]
+          or 'L vendidos<' not in telas['nota'],
+          'a linha "nota X · desceu Y · entrou Z · W vendidos" continua lá')
+    for fora in ('medido no tanque', 'medido pelo ELS na descarga',
+                 'produto ' + _moeda(ger[1]['total']['nota_produto_rs'])):
+        prova('saiu do quadro: %s' % fora[:34], fora not in liso_t,
+              'continua na tela')
+    prova('e "medido em N de M dias" saiu também',
+          not re.search(r'medido em \d+ de \d+ dias', liso_t))
+    prova('a venda mostra litros, preço por litro e total, nessa ordem',
+          re.search(r'Venda</div>\s*<div class="r__v">[\d.]+ L</div>\s*'
+                    r'<div class="r__c">R\$[^<]+/L</div>\s*'
+                    r'<div class="r__d">', telas['nota']),
+          'a ordem da venda não é litros -> R$/L -> total')
+    prova('o litro leva a cor do combustível (Modelo 3)',
+          '#lpm .r__v{ font-size:.95rem; font-weight:800; color:var(--c);' in telas['nota']
+          and telas['nota'].count('class="cx" style="--c:#') == len(PRODUTOS),
+          'a cor do produto não chegou aos quadrinhos')
+
     prova('a tela não fala mais em "régua" — quem mede é o ELS',
           'régua' not in tela and 'regua' not in tela,
           'sobrou "régua" na tela; o frentista não mede nada, é o ELS por e-mail')

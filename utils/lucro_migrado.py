@@ -411,6 +411,8 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
         falta_acum = 0.0
         var_acum = 0.0
         lucro_acum = 0.0
+        ei_rs = 0.0
+        ultimo_custo = preco_abertura.get(pid, 0.0)
         for d in _dias(aquece, fim):
             medido = leitura.get((d, pid))
             # A medicao do dia manda no estoque inicial: ela e a realidade.
@@ -427,6 +429,11 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
                 saldo_rs = medido * custo_unit
             ei = saldo_l
             ei_medido = medido is not None
+            # O estoque de abertura EM REAIS, capturado no primeiro dia da
+            # tela: e o saldo carregado do aquecimento, antes de a compra do
+            # dia entrar. Depois disso o saldo ja e outro.
+            if d == ini:
+                ei_rs = saldo_rs
 
             ent_l, ent_rs = entrada.get((d, pid), (0.0, 0.0))
             nota_l, nota_rs = nota.get((d, pid), (0.0, 0.0))
@@ -464,6 +471,7 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
             if variacao is not None:
                 var_acum += variacao
             lucro_acum += ven_rs - custo_rs
+            ultimo_custo = custo_unit
 
             dias.append({
                 'data': d, 'ei': ei, 'ei_medido': ei_medido,
@@ -500,12 +508,19 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
 
         tot['ei'] = dias[0]['ei'] if dias else 0.0
         tot['ei_medido'] = dias[0]['ei_medido'] if dias else False
+        tot['ei_rs'] = ei_rs if dias else 0.0
         tot['encadeado'] = encadeado
         # o final do periodo e a ULTIMA medicao que existe — nao o calculado
         tot['ef_real'] = next((x['ef_real'] for x in reversed(dias)
                                if x['ef_real'] is not None), None)
         tot['ef_calc'] = dias[-1]['ef_calc'] if dias else 0.0
         tot['falta_l'] = falta_acum
+        # O estoque final em reais sai dos MESMOS litros que a tela mostra,
+        # ao custo corrido do ultimo dia -- e o que aquele combustivel custou,
+        # nao o que ele vale vendido.
+        _ef = tot['ef_real'] if tot['ef_real'] is not None else tot['ef_calc']
+        tot['ef_rs'] = _ef * ultimo_custo
+        tot['ef_unit'] = ultimo_custo
         # o que a nota cobrou alem do produto — ICMS-ST, quase sempre
         tot['nota_st_rs'] = tot['nota_rs'] - tot['nota_produto_rs']
         tot['nota_produto_unit'] = ((tot['nota_produto_rs'] / tot['nota_l'])

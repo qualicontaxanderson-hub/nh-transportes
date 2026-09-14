@@ -169,13 +169,23 @@ body > .container-fluid:has(#lpm){
     #lpm .resumo{ grid-template-columns:repeat(3,1fr); } }
   @media (min-width:1200px){
     #lpm .resumo{ grid-template-columns:repeat(6,1fr); } }
-  #lpm .r{ background:#f7f9fc; border:1px solid var(--linha); border-radius:11px;
-    padding:.5rem .6rem; }
+  /* Modelo 3, aprovado: o LITRO toma a cor do combustivel e o dinheiro
+     fica na cor do texto. Assim a cor diz em qual produto voce esta sem
+     precisar ler o nome, e sem competir com o valor. */
+  #lpm .r{ background:#f7f9fc; border:1px solid var(--linha);
+    border-left:3px solid var(--c); border-radius:11px; padding:.5rem .6rem; }
   #lpm .r__r{ font-size:.62rem; font-weight:800; color:var(--muted);
     text-transform:uppercase; letter-spacing:.05em; }
-  #lpm .r__v{ font-size:.95rem; font-weight:800;
+  #lpm .r__v{ font-size:.95rem; font-weight:800; color:var(--c);
     font-variant-numeric:tabular-nums; }
-  #lpm .r__c{ font-size:.66rem; color:var(--muted); }
+  #lpm .r__d{ font-size:.82rem; font-weight:700; color:var(--ink);
+    font-variant-numeric:tabular-nums; }
+  #lpm .r__c{ font-size:.7rem; color:var(--muted);
+    font-variant-numeric:tabular-nums; }
+  #lpm .r__f{ font-size:.68rem; font-weight:700; color:var(--ambar);
+    margin-top:.1rem; }
+  /* no painel escuro os quadrinhos seguem claros: e numero que se le ali */
+  #lpm.escuro .r__d{ color:var(--ink); }
 
   /* ---- tabelas ------------------------------------------------------- */
   #lpm .tab{ overflow-x:auto; border-top:1px solid var(--linha); }
@@ -620,14 +630,10 @@ body > .container-fluid:has(#lpm){
   {% for pid, dados in apurado.items() %}
   {% set t = dados.total %}
   {% set cor = cores_produto.get(pid, '#9aa3ad') %}
-  <div class="cx">
+  <div class="cx" style="--c:{{ cor }}">
     <div class="ph" style="border-left-color:{{ cor }}" onclick="lpmAbre(this)">
       <div>
         <div class="ph__n">{{ produtos_nome.get(pid, 'Produto %s'|format(pid)) }}</div>
-        <div class="ph__d">nota {{ litros(t.nota_l) }} L ·
-          desceu {{ litros(t.desc_l) }} L ·
-          entrou no tanque {{ litros(t.entrou_l) }} L ·
-          {{ litros(t.venda_l) }} L vendidos</div>
       </div>
       <div class="ph__v">
         <div class="ph__l {{ 'ruim' if t.lucro_rs < 0 }}">{{ reais(t.lucro_rs) }}</div>
@@ -639,28 +645,26 @@ body > .container-fluid:has(#lpm){
     <div class="resumo">
       <div class="r"><div class="r__r">Estoque inicial</div>
         <div class="r__v">{{ litros(t.ei) }} L</div>
-        <div class="r__c">{{ 'medido no tanque' if t.ei_medido else 'sem medição no 1º dia' }}</div></div>
+        <div class="r__d">{{ reais(t.ei_rs) }}</div></div>
       <div class="r"><div class="r__r">Nota</div>
         <div class="r__v">{{ litros(t.nota_l) }} L</div>
-        <div class="r__c">{{ reais(t.nota_rs) }} ·
-          {%- if t.nota_st_rs > 1 %} produto {{ reais(t.nota_produto_rs) }}
-          + ST {{ reais(t.nota_st_rs) }}
-          {%- else %} a nota que desceu{% endif %}</div></div>
+        <div class="r__d">{{ reais(t.nota_rs) }}</div></div>
       <div class="r"><div class="r__r">Descarga</div>
         <div class="r__v">{{ litros(t.desc_l) }} L</div>
-        <div class="r__c">medido pelo ELS na descarga
-          {%- if t.falta_l > 1 %} · falta descer {{ litros(t.falta_l) }} L de nota
-          {%- endif %}</div></div>
+        {%- if t.falta_l > 1 %}
+        <div class="r__f">falta descer {{ litros(t.falta_l) }} L de nota</div>
+        {%- endif %}</div>
       <div class="r"><div class="r__r">Entrou no tanque</div>
-        <div class="r__v tanque">{{ litros(t.entrou_l) }} L</div>
-        <div class="r__c">medido em {{ t.dias_entrou }} de {{ t.dias }} dias</div></div>
+        <div class="r__v">{{ litros(t.entrou_l) }} L</div></div>
+      {# Venda na ordem que o Anderson pediu: litros, preco por litro, total.
+         E a ordem em que a conta acontece -- vendi tanto, a tanto, deu isso. #}
       <div class="r"><div class="r__r">Venda</div>
-        <div class="r__v">{{ reais(t.venda_rs) }}</div>
-        <div class="r__c">{{ litros(t.venda_l) }} L · {{ preco(t.venda_unit) }}/L</div></div>
+        <div class="r__v">{{ litros(t.venda_l) }} L</div>
+        <div class="r__c">{{ preco(t.venda_unit) }}/L</div>
+        <div class="r__d">{{ reais(t.venda_rs) }}</div></div>
       <div class="r"><div class="r__r">Estoque final</div>
         <div class="r__v">{{ litros(t.ef_real if t.ef_real is not none else t.ef_calc) }} L</div>
-        <div class="r__c">{{ 'medido' if t.ef_real is not none else 'calculado — sem medição' }}
-          · variação {{ litros(t.variacao_l) }} L</div></div>
+        <div class="r__d">{{ reais(t.ef_rs) }}</div></div>
     </div>
 
     <div class="tab tab--prod" hidden>
