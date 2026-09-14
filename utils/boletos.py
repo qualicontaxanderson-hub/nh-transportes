@@ -26,6 +26,107 @@ import requests
 from efipay import EfiPay
 from utils.db import get_db_connection
 
+
+# ---------------------------------------------------------------------------
+# NUNCA DOIS BOLETOS PARA O MESMO FRETE (14/09/2026)
+#
+# O frete #2830 saiu com duas cobranças (1061410292 e 1061410386), mesmo
+# valor, mesmo vencimento, mesmo item. O caminho de UM frete
+# (emitir_boleto_frete) não conferia se já havia cobrança ativa — só o
+# caminho de vários conferia — e nada impedia duas requisições ao mesmo
+# tempo (a primeira demora: cria a charge, associa o boleto, baixa o PDF,
+# manda o e-mail; se o navegador desiste antes, o usuário clica de novo).
+# Três cintos, no servidor, onde a decisão é definitiva:
+#   1. trava por frete (GET_LOCK) durante toda a emissão;
+#   2. recusa se o frete já tem cobrança não cancelada ou boleto_emitido;
+#   3. se a charge foi criada no provedor mas a emissão falhou depois, o
+#      charge_id fica registrado (status 'erro') — a próxima tentativa é
+#      barrada até alguém cancelar, em vez de nascer um segundo boleto; e o
+#      encadeamento de tentativas de criação NÃO cria de novo quando a
+#      resposta anterior foi de sucesso sem id legível.
+# ---------------------------------------------------------------------------
+def _trava_nome(frete_ids):
+    import hashlib
+    ids = sorted(int(x) for x in frete_ids)
+    chave = ",".join(str(i) for i in ids)
+    return "boleto_" + (chave if len(chave) <= 50 else hashlib.md5(chave.encode()).hexdigest())
+
+
+def _travar(cursor, nome):
+    """True se conseguiu a trava AGORA (sem esperar). Vive na conexão."""
+    try:
+        cursor.execute("SELECT GET_LOCK(%s, 0) AS ok", (nome,))
+        r = cursor.fetchone()
+        ok = (r.get("ok") if isinstance(r, dict) else (r[0] if r else 0))
+        return int(ok or 0) == 1
+    except Exception:
+        logger.exception("_travar: GET_LOCK falhou (segue sem trava)")
+        return True
+
+
+def _destravar(cursor, nome):
+    try:
+        cursor.execute("SELECT RELEASE_LOCK(%s)", (nome,))
+        cursor.fetchall()
+    except Exception:
+        pass
+
+
+def _cobranca_ativa_do_frete(cursor, frete_id):
+    """A cobrança não cancelada do frete (direta ou por cobrancas_freites), ou None."""
+    cursor.execute(
+        "SELECT id, charge_id, status FROM cobrancas "
+        " WHERE frete_id = %s AND (status IS NULL OR status <> 'cancelado') "
+        " ORDER BY id DESC LIMIT 1", (int(frete_id),))
+    r = cursor.fetchone()
+    if r:
+        return r
+    try:
+        cursor.execute(
+            "SELECT c.id, c.charge_id, c.status FROM cobrancas c "
+            "  JOIN cobrancas_freites cf ON cf.cobranca_id = c.id "
+            " WHERE cf.frete_id = %s AND (c.status IS NULL OR c.status <> 'cancelado') "
+            " ORDER BY c.id DESC LIMIT 1", (int(frete_id),))
+        return cursor.fetchone()
+    except Exception:
+        return None
+
+
+def _registrar_charge_orfa(conn, frete, charge_id, data_vencimento, motivo):
+    """A charge nasceu no provedor mas a emissão morreu depois: grava com
+    status 'erro' para (a) aparecer e (b) barrar uma segunda emissão."""
+    if not charge_id:
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO cobrancas (frete_id, id_cliente, valor, data_vencimento, status, "
+            "                       charge_id, link_boleto, pdf_boleto, data_emissao) "
+            "VALUES (%s, %s, %s, %s, 'erro', %s, NULL, NULL, %s)",
+            (frete["id"], frete["clientes_id"], frete["valor_total_frete"],
+             data_vencimento.date(), charge_id, datetime.today().date()))
+        conn.commit()
+        cur.close()
+        logger.warning("charge %s do frete %s registrada com status 'erro': %s",
+                       charge_id, frete["id"], str(motivo)[:200])
+    except Exception:
+        logger.exception("Falha ao registrar charge órfã %s do frete %s", charge_id, frete.get("id"))
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+
+def _resposta_parece_sucesso(resp):
+    """Resposta do provedor que indica que a charge FOI criada, mesmo sem id
+    legível: não se tenta criar de novo por cima dela."""
+    if not isinstance(resp, dict):
+        return False
+    if resp.get("error") or resp.get("error_description"):
+        return False
+    code = resp.get("code")
+    return bool(resp.get("data")) or code in (200, 201, "200", "201")
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
@@ -1119,6 +1220,8 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
 
     conn = None
     cursor = None
+    trava = None
+    trava_ok = False
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -1147,6 +1250,16 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
         rows = cursor.fetchall()
         if not rows or len(rows) != len(ids):
             return {"success": False, "error": "Um ou mais fretes não encontrados"}
+
+        # cinto 1: uma emissão por vez para este conjunto de fretes
+        trava = _trava_nome(ids)
+        if not _travar(cursor, trava):
+            return {"success": False, "error": "Já existe uma emissão em andamento para estes fretes. Aguarde e confira em Recebimentos antes de tentar de novo."}
+        trava_ok = True
+        cursor.execute(f"SELECT id FROM fretes WHERE id IN ({format_ids}) AND boleto_emitido = TRUE", tuple(ids))
+        _ja = [str(r.get("id")) for r in (cursor.fetchall() or [])]
+        if _ja:
+            return {"success": False, "error": f"Frete(s) já com boleto emitido: {','.join(_ja)}. Cancele a cobrança antes de emitir outra."}
 
         # validar mesmo cliente
         clientes_ids = {int(r.get("clientes_id")) for r in rows}
@@ -1384,6 +1497,11 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
         return {"success": False, "error": error_message}
     finally:
         try:
+            if cursor and trava_ok and trava:
+                _destravar(cursor, trava)
+        except Exception:
+            pass
+        try:
             if cursor:
                 cursor.close()
         except Exception:
@@ -1398,6 +1516,8 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
 def emitir_boleto_frete(frete_id, vencimento_str=None):
     conn = None
     cursor = None
+    trava = None
+    trava_ok = False
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -1423,6 +1543,20 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
 
         if not frete:
             return {"success": False, "error": "Frete não encontrado"}
+
+        # cinto 1: uma emissão por vez para este frete
+        trava = _trava_nome([frete_id])
+        if not _travar(cursor, trava):
+            return {"success": False, "error": f"Já existe uma emissão em andamento para o frete #{frete_id}. Aguarde e confira em Recebimentos antes de tentar de novo."}
+        trava_ok = True
+        # cinto 2: já tem cobrança? não nasce outra
+        ativa = _cobranca_ativa_do_frete(cursor, frete_id)
+        if ativa:
+            return {"success": False, "error": f"O frete #{frete_id} já tem a cobrança {ativa.get('charge_id') or ativa.get('id')} ({ativa.get('status') or 'pendente'}). Cancele-a antes de emitir outra."}
+        cursor.execute("SELECT boleto_emitido FROM fretes WHERE id = %s", (int(frete_id),))
+        _be = cursor.fetchone() or {}
+        if _be.get("boleto_emitido"):
+            return {"success": False, "error": f"O frete #{frete_id} está marcado como boleto emitido. Cancele a cobrança em Recebimentos antes de emitir outra."}
         if not frete.get("cliente_email"):
             return {"success": False, "error": "Cliente sem e-mail cadastrado"}
         if not frete.get("cliente_telefone"):
@@ -1509,6 +1643,10 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                 logger.debug("Erro ao criar charge via SDK: %s", ex)
                 create_response = ex
 
+        if not charge_id and _resposta_parece_sucesso(create_response):
+            logger.error("create_charge respondeu sucesso sem id legível — NÃO vou criar outra. resp=%r", create_response)
+            return {"success": False, "error": "O provedor respondeu que criou a cobrança, mas não devolveu o número. Confira no painel da Efí antes de tentar de novo — emitir outra vez geraria boleto em duplicidade."}
+
         if not charge_id and efi:
             try:
                 if hasattr(efi, "send") and callable(getattr(efi, "send")):
@@ -1533,6 +1671,10 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                         charge_id = _extract_charge_id(resp_low)
             except Exception:
                 logger.debug("Fallback SDK create_charge falhou")
+
+        if not charge_id and _resposta_parece_sucesso(create_response):
+            logger.error("create_charge (low-level) respondeu sucesso sem id legível — NÃO vou criar outra. resp=%r", create_response)
+            return {"success": False, "error": "O provedor respondeu que criou a cobrança, mas não devolveu o número. Confira no painel da Efí antes de tentar de novo."}
 
         if not charge_id:
             try:
@@ -1731,14 +1873,17 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
 
         if isinstance(final_response, dict) and final_response.get("error") == "validation_error":
             err_desc = final_response.get("error_description") or final_response.get("message") or final_response
-            return {"success": False, "error": f"Resposta inválida do provedor de cobrança: {err_desc}"}
-
-        if isinstance(final_response, dict):
-            return {"success": False, "error": f"Resposta inválida do provedor de cobrança: {final_response}"}
-        if isinstance(final_response, Exception):
-            return {"success": False, "error": f"Erro ao chamar provedor: {str(final_response)}"}
-
-        return {"success": False, "error": "Resposta inválida do provedor de cobrança"}
+            erro = f"Resposta inválida do provedor de cobrança: {err_desc}"
+        elif isinstance(final_response, dict):
+            erro = f"Resposta inválida do provedor de cobrança: {final_response}"
+        elif isinstance(final_response, Exception):
+            erro = f"Erro ao chamar provedor: {str(final_response)}"
+        else:
+            erro = "Resposta inválida do provedor de cobrança"
+        # a charge JA EXISTE no provedor: fica registrada para barrar a próxima
+        # tentativa (e para alguém cancelar), em vez de nascer um segundo boleto.
+        _registrar_charge_orfa(conn, frete, charge_id, data_vencimento, erro)
+        return {"success": False, "error": erro + f" A cobrança {charge_id} ficou registrada com status 'erro': cancele-a em Recebimentos antes de emitir outra."}
 
     except Exception as e:
         logger.exception("Erro ao emitir boleto para frete_id=%s", frete_id)
@@ -1756,6 +1901,11 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                 error_message = f"{type(e).__name__}: Erro ao processar boleto"
         return {"success": False, "error": error_message}
     finally:
+        try:
+            if cursor and trava_ok and trava:
+                _destravar(cursor, trava)
+        except Exception:
+            pass
         try:
             if cursor:
                 cursor.close()
