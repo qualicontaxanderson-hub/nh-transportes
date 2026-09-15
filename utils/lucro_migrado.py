@@ -417,7 +417,9 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
 
         dias, tot = [], {'entrada_l': 0.0, 'entrada_rs': 0.0, 'venda_l': 0.0,
                          'venda_rs': 0.0, 'custo_rs': 0.0, 'lucro_rs': 0.0,
-                         'variacao_l': 0.0, 'nota_l': 0.0, 'nota_rs': 0.0,
+                         'variacao_l': 0.0, 'variacao_rs': 0.0,
+                         'dias_variacao': 0,
+                         'nota_l': 0.0, 'nota_rs': 0.0,
                          'desc_l': 0.0, 'entrou_l': 0.0, 'dias_entrou': 0,
                          'nota_produto_rs': 0.0, 'venda_produto_rs': 0.0,
                          'venda_acr_rs': 0.0, 'venda_desc_rs': 0.0}
@@ -526,6 +528,11 @@ def apurar(cur, cliente_id, produto_ids, ini, fim, base='nota'):
             tot['lucro_rs'] += ven_rs - custo_rs
             if variacao is not None:
                 tot['variacao_l'] += variacao
+                # A perda (ou a sobra) em dinheiro: cada dia ao custo corrido
+                # DAQUELE dia. Multiplicar o acumulado do mes por um custo
+                # medio daria outro numero, e um que nunca aconteceu.
+                tot['variacao_rs'] += variacao * custo_unit
+                tot['dias_variacao'] += 1
             if entrou is not None:
                 tot['entrou_l'] += entrou
                 tot['dias_entrou'] += 1

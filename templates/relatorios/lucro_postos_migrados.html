@@ -167,7 +167,7 @@ body > .container-fluid:has(#lpm){
     grid-template-columns:repeat(2,1fr); }
   @media (min-width:768px){
     #lpm .resumo{ grid-template-columns:repeat(3,1fr); } }
-  /* sete quadros: auto-fit evita deixar um sozinho esticado na ultima linha */
+  /* oito quadros: auto-fit evita deixar um sozinho esticado na ultima linha */
   @media (min-width:1200px){
     #lpm .resumo{ grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); } }
   /* Modelo 3, aprovado: o LITRO toma a cor do combustivel e o dinheiro
@@ -604,26 +604,6 @@ body > .container-fluid:has(#lpm){
         </tbody>
       </table>
     </div>
-    <div class="leg">
-      <b>A mesma carga, medida por três instrumentos diferentes.</b><br>
-      <b>1. A nota</b> é o que o fornecedor cobrou — o total do documento,
-      com o ICMS-ST dentro.<br>
-      <b>2. A descarga</b> é o ELS medindo o tanque antes e depois de o
-      caminhão descarregar, e mandando por e-mail. Ninguém digita: é o próprio
-      equipamento registrando aquela descarga, e é o que você vê em
-      <i>/estoque → descargas</i>.<br>
-      <b>3. O tanque</b> é a mesma medição do ELS, mas pela leitura de
-      <i>abertura</i> de cada dia: a de amanhã menos a de hoje, mais o que se
-      vendeu no dia.<br>
-      As duas últimas colunas são a distância de cada uma até a nº 3. As duas
-      primeiras podem errar: a nota é emitida na saída da distribuidora e o
-      combustível encolhe no caminho, e a descarga não enxerga o que foi
-      vendido pelas bombas enquanto o caminhão descarregava. Diferença de
-      dezenas ou poucas centenas de litros é o normal.
-      <b>Quem estiver mais perto de zero é a fonte confiável para aquele
-      produto</b> — e é a base que vale a pena escolher lá em cima.
-      A conta anda só pelos dias em que houve as duas leituras de tanque, senão
-      compararia períodos diferentes.</div>
   </div>
   {% endif %}
 
@@ -674,6 +654,23 @@ body > .container-fluid:has(#lpm){
       <div class="r"><div class="r__r">Estoque final</div>
         <div class="r__v">{{ litros(t.ef_real if t.ef_real is not none else t.ef_calc) }} L</div>
         <div class="r__d">{{ reais(t.ef_rs) }}</div></div>
+      {# O acumulado do periodo: o que o tanque tem de menos (perda) ou de
+         mais (sobra) do que a conta diz. E o MESMO numero da coluna
+         "Acumulada" no fim da tabela, e o dinheiro sai de cada dia ao custo
+         corrido daquele dia. So anda nos dias com as duas leituras. #}
+      <div class="r"><div class="r__r">
+          {{ 'Perda no período' if t.variacao_l < -0.5
+             else 'Sobra no período' if t.variacao_l > 0.5 else 'Perda ou sobra' }}</div>
+        <div class="r__v {{ 'neg' if t.variacao_l < -0.5 else 'pos' if t.variacao_l > 0.5 }}"
+             title="soma da diferença de cada dia entre o tanque medido e a conta; só os dias com as duas leituras">
+          {{ litros(t.variacao_l) }} L</div>
+        <div class="r__d {{ 'neg' if t.variacao_rs < 0 else 'pos' if t.variacao_rs > 0 }}">
+          {{ reais(t.variacao_rs) }}</div>
+        {#- O dia de hoje esta sempre fora: a conta dele so fecha com a leitura
+            de amanha. Por isso o aviso so aparece quando faltam OUTROS dias. -#}
+        {%- if t.dias - t.dias_variacao > 1 %}
+        <div class="r__f">{{ t.dias - t.dias_variacao }} dias sem medição</div>
+        {%- endif %}</div>
     </div>
 
     <div class="tab tab--prod" hidden>
@@ -729,7 +726,13 @@ body > .container-fluid:has(#lpm){
             <td data-r="Recebido">{{ reais(d.venda_rs) if d.venda_l else '—' }}</td>
             <td data-r="Margem/L">{{ preco(d.margem_l) if d.venda_l else '—' }}</td>
             <td class="sec" data-r="EF medido">{{ litros(d.ef_real) if d.ef_real is not none else '—' }}</td>
-            <td data-r="Dif. do dia" class="sec est" title="o dia sozinho não fecha: a nota vem num dia e o caminhão no outro">
+            {# A cor segue o SINAL do que esta escrito: sobra em verde, perda
+               em vermelho. O corte em meio litro e para o que aparece como
+               "0" nao sair pintado. #}
+            <td data-r="Dif. do dia" title="o dia sozinho não fecha: a nota vem num dia e o caminhão no outro"
+                class="sec {{ 'neg' if d.variacao is not none and d.variacao < -0.5
+                              else 'pos' if d.variacao is not none and d.variacao > 0.5
+                              else 'est' }}">
               {{ litros(d.variacao) if d.variacao is not none else '—' }}</td>
             <td data-r="Acumulada" class="{{ 'neg' if d.var_acum < -1 else 'pos' if d.var_acum > 1 else '' }}">
               {{ litros(d.var_acum) }}</td>
@@ -766,45 +769,6 @@ body > .container-fluid:has(#lpm){
           </tr>
         </tfoot>
       </table>
-      <div class="leg">
-        <b>Nota (L)</b> é a nota que você escolheu ao lançar a descarga daquele
-        dia — entra pelo dia em que desceu, não pelo dia da emissão.
-        <b>Descarga (L)</b> é o que o ELS mediu naquela descarga — tanque antes
-        e depois do caminhão descarregar, em <i>/estoque → descargas</i>.
-        <b>Entrou (L)</b> é o que o tanque absorveu: a medição de amanhã menos a
-        de hoje, mais o que se vendeu — a única que não depende de lançamento.
-        As três só divergem por dezenas de litros, que é a perda de temperatura.
-        <b>A descer</b> é o saldo de nota já faturada que ainda não desceu: ele
-        baixa sozinho no dia em que o caminhão chega. Negativo é o contrário —
-        a descarga foi lançada antes de a nota ser registrada, e se acerta no
-        dia seguinte.
-        A <b>diferença do dia</b> e a <b>acumulada</b> medem a base escolhida
-        contra o tanque.
-        <br><br>
-        <b>De onde sai o dinheiro.</b>
-        <b>Entrada R$</b> é o total das notas que desceram naquele dia —
-        o total do documento, <i>com o ICMS-ST</i>, não a linha do produto.
-        Numa nota de 8.000 L de etanol a linha soma R$ 22.235,54 e a nota é de
-        R$ 23.600,00: os R$ 1.364,46 de ST são dinheiro que sai do caixa, e
-        entram no custo. <b>Preço compra</b> é essa Entrada R$ dividida pelos
-        litros que desceram — o custo cheio do litro naquela carga.
-<b>Preço bomba</b> é o que estava no painel quando o cliente
-        abasteceu, e <b>Venda bomba</b> é esse preço vezes os litros.
-        <b>Acréscimo</b> é o que o cartão e o prazo somam por cima — no cupom
-        7350 o S-10 saiu por 490 L × R$ 6,49 = R$ 3.180,21 e o cliente pagou
-        R$ 3.425,22 porque foi a prazo; esses R$ 245 são seus.
-        <b>Recebido</b> é a soma das três partes: é ele que vira lucro e
-        é ele o faturamento. <b>Margem/L</b> é outra conta, a de pista:
-        <i>preço de bomba menos custo corrido</i>, sem o acréscimo. Ele fica
-        de fora porque existe para cobrir a taxa da operadora — e a taxa
-        também não está descontada aqui, então os dois saem juntos. Por isso
-        Margem/L × litros não dá o Lucro do dia: a diferença é o acréscimo.
-        <b>Custo corrido</b> é a média móvel ponderada do que está no tanque:
-        a cada carga, somam-se os litros e os reais ao que já havia, e a venda
-        do dia sai por essa média. É por isso que ele anda devagar e não pula
-        para o preço da última compra. O <b>lucro do dia</b> é a receita menos
-        os litros vendidos ao custo corrido daquele momento.
-      </div>
     </div>
   </div>
   {% endfor %}
