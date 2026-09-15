@@ -55,6 +55,59 @@ body > .container-fluid:has(#fmg){
     color:var(--blue-deep); border-radius:11px; padding:.55rem .7rem; font-size:.8rem;
     font-weight:600; margin-bottom:.7rem; }
   #fmg .aviso--erro{ background:#fbe9e9; color:var(--danger); }
+  #fmg .aviso--am{ background:#fdf8ee; border:1px solid #f0dcae; color:#6b4708; }
+  #fmg .aviso--am a{ color:#6b4708; }
+  #fmg .aviso--am b{ color:#4a3105; }
+
+  /* as duas abas: mesmo periodo, mesmo filtro, outra pergunta */
+  #fmg .abas{ display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:.7rem; }
+  #fmg .abas a{ border:1px solid var(--borda); background:#fff; border-radius:99px;
+    padding:.35rem .85rem; font-size:.82rem; font-weight:800; color:#3a4655;
+    text-decoration:none; display:inline-flex; gap:.35rem; align-items:center; }
+  #fmg .abas a:hover{ background:#f2f7fc; color:var(--blue-deep); }
+  #fmg .abas a.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+
+  /* ---- a aba POR PRODUTO: um card por combustivel ------------------- */
+  #fmg .pgrade{ display:grid; gap:.6rem; grid-template-columns:1fr; margin-bottom:.7rem; }
+  @media (min-width:760px){ #fmg .pgrade{ grid-template-columns:repeat(2,1fr); } }
+  @media (min-width:1180px){ #fmg .pgrade{ grid-template-columns:repeat(4,1fr); } }
+  #fmg .pc{ background:#fff; border:1px solid var(--borda); border-top:4px solid var(--c);
+    border-radius:14px; padding:.7rem .8rem .6rem; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #fmg .pc__t{ display:flex; align-items:center; gap:.5rem; }
+  #fmg .pc__i{ width:2rem; height:2rem; border-radius:9px; background:var(--c);
+    color:#fff; display:inline-grid; place-items:center; font-size:1rem; opacity:.9; }
+  #fmg .pc__n{ font-weight:800; font-size:1rem; }
+  #fmg .pc__r{ font-size:.64rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.04em; }
+  #fmg .pc__v{ margin-top:.4rem; display:flex; align-items:baseline; gap:.3rem; }
+  #fmg .pc__v b{ font-size:1.55rem; font-weight:800; color:var(--c);
+    letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1; }
+  #fmg .pc__v span{ font-size:.85rem; font-weight:800; color:var(--c); opacity:.7; }
+  #fmg .pc__g{ display:grid; grid-template-columns:1fr 1fr; gap:.3rem; margin-top:.5rem; }
+  #fmg .pc__g div{ background:#f7f9fc; border:1px solid var(--linha); border-radius:9px;
+    padding:.3rem .45rem; }
+  #fmg .pc__g dt{ font-size:.6rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.03em; }
+  #fmg .pc__g dd{ margin:.05rem 0 0; font-size:.84rem; font-weight:800;
+    font-variant-numeric:tabular-nums; color:#26354d; }
+  #fmg .pc__f{ margin-top:.45rem; border-top:1px dashed var(--linha); padding-top:.4rem;
+    font-size:.73rem; color:var(--muted); display:flex; justify-content:space-between;
+    gap:.4rem; }
+  #fmg .pc__f b{ color:#26354d; font-variant-numeric:tabular-nums; }
+  #fmg .spark{ display:flex; align-items:flex-end; gap:2px; height:30px; margin-top:.45rem; }
+  #fmg .spark i{ flex:1 1 0; background:var(--c); opacity:.28; border-radius:2px 2px 0 0;
+    min-height:2px; }
+  #fmg .spark i.ult{ opacity:.95; }
+  #fmg .pbar{ display:flex; height:6px; border-radius:99px; overflow:hidden;
+    background:#eef1f5; margin-top:.4rem; }
+  #fmg .pbar i{ display:block; height:100%; }
+  #fmg .melhor{ background:#e6f2ea; color:#146c43; border-radius:6px; padding:.02rem .35rem;
+    font-weight:800; font-size:.72rem; }
+  #fmg .cx__t .dir{ margin-left:auto; font-weight:700; color:var(--muted);
+    text-transform:none; letter-spacing:0; font-size:.72rem; }
+  #fmg .cx__t{ display:flex; gap:.5rem; align-items:center; padding:.6rem .8rem;
+    font-size:.7rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--blue-deep); background:#f7fafd; border-bottom:1px solid var(--linha); }
   #fmg .nada{ background:#fff; border:1px solid var(--borda); border-radius:14px;
     padding:2.2rem 1rem; text-align:center; color:var(--muted); font-size:.9rem; }
 
@@ -199,6 +252,9 @@ body > .container-fluid:has(#fmg){
   {% endif %}
 
   <form class="filtro" method="GET">
+    {# a aba viaja no filtro: apurar de novo nao pode jogar o usuario de volta
+       para a outra aba #}
+    <input type="hidden" name="aba" value="{{ aba }}">
     <div class="filtro__g">
       <label class="campo"><span>De</span>
         <input type="date" name="data_inicio" value="{{ data_inicio }}"></label>
@@ -220,9 +276,127 @@ body > .container-fluid:has(#fmg){
     </div>
   </form>
 
+  {# As duas perguntas, o mesmo período e o mesmo filtro. #}
+  <div class="abas">
+    <a class="{{ 'on' if aba == 'fornecedor' }}"
+       href="{{ url_for('relatorios.fornecedores_migrados', data_inicio=data_inicio,
+                data_fim=data_fim, forn=chave) }}">
+      <i class="bi bi-truck"></i> Por fornecedor</a>
+    <a class="{{ 'on' if aba == 'produto' }}"
+       href="{{ url_for('relatorios.fornecedores_migrados', data_inicio=data_inicio,
+                data_fim=data_fim, forn=chave, aba='produto') }}">
+      <i class="bi bi-fuel-pump"></i> Por produto</a>
+  </div>
+
   {% if not grupos %}
   <div class="nada">Nenhuma nota de compra neste período{% if chave %} para este
     fornecedor{% endif %}. A captura da SEFAZ entrega de 07/07/2026 em diante.</div>
+  {% elif aba == 'produto' %}
+
+  {# ==== A ABA POR PRODUTO ============================================= #}
+  {# Aqui só entra o item de nota que JÁ TEM produto classificado em
+     /dfe/compras. O aviso não é rodapé: sem ele a tela esconderia 700 mil
+     litros de julho e agosto e pareceria completa. #}
+  {% set sem = produtos.sem_classificar %}
+  {% if sem.itens %}
+  <div class="aviso aviso--am"><i class="bi bi-exclamation-triangle-fill"></i>
+    <div>Este corte só enxerga o item de nota com <b>produto classificado</b>
+      em <a href="{{ url_for('dfe_compras.compras') }}">/dfe/compras →
+      Classificar</a>. Faltam <b>{{ sem.itens }} itens, {{ litros(sem.litros) }} L</b>
+      ({% for m in sem.meses %}{{ m.mes[5:7] }}/{{ m.mes[2:4] }}:
+      {{ litros(m.litros) }} L{{ ' · ' if not loop.last }}{% endfor %}) —
+      classificados, eles aparecem aqui sozinhos.</div></div>
+  {% endif %}
+
+  {% if not produtos.produtos %}
+  <div class="nada">Nenhum item de combustível classificado neste período.</div>
+  {% else %}
+  <div class="pgrade">
+    {% for p in produtos.produtos %}
+    {% set cor = cores_produto.get(p.pid, '#64748b') %}
+    {% set umin = p.dia_a_dia | map(attribute='unit') | min %}
+    {% set umax = p.dia_a_dia | map(attribute='unit') | max %}
+    <div class="pc" style="--c:{{ cor }}">
+      <div class="pc__t">
+        <span class="pc__i"><i class="bi bi-fuel-pump"></i></span>
+        <div><div class="pc__n">{{ p.nome }}</div>
+          <div class="pc__r">{{ p.notas }} notas ·
+            {{ p.forns }} fornecedor{{ 'es' if p.forns > 1 }}</div></div>
+      </div>
+      <div class="pc__v"><b>{{ litros(p.litros) }}</b><span>L</span></div>
+      <div class="pc__r">comprados no período</div>
+      <div class="pc__g">
+        <div><dt>Preço médio</dt><dd>{{ preco(p.unit) }}</dd></div>
+        <div><dt>Total</dt><dd>{{ reais(p.rs) }}</dd></div>
+        <div><dt>Mais barato</dt><dd class="pos">{{ preco(p.menor) }}</dd></div>
+        <div><dt>Mais caro</dt><dd class="neg">{{ preco(p.maior) }}</dd></div>
+      </div>
+      {# O preço dia a dia: a altura é a posição do dia entre o menor e o
+         maior do próprio produto — é a forma da curva que interessa, não a
+         escala. A última barra fica acesa. #}
+      <div class="spark">
+        {% for d in p.dia_a_dia %}
+        <i class="{{ 'ult' if loop.last }}"
+           style="height:{{ 18 + 82 * ((d.unit - umin) / (umax - umin)) if umax > umin else 60 }}%"
+           title="{{ d.dia.strftime('%d/%m') }}: {{ preco(d.unit) }} · {{ litros(d.litros) }} L"></i>
+        {% endfor %}
+      </div>
+      <div class="pc__f"><span>preço dia a dia</span>
+        <span>vs {{ produtos.ini_ant.strftime('%d/%m') }}–{{ produtos.fim_ant.strftime('%d/%m') }}:
+          {% if p.delta is not none %}
+          <b class="{{ 'neg' if p.delta > 0 else 'pos' }}">{{ '+' if p.delta > 0 }}{{ preco(p.delta) }}</b>
+          {% else %}<b>—</b>{% endif %}</span></div>
+      <div class="pc__f"><span>fatia da compra</span><b>{{ '%.0f'|format(p.fatia) }}%</b></div>
+      <div class="pbar"><i style="width:{{ p.fatia }}%;background:{{ cor }}"></i></div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="cx">
+    <div class="cx__t"><i class="bi bi-tags"></i>
+      De quem vem cada combustível, e a que preço
+      <span class="dir">o mais barato de cada produto em verde ·
+        a diferença é só preço de nota, sem frete nem prazo</span></div>
+    <div class="tab">
+      <table>
+        <thead>
+          <tr><th class="e">Produto</th><th class="e">Fornecedor</th><th>Notas</th>
+            <th>Litros</th><th>Preço médio/L</th><th>Total</th>
+            <th class="e">Contra o melhor</th></tr>
+        </thead>
+        <tbody>
+          {% for p in produtos.produtos %}
+          {% for f in p.fornecedores %}
+          <tr>
+            <td class="e" data-r="Produto">
+              {%- if loop.first %}{{ p.nome }}
+              <i class="pt" style="background:{{ cores_produto.get(p.pid, '#64748b') }};
+                 margin-left:.3rem"></i>{% endif %}</td>
+            <td class="e" data-r="Fornecedor">{{ curto(f.nome) }}</td>
+            <td data-r="Notas">{{ f.notas }}</td>
+            <td data-r="Litros">{{ litros(f.litros) }} L</td>
+            <td data-r="Preço médio/L" class="forte">{{ preco(f.unit) }}</td>
+            <td data-r="Total">{{ reais(f.rs) }}</td>
+            <td class="e" data-r="Contra o melhor">
+              {%- if f.acima < 0.0001 %}<span class="melhor">o mais barato</span>
+              {%- else %}<span class="neg">+{{ preco(f.acima) }}/L ·
+                {{ reais(f.acima_rs) }} a mais</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr><td class="e" colspan="2">Período</td>
+            <td>{{ produtos.total.notas }}</td>
+            <td>{{ litros(produtos.total.litros) }} L</td>
+            <td>{{ preco(produtos.total.unit) }}</td>
+            <td>{{ reais(produtos.total.rs) }}</td><td class="e"></td></tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+  {% endif %}{# fecha o "nenhum item classificado" #}
+
   {% else %}
 
   {# ---- o periodo inteiro, antes de qualquer fornecedor --------------- #}

@@ -1788,6 +1788,10 @@ def fornecedores_migrados():
     if data_fim < data_inicio:
         data_fim = data_inicio
     chave = (request.args.get('forn') or '').strip() or None
+    # Duas abas, o MESMO periodo e o mesmo filtro: "por fornecedor" responde
+    # de quem eu compro e quanto devo; "por produto" responde a quanto eu
+    # compro cada combustivel, e de quem sai mais barato.
+    aba = 'produto' if (request.args.get('aba') == 'produto') else 'fornecedor'
 
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
@@ -1798,13 +1802,16 @@ def fornecedores_migrados():
         todos = fornecedor_migrado.apurar(cur, data_inicio, data_fim)
         apurado = (fornecedor_migrado.apurar(cur, data_inicio, data_fim, chave)
                    if chave else todos)
+        produtos = (fornecedor_migrado.por_produto(cur, data_inicio, data_fim,
+                                                   chave)
+                    if aba == 'produto' else None)
     except Exception as e:
         logging.getLogger(__name__).exception('[fornecedor_migrado] falha')
         return render_template(
             'relatorios/fornecedores_migrados.html', erro=str(e),
-            data_inicio=data_inicio, data_fim=data_fim, chave=chave,
+            data_inicio=data_inicio, data_fim=data_fim, chave=chave, aba=aba,
             total={}, grupos=[], lista_forn=[], cores_produto=CORES_PRODUTO,
-            maior=0.0)
+            maior=0.0, produtos=None)
     finally:
         cur.close()
         conn.close()
@@ -1815,7 +1822,7 @@ def fornecedores_migrados():
 
     return render_template(
         'relatorios/fornecedores_migrados.html',
-        data_inicio=data_inicio, data_fim=data_fim, chave=chave,
-        total=apurado['total'], grupos=apurado['grupos'],
+        data_inicio=data_inicio, data_fim=data_fim, chave=chave, aba=aba,
+        total=apurado['total'], grupos=apurado['grupos'], produtos=produtos,
         lista_forn=lista_forn, cores_produto=CORES_PRODUTO,
         maior=maior, erro=None)

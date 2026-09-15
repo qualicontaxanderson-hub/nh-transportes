@@ -173,5 +173,68 @@ prova('a pilula do Fornecedores esta acesa na tela dele',
 prova('e a do Lucro esta acesa na tela do Lucro',
       re.search(r'class="on"[^>]*lucro_postos_migrados', hl) is not None)
 
+print('\n6) a aba POR PRODUTO')
+conn = get_db_connection()
+cur = conn.cursor(dictionary=True)
+pp = fornecedor_migrado.por_produto(cur, INI, FIM)
+# o mesmo total do corte por produto, por outro caminho: SQL direto
+cur.execute("SELECT COUNT(DISTINCT d.id) notas, "
+            "       COALESCE(SUM(i.quantidade),0) litros, "
+            "       COALESCE(SUM(i.valor_total),0) rs "
+            "  FROM dfe_itens i "
+            "  JOIN dfe_documentos d ON d.id = i.documento_id "
+            " WHERE i.categoria='combustivel' AND i.produto_id IS NOT NULL "
+            "   AND d.tipo='NFe' AND d.resumo=0 "
+            "   AND (d.situacao IS NULL OR UPPER(d.situacao)='AUTORIZADO') "
+            "   AND DATE(d.dh_emissao) BETWEEN %s AND %s", (INI, FIM))
+sql_pp = cur.fetchone()
+cur.close()
+conn.close()
+
+tp = pp['total']
+prova('litros: motor %s = SQL %s'
+      % (litros(tp['litros']), litros(float(sql_pp['litros']))),
+      abs(tp['litros'] - float(sql_pp['litros'])) < 0.01)
+prova('total R$: motor %s = SQL %s'
+      % (reais(tp['rs']), reais(float(sql_pp['rs']))),
+      abs(tp['rs'] - float(sql_pp['rs'])) < 0.01)
+prova('notas: motor %d = SQL %d' % (tp['notas'], sql_pp['notas']),
+      tp['notas'] == sql_pp['notas'])
+prova('cada produto soma os fornecedores dele',
+      all(abs(p['litros'] - sum(f['litros'] for f in p['fornecedores'])) < 0.01
+          and abs(p['rs'] - sum(f['rs'] for f in p['fornecedores'])) < 0.01
+          for p in pp['produtos']))
+prova('o preco medio esta entre o menor e o maior de cada produto',
+      all(p['menor'] - 0.0001 <= p['unit'] <= p['maior'] + 0.0001
+          for p in pp['produtos']))
+prova('o primeiro fornecedor de cada produto e o mais barato (acima = 0)',
+      all(p['fornecedores'][0]['acima'] < 0.0001 for p in pp['produtos']))
+prova('as fatias somam 100%',
+      abs(sum(p['fatia'] for p in pp['produtos']) - 100) < 0.01)
+prova('o aviso conta os itens de combustivel SEM produto classificado (%d)'
+      % pp['sem_classificar']['itens'], pp['sem_classificar']['itens'] > 0)
+
+r3 = client.get(url + '&aba=produto')
+h3 = r3.get_data(as_text=True)
+open('_fmg_produto.html', 'w', encoding='utf-8').write(h3)
+prova('a aba abre 200', r3.status_code == 200)
+prova('a pilula "Por produto" esta acesa',
+      re.search(r'class="on"[^>]*aba=produto', h3) is not None)
+prova('e a outra aba continua alcancavel', 'Por fornecedor' in h3)
+for rot in ('Preço médio', 'Mais barato', 'Mais caro', 'fatia da compra',
+            'preço dia a dia', 'Contra o melhor'):
+    prova('a aba mostra "%s"' % rot, rot in h3)
+for p in pp['produtos']:
+    prova('%s: %s L na tela' % (p['nome'], litros(p['litros'])),
+          ('>%s<' % litros(p['litros'])) in h3)
+    prova('%s: preco medio %s' % (p['nome'], preco(p['unit'])), preco(p['unit']) in h3)
+    f0 = p['fornecedores'][0]
+    prova('%s: o mais barato e %s a %s' % (p['nome'], f0['nome'], preco(f0['unit'])),
+          preco(f0['unit']) in h3)
+prova('o aviso dos nao classificados aparece na tela',
+      ('%s L' % litros(pp['sem_classificar']['litros'])) in h3)
+prova('a aba respeita o filtro de fornecedor',
+      client.get(url + '&aba=produto&forn=' + g0['chave']).status_code == 200)
+
 print('\n' + ('TUDO PROVADO' if ok else 'TEM FALHA'))
 sys.exit(0 if ok else 1)

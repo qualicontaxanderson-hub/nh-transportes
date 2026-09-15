@@ -38,6 +38,7 @@ ICMS-ST — é o que sai do caixa; a linha do produto vem ao lado, para a
 diferença aparecer em vez de se esconder.
 """
 from collections import defaultdict
+from datetime import timedelta
 
 # So digito, dos dois lados, antes de comparar CNPJ.
 _LIMPA_CNPJ = ("REPLACE(REPLACE(REPLACE(REPLACE(f.cnpj,'.',''),'/',''),'-',''),' ','')")
@@ -263,3 +264,169 @@ def apurar(cur, ini, fim, chave=None):
     tot['st'] = tot['nota_rs'] - tot['itens_rs']
     tot['unit'] = (tot['itens_rs'] / tot['litros']) if tot['litros'] else 0.0
     return {'total': tot, 'grupos': lista}
+
+
+# ===========================================================================
+# O MESMO período, virado: quanto se comprou de cada COMBUSTÍVEL, a que preço,
+# e de quem. É o corte que responde "de quem eu compro o S-10 mais barato".
+#
+# Aqui entra só o item de nota que JÁ TEM PRODUTO CLASSIFICADO em
+# /dfe/compras -> Classificar. Não é limitação da conta: é o que existe. Por
+# isso `sem_classificar` volta junto e a tela avisa — um relatório que esconde
+# 700 mil litros não classificados mentiria por omissão.
+# ===========================================================================
+
+# O item de combustivel que interessa aqui: nota autorizada, nao resumo, nao
+# CT-e, e produto ja classificado. As datas ficam de fora do trecho porque uma
+# das consultas anda no periodo ANTERIOR.
+_SO_COMB = """
+      FROM dfe_itens i
+      JOIN dfe_documentos d ON d.id = i.documento_id
+     WHERE d.tipo = 'NFe' AND d.resumo = 0
+       AND (d.situacao IS NULL OR UPPER(d.situacao) = 'AUTORIZADO')
+       AND i.categoria = 'combustivel' AND i.produto_id IS NOT NULL
+       AND DATE(d.dh_emissao) BETWEEN %s AND %s
+"""
+
+
+def por_produto(cur, ini, fim, chave=None):
+    """Compras do período por combustível.
+
+    Devolve {'produtos': [...], 'total': {...}, 'sem_classificar': {...}}.
+    Cada produto traz os litros, o preço médio, o menor e o maior preço, o
+    preço dia a dia (para a linha do tempo), a variação contra o período
+    ANTERIOR de mesmo tamanho, e de quais fornecedores ele veio — ordenados do
+    mais barato para o mais caro, que é a pergunta que a tela responde.
+
+    `chave` filtra um fornecedor só, a mesma chave que sai de apurar().
+    SOMENTE LEITURA (recebe cursor).
+    """
+    nome_raiz, nome_id, grupo_de = _nomes(cur)
+
+    def _ch(cnpj):
+        raiz = (cnpj or '').zfill(14)[:8]
+        titular = grupo_de.get(raiz)
+        return (('f%s' % titular) if titular else ('r%s' % raiz)), raiz, titular
+
+    # ---- o item, um por um: e daqui que sai todo o resto ----
+    cur.execute("""
+        SELECT d.id AS doc, DATE(d.dh_emissao) AS dia, d.emit_cnpj, d.emit_nome,
+               i.produto_id AS pid, p.nome AS produto,
+               i.quantidade, i.valor_unitario, i.valor_total
+          FROM dfe_itens i
+          JOIN dfe_documentos d ON d.id = i.documento_id
+          LEFT JOIN produto p ON p.id = i.produto_id
+         WHERE d.tipo = 'NFe' AND d.resumo = 0
+           AND (d.situacao IS NULL OR UPPER(d.situacao) = 'AUTORIZADO')
+           AND i.categoria = 'combustivel' AND i.produto_id IS NOT NULL
+           AND DATE(d.dh_emissao) BETWEEN %s AND %s
+         ORDER BY d.dh_emissao, d.id, i.n_item""", (ini, fim))
+    linhas = []
+    for r in cur.fetchall():
+        ch, raiz, titular = _ch(r['emit_cnpj'])
+        if chave and ch != chave:
+            continue
+        linhas.append({
+            'doc': r['doc'], 'dia': _dia(r['dia']), 'pid': r['pid'],
+            'produto': r['produto'] or ('Produto %s' % r['pid']),
+            'chave': ch, 'raiz': raiz,
+            'nome': (nome_id.get(titular) or nome_raiz.get(raiz)
+                     or (r['emit_nome'] or '—')),
+            'litros': _f(r['quantidade']), 'unit': _f(r['valor_unitario']),
+            'rs': _f(r['valor_total']),
+        })
+
+    # ---- o periodo ANTERIOR, do mesmo tamanho, so para o preco ter com o que
+    #      se comparar: um preco medio sozinho nao diz se subiu ----
+    dias_periodo = (fim - ini).days + 1
+    ini_ant = ini - timedelta(days=dias_periodo)
+    fim_ant = ini - timedelta(days=1)
+    cur.execute("SELECT i.produto_id AS pid, SUM(i.quantidade) AS litros, "
+                "       SUM(i.valor_total) AS rs "
+                + _SO_COMB + " GROUP BY i.produto_id", (ini_ant, fim_ant))
+    antes = {}
+    for r in cur.fetchall():
+        litros = _f(r['litros'])
+        if litros:
+            antes[r['pid']] = _f(r['rs']) / litros
+
+    # ---- o que fica de fora: combustivel sem produto classificado ----
+    cur.execute("""
+        SELECT DATE_FORMAT(d.dh_emissao, '%Y-%m') AS mes, COUNT(*) AS itens,
+               SUM(i.quantidade) AS litros
+          FROM dfe_itens i
+          JOIN dfe_documentos d ON d.id = i.documento_id
+         WHERE d.tipo = 'NFe' AND d.resumo = 0
+           AND (d.situacao IS NULL OR UPPER(d.situacao) = 'AUTORIZADO')
+           AND i.categoria = 'combustivel' AND i.produto_id IS NULL
+         GROUP BY mes ORDER BY mes""")
+    meses = [{'mes': r['mes'], 'itens': int(r['itens'] or 0),
+              'litros': _f(r['litros'])} for r in cur.fetchall()]
+    sem = {'meses': meses,
+           'itens': sum(m['itens'] for m in meses),
+           'litros': sum(m['litros'] for m in meses)}
+
+    # ---- monta por produto ----
+    prods = {}
+    for x in linhas:
+        p = prods.get(x['pid'])
+        if p is None:
+            p = prods[x['pid']] = {
+                'pid': x['pid'], 'nome': x['produto'], 'litros': 0.0,
+                'rs': 0.0, 'docs': set(), 'menor': None, 'maior': None,
+                'dias': defaultdict(lambda: [0.0, 0.0]),   # dia -> [litros, rs]
+                'forn': {},
+            }
+        p['litros'] += x['litros']
+        p['rs'] += x['rs']
+        p['docs'].add(x['doc'])
+        p['menor'] = x['unit'] if p['menor'] is None else min(p['menor'], x['unit'])
+        p['maior'] = x['unit'] if p['maior'] is None else max(p['maior'], x['unit'])
+        d = p['dias'][x['dia']]
+        d[0] += x['litros']
+        d[1] += x['rs']
+        f = p['forn'].get(x['chave'])
+        if f is None:
+            f = p['forn'][x['chave']] = {'chave': x['chave'], 'nome': x['nome'],
+                                         'litros': 0.0, 'rs': 0.0, 'docs': set()}
+        f['litros'] += x['litros']
+        f['rs'] += x['rs']
+        f['docs'].add(x['doc'])
+
+    total_rs = sum(p['rs'] for p in prods.values())
+    saida = []
+    for p in prods.values():
+        p['notas'] = len(p['docs'])
+        p['unit'] = (p['rs'] / p['litros']) if p['litros'] else 0.0
+        p['fatia'] = (p['rs'] / total_rs * 100) if total_rs else 0.0
+        p['antes'] = antes.get(p['pid'])
+        p['delta'] = (p['unit'] - p['antes']) if p['antes'] else None
+        p['dia_a_dia'] = [{'dia': d, 'litros': v[0],
+                           'unit': (v[1] / v[0]) if v[0] else 0.0}
+                          for d, v in sorted(p['dias'].items())]
+        fs = sorted(p['forn'].values(),
+                    key=lambda f: (f['rs'] / f['litros']) if f['litros'] else 0.0)
+        melhor = (fs[0]['rs'] / fs[0]['litros']) if fs and fs[0]['litros'] else 0.0
+        for f in fs:
+            f['notas'] = len(f['docs'])
+            f['unit'] = (f['rs'] / f['litros']) if f['litros'] else 0.0
+            # Quanto custou NAO ter comprado do mais barato, naqueles litros.
+            # Nao e acusacao -- frete e prazo nao estao aqui. E uma pergunta.
+            f['acima'] = f['unit'] - melhor
+            f['acima_rs'] = f['acima'] * f['litros']
+            del f['docs']
+        p['fornecedores'] = fs
+        p['forns'] = len(fs)
+        del p['docs'], p['dias'], p['forn']
+        saida.append(p)
+
+    saida.sort(key=lambda p: -p['rs'])
+    tot = {
+        'litros': sum(p['litros'] for p in saida),
+        'rs': total_rs,
+        'notas': len(set(x['doc'] for x in linhas)),
+        'produtos': len(saida),
+    }
+    tot['unit'] = (tot['rs'] / tot['litros']) if tot['litros'] else 0.0
+    return {'produtos': saida, 'total': tot, 'sem_classificar': sem,
+            'ini_ant': ini_ant, 'fim_ant': fim_ant}
