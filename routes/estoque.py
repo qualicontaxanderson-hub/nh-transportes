@@ -1444,6 +1444,33 @@ def tempo_real():
             })
         cards.sort(key=lambda c: (c['empresa_nome'], c['ordem']))
 
+        # ---- 4) CUSTO CORRIDO de hoje, e o estoque em R$ ----
+        # O custo nao e calculado aqui: e o MESMO do relatorio de lucro
+        # (media movel ponderada, utils/lucro_migrado), apurado ate hoje.
+        # Duas telas com dois custos diferentes para o mesmo litro nao
+        # serviriam para decidir nada. O estoque em R$ e o saldo DESTA tela
+        # ao custo corrido de hoje -- o que aquele combustivel custou, nao o
+        # que ele vale vendido.
+        # Se a apuracao falhar, o card mostra "—" e a tela segue mostrando o
+        # saldo, que e a razao de ela existir.
+        custo_unit = {}
+        try:
+            from utils import lucro_migrado
+            for cid in {c['cliente_id'] for c in cards}:
+                apurado = lucro_migrado.apurar(cur, cid, list(CONC_IDS),
+                                               hoje, hoje)
+                for pid, d in apurado.items():
+                    u = d['total'].get('ef_unit') or 0.0
+                    if u > 0:
+                        custo_unit[(cid, pid)] = u
+        except Exception:
+            current_app.logger.exception(
+                '[tempo-real] falha ao apurar o custo corrido')
+        for c in cards:
+            u = custo_unit.get((c['cliente_id'], c['pid']))
+            c['custo_unit'] = u
+            c['estoque_rs'] = (c['saldo'] * u) if (u and c['saldo'] is not None) else None
+
         return render_template(
             'estoque/tempo_real.html',
             cards=cards, empresas=empresas, empresa=empresa,
