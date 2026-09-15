@@ -1445,20 +1445,29 @@ def tempo_real():
         cards.sort(key=lambda c: (c['empresa_nome'], c['ordem']))
 
         # ---- 4) CUSTO CORRIDO de hoje, e o estoque em R$ ----
-        # O custo nao e calculado aqui: e o MESMO do relatorio de lucro
-        # (media movel ponderada, utils/lucro_migrado), apurado ate hoje.
-        # Duas telas com dois custos diferentes para o mesmo litro nao
-        # serviriam para decidir nada. O estoque em R$ e o saldo DESTA tela
-        # ao custo corrido de hoje -- o que aquele combustivel custou, nao o
-        # que ele vale vendido.
+        # O custo nao e calculado aqui: e o MESMO de
+        # /relatorios/lucro_postos_migrados -- utils/lucro_migrado, na base
+        # NOTA, que e a das Compras Migradas (a entrada e o que a nota fiscal
+        # daquela descarga diz). Duas telas com dois custos para o mesmo litro
+        # nao serviriam para decidir nada.
+        #
+        # E a chamada e a MESMA do relatorio quando ele abre: do dia 1 do mes
+        # ate hoje. O aquecimento de 60 dias ja faz o custo de um dia nao
+        # depender do filtro, mas nao ao centesimo de centavo -- apurar so
+        # "hoje..hoje" dava R$ 0,000003/L de diferenca na gasolina. Aqui o
+        # numero e igual ao que o relatorio mostra, ponto.
+        #
+        # O estoque em R$ e o saldo DESTA tela ao custo corrido de hoje -- o
+        # que aquele combustivel custou, nao o que ele vale vendido.
         # Se a apuracao falhar, o card mostra "—" e a tela segue mostrando o
         # saldo, que e a razao de ela existir.
         custo_unit = {}
         try:
             from utils import lucro_migrado
+            ini_mes = hoje.replace(day=1)
             for cid in {c['cliente_id'] for c in cards}:
                 apurado = lucro_migrado.apurar(cur, cid, list(CONC_IDS),
-                                               hoje, hoje)
+                                               ini_mes, hoje, 'nota')
                 for pid, d in apurado.items():
                     u = d['total'].get('ef_unit') or 0.0
                     if u > 0:
