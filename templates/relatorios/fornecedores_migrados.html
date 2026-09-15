@@ -67,6 +67,33 @@ body > .container-fluid:has(#fmg){
   #fmg .abas a:hover{ background:#f2f7fc; color:var(--blue-deep); }
   #fmg .abas a.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
 
+  /* a regua de meses: um clique troca o periodo inteiro, como no DRE */
+  #fmg .meses{ display:flex; gap:.35rem; flex-wrap:wrap; align-items:center;
+    background:#fff; border:1px solid var(--borda); border-radius:13px;
+    padding:.5rem .6rem; margin-bottom:.7rem; }
+  #fmg .meses > b{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.06em; margin-right:.15rem; }
+  #fmg .meses a{ border:1px solid var(--borda); background:#f7f9fc;
+    border-radius:99px; padding:.26rem .72rem; font-size:.76rem; font-weight:800;
+    color:#3a4655; text-decoration:none; white-space:nowrap; }
+  #fmg .meses a:hover{ background:#eef5fd; color:var(--blue-deep); }
+  #fmg .meses a.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #fmg .meses .obs{ font-size:.68rem; color:var(--muted); margin-left:auto; }
+
+  /* o card do produto e botao: clicar mostra so as notas dele */
+  #fmg a.pc{ display:block; color:inherit; text-decoration:none;
+    transition:box-shadow .12s, opacity .12s; }
+  #fmg a.pc:hover{ box-shadow:0 5px 18px rgba(20,35,60,.14); }
+  #fmg .pc--off{ opacity:.5; }
+  #fmg .pc--on{ box-shadow:0 0 0 2px var(--c), 0 4px 16px rgba(20,35,60,.12); }
+  #fmg .pc__cl{ font-size:.63rem; font-weight:800; color:var(--c); opacity:.75;
+    text-transform:uppercase; letter-spacing:.03em; margin-top:.35rem; }
+  #fmg .sel{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
+    background:#eaf1f9; color:var(--blue-deep); border-radius:11px;
+    padding:.45rem .7rem; font-size:.8rem; font-weight:700; margin-bottom:.7rem; }
+  #fmg .sel b{ font-weight:800; }
+  #fmg .sel a{ margin-left:auto; }
+
   /* ---- a aba POR PRODUTO: um card por combustivel ------------------- */
   #fmg .pgrade{ display:grid; gap:.6rem; grid-template-columns:1fr; margin-bottom:.7rem; }
   @media (min-width:760px){ #fmg .pgrade{ grid-template-columns:repeat(2,1fr); } }
@@ -276,6 +303,28 @@ body > .container-fluid:has(#fmg){
     </div>
   </form>
 
+  {# A régua de meses: a tela abre no mês corrente (1º até hoje) e um clique
+     troca o período inteiro, sem mexer na aba, no fornecedor nem no produto.
+     Os meses saem do banco — a captura da SEFAZ começa em 07/07/2026, e uma
+     pílula de janeiro só saberia dizer "não tem nada". #}
+  {% if meses %}
+  {% set tudo_ini = meses[0].ini %}{% set tudo_fim = meses[-1].fim %}
+  <div class="meses">
+    <b><i class="bi bi-calendar3"></i> Mês</b>
+    <a class="{{ 'on' if data_inicio == tudo_ini and data_fim == tudo_fim }}"
+       href="{{ url_for('relatorios.fornecedores_migrados', data_inicio=tudo_ini,
+                data_fim=tudo_fim, forn=chave, aba=aba, pid=pid) }}">Tudo</a>
+    {% for m in meses %}
+    <a class="{{ 'on' if data_inicio == m.ini and data_fim == m.fim }}"
+       title="{{ m.notas }} nota{{ 's' if m.notas != 1 }} · {{ m.ini.strftime('%d/%m') }} a {{ m.fim.strftime('%d/%m') }}"
+       href="{{ url_for('relatorios.fornecedores_migrados', data_inicio=m.ini,
+                data_fim=m.fim, forn=chave, aba=aba, pid=pid) }}">{{ m.rotulo }}</a>
+    {% endfor %}
+    <span class="obs">o mês corrente vai até hoje · para um pedaço do mês,
+      use as datas acima</span>
+  </div>
+  {% endif %}
+
   {# As duas perguntas, o mesmo período e o mesmo filtro. #}
   <div class="abas">
     <a class="{{ 'on' if aba == 'fornecedor' }}"
@@ -311,12 +360,35 @@ body > .container-fluid:has(#fmg){
   {% if not produtos.produtos %}
   <div class="nada">Nenhum item de combustível classificado neste período.</div>
   {% else %}
+  {#- Clicar num card escolhe o combustível: as tabelas de baixo passam a
+      mostrar só ele. Os cards continuam TODOS na tela — eles são o seletor, e
+      sumir com os outros tiraria o caminho de volta. Clicar de novo no card
+      aceso, ou na barra azul, volta a ver tudo. -#}
+  {% set sel = (produtos.produtos | selectattr('pid', 'equalto', pid)
+                | list | first) if pid else none %}
+  {% set lista_p = [sel] if sel else produtos.produtos %}
+  {% set relacao = (produtos.notas | selectattr('pid', 'equalto', pid) | list)
+                   if sel else produtos.notas %}
+
+  {% if sel %}
+  <div class="sel"><i class="bi bi-funnel-fill"></i>
+    <span>as tabelas abaixo mostram só o <b>{{ sel.nome }}</b> —
+      {{ sel.notas }} notas, {{ litros(sel.litros) }} L</span>
+    <a class="bt bt--mini" href="{{ url_for('relatorios.fornecedores_migrados',
+         data_inicio=data_inicio, data_fim=data_fim, forn=chave, aba='produto') }}">
+      <i class="bi bi-x-lg"></i> ver todos os produtos</a></div>
+  {% endif %}
+
   <div class="pgrade">
     {% for p in produtos.produtos %}
     {% set cor = cores_produto.get(p.pid, '#64748b') %}
     {% set umin = p.dia_a_dia | map(attribute='unit') | min %}
     {% set umax = p.dia_a_dia | map(attribute='unit') | max %}
-    <div class="pc" style="--c:{{ cor }}">
+    <a class="pc{{ ' pc--on' if sel and sel.pid == p.pid }}{{ ' pc--off' if sel and sel.pid != p.pid }}"
+       style="--c:{{ cor }}"
+       href="{{ url_for('relatorios.fornecedores_migrados', data_inicio=data_inicio,
+                data_fim=data_fim, forn=chave, aba='produto',
+                pid=(none if sel and sel.pid == p.pid else p.pid)) }}">
       <div class="pc__t">
         <span class="pc__i"><i class="bi bi-fuel-pump"></i></span>
         <div><div class="pc__n">{{ p.nome }}</div>
@@ -348,7 +420,11 @@ body > .container-fluid:has(#fmg){
           {% else %}<b>—</b>{% endif %}</span></div>
       <div class="pc__f"><span>fatia da compra</span><b>{{ '%.0f'|format(p.fatia) }}%</b></div>
       <div class="pbar"><i style="width:{{ p.fatia }}%;background:{{ cor }}"></i></div>
-    </div>
+      <div class="pc__cl">{% if sel and sel.pid == p.pid %}
+        <i class="bi bi-check2"></i> vendo só este — clique para voltar a todos
+        {% else %}<i class="bi bi-hand-index"></i> clique para ver só as notas deste
+        {% endif %}</div>
+    </a>
     {% endfor %}
   </div>
 
@@ -365,7 +441,7 @@ body > .container-fluid:has(#fmg){
             <th class="e">Contra o melhor</th></tr>
         </thead>
         <tbody>
-          {% for p in produtos.produtos %}
+          {% for p in lista_p %}
           {% for f in p.fornecedores %}
           <tr>
             <td class="e" data-r="Produto">
@@ -386,15 +462,69 @@ body > .container-fluid:has(#fmg){
           {% endfor %}
         </tbody>
         <tfoot>
-          <tr><td class="e" colspan="2">Período</td>
-            <td>{{ produtos.total.notas }}</td>
-            <td>{{ litros(produtos.total.litros) }} L</td>
-            <td>{{ preco(produtos.total.unit) }}</td>
-            <td>{{ reais(produtos.total.rs) }}</td><td class="e"></td></tr>
+          <tr><td class="e" colspan="2">{{ sel.nome if sel else 'Período' }}</td>
+            <td>{{ sel.notas if sel else produtos.total.notas }}</td>
+            <td>{{ litros(sel.litros if sel else produtos.total.litros) }} L</td>
+            <td>{{ preco(sel.unit if sel else produtos.total.unit) }}</td>
+            <td>{{ reais(sel.rs if sel else produtos.total.rs) }}</td>
+            <td class="e"></td></tr>
         </tfoot>
       </table>
     </div>
   </div>
+  {# ---- e a relação, nota por nota ------------------------------------
+     A tabela de cima responde "de quem, e a que preço" no período inteiro;
+     esta responde "quando". Cada linha é uma nota e um produto — duas linhas
+     do mesmo S-10 na mesma nota são a mesma compra. A descarga é do
+     documento: é o vínculo que o usuário fez na régua do ELS, em /estoque. #}
+  <div class="cx">
+    <div class="cx__t"><i class="bi bi-calendar3"></i>
+      As notas, uma a uma{% if sel %} — {{ sel.nome }}{% endif %}
+      <span class="dir">da compra mais nova para a mais velha ·
+        a data de descarga vem da régua do ELS{% if not sel %} ·
+        clique num card acima para ver um combustível só{% endif %}</span></div>
+    <div class="tab">
+      <table>
+        <thead>
+          <tr><th class="e">Compra</th><th class="e">Descarga</th>
+            <th class="e">Nota</th><th class="e">Produto</th>
+            <th class="e">Fornecedor</th><th>Litros</th>
+            <th>Preço/L</th><th>Total</th></tr>
+        </thead>
+        <tbody>
+          {% for n in relacao %}
+          <tr>
+            <td class="e forte" data-r="Compra">{{ n.dia.strftime('%d/%m/%Y') }}</td>
+            <td class="e" data-r="Descarga">
+              {%- if n.descargas %}
+                {%- for x in n.descargas %}
+                <span class="dsc" title="tanque {{ x.tanque }} · {{ litros(x.litros) }} L">
+                  {{ x.dia.strftime('%d/%m') }}</span>
+                {%- endfor %}
+              {%- else %}<span class="pend">não desceu</span>{% endif %}</td>
+            <td class="e nf" data-r="Nota">{{ n.numero }}</td>
+            <td class="e" data-r="Produto">
+              <i class="pt" style="background:{{ cores_produto.get(n.pid, '#64748b') }}"></i>
+              {{ n.produto }}</td>
+            <td class="e" data-r="Fornecedor">{{ curto(n.nome) }}</td>
+            <td data-r="Litros">{{ litros(n.litros) }} L</td>
+            <td data-r="Preço/L" class="forte">{{ preco(n.unit) }}</td>
+            <td data-r="Total">{{ reais(n.rs) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr><td class="e" colspan="4">{{ relacao|length }} nota{{ 's' if relacao|length != 1 }}
+              {%- if sel %} de {{ sel.nome }}{% endif %}</td>
+            <td class="e"></td>
+            <td>{{ litros(sel.litros if sel else produtos.total.litros) }} L</td>
+            <td>{{ preco(sel.unit if sel else produtos.total.unit) }}</td>
+            <td>{{ reais(sel.rs if sel else produtos.total.rs) }}</td></tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
   {% endif %}{# fecha o "nenhum item classificado" #}
 
   {% else %}

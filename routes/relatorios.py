@@ -1792,6 +1792,13 @@ def fornecedores_migrados():
     # de quem eu compro e quanto devo; "por produto" responde a quanto eu
     # compro cada combustivel, e de quem sai mais barato.
     aba = 'produto' if (request.args.get('aba') == 'produto') else 'fornecedor'
+    # Clicar no card do S-500 nao muda o periodo nem o fornecedor: so escolhe
+    # de qual combustivel e a relacao de baixo. Os cards continuam todos na
+    # tela -- eles SAO o seletor, e sumir com os outros tiraria a volta.
+    try:
+        pid = int(request.args.get('pid') or 0) or None
+    except (TypeError, ValueError):
+        pid = None
 
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
@@ -1805,13 +1812,16 @@ def fornecedores_migrados():
         produtos = (fornecedor_migrado.por_produto(cur, data_inicio, data_fim,
                                                    chave)
                     if aba == 'produto' else None)
+        # A regua de meses sai do banco inteiro, e nao do periodo: ela existe
+        # justamente para trocar de periodo.
+        meses = fornecedor_migrado.meses(cur, hoje)
     except Exception as e:
         logging.getLogger(__name__).exception('[fornecedor_migrado] falha')
         return render_template(
             'relatorios/fornecedores_migrados.html', erro=str(e),
             data_inicio=data_inicio, data_fim=data_fim, chave=chave, aba=aba,
             total={}, grupos=[], lista_forn=[], cores_produto=CORES_PRODUTO,
-            maior=0.0, produtos=None)
+            maior=0.0, produtos=None, pid=None, meses=[])
     finally:
         cur.close()
         conn.close()
@@ -1824,5 +1834,5 @@ def fornecedores_migrados():
         'relatorios/fornecedores_migrados.html',
         data_inicio=data_inicio, data_fim=data_fim, chave=chave, aba=aba,
         total=apurado['total'], grupos=apurado['grupos'], produtos=produtos,
-        lista_forn=lista_forn, cores_produto=CORES_PRODUTO,
-        maior=maior, erro=None)
+        lista_forn=lista_forn, cores_produto=CORES_PRODUTO, meses=meses,
+        pid=pid, maior=maior, erro=None)

@@ -236,5 +236,136 @@ prova('o aviso dos nao classificados aparece na tela',
 prova('a aba respeita o filtro de fornecedor',
       client.get(url + '&aba=produto&forn=' + g0['chave']).status_code == 200)
 
+print('\n7) a regua de meses')
+conn = get_db_connection()
+cur = conn.cursor(dictionary=True)
+mm = fornecedor_migrado.meses(cur, date(2026, 9, 15))
+cur.execute("SELECT DATE_FORMAT(d.dh_emissao,'%Y-%m') mes, COUNT(*) n "
+            "  FROM dfe_documentos d "
+            " WHERE d.tipo='NFe' AND d.resumo=0 "
+            "   AND (d.situacao IS NULL OR UPPER(d.situacao)='AUTORIZADO') "
+            " GROUP BY mes ORDER BY mes")
+sql_mm = cur.fetchall()
+cur.close()
+conn.close()
+
+prova('a regua traz os %d meses que TEM nota, e so eles' % len(sql_mm),
+      [m['mes'] for m in mm] == [r['mes'] for r in sql_mm])
+prova('cada mes leva a sua contagem de notas',
+      all(m['notas'] == r['n'] for m, r in zip(mm, sql_mm)))
+prova('todo mes comeca no dia 1', all(m['ini'].day == 1 for m in mm))
+prova('os meses vem do mais antigo para o mais novo',
+      [m['ini'] for m in mm] == sorted(m['ini'] for m in mm))
+prova('nenhum mes passa de hoje', all(m['fim'] <= date(2026, 9, 15) for m in mm))
+prova('o mes corrente para HOJE, e nao no dia 30 (%s)'
+      % mm[-1]['fim'].strftime('%d/%m'), mm[-1]['fim'] == date(2026, 9, 15))
+prova('o rotulo e o mes em portugues (%s)' % mm[-1]['rotulo'],
+      mm[-1]['rotulo'] == 'SET/26')
+prova('as pilulas dos meses aparecem na tela',
+      all(('>%s<' % m['rotulo']) in h3 for m in mm))
+prova('tem a pilula "Tudo", para o periodo inteiro', '>Tudo<' in h3)
+prova('a pilula do mes corrente esta acesa (o periodo E 01-15/09)',
+      re.search(r'class="on"[^>]*data_fim=2026-09-15', h3) is not None)
+rm = client.get('/relatorios/fornecedores_migrados?aba=produto'
+                '&data_inicio=2026-08-01&data_fim=2026-08-31')
+hm = rm.get_data(as_text=True)
+prova('clicar em AGO/26 abre o mes inteiro', rm.status_code == 200)
+prova('e o periodo que abre e mesmo agosto',
+      'value="2026-08-01"' in hm and 'value="2026-08-31"' in hm)
+prova('a regua guarda a aba: de AGO/26 nao se volta para "Por fornecedor"',
+      re.search(r'class="on"[^>]*aba=produto', hm) is not None)
+
+print('\n8) a relacao nota a nota, com data de compra e de descarga')
+rel = pp['notas']
+prova('a relacao existe e tem linha (%d)' % len(rel), len(rel) > 0)
+prova('os litros da relacao fecham com o total do periodo',
+      abs(sum(n['litros'] for n in rel) - tp['litros']) < 0.01)
+prova('os reais da relacao fecham com o total do periodo',
+      abs(sum(n['rs'] for n in rel) - tp['rs']) < 0.01)
+prova('cada produto fecha com as linhas dele',
+      all(abs(p['litros'] - sum(n['litros'] for n in rel
+                                if n['pid'] == p['pid'])) < 0.01
+          for p in pp['produtos']))
+prova('as notas da relacao sao as mesmas notas do periodo',
+      len(set(n['doc'] for n in rel)) == tp['notas'])
+prova('uma linha por nota E produto (nenhuma repetida)',
+      len(set((n['doc'], n['pid']) for n in rel)) == len(rel))
+prova('a mais nova vem primeiro',
+      [n['dia'] for n in rel] == sorted((n['dia'] for n in rel), reverse=True))
+prova('toda linha tem data de compra e numero de nota',
+      all(n['dia'] and n['numero'] for n in rel))
+prova('o preco/L de cada linha e o total dividido pelos litros',
+      all(abs(n['unit'] * n['litros'] - n['rs']) < 0.02 for n in rel))
+conn = get_db_connection()
+cur = conn.cursor(dictionary=True)
+cur.execute("SELECT COUNT(DISTINCT v.documento_id) n "
+            "  FROM descarga_nota v "
+            "  JOIN dfe_documentos d ON d.id = v.documento_id "
+            "  JOIN dfe_itens i ON i.documento_id = d.id "
+            " WHERE d.tipo='NFe' AND d.resumo=0 "
+            "   AND (d.situacao IS NULL OR UPPER(d.situacao)='AUTORIZADO') "
+            "   AND i.categoria='combustivel' AND i.produto_id IS NOT NULL "
+            "   AND DATE(d.dh_emissao) BETWEEN %s AND %s", (INI, FIM))
+sql_desc = cur.fetchone()['n']
+cur.close()
+conn.close()
+com_desc = len(set(n['doc'] for n in rel if n['descargas']))
+prova('as notas com descarga sao as que o ELS amarrou: motor %d = SQL %d'
+      % (com_desc, sql_desc), com_desc == sql_desc)
+prova('toda descarga tem dia e litros',
+      all(x['dia'] and x['litros'] >= 0 for n in rel for x in n['descargas']))
+for rot in ('Compra', 'Descarga', 'Nota', 'Produto', 'Fornecedor', 'Litros',
+            'Total'):
+    prova('a relacao tem a coluna "%s"' % rot, ('>%s<' % rot) in h3)
+prova('a relacao tem a coluna "Preco/L"', 'Preço/L' in h3)
+prova('a tela conta as %d linhas da relacao' % len(rel),
+      ('%d notas' % len(rel)) in h3)
+n0 = rel[0]
+prova('a data de compra sai por extenso (%s)' % n0['dia'].strftime('%d/%m/%Y'),
+      n0['dia'].strftime('%d/%m/%Y') in h3)
+prova('a nota sem descarga aparece como "nao desceu"',
+      ('não desceu' in h3) == any(not n['descargas'] for n in rel))
+com = [n for n in rel if n['descargas']]
+prova('a data de descarga sai na linha (%s)'
+      % (com[0]['descargas'][0]['dia'].strftime('%d/%m') if com else '-'),
+      (not com) or com[0]['descargas'][0]['dia'].strftime('%d/%m') in h3)
+
+print('\n9) clicar no card mostra um combustivel so -- e da para voltar')
+p0 = pp['produtos'][0]
+rp = client.get(url + '&aba=produto&pid=%d' % p0['pid'])
+hp = rp.get_data(as_text=True)
+open('_fmg_pid.html', 'w', encoding='utf-8').write(hp)
+so = [n for n in rel if n['pid'] == p0['pid']]
+prova('a tela do %s abre 200' % p0['nome'], rp.status_code == 200)
+prova('sem clique, nenhum card fica aceso e nao ha barra de volta',
+      'class="pc pc--on"' not in h3 and 'ver todos os produtos' not in h3)
+prova('com clique, o card do %s fica aceso' % p0['nome'],
+      'class="pc pc--on"' in hp)
+prova('e os outros %d cards continuam na tela (o seletor nao some)'
+      % (len(pp['produtos']) - 1),
+      all(p['nome'] in hp for p in pp['produtos']))
+prova('os outros cards ficam apagados',
+      hp.count('class="pc pc--off"') == len(pp['produtos']) - 1)
+prova('a relacao mostra so as %d notas do %s' % (len(so), p0['nome']),
+      hp.count('data-r="Compra"') == len(so))
+prova('e a tela diz quantas sao', ('%d notas' % len(so)) in hp)
+prova('o rodape passa a ser o do produto (%s)' % preco(p0['unit']),
+      preco(p0['unit']) in hp)
+prova('a tabela "de quem vem" tambem so mostra o %s' % p0['nome'],
+      hp.count('data-r="Fornecedor"') == len(so) + len(p0['fornecedores']))
+prova('tem o caminho de volta para todos os produtos',
+      'ver todos os produtos' in hp and 'vendo só este' in hp)
+volta = client.get(url + '&aba=produto')
+prova('e a volta traz os %d produtos de novo' % len(pp['produtos']),
+      volta.get_data(as_text=True).count('data-r="Compra"') == len(rel))
+prova('o produto escolhido sobrevive a troca de mes',
+      client.get('/relatorios/fornecedores_migrados?aba=produto&pid=%d'
+                 '&data_inicio=2026-08-01&data_fim=2026-08-31'
+                 % p0['pid']).status_code == 200)
+prova('um pid que nao existe nao quebra a tela',
+      client.get(url + '&aba=produto&pid=999999').status_code == 200)
+prova('um pid podre nao quebra a tela',
+      client.get(url + '&aba=produto&pid=xis').status_code == 200)
+
 print('\n' + ('TUDO PROVADO' if ok else 'TEM FALHA'))
 sys.exit(0 if ok else 1)

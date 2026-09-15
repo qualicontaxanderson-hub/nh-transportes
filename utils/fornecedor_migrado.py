@@ -38,7 +38,7 @@ ICMS-ST — é o que sai do caixa; a linha do produto vem ao lado, para a
 diferença aparecer em vez de se esconder.
 """
 from collections import defaultdict
-from datetime import timedelta
+from datetime import date, timedelta
 
 # So digito, dos dois lados, antes de comparar CNPJ.
 _LIMPA_CNPJ = ("REPLACE(REPLACE(REPLACE(REPLACE(f.cnpj,'.',''),'/',''),'-',''),' ','')")
@@ -87,6 +87,39 @@ def _nomes(cur):
     except Exception:
         pass  # a tabela nasce em conf_fornecedores_dfe; sem ela, sem grupo
     return por_raiz, por_id, grupo
+
+
+_MES_PT = ('JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN',
+           'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ')
+
+
+def meses(cur, hoje=None):
+    """A regua de meses que TEM nota de compra, do mais antigo ao mais novo.
+
+    Serve a fila de pilulas do topo: um clique troca o periodo inteiro. Sai do
+    banco, e nao de um range fixo, porque a captura da SEFAZ comeca em
+    07/07/2026 -- inventar janeiro daria uma pilula que so sabe dizer "nao tem
+    nada". O mes corrente para HOJE, nao no dia 30: o periodo tem que ser o
+    mesmo que a tela abre sozinha.
+    """
+    hoje = hoje or date.today()
+    cur.execute(
+        "SELECT DATE_FORMAT(d.dh_emissao,'%Y-%m') AS mes, COUNT(*) AS notas "
+        "  FROM dfe_documentos d "
+        " WHERE d.tipo = 'NFe' AND d.resumo = 0 "
+        "   AND (d.situacao IS NULL OR UPPER(d.situacao) = 'AUTORIZADO') "
+        " GROUP BY mes ORDER BY mes")
+    saida = []
+    for r in cur.fetchall():
+        ano, mes = int(r['mes'][:4]), int(r['mes'][5:7])
+        ini = date(ano, mes, 1)
+        fim = (date(ano + (mes == 12), (mes % 12) + 1, 1) - timedelta(days=1))
+        if fim > hoje:
+            fim = hoje
+        saida.append({'mes': r['mes'], 'ini': ini, 'fim': fim,
+                      'rotulo': '%s/%s' % (_MES_PT[mes - 1], r['mes'][2:4]),
+                      'notas': int(r['notas'] or 0)})
+    return saida
 
 
 def apurar(cur, ini, fim, chave=None):
@@ -292,7 +325,9 @@ _SO_COMB = """
 def por_produto(cur, ini, fim, chave=None):
     """Compras do período por combustível.
 
-    Devolve {'produtos': [...], 'total': {...}, 'sem_classificar': {...}}.
+    Devolve {'produtos': [...], 'total': {...}, 'sem_classificar': {...},
+    'notas': [...]} -- `notas` e a relacao nota a nota, com a data da
+    compra e a(s) data(s) de descarga, da mais nova para a mais velha.
     Cada produto traz os litros, o preço médio, o menor e o maior preço, o
     preço dia a dia (para a linha do tempo), a variação contra o período
     ANTERIOR de mesmo tamanho, e de quais fornecedores ele veio — ordenados do
@@ -366,6 +401,53 @@ def por_produto(cur, ini, fim, chave=None):
            'itens': sum(m['itens'] for m in meses),
            'litros': sum(m['litros'] for m in meses)}
 
+    # ---- a relacao, nota por nota: quando comprei e quando desceu -------
+    # O card responde o total; aqui responde a linha do tempo. A DESCARGA e do
+    # documento inteiro (a regua do ELS amarra a nota, nao o item), entao numa
+    # nota com dois produtos a mesma data aparece nos dois -- e a verdade do
+    # vinculo, nao um rateio inventado.
+    docs_ids = sorted(set(x['doc'] for x in linhas))
+    numeros, desc_doc = {}, defaultdict(list)
+    if docs_ids:
+        ph = ','.join(['%s'] * len(docs_ids))
+        cur.execute("SELECT id, numero FROM dfe_documentos WHERE id IN (%s)"
+                    % ph, docs_ids)
+        numeros = {r['id']: r['numero'] for r in cur.fetchall()}
+        cur.execute(
+            """SELECT v.documento_id, v.litros, dp.data_descarga, dp.tanque
+                 FROM descarga_nota v
+                 JOIN descargas_pendentes dp ON dp.id = v.descarga_id
+                WHERE v.documento_id IN (%s)
+                ORDER BY dp.data_descarga, v.id""" % ph, docs_ids)
+        for r in cur.fetchall():
+            desc_doc[r['documento_id']].append(
+                {'dia': _dia(r['data_descarga']), 'litros': _f(r['litros']),
+                 'tanque': r['tanque']})
+
+    # uma linha por NOTA e PRODUTO: duas linhas do mesmo S-10 na mesma nota sao
+    # a mesma compra, e separadas so fariam a relacao parecer o dobro.
+    junta = {}
+    for x in linhas:
+        k = (x['doc'], x['pid'])
+        n = junta.get(k)
+        if n is None:
+            n = junta[k] = {
+                'doc': x['doc'], 'pid': x['pid'], 'produto': x['produto'],
+                'dia': x['dia'], 'numero': numeros.get(x['doc']),
+                'chave': x['chave'], 'nome': x['nome'],
+                'descargas': desc_doc.get(x['doc'], []),
+                'litros': 0.0, 'rs': 0.0,
+            }
+        n['litros'] += x['litros']
+        n['rs'] += x['rs']
+    relacao = []
+    for n in junta.values():
+        n['unit'] = (n['rs'] / n['litros']) if n['litros'] else 0.0
+        n['desceu'] = sum(d['litros'] for d in n['descargas'])
+        relacao.append(n)
+    # a mais nova em cima: o preco que interessa primeiro e o da ultima compra
+    relacao.sort(key=lambda n: (n['dia'], n['doc']), reverse=True)
+
     # ---- monta por produto ----
     prods = {}
     for x in linhas:
@@ -429,4 +511,4 @@ def por_produto(cur, ini, fim, chave=None):
     }
     tot['unit'] = (tot['rs'] / tot['litros']) if tot['litros'] else 0.0
     return {'produtos': saida, 'total': tot, 'sem_classificar': sem,
-            'ini_ant': ini_ant, 'fim_ant': fim_ant}
+            'notas': relacao, 'ini_ant': ini_ant, 'fim_ant': fim_ant}
