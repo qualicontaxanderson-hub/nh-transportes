@@ -1,0 +1,33 @@
+{#- A barra que liga os relatórios MIGRADOS — os que apuram pelas telas novas
+    (nota da SEFAZ, régua do ELS, cupom fiscal, extrato do banco) em vez do que
+    alguém digitou.
+
+    Cada tela inclui esta lista e marca a sua chave, assim um relatório novo
+    nasce ligado em todos de uma vez:
+
+      {% with ativa = 'fornecedores' %}{% include 'includes/relatorios_migrados.html' %}{% endwith %}
+
+    Mesma ideia de includes/abas_migracoes.html, e de propósito: quem opera já
+    conhece essa fileira de pílulas do módulo Migrações.
+-#}
+<style>
+.rmig{ display:flex; gap:.4rem; align-items:center; flex-wrap:wrap; margin-bottom:.7rem; }
+.rmig > span{ font-size:.68rem; color:#4b5563; font-weight:800; text-transform:uppercase;
+  letter-spacing:.05em; margin-right:.15rem; }
+.rmig a{ border:1px solid #d9e0e8; background:#fff; border-radius:99px; padding:.3rem .78rem;
+  font-size:.79rem; font-weight:800; color:#3a4655; text-decoration:none;
+  display:inline-flex; gap:.35rem; align-items:center; white-space:nowrap; }
+.rmig a:hover{ background:#f2f7fc; color:#0C4C86; }
+.rmig a.on{ background:#1D63A5; border-color:#1D63A5; color:#fff; }
+</style>
+<div class="rmig">
+  <span>Migrados</span>
+  {%- for chave, rotulo, icone, destino in [
+        ('lucro',        'Lucro dos postos',        'bi-fuel-pump',  'relatorios.lucro_postos_migrados'),
+        ('fornecedores', 'Fornecedores',            'bi-truck',      'relatorios.fornecedores_migrados'),
+        ('compras',      'Compras (DFe)',           'bi-box-seam',   'dfe_compras.compras'),
+        ('pagamentos',   'Conferência de pagamentos', 'bi-bank',     'conf_fornecedores_dfe.conf_fornecedores_dfe')] %}
+  <a class="{{ 'on' if ativa == chave }}" href="{{ url_for(destino) }}">
+    <i class="bi {{ icone }}"></i> {{ rotulo }}</a>
+  {%- endfor %}
+</div>

@@ -1,0 +1,394 @@
+{% extends "base.html" %}
+
+{% block title %}Fornecedores Migrados{% endblock %}
+
+{#- Fornecedores Migrados — Modelo 3, o escolhido entre os três desenhados.
+
+    A compra vem da NOTA que a SEFAZ entregou, a descarga vem da régua do ELS
+    e o pagamento vem da linha do extrato que o usuário amarrou àquela nota.
+    Nada aqui é digitado duas vezes.
+
+    A tela lê de cima para baixo: o período inteiro, de quem se compra, e só
+    então um quadro por fornecedor com as suas notas. Mesmo desenho do
+    /relatorios/lucro_postos_migrados, de propósito: são irmãos.
+-#}
+
+{% block styles %}
+<style>
+body > .container-fluid:has(#fmg){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#fmg){ padding:.7rem 1rem 0; }
+}
+</style>
+<style>
+  #fmg{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#146c43; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#4b5563; --ink:#151d27; --borda:#d9e0e8;
+        --linha:#eef1f5; color:var(--ink); max-width:100%; }
+
+  #fmg .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .7rem; margin-bottom:.7rem; }
+  #fmg .topo__t{ font-weight:800; font-size:1.02rem; }
+  #fmg .topo__s{ font-size:.76rem; opacity:.96; margin-top:.1rem; }
+
+  #fmg .filtro{ background:#fff; border:1px solid var(--borda); border-radius:13px;
+    padding:.7rem .75rem; margin-bottom:.7rem; }
+  #fmg .filtro__g{ display:grid; gap:.5rem; grid-template-columns:1fr 1fr; }
+  @media (min-width:768px){ #fmg .filtro__g{ grid-template-columns:1fr 1fr 2fr; } }
+  #fmg .campo{ display:flex; flex-direction:column; gap:.2rem; min-width:0; }
+  #fmg .campo span{ font-size:.68rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.04em; }
+  #fmg .campo input, #fmg .campo select{ border:1px solid var(--borda);
+    border-radius:9px; padding:.42rem .5rem; font-size:.82rem; font-family:inherit;
+    background:#fff; color:var(--ink); min-width:0; }
+  #fmg .filtro__r{ display:flex; gap:.4rem; margin-top:.6rem; flex-wrap:wrap; align-items:center; }
+  #fmg .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:9px; padding:.45rem .8rem; font-size:.83rem; font-weight:700;
+    font-family:inherit; cursor:pointer; text-decoration:none; display:inline-flex;
+    gap:.3rem; align-items:center; }
+  #fmg .bt--sim{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #fmg .bt--mini{ padding:.28rem .6rem; font-size:.76rem; }
+
+  #fmg .aviso{ display:flex; gap:.5rem; align-items:flex-start; background:#eaf1f9;
+    color:var(--blue-deep); border-radius:11px; padding:.55rem .7rem; font-size:.8rem;
+    font-weight:600; margin-bottom:.7rem; }
+  #fmg .aviso--erro{ background:#fbe9e9; color:var(--danger); }
+  #fmg .nada{ background:#fff; border:1px solid var(--borda); border-radius:14px;
+    padding:2.2rem 1rem; text-align:center; color:var(--muted); font-size:.9rem; }
+
+  /* ---- o painel do periodo inteiro ---------------------------------- */
+  #fmg .painel{ background:#fff; border:1px solid var(--borda); border-radius:16px;
+    margin-bottom:.7rem; overflow:hidden; box-shadow:0 3px 14px rgba(20,35,60,.07);
+    display:grid; }
+  @media (min-width:992px){ #fmg .painel{ grid-template-columns:minmax(290px,.9fr) 1.3fr; } }
+  #fmg .caixa{ padding:.9rem 1rem 1rem;
+    background:linear-gradient(160deg,#f2f7fc,#eaf2f9 70%,#e4eef8);
+    border-bottom:1px solid var(--linha); }
+  @media (min-width:992px){
+    #fmg .caixa{ border-bottom:0; border-right:1px solid var(--linha); } }
+  #fmg .caixa__r{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.07em; }
+  #fmg .caixa__v{ font-size:1.8rem; font-weight:800; line-height:1.1;
+    color:var(--blue-deep); font-variant-numeric:tabular-nums; margin-top:.1rem; }
+  #fmg .caixa__s{ font-size:.76rem; color:#3a4655; margin-top:.2rem; font-weight:600; }
+  #fmg .mini{ display:grid; grid-template-columns:1fr 1fr; gap:.4rem; margin-top:.7rem; }
+  #fmg .mini div{ background:#fff; border:1px solid var(--borda); border-radius:10px;
+    padding:.4rem .55rem; }
+  #fmg .mini b{ display:block; font-size:.86rem; font-weight:800;
+    font-variant-numeric:tabular-nums; }
+  #fmg .mini span{ font-size:.62rem; color:var(--muted); font-weight:800;
+    text-transform:uppercase; letter-spacing:.05em; }
+
+  /* de quem se compra */
+  #fmg .rank{ padding:.85rem 1rem .9rem; }
+  #fmg .rank__t{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.07em; margin-bottom:.6rem; }
+  #fmg .rk{ display:grid; grid-template-columns:1fr auto; gap:.15rem .6rem;
+    align-items:baseline; margin-bottom:.55rem; }
+  #fmg .rk:last-child{ margin-bottom:0; }
+  #fmg .rk__n{ font-weight:800; font-size:.84rem; display:flex; gap:.4rem;
+    align-items:center; min-width:0; }
+  #fmg .rk__n a{ color:inherit; text-decoration:none; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
+  #fmg .rk__n a:hover{ color:var(--blue); text-decoration:underline; }
+  #fmg .rk__v{ font-weight:800; font-size:.86rem; text-align:right;
+    font-variant-numeric:tabular-nums; }
+  #fmg .rk__b{ grid-column:1/-1; height:7px; border-radius:99px; background:#eef1f5;
+    overflow:hidden; }
+  #fmg .rk__b i{ display:block; height:100%; border-radius:99px; }
+  #fmg .rk__d{ grid-column:1/-1; font-size:.68rem; color:var(--muted); display:flex;
+    gap:.7rem; flex-wrap:wrap; font-variant-numeric:tabular-nums; }
+  #fmg .leg{ font-size:.67rem; color:var(--muted); margin-top:.35rem; }
+
+  /* ---- um quadro por fornecedor ------------------------------------- */
+  #fmg .cx{ background:#fff; border:1px solid var(--borda); border-radius:14px;
+    margin-bottom:.7rem; overflow:hidden; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #fmg .ph{ display:flex; align-items:center; gap:.6rem; padding:.6rem .8rem;
+    border-left:4px solid var(--c); background:#fff; border-bottom:1px solid var(--linha);
+    cursor:pointer; }
+  #fmg .ph__n{ font-weight:800; font-size:.95rem; }
+  #fmg .ph__c{ font-size:.68rem; color:var(--muted); font-weight:700; }
+  #fmg .ph__v{ margin-left:auto; text-align:right; }
+  #fmg .ph__l{ font-size:1.02rem; font-weight:800; color:var(--blue-deep);
+    font-variant-numeric:tabular-nums; }
+  #fmg .ph__r{ font-size:.65rem; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.05em; font-weight:800; }
+  #fmg .resumo{ display:grid; gap:.5rem; padding:.6rem .8rem;
+    grid-template-columns:repeat(2,1fr); }
+  @media (min-width:768px){ #fmg .resumo{ grid-template-columns:repeat(3,1fr); } }
+  @media (min-width:1200px){
+    #fmg .resumo{ grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); } }
+  #fmg .r{ background:#f7f9fc; border:1px solid var(--linha);
+    border-left:3px solid var(--c); border-radius:11px; padding:.45rem .6rem; }
+  #fmg .r__r{ font-size:.61rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.05em; }
+  #fmg .r__v{ font-size:.92rem; font-weight:800; color:var(--c);
+    font-variant-numeric:tabular-nums; }
+  #fmg .r__d{ font-size:.8rem; font-weight:700; color:var(--ink);
+    font-variant-numeric:tabular-nums; }
+
+  /* ---- tabelas ------------------------------------------------------ */
+  #fmg .tab{ overflow-x:auto; border-top:1px solid var(--linha); }
+  #fmg table{ width:100%; border-collapse:collapse; font-size:.78rem;
+    font-variant-numeric:tabular-nums; }
+  #fmg th{ background:#f0f4f8; color:#3d4854; font-size:.63rem; text-transform:uppercase;
+    letter-spacing:.04em; font-weight:800; padding:.4rem .5rem; white-space:nowrap;
+    text-align:right; border-bottom:1px solid var(--borda); }
+  #fmg th.e, #fmg td.e{ text-align:left; }
+  #fmg td{ padding:.36rem .5rem; text-align:right; white-space:nowrap;
+    border-bottom:1px solid #f4f6f9; }
+  #fmg tr:hover td{ background:#fafbfd; }
+  #fmg tfoot td{ background:#f0f4f8; font-weight:800; border-top:2px solid var(--borda); }
+  #fmg .forte{ font-weight:800; }
+  #fmg .neg{ color:var(--danger); font-weight:700; }
+  #fmg .pos{ color:var(--ok); font-weight:700; }
+  #fmg .pt{ width:.55rem; height:.55rem; border-radius:99px; display:inline-block;
+    flex:0 0 auto; }
+  #fmg .nf{ font-family:ui-monospace,Menlo,monospace; font-size:.74rem; color:#334155; }
+
+  /* pilulas: a data que veio de outra tela */
+  #fmg .dsc{ background:#e7f0f9; color:#0C4C86; border-radius:6px; padding:.03rem .35rem;
+    font-weight:800; font-size:.74rem; }
+  #fmg .pg{ background:#e6f2ea; color:#146c43; border-radius:6px; padding:.03rem .35rem;
+    font-weight:800; font-size:.74rem; }
+  #fmg .pend{ background:#fbf1de; color:#8a5a12; border:1px solid #f0dcae;
+    border-radius:6px; padding:.02rem .35rem; font-weight:800; font-size:.72rem; }
+  #fmg .bco{ font-size:.72rem; font-weight:700; color:#3a4655; }
+
+  /* No celular a tabela do fornecedor vira cartao por nota: 10 colunas nao
+     cabem em 400px, e rolar de lado esconde justamente a data e o banco. */
+  @media (max-width:991px){
+    #fmg .tab table, #fmg .tab thead, #fmg .tab tbody, #fmg .tab tr,
+    #fmg .tab td{ display:block; width:auto; }
+    #fmg .tab thead{ display:none; }
+    #fmg .tab tbody tr{ border-bottom:1px solid var(--borda); padding:.35rem .6rem; }
+    #fmg .tab td{ border:0; text-align:right; white-space:normal; padding:.12rem 0;
+      display:flex; justify-content:space-between; gap:.6rem; }
+    #fmg .tab td::before{ content:attr(data-r); color:var(--muted); font-weight:700;
+      font-size:.7rem; text-transform:uppercase; letter-spacing:.03em; }
+    #fmg .tab td:empty{ display:none; }
+    #fmg .tab tfoot{ display:none; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+{% macro litros(v) %}{{ '{:,.0f}'.format(v or 0).replace(',', '.') }}{% endmacro %}
+{% macro reais(v) %}{{ (v or 0) | formatar_moeda }}{% endmacro %}
+{% macro preco(v) %}{{ 'R$ %.4f'|format(v or 0) | replace('.', ',') }}{% endmacro %}
+{#- O nome do cadastro vem com o tipo societario no fim; ele nao identifica
+    ninguem e come metade da linha no celular. -#}
+{% macro curto(nome) %}{{ nome | replace(' LTDA.', '') | replace(' LTDA', '')
+  | replace(' S.A.', '') | replace(' S/A', '') | replace(' EIRELI', '')
+  | replace(' - EM RECUPERACAO JUDICIAL', '') }}{% endmacro %}
+
+<div id="fmg">
+  {% with ativa = 'fornecedores' %}{% include 'includes/relatorios_migrados.html' %}{% endwith %}
+
+  <div class="topo">
+    <div class="topo__t"><i class="bi bi-truck"></i> Fornecedores Migrados</div>
+    <div class="topo__s">A compra vem da nota da SEFAZ, a descarga da régua do
+      ELS e o pagamento da linha do extrato — nada digitado duas vezes</div>
+  </div>
+
+  {% if erro %}
+  <div class="aviso aviso--erro"><i class="bi bi-exclamation-triangle-fill"></i>
+    <span>Não deu para apurar: {{ erro }}</span></div>
+  {% endif %}
+
+  <form class="filtro" method="GET">
+    <div class="filtro__g">
+      <label class="campo"><span>De</span>
+        <input type="date" name="data_inicio" value="{{ data_inicio }}"></label>
+      <label class="campo"><span>Até</span>
+        <input type="date" name="data_fim" value="{{ data_fim }}"></label>
+      <label class="campo"><span>Fornecedor</span>
+        <select name="forn">
+          <option value="">Todos</option>
+          {% for f in lista_forn %}
+          <option value="{{ f.chave }}" {{ 'selected' if chave == f.chave }}>
+            {{ curto(f.nome) }}</option>
+          {% endfor %}
+        </select></label>
+    </div>
+    <div class="filtro__r">
+      <button type="submit" class="bt bt--sim"><i class="bi bi-search"></i> Apurar</button>
+      <a class="bt" href="{{ url_for('conf_fornecedores.conf_fornecedores') }}">
+        <i class="bi bi-clock-history"></i> Ver o relatório antigo</a>
+    </div>
+  </form>
+
+  {% if not grupos %}
+  <div class="nada">Nenhuma nota de compra neste período{% if chave %} para este
+    fornecedor{% endif %}. A captura da SEFAZ entrega de 07/07/2026 em diante.</div>
+  {% else %}
+
+  {# ---- o periodo inteiro, antes de qualquer fornecedor --------------- #}
+  <div class="painel">
+    <div class="caixa">
+      <div class="caixa__r">Comprado no período</div>
+      <div class="caixa__v">{{ reais(total.nota_rs) }}</div>
+      <div class="caixa__s">{{ total.notas }} notas ·
+        {{ litros(total.litros) }} L · {{ preco(total.unit) }} por litro</div>
+      <div class="mini">
+        <div><span>Pago</span><b class="pos">{{ reais(total.pago) }}</b></div>
+        <div><span>Em aberto</span>
+          <b class="{{ 'neg' if total.saldo > 0.005 }}">{{ reais(total.saldo) }}</b></div>
+        <div><span>Desceu no tanque</span><b>{{ litros(total.desceu) }} L</b></div>
+        <div><span>ICMS-ST na nota</span><b>{{ reais(total.st) }}</b></div>
+        <div><span>Fornecedores</span><b>{{ total.fornecedores }}</b></div>
+        <div><span>Notas sem pagar</span>
+          <b class="{{ 'neg' if total.sem_pagar }}">{{ total.sem_pagar }}</b></div>
+        <div><span>Notas sem descer</span>
+          <b class="{{ 'neg' if total.sem_descer }}">{{ total.sem_descer }}</b></div>
+        <div><span>Bancos</span>
+          <b style="font-size:.78rem">{{ total.bancos | join(' · ') if total.bancos else '—' }}</b></div>
+      </div>
+    </div>
+    <div class="rank">
+      <div class="rank__t">De quem se compra</div>
+      {% for g in grupos %}
+      {% set cor = cores_produto.get(g.pid, '#64748b') %}
+      <div class="rk">
+        <div class="rk__n"><i class="pt" style="background:{{ cor }}"></i>
+          <a href="{{ url_for('relatorios.fornecedores_migrados',
+                     data_inicio=data_inicio, data_fim=data_fim, forn=g.chave) }}"
+             title="ver só este fornecedor">{{ curto(g.nome) }}</a></div>
+        <div class="rk__v">{{ reais(g.nota_rs) }}</div>
+        <div class="rk__b"><i style="width:{{ (g.nota_rs / maior * 100) if maior else 0 }}%;
+          background:{{ cor }}"></i></div>
+        <div class="rk__d"><span>{{ g.notas|length }} notas</span>
+          {% if g.litros %}<span>{{ litros(g.litros) }} L</span>
+          <span>{{ preco(g.unit) }}/L</span>{% endif %}
+          {% if g.saldo > 0.005 %}<span class="neg">{{ reais(g.saldo) }} em aberto</span>
+          {% else %}<span class="pos">quitado</span>{% endif %}</div>
+      </div>
+      {% endfor %}
+      <div class="leg">a cor é do combustível que mais veio de cada um ·
+        clique no nome para ver só ele</div>
+    </div>
+  </div>
+
+  {# ---- e agora, um fornecedor de cada vez ---------------------------- #}
+  {% for g in grupos %}
+  {% set cor = cores_produto.get(g.pid, '#64748b') %}
+  <div class="cx" style="--c:{{ cor }}">
+    <div class="ph" onclick="fmgAbre(this)">
+      <div style="min-width:0">
+        <div class="ph__n">{{ curto(g.nome) }}</div>
+        <div class="ph__c">{{ g.emit_nome }}
+          {%- if g.raizes|length > 1 %} · grupo de {{ g.raizes|length }} CNPJs{% endif %}</div>
+      </div>
+      <div class="ph__v">
+        <div class="ph__l">{{ reais(g.nota_rs) }}</div>
+        <div class="ph__r">{{ g.notas|length }} notas
+          {%- if g.litros %} · {{ litros(g.litros) }} L{% endif %}</div>
+      </div>
+      <i class="bi bi-chevron-up"></i>
+    </div>
+
+    <div class="resumo">
+      <div class="r"><div class="r__r">Quantidade</div>
+        <div class="r__v">{% if g.litros %}{{ litros(g.litros) }} L{% else %}—{% endif %}</div>
+        <div class="r__d">{% if g.litros %}{{ preco(g.unit) }}/L{% else %}não é combustível{% endif %}</div></div>
+      <div class="r"><div class="r__r">Produto na nota</div>
+        <div class="r__v">{{ reais(g.itens_rs) }}</div>
+        <div class="r__d">+ {{ reais(g.st) }} de ST</div></div>
+      <div class="r"><div class="r__r">Total das notas</div>
+        <div class="r__v">{{ reais(g.nota_rs) }}</div></div>
+      <div class="r" style="--c:var(--ok)"><div class="r__r">Pago</div>
+        <div class="r__v" style="color:var(--ok)">{{ reais(g.pago) }}</div>
+        <div class="r__d">{{ g.bancos | join(' · ') if g.bancos else '—' }}</div></div>
+      <div class="r" style="--c:{{ 'var(--danger)' if g.saldo > 0.005 else 'var(--ok)' }}">
+        <div class="r__r">{{ 'Em aberto' if g.saldo > 0.005 else 'Situação' }}</div>
+        <div class="r__v" style="color:{{ 'var(--danger)' if g.saldo > 0.005 else 'var(--ok)' }}">
+          {{ reais(g.saldo) if g.saldo > 0.005 else 'quitado' }}</div>
+        {%- if g.sem_pagar %}
+        <div class="r__d">{{ g.sem_pagar }} nota{{ 's' if g.sem_pagar > 1 }} sem pagamento</div>
+        {%- endif %}</div>
+      <div class="r"><div class="r__r">Desceu</div>
+        <div class="r__v">{{ litros(g.desceu) }} L</div>
+        <div class="r__d">{{ g.com_desc }} de {{ g.notas|length }} notas</div></div>
+    </div>
+
+    <div class="tab">
+      <table>
+        <thead>
+          <tr>
+            <th class="e">Compra</th><th class="e">Descargas</th>
+            <th class="e">Nota</th><th class="e">Produto</th>
+            <th>Preço unit.</th><th>Qtd</th><th>Preço total</th>
+            <th>Total da nota</th><th class="e">Pagamento</th><th class="e">Banco</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for n in g.notas %}
+          <tr>
+            <td class="e forte" data-r="Compra">{{ n.dia.strftime('%d/%m') }}</td>
+            <td class="e" data-r="Descargas">
+              {%- if n.descargas %}
+                {%- for x in n.descargas %}
+                <span class="dsc" title="tanque {{ x.tanque }} · {{ litros(x.litros) }} L">
+                  {{ x.dia.strftime('%d/%m') }}</span>
+                {%- endfor %}
+              {%- else %}<span class="pend">não desceu</span>{% endif %}</td>
+            <td class="e nf" data-r="Nota">{{ n.numero }}</td>
+            <td class="e" data-r="Produto">{{ n.produto }}</td>
+            <td data-r="Preço unit.">{{ preco(n.unit) }}</td>
+            <td data-r="Qtd">{{ litros(n.qtd) }} {{ n.unidade }}</td>
+            <td data-r="Preço total">{{ reais(n.itens_rs) }}</td>
+            <td class="forte" data-r="Total da nota">{{ reais(n.total_nota) }}</td>
+            <td class="e" data-r="Pagamento">
+              {%- if n.pagamentos %}
+                {%- for p in n.pagamentos %}
+                <span class="pg" title="{{ reais(p.valor) }} · {{ p.descricao }}">
+                  {{ p.dia.strftime('%d/%m') }}</span>
+                {%- endfor %}
+              {%- else %}<span class="pend">a pagar</span>{% endif %}</td>
+            <td class="e bco" data-r="Banco">
+              {{ n.pagamentos | map(attribute='banco') | unique | join(' · ') if n.pagamentos else '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td class="e">{{ g.notas|length }} notas</td>
+            <td class="e">{{ litros(g.desceu) }} L</td>
+            <td class="e"></td><td class="e"></td>
+            <td>{{ preco(g.unit) if g.litros else '—' }}</td>
+            <td>{{ litros(g.litros) }}{{ ' L' if g.litros }}</td>
+            <td>{{ reais(g.itens_rs) }}</td>
+            <td>{{ reais(g.nota_rs) }}</td>
+            <td class="e">{{ reais(g.pago) }}</td>
+            <td class="e {{ 'neg' if g.saldo > 0.005 else 'pos' }}">
+              {{ reais(g.saldo) if g.saldo > 0.005 else 'quitado' }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// O quadro do fornecedor abre e fecha: com onze deles na tela, a tabela de
+// todos de uma vez empurraria para baixo o que se olha primeiro, que e o
+// periodo inteiro. Abertos por padrao -- fechar e escolha de quem olha.
+function fmgAbre(cab){
+  var box = cab.closest('.cx');
+  var tab = box ? box.querySelector('.tab') : null;
+  var res = box ? box.querySelector('.resumo') : null;
+  if (!tab) return;
+  var fecha = !tab.hidden;
+  tab.hidden = fecha;
+  if (res) res.hidden = fecha;
+  var ico = cab.querySelector('.bi-chevron-down, .bi-chevron-up');
+  if (ico) ico.className = fecha ? 'bi bi-chevron-down' : 'bi bi-chevron-up';
+}
+</script>
+{% endblock %}

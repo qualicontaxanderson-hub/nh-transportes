@@ -360,6 +360,10 @@ body > .container-fluid:has(#lpm){
 })();
 </script>
 
+  {# A fileira que liga os relatorios migrados: daqui se chega aos
+     Fornecedores Migrados, e de la se volta. #}
+  {% with ativa = 'lucro' %}{% include 'includes/relatorios_migrados.html' %}{% endwith %}
+
   <div class="topo">
     <div class="topo__t"><i class="bi bi-graph-up-arrow"></i> Lucro Postos Migrados</div>
     <div class="topo__s">Nota, descarga e tanque no mesmo dia — e o tanque

@@ -1754,3 +1754,68 @@ def lucro_postos_migrados():
         geral=geral, ranking=ranking,
         totais=totais, filtrou=filtrou, erro=None,
     )
+
+
+# ===========================================================================
+# Fornecedores Migrados — a compra pela NOTA, e o pagamento pelo EXTRATO
+#
+# O relatorio antigo (conf_fornecedores) tira a divida do PEDIDO, digitado por
+# gente. Aqui a compra vem da nota que a SEFAZ entregou (/dfe/compras), a
+# descarga vem da regua do ELS e o pagamento vem da linha do extrato que o
+# usuario amarrou aquela nota (/relatorios/conf_fornecedores_dfe). A conta
+# mora em utils/fornecedor_migrado; aqui so se escolhe o periodo e se desenha.
+#
+# Modelo 3, escolhido pelo Anderson entre os tres desenhados: o periodo
+# inteiro em cima, de quem se compra ao lado, e um quadro por fornecedor com a
+# sua tabela de notas.
+# ===========================================================================
+@bp.route('/fornecedores_migrados', methods=['GET'])
+@admin_required
+def fornecedores_migrados():
+    from utils import fornecedor_migrado
+
+    hoje = date.today()
+    ini_padrao = date(hoje.year, hoje.month, 1)
+
+    def _data(nome, padrao):
+        try:
+            return datetime.strptime(request.args.get(nome, ''), '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            return padrao
+
+    data_inicio = _data('data_inicio', ini_padrao)
+    data_fim = _data('data_fim', hoje)
+    if data_fim < data_inicio:
+        data_fim = data_inicio
+    chave = (request.args.get('forn') or '').strip() or None
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        # A lista do filtro vem do periodo INTEIRO, nao do fornecedor
+        # filtrado: senao, escolher um fornecedor apagaria os outros da lista
+        # e nao teria como voltar.
+        todos = fornecedor_migrado.apurar(cur, data_inicio, data_fim)
+        apurado = (fornecedor_migrado.apurar(cur, data_inicio, data_fim, chave)
+                   if chave else todos)
+    except Exception as e:
+        logging.getLogger(__name__).exception('[fornecedor_migrado] falha')
+        return render_template(
+            'relatorios/fornecedores_migrados.html', erro=str(e),
+            data_inicio=data_inicio, data_fim=data_fim, chave=chave,
+            total={}, grupos=[], lista_forn=[], cores_produto=CORES_PRODUTO,
+            maior=0.0)
+    finally:
+        cur.close()
+        conn.close()
+
+    lista_forn = [{'chave': g['chave'], 'nome': g['nome']}
+                  for g in sorted(todos['grupos'], key=lambda g: g['nome'])]
+    maior = max([g['nota_rs'] for g in apurado['grupos']] or [0.0])
+
+    return render_template(
+        'relatorios/fornecedores_migrados.html',
+        data_inicio=data_inicio, data_fim=data_fim, chave=chave,
+        total=apurado['total'], grupos=apurado['grupos'],
+        lista_forn=lista_forn, cores_produto=CORES_PRODUTO,
+        maior=maior, erro=None)
