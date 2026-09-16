@@ -1563,6 +1563,10 @@ CORES_PRODUTO = {
 # A mesma cor nao serve nos dois fundos: sobre o painel escuro do Modelo B as
 # de cima somem. Cada produto leva entao a sua versao acesa, e o CSS escolhe
 # qual usar pela variavel -- a cor viaja no elemento, nao na regra.
+# O card "Outros" (ARLA, oleo, acessorio) nao e combustivel: cinza, como o
+# card TODOS, para nao disputar a fila dos quatro.
+COR_OUTROS = '#64748B'
+
 CORES_PRODUTO_ACESA = {
     2: '#f0a63a',
     1: '#8fd14f',
@@ -1836,3 +1840,59 @@ def fornecedores_migrados():
         total=apurado['total'], grupos=apurado['grupos'], produtos=produtos,
         lista_forn=lista_forn, cores_produto=CORES_PRODUTO, meses=meses,
         pid=pid, maior=maior, erro=None)
+
+
+@bp.route('/saidas_migradas', methods=['GET'])
+@admin_required
+def saidas_migradas():
+    """A saída do posto pelo cupom — o espelho do /fornecedores_migrados.
+
+    Mesma leitura de cima para baixo: o período, os cards por combustível, e
+    então o MESMO faturamento aberto por sete recortes (forma de recebimento,
+    cliente, vendedor, bico, bandeira, caixa e hora). Clicar num card não muda
+    o período: escolhe de qual combustível falam os recortes e o dia a dia.
+    """
+    from utils import saida_migrada
+
+    hoje = date.today()
+    ini_padrao = date(hoje.year, hoje.month, 1)
+
+    def _data(nome, padrao):
+        try:
+            return datetime.strptime(request.args.get(nome, ''), '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            return padrao
+
+    data_inicio = _data('data_inicio', ini_padrao)
+    data_fim = _data('data_fim', hoje)
+    if data_fim < data_inicio:
+        data_fim = data_inicio
+    try:
+        pid = int(request.args.get('pid') or 0) or None
+    except (TypeError, ValueError):
+        pid = None
+    corte = (request.args.get('corte') or '').strip()
+    if corte not in [c[0] for c in saida_migrada.RECORTES]:
+        corte = saida_migrada.RECORTES[0][0]
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        apurado = saida_migrada.apurar(cur, data_inicio, data_fim, pid)
+        meses = saida_migrada.meses(cur, hoje)
+    except Exception as e:
+        logging.getLogger(__name__).exception('[saida_migrada] falha')
+        return render_template(
+            'relatorios/saidas_migradas.html', erro=str(e),
+            data_inicio=data_inicio, data_fim=data_fim, pid=None, corte=corte,
+            apurado=None, meses=[], recortes=saida_migrada.RECORTES,
+            cores_produto=CORES_PRODUTO, cor_outros=COR_OUTROS)
+    finally:
+        cur.close()
+        conn.close()
+
+    return render_template(
+        'relatorios/saidas_migradas.html',
+        data_inicio=data_inicio, data_fim=data_fim, pid=pid, corte=corte,
+        apurado=apurado, meses=meses, recortes=saida_migrada.RECORTES,
+        cores_produto=CORES_PRODUTO, cor_outros=COR_OUTROS, erro=None)

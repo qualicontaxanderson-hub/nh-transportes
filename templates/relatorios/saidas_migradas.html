@@ -1,0 +1,516 @@
+{% extends "base.html" %}
+
+{% block title %}Saídas Migradas{% endblock %}
+
+{#- Saídas Migradas — o espelho do /relatorios/fornecedores_migrados.
+
+    Lá a entrada (a nota da SEFAZ, a descarga da régua, o pagamento do
+    extrato); aqui a saída, e também de uma fonte só: o cupom e a NF-e que a
+    captura trouxe. Nada digitado duas vezes.
+
+    A tela lê de cima para baixo: o período, um card por combustível, e então
+    o MESMO faturamento aberto por sete recortes — como o dinheiro entrou,
+    para quem foi, quem vendeu, de qual bico saiu, por qual bandeira, em qual
+    caixa e a que hora. Embaixo, o dia a dia.
+
+    Clicar num card não muda o período nem o recorte: escolhe de qual
+    combustível fala o resto da tela. Os cards continuam todos ali — eles SÃO
+    o seletor, e sumir com os outros tiraria o caminho de volta.
+-#}
+
+{% block styles %}
+<style>
+body > .container-fluid:has(#smg){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#smg){ padding:.7rem 1rem 0; }
+}
+</style>
+<style>
+  #smg{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#146c43; --danger:#a32d2d;
+        --muted:#4b5563; --ink:#151d27; --borda:#d9e0e8; --linha:#eef1f5;
+        color:var(--ink); max-width:100%; }
+
+  /* verde no topo: a entrada e azul (Fornecedores), a saida e outra coisa */
+  #smg .topo{ background:linear-gradient(120deg,#1E7A4D,#15694A 55%,#0C5138);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .7rem; margin-bottom:.7rem; }
+  #smg .topo__t{ font-weight:800; font-size:1.02rem; }
+  #smg .topo__s{ font-size:.76rem; opacity:.96; margin-top:.1rem; }
+
+  #smg .filtro{ background:#fff; border:1px solid var(--borda); border-radius:13px;
+    padding:.7rem .75rem; margin-bottom:.7rem; }
+  #smg .filtro__g{ display:grid; gap:.5rem; grid-template-columns:1fr 1fr; }
+  #smg .campo{ display:flex; flex-direction:column; gap:.2rem; min-width:0; }
+  #smg .campo span{ font-size:.68rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.04em; }
+  #smg .campo input{ border:1px solid var(--borda); border-radius:9px;
+    padding:.42rem .5rem; font-size:.82rem; font-family:inherit;
+    background:#fff; color:var(--ink); min-width:0; }
+  #smg .filtro__r{ display:flex; gap:.4rem; margin-top:.6rem; flex-wrap:wrap;
+    align-items:center; }
+  #smg .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:9px; padding:.45rem .8rem; font-size:.83rem; font-weight:700;
+    font-family:inherit; cursor:pointer; text-decoration:none; display:inline-flex;
+    gap:.3rem; align-items:center; }
+  #smg .bt--sim{ background:#15694A; border-color:#15694A; color:#fff; }
+
+  #smg .aviso{ display:flex; gap:.5rem; align-items:flex-start; background:#eaf1f9;
+    color:var(--blue-deep); border-radius:11px; padding:.55rem .7rem; font-size:.8rem;
+    font-weight:600; margin-bottom:.7rem; }
+  #smg .aviso--erro{ background:#fbe9e9; color:var(--danger); }
+
+  /* a regua de meses: um clique troca o periodo inteiro */
+  #smg .meses{ display:flex; gap:.35rem; flex-wrap:wrap; align-items:center;
+    background:#fff; border:1px solid var(--borda); border-radius:13px;
+    padding:.5rem .6rem; margin-bottom:.7rem; }
+  #smg .meses > b{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.06em; margin-right:.15rem; }
+  #smg .meses a{ border:1px solid var(--borda); background:#f7f9fc;
+    border-radius:99px; padding:.26rem .72rem; font-size:.76rem; font-weight:800;
+    color:#3a4655; text-decoration:none; white-space:nowrap; }
+  #smg .meses a:hover{ background:#eef5fd; color:var(--blue-deep); }
+  #smg .meses a.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #smg .meses .obs{ font-size:.68rem; color:var(--muted); margin-left:auto; }
+
+  /* ---- os cards por combustivel ------------------------------------- */
+  #smg .pgrade{ display:grid; gap:.6rem; grid-template-columns:1fr;
+    margin-bottom:.7rem; --cols:4; }
+  @media (min-width:760px){ #smg .pgrade{ grid-template-columns:repeat(2,1fr); } }
+  @media (min-width:1180px){
+    /* a conta das colunas vem do Jinja: com TODOS + 4 combustiveis + Outros
+       sao seis, e uma grade fixa de quatro deixaria dois sozinhos embaixo. */
+    #smg .pgrade{ grid-template-columns:repeat(var(--cols),1fr); } }
+  #smg a.pc{ display:block; color:inherit; text-decoration:none;
+    transition:box-shadow .12s, opacity .12s; }
+  #smg a.pc:hover{ box-shadow:0 5px 18px rgba(20,35,60,.14); }
+  #smg .pc{ background:#fff; border:1px solid var(--borda);
+    border-top:4px solid var(--c); border-radius:14px; padding:.7rem .8rem .6rem;
+    box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #smg .pc--off{ opacity:.5; }
+  #smg .pc--on{ box-shadow:0 0 0 2px var(--c), 0 4px 16px rgba(20,35,60,.12); }
+  #smg .pc--tot{ background:linear-gradient(165deg,#fbfcfe,#f3f6fa); }
+  #smg .pc__t{ display:flex; align-items:center; gap:.5rem; }
+  #smg .pc__i{ width:2rem; height:2rem; border-radius:9px; background:var(--c);
+    color:#fff; display:inline-grid; place-items:center; font-size:1rem; opacity:.9; }
+  #smg .pc__n{ font-weight:800; font-size:1rem; }
+  #smg .pc__r{ font-size:.64rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.04em; }
+  #smg .pc__v{ margin-top:.4rem; display:flex; align-items:baseline; gap:.3rem; }
+  #smg .pc__v b{ font-size:1.55rem; font-weight:800; color:var(--c);
+    letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1; }
+  #smg .pc__v span{ font-size:.85rem; font-weight:800; color:var(--c); opacity:.7; }
+  #smg .pc__g{ display:grid; grid-template-columns:1fr 1fr; gap:.3rem; margin-top:.5rem; }
+  #smg .pc__g div{ background:#f7f9fc; border:1px solid var(--linha);
+    border-radius:9px; padding:.3rem .45rem; }
+  #smg .pc__g dt{ font-size:.6rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.03em; }
+  #smg .pc__g dd{ margin:.05rem 0 0; font-size:.84rem; font-weight:800;
+    font-variant-numeric:tabular-nums; color:#26354d; }
+  #smg .pc__f{ margin-top:.45rem; border-top:1px dashed var(--linha);
+    padding-top:.4rem; font-size:.73rem; color:var(--muted); display:flex;
+    justify-content:space-between; gap:.4rem; }
+  #smg .pc__f b{ color:#26354d; font-variant-numeric:tabular-nums; }
+  #smg .pc__cl{ font-size:.63rem; font-weight:800; color:var(--c); opacity:.75;
+    text-transform:uppercase; letter-spacing:.03em; margin-top:.35rem; }
+  #smg .spark{ display:flex; align-items:flex-end; gap:2px; height:30px;
+    margin-top:.45rem; }
+  #smg .spark i{ flex:1 1 0; background:var(--c); opacity:.28;
+    border-radius:2px 2px 0 0; min-height:2px; }
+  #smg .spark i.ult{ opacity:.95; }
+  #smg .pbar{ display:flex; height:6px; border-radius:99px; overflow:hidden;
+    background:#eef1f5; margin-top:.4rem; }
+  #smg .pbar i{ display:block; height:100%; }
+
+  #smg .sel{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
+    background:#eaf1f9; color:var(--blue-deep); border-radius:11px;
+    padding:.45rem .7rem; font-size:.8rem; font-weight:700; margin-bottom:.7rem; }
+  #smg .sel b{ font-weight:800; }
+  #smg .sel a{ margin-left:auto; color:var(--blue-deep); }
+
+  /* ---- as pilulas dos sete recortes --------------------------------- */
+  #smg .cortes{ display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:.7rem;
+    align-items:center; }
+  #smg .cortes > b{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.06em; margin-right:.15rem; }
+  #smg .cortes a{ border:1px solid var(--borda); background:#fff;
+    border-radius:99px; padding:.32rem .8rem; font-size:.79rem; font-weight:800;
+    color:#3a4655; text-decoration:none; display:inline-flex; gap:.35rem;
+    align-items:center; white-space:nowrap; }
+  #smg .cortes a:hover{ background:#f2f7fc; color:var(--blue-deep); }
+  #smg .cortes a.on{ background:#15694A; border-color:#15694A; color:#fff; }
+
+  /* ---- caixas e tabelas --------------------------------------------- */
+  #smg .cx{ background:#fff; border:1px solid var(--borda); border-radius:14px;
+    margin-bottom:.7rem; overflow:hidden; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #smg .cx__t{ display:flex; gap:.5rem; align-items:center; padding:.6rem .8rem;
+    font-size:.7rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--blue-deep); background:#f7fafd; border-bottom:1px solid var(--linha); }
+  #smg .cx__t .dir{ margin-left:auto; font-weight:700; color:var(--muted);
+    text-transform:none; letter-spacing:0; font-size:.72rem; }
+  #smg .tab{ overflow-x:auto; border-top:1px solid var(--linha); }
+  #smg table{ width:100%; border-collapse:collapse; font-size:.78rem;
+    font-variant-numeric:tabular-nums; }
+  #smg th{ background:#f0f4f8; color:#3d4854; font-size:.63rem;
+    text-transform:uppercase; letter-spacing:.04em; font-weight:800;
+    padding:.4rem .5rem; white-space:nowrap; text-align:right;
+    border-bottom:1px solid var(--borda); }
+  #smg th.e, #smg td.e{ text-align:left; }
+  #smg td{ padding:.36rem .5rem; text-align:right; white-space:nowrap;
+    border-bottom:1px solid #f4f6f9; }
+  #smg tr:hover td{ background:#fafbfd; }
+  #smg tfoot td{ background:#f0f4f8; font-weight:800; border-top:2px solid var(--borda); }
+  #smg .forte{ font-weight:800; }
+  #smg .neg{ color:var(--danger); font-weight:700; }
+  #smg .pos{ color:var(--ok); font-weight:700; }
+  #smg .sub{ font-size:.7rem; color:var(--muted); font-weight:700; }
+  #smg .pt{ width:.55rem; height:.55rem; border-radius:99px; display:inline-block;
+    flex:0 0 auto; }
+  /* a barra da fatia dentro da celula: o tamanho da linha sem uma coluna a mais */
+  #smg .fbar{ display:block; height:5px; border-radius:99px; background:#eef1f5;
+    overflow:hidden; margin-top:.2rem; min-width:60px; }
+  #smg .fbar i{ display:block; height:100%; background:#15694A; }
+  /* o dia leva para a venda daquele dia, na tela /vendas */
+  #smg a.dia{ color:var(--blue-deep); font-weight:800; text-decoration:none; }
+  #smg a.dia:hover{ text-decoration:underline; }
+  #smg .nada{ background:#fff; border:1px solid var(--borda); border-radius:14px;
+    padding:2.2rem 1rem; text-align:center; color:var(--muted); font-size:.9rem; }
+  #smg .rod{ font-size:.7rem; color:var(--muted); padding:.5rem .8rem; }
+
+  /* No celular a tabela vira cartao: sete colunas nao cabem em 400px, e
+     rolar de lado esconde justamente o nome e o valor. */
+  @media (max-width:640px){
+    #smg .tab{ overflow-x:visible; }
+    #smg .tab table, #smg .tab tbody, #smg .tab tr, #smg .tab td{ display:block;
+      width:100%; }
+    #smg .tab thead{ display:none; }
+    #smg .tab tr{ border-bottom:1px solid var(--linha); padding:.35rem 0; }
+    #smg .tab td{ border:0; text-align:right; padding:.16rem .7rem;
+      white-space:normal; display:flex; justify-content:space-between; gap:.6rem; }
+    #smg .tab td::before{ content:attr(data-r); color:var(--muted); font-weight:700;
+      font-size:.7rem; text-transform:uppercase; letter-spacing:.03em; }
+    #smg .tab td:empty{ display:none; }
+    #smg .tab tfoot{ display:none; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+{% macro litros(v) %}{{ '{:,.0f}'.format(v or 0).replace(',', '.') }}{% endmacro %}
+{% macro reais(v) %}{{ (v or 0) | formatar_moeda }}{% endmacro %}
+{% macro preco(v) %}{{ 'R$ %.4f'|format(v or 0) | replace('.', ',') }}{% endmacro %}
+
+<div id="smg">
+  {% with ativa = 'saidas' %}{% include 'includes/relatorios_migrados.html' %}{% endwith %}
+
+  <div class="topo">
+    <div class="topo__t"><i class="bi bi-cash-coin"></i> Saídas Migradas</div>
+    <div class="topo__s">A venda vem do cupom e da NF-e que a captura trouxe —
+      o mesmo faturamento, aberto por sete perguntas</div>
+  </div>
+
+  {% if erro %}
+  <div class="aviso aviso--erro"><i class="bi bi-exclamation-triangle-fill"></i>
+    <span>Não deu para apurar: {{ erro }}</span></div>
+  {% endif %}
+
+  <form class="filtro" method="GET">
+    {# o recorte e o produto viajam no filtro: apurar de novo nao pode jogar o
+       usuario de volta para o primeiro recorte #}
+    <input type="hidden" name="corte" value="{{ corte }}">
+    {% if pid %}<input type="hidden" name="pid" value="{{ pid }}">{% endif %}
+    <div class="filtro__g">
+      <label class="campo"><span>De</span>
+        <input type="date" name="data_inicio" value="{{ data_inicio }}"></label>
+      <label class="campo"><span>Até</span>
+        <input type="date" name="data_fim" value="{{ data_fim }}"></label>
+    </div>
+    <div class="filtro__r">
+      <button type="submit" class="bt bt--sim"><i class="bi bi-search"></i> Apurar</button>
+      <a class="bt" href="{{ url_for('vendas.index', data_ini=data_inicio,
+               data_fim=data_fim) }}"><i class="bi bi-receipt"></i> Ver as notas</a>
+    </div>
+  </form>
+
+  {% if meses %}
+  {% set tudo_ini = meses[0].ini %}{% set tudo_fim = meses[-1].fim %}
+  <div class="meses">
+    <b><i class="bi bi-calendar3"></i> Mês</b>
+    <a class="{{ 'on' if data_inicio == tudo_ini and data_fim == tudo_fim }}"
+       href="{{ url_for('relatorios.saidas_migradas', data_inicio=tudo_ini,
+                data_fim=tudo_fim, corte=corte, pid=pid) }}">Tudo</a>
+    {% for m in meses %}
+    <a class="{{ 'on' if data_inicio == m.ini and data_fim == m.fim }}"
+       title="{{ m.notas }} nota{{ 's' if m.notas != 1 }} · {{ m.ini.strftime('%d/%m') }} a {{ m.fim.strftime('%d/%m') }}"
+       href="{{ url_for('relatorios.saidas_migradas', data_inicio=m.ini,
+                data_fim=m.fim, corte=corte, pid=pid) }}">{{ m.rotulo }}</a>
+    {% endfor %}
+    <span class="obs">o mês corrente vai até hoje · para um pedaço do mês,
+      use as datas acima</span>
+  </div>
+  {% endif %}
+
+  {% if not apurado or not apurado.produtos %}
+  <div class="nada">Nenhuma venda neste período. A captura do cupom entrega de
+    26/05/2026 em diante.</div>
+  {% else %}
+
+  {% set g = apurado.geral %}
+  {% set sel = (apurado.produtos | selectattr('pid', 'equalto', pid)
+                | list | first) if pid else none %}
+
+  {% if sel %}
+  <div class="sel"><i class="bi bi-funnel-fill"></i>
+    <span>os recortes abaixo mostram só o <b>{{ sel.nome }}</b> —
+      {{ sel.notas }} notas, {{ litros(sel.litros) }} L</span>
+    <a class="bt bt--mini" href="{{ url_for('relatorios.saidas_migradas',
+         data_inicio=data_inicio, data_fim=data_fim, corte=corte) }}">
+      <i class="bi bi-x-lg"></i> ver todos os produtos</a></div>
+  {% endif %}
+
+  {#- O primeiro card soma tudo. Ele é o "todos" do seletor: sem produto
+      escolhido é ele que fica aceso; com um escolhido, é o caminho de volta.
+      Sem preço médio de propósito — média entre S-10 a R$ 6,41 e etanol a
+      R$ 3,41 não é preço de nada; ela sobe quando se vende mais diesel, e não
+      quando o combustível encarece. -#}
+  <div class="pgrade" style="--cols:{{ [apurado.produtos|length + 1, 6]|min }}">
+    {% set gmin = g.dia_a_dia | map(attribute='rs') | min %}
+    {% set gmax = g.dia_a_dia | map(attribute='rs') | max %}
+    <a class="pc pc--tot{{ ' pc--on' if not sel }}" style="--c:#475569"
+       href="{{ url_for('relatorios.saidas_migradas', data_inicio=data_inicio,
+                data_fim=data_fim, corte=corte) }}">
+      <div class="pc__t">
+        <span class="pc__i"><i class="bi bi-stack"></i></span>
+        <div><div class="pc__n">TODOS</div>
+          <div class="pc__r">{{ g.produtos }} combustíveis ·
+            {{ g.vendedores }} vendedor{{ 'es' if g.vendedores > 1 }}</div></div>
+      </div>
+      <div class="pc__v"><b>{{ reais(g.rs) }}</b></div>
+      <div class="pc__r">faturado no período</div>
+      <div class="pc__g">
+        <div><dt>Litros</dt><dd>{{ litros(g.litros) }} L</dd></div>
+        <div><dt>Notas</dt><dd>{{ g.notas }}</dd></div>
+        <div><dt>Mais vendido</dt><dd>{{ g.maior }}</dd></div>
+        <div><dt>Fatia dele</dt><dd>{{ '%.0f'|format(g.maior_fatia) }}%</dd></div>
+      </div>
+      <div class="spark">
+        {% for d in g.dia_a_dia %}
+        <i class="{{ 'ult' if loop.last }}"
+           style="height:{{ 18 + 82 * ((d.rs - gmin) / (gmax - gmin)) if gmax > gmin else 60 }}%"
+           title="{{ d.dia.strftime('%d/%m') }}: {{ reais(d.rs) }} · {{ litros(d.litros) }} L"></i>
+        {% endfor %}
+      </div>
+      <div class="pc__f"><span>venda dia a dia</span>
+        <span>vs {{ apurado.ini_ant.strftime('%d/%m') }}–{{ apurado.fim_ant.strftime('%d/%m') }}:
+          {% if g.delta_rs is not none %}
+          <b class="{{ 'pos' if g.delta_rs > 0 else 'neg' }}">{{ '+' if g.delta_rs > 0 }}{{ reais(g.delta_rs) }}</b>
+          {% else %}<b>—</b>{% endif %}</span></div>
+      <div class="pc__f"><span>é quanto se vendeu, e não preço —
+        S-10 e etanol juntos não dão preço</span></div>
+      <div class="pbar"><i style="width:100%;background:#475569"></i></div>
+      <div class="pc__cl">{% if sel %}
+        <i class="bi bi-arrow-left"></i> clique para voltar a todos os produtos
+        {% else %}<i class="bi bi-check2"></i> vendo todos os produtos{% endif %}</div>
+    </a>
+
+    {% for p in apurado.produtos %}
+    {% set cor = cor_outros if p.eh_outros else cores_produto.get(p.pid, '#64748b') %}
+    <a class="pc{{ ' pc--on' if sel and sel.pid == p.pid }}{{ ' pc--off' if sel and sel.pid != p.pid }}"
+       style="--c:{{ cor }}"
+       href="{{ url_for('relatorios.saidas_migradas', data_inicio=data_inicio,
+                data_fim=data_fim, corte=corte,
+                pid=(none if sel and sel.pid == p.pid else p.pid)) }}">
+      <div class="pc__t">
+        <span class="pc__i"><i class="bi {{ 'bi-box2' if p.eh_outros else 'bi-fuel-pump' }}"></i></span>
+        <div><div class="pc__n">{{ p.nome }}</div>
+          <div class="pc__r">{{ p.notas }} notas · {{ p.itens }} itens</div></div>
+      </div>
+      {#- O card do combustível fala em litro; o de Outros fala em real. Ali
+          dentro tem ARLA em litro e lata de óleo em unidade: um total em
+          litros seria a soma de coisas diferentes. -#}
+      {% if p.eh_outros %}
+      <div class="pc__v"><b>{{ reais(p.rs) }}</b></div>
+      <div class="pc__r">faturado no período</div>
+      <div class="pc__g">
+        <div><dt>ARLA e granel</dt><dd>{{ litros(p.litros) }} L</dd></div>
+        <div><dt>Itens diferentes</dt><dd>{{ p.lista|length }}</dd></div>
+      </div>
+      <div class="pc__f"><span>o maior deles</span>
+        <b>{{ p.lista[0].nome[:22] if p.lista }}</b></div>
+      <div class="pc__f"><span>sem preço médio: ARLA em litro e óleo em
+        unidade não dão média</span></div>
+      {% else %}
+      <div class="pc__v"><b>{{ litros(p.litros) }}</b><span>L</span></div>
+      <div class="pc__r">vendidos no período</div>
+      <div class="pc__g">
+        <div><dt>Preço médio</dt><dd>{{ preco(p.unit) }}</dd></div>
+        <div><dt>Total</dt><dd>{{ reais(p.rs) }}</dd></div>
+        <div><dt>Mais barato</dt><dd class="pos">{{ preco(p.menor) }}</dd></div>
+        <div><dt>Mais caro</dt><dd class="neg">{{ preco(p.maior) }}</dd></div>
+      </div>
+      {# O preço dia a dia: a altura é a posição do dia entre o menor e o maior
+         do próprio produto — é a forma da curva que interessa, não a escala. #}
+      {% set umin = p.dia_a_dia | map(attribute='unit') | min %}
+      {% set umax = p.dia_a_dia | map(attribute='unit') | max %}
+      <div class="spark">
+        {% for d in p.dia_a_dia %}
+        <i class="{{ 'ult' if loop.last }}"
+           style="height:{{ 18 + 82 * ((d.unit - umin) / (umax - umin)) if umax > umin else 60 }}%"
+           title="{{ d.dia.strftime('%d/%m') }}: {{ preco(d.unit) }} · {{ litros(d.litros) }} L"></i>
+        {% endfor %}
+      </div>
+      <div class="pc__f"><span>preço dia a dia</span>
+        <span>vs {{ apurado.ini_ant.strftime('%d/%m') }}–{{ apurado.fim_ant.strftime('%d/%m') }}:
+          {% if p.delta is not none %}
+          <b class="{{ 'pos' if p.delta > 0 else 'neg' }}">{{ '+' if p.delta > 0 }}{{ preco(p.delta) }}</b>
+          {% else %}<b>—</b>{% endif %}</span></div>
+      {% endif %}
+      <div class="pc__f"><span>fatia da venda</span><b>{{ '%.0f'|format(p.fatia) }}%</b></div>
+      <div class="pbar"><i style="width:{{ p.fatia }}%;background:{{ cor }}"></i></div>
+      <div class="pc__cl">{% if sel and sel.pid == p.pid %}
+        <i class="bi bi-check2"></i> vendo só este — clique para voltar a todos
+        {% else %}<i class="bi bi-hand-index"></i> clique para ver só este
+        {% endif %}</div>
+    </a>
+    {% endfor %}
+  </div>
+
+  {#- O card "Outros" é o único que precisa dizer o que tem dentro: os outros
+      têm o nome do combustível, este é uma caixa com quarenta coisas. -#}
+  {% set outros = (apurado.produtos | selectattr('eh_outros') | list | first) %}
+  {% if outros and (not sel or sel.eh_outros) %}
+  <div class="cx">
+    <div class="cx__t"><i class="bi bi-box2"></i> O que está dentro de Outros
+      <span class="dir">o que não é um dos quatro combustíveis —
+        classificar em /vendas → Classificar tira daqui e dá card próprio</span></div>
+    <div class="tab">
+      <table>
+        <thead><tr><th class="e">Item, como vem no XML</th><th>Litros</th>
+          <th>Faturado</th></tr></thead>
+        <tbody>
+          {% for v in outros.lista %}
+          <tr>
+            <td class="e" data-r="Item">{{ v.nome }}</td>
+            <td data-r="Litros">{{ litros(v.litros) if v.litros else '—' }}</td>
+            <td data-r="Faturado" class="forte">{{ reais(v.rs) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot><tr><td class="e">{{ outros.lista|length }} itens</td>
+          <td>{{ litros(outros.litros) }}</td>
+          <td>{{ reais(outros.rs) }}</td></tr></tfoot>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  {#- Os sete recortes do MESMO faturamento. Um de cada vez: sete tabelas
+      empilhadas seriam sete respostas para quem só fez uma pergunta. Todas
+      fecham no mesmo total — é isso que faz delas recortes, e não relatórios
+      diferentes. -#}
+  <div class="cortes">
+    <b><i class="bi bi-pie-chart"></i> Ver por</b>
+    {% for chave, rotulo, icone, pergunta in recortes %}
+    <a class="{{ 'on' if corte == chave }}"
+       title="{{ pergunta }}"
+       href="{{ url_for('relatorios.saidas_migradas', data_inicio=data_inicio,
+                data_fim=data_fim, corte=chave, pid=pid) }}">
+      <i class="bi {{ icone }}"></i> {{ rotulo }}</a>
+    {% endfor %}
+  </div>
+
+  {% set linhas = apurado.recortes[corte] %}
+  {% set atual = (recortes | selectattr('0', 'equalto', corte) | list | first) %}
+  <div class="cx">
+    <div class="cx__t"><i class="bi {{ atual[2] }}"></i> {{ atual[1] }}
+      <span class="dir">{{ atual[3] }}{% if sel %} · só {{ sel.nome }}{% endif %}</span></div>
+    <div class="tab">
+      <table>
+        <thead>
+          <tr><th class="e">{{ atual[1] }}</th><th>Notas</th><th>Litros</th>
+            <th>Faturado</th><th>Preço médio/L</th><th class="e">Fatia</th></tr>
+        </thead>
+        <tbody>
+          {% for l in linhas %}
+          <tr>
+            <td class="e" data-r="{{ atual[1] }}">{{ l.rotulo }}
+              {%- if l.sub %}<div class="sub">{{ l.sub }}</div>{% endif %}</td>
+            <td data-r="Notas">{{ l.notas }}</td>
+            <td data-r="Litros">{{ litros(l.litros) }} L</td>
+            <td data-r="Faturado" class="forte">{{ reais(l.rs) }}</td>
+            {# Preço médio só quando é de um combustível só: no recorte de
+               todos os produtos, esta média mistura diesel com etanol. #}
+            <td data-r="Preço médio/L">{{ preco(l.unit) if sel and not sel.eh_outros else '—' }}</td>
+            <td class="e" data-r="Fatia">{{ '%.1f'|format(l.fatia) }}%
+              <i class="fbar"><i style="width:{{ l.fatia }}%"></i></i></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr><td class="e">{{ linhas|length }} linha{{ 's' if linhas|length != 1 }}</td>
+            <td>{{ (sel.notas if sel else g.notas) }}</td>
+            <td>{{ litros(sel.litros if sel else g.litros) }} L</td>
+            <td>{{ reais(sel.rs if sel else g.rs) }}</td>
+            <td>{{ preco(sel.unit) if sel and not sel.eh_outros else '—' }}</td>
+            <td class="e">100%</td></tr>
+        </tfoot>
+      </table>
+    </div>
+    <div class="rod">A nota paga com dois meios conta uma vez, na combinação —
+      o XML não diz quanto foi em cada um. Por isso as notas somam o período
+      inteiro e não se repetem.</div>
+  </div>
+
+  {#- O dia a dia. É a relação de baixo do Fornecedores Migrados, mas aqui uma
+      linha por DIA e não por nota: setembro tem 4 mil cupons, e uma lista
+      deles não é uma leitura, é um arquivo. Cada dia leva para a tela
+      /vendas já filtrada naquele dia, onde os cupons estão um a um. -#}
+  <div class="cx">
+    <div class="cx__t"><i class="bi bi-calendar3"></i>
+      Dia a dia{% if sel %} — {{ sel.nome }}{% endif %}</div>
+    <div class="tab">
+      <table>
+        <thead>
+          <tr><th class="e">Dia</th><th>Notas</th><th>Litros</th>
+            <th>Faturado</th><th>Preço médio/L</th></tr>
+        </thead>
+        <tbody>
+          {% for d in apurado.dias %}
+          <tr>
+            <td class="e forte" data-r="Dia">
+              <a class="dia" target="_blank" rel="noopener"
+                 title="abrir as notas deste dia em /vendas"
+                 href="{{ url_for('vendas.index', data_ini=d.dia.strftime('%Y-%m-%d'),
+                          data_fim=d.dia.strftime('%Y-%m-%d')) }}">{{ d.dia.strftime('%d/%m/%Y') }}</a></td>
+            <td data-r="Notas">{{ d.notas }}</td>
+            <td data-r="Litros">{{ litros(d.litros) }} L</td>
+            <td data-r="Faturado" class="forte">{{ reais(d.rs) }}</td>
+            <td data-r="Preço médio/L">{{ preco(d.unit) if sel and not sel.eh_outros else '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr><td class="e">{{ apurado.dias|length }} dia{{ 's' if apurado.dias|length != 1 }}</td>
+            <td>{{ (sel.notas if sel else g.notas) }}</td>
+            <td>{{ litros(sel.litros if sel else g.litros) }} L</td>
+            <td>{{ reais(sel.rs if sel else g.rs) }}</td>
+            <td>{{ preco(sel.unit) if sel and not sel.eh_outros else '—' }}</td></tr>
+        </tfoot>
+      </table>
+    </div>
+    <div class="rod">
+      O faturado é a linha do item mais o acréscimo, menos o desconto — o
+      acréscimo é o preço do cartão e do prazo, que no posto vem fora da linha
+      do produto.
+      {% if g.acrescimo %}No período ele soma {{ reais(g.acrescimo) }}.{% endif %}
+      {% if g.canceladas.notas %}
+      {{ g.canceladas.notas }} nota{{ 's' if g.canceladas.notas != 1 }}
+      cancelada{{ 's' if g.canceladas.notas != 1 }}
+      ({{ reais(g.canceladas.rs) }}) ficaram de fora de tudo isto.{% endif %}
+    </div>
+  </div>
+
+  {% endif %}
+</div>
+{% endblock %}

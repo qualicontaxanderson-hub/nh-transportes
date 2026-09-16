@@ -25,6 +25,7 @@
   {%- for chave, rotulo, icone, destino in [
         ('lucro',        'Lucro dos postos',        'bi-fuel-pump',  'relatorios.lucro_postos_migrados'),
         ('fornecedores', 'Fornecedores',            'bi-truck',      'relatorios.fornecedores_migrados'),
+        ('saidas',       'Saídas',                  'bi-cash-coin',  'relatorios.saidas_migradas'),
         ('compras',      'Compras (DFe)',           'bi-box-seam',   'dfe_compras.compras'),
         ('pagamentos',   'Conferência de pagamentos', 'bi-bank',     'conf_fornecedores_dfe.conf_fornecedores_dfe')] %}
   <a class="{{ 'on' if ativa == chave }}" href="{{ url_for(destino) }}">
