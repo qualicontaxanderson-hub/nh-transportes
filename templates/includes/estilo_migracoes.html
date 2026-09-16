@@ -114,6 +114,13 @@
 
 .mig-dia{ background:var(--surface); border:1px solid var(--line-2); border-radius:var(--radius);
   box-shadow:var(--shadow); overflow:hidden; margin-bottom:.7rem; }
+/* O dia que veio por link de outra tela (?dia=): chegar no meio de trinta
+   cards iguais e nao achar o que se clicou. O realce apaga sozinho. */
+.mig-dia--alvo{ border-color:#0C4C86; box-shadow:0 0 0 3px rgba(12,76,134,.18), var(--shadow); }
+.mig-dia--alvo .mig-dia__head{ background:#e7f0f9; }
+@keyframes mig-piscar{ 0%,100%{ box-shadow:0 0 0 3px rgba(12,76,134,.18), var(--shadow); }
+  50%{ box-shadow:0 0 0 7px rgba(12,76,134,.30), var(--shadow); } }
+.mig-dia--alvo{ animation:mig-piscar 1s ease-in-out 2; }
 
 /* Cabecalho do dia: a DATA aparece uma vez so. */
 .mig-dia__head{ display:flex; align-items:center; justify-content:space-between; gap:.6rem;

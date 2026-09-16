@@ -238,6 +238,9 @@ body > .container-fluid:has(#fmg){
   /* pilulas: a data que veio de outra tela */
   #fmg .dsc{ background:#e7f0f9; color:#0C4C86; border-radius:6px; padding:.03rem .35rem;
     font-weight:800; font-size:.74rem; }
+  /* a pilula de descarga leva para o dia dela em /estoque, em outra aba */
+  #fmg a.dsc{ text-decoration:none; cursor:pointer; display:inline-block; }
+  #fmg a.dsc:hover{ background:#0C4C86; color:#fff; }
   #fmg .pg{ background:#e6f2ea; color:#146c43; border-radius:6px; padding:.03rem .35rem;
     font-weight:800; font-size:.74rem; }
   #fmg .pend{ background:#fbf1de; color:#8a5a12; border:1px solid #f0dcae;
@@ -351,18 +354,8 @@ body > .container-fluid:has(#fmg){
 
   {# ==== A ABA POR PRODUTO ============================================= #}
   {# Aqui só entra o item de nota que JÁ TEM produto classificado em
-     /dfe/compras. O aviso não é rodapé: sem ele a tela esconderia 700 mil
-     litros de julho e agosto e pareceria completa. #}
-  {% set sem = produtos.sem_classificar %}
-  {% if sem.itens %}
-  <div class="aviso aviso--am"><i class="bi bi-exclamation-triangle-fill"></i>
-    <div>Este corte só enxerga o item de nota com <b>produto classificado</b>
-      em <a href="{{ url_for('dfe_compras.compras') }}">/dfe/compras →
-      Classificar</a>. Faltam <b>{{ sem.itens }} itens, {{ litros(sem.litros) }} L</b>
-      ({% for m in sem.meses %}{{ m.mes[5:7] }}/{{ m.mes[2:4] }}:
-      {{ litros(m.litros) }} L{{ ' · ' if not loop.last }}{% endfor %}) —
-      classificados, eles aparecem aqui sozinhos.</div></div>
-  {% endif %}
+     /dfe/compras — o item sem classificar não aparece em lugar nenhum desta
+     aba. #}
 
   {% if not produtos.produtos %}
   <div class="nada">Nenhum item de combustível classificado neste período.</div>
@@ -479,10 +472,7 @@ body > .container-fluid:has(#fmg){
   </div>
 
   <div class="cx">
-    <div class="cx__t"><i class="bi bi-tags"></i>
-      De quem vem cada combustível, e a que preço
-      <span class="dir">o mais barato de cada produto em verde ·
-        a diferença é só preço de nota, sem frete nem prazo</span></div>
+    <div class="cx__t"><i class="bi bi-tags"></i> Por fornecedor</div>
     <div class="tab">
       <table>
         <thead>
@@ -529,10 +519,7 @@ body > .container-fluid:has(#fmg){
      documento: é o vínculo que o usuário fez na régua do ELS, em /estoque. #}
   <div class="cx">
     <div class="cx__t"><i class="bi bi-calendar3"></i>
-      As notas, uma a uma{% if sel %} — {{ sel.nome }}{% endif %}
-      <span class="dir">da compra mais nova para a mais velha ·
-        a data de descarga vem da régua do ELS{% if not sel %} ·
-        clique num card acima para ver um combustível só{% endif %}</span></div>
+      Nota a nota{% if sel %} — {{ sel.nome }}{% endif %}</div>
     <div class="tab">
       <table>
         <thead>
@@ -548,8 +535,11 @@ body > .container-fluid:has(#fmg){
             <td class="e" data-r="Descarga">
               {%- if n.descargas %}
                 {%- for x in n.descargas %}
-                <span class="dsc" title="tanque {{ x.tanque }} · {{ litros(x.litros) }} L">
-                  {{ x.dia.strftime('%d/%m') }}</span>
+                <a class="dsc" target="_blank" rel="noopener"
+                   href="{{ url_for('estoque.index', tab='descargas',
+                            dia=x.dia.strftime('%Y-%m-%d')) }}#dia-{{ x.dia.strftime('%Y-%m-%d') }}"
+                   title="tanque {{ x.tanque }} · {{ litros(x.litros) }} L — abrir este dia em /estoque">
+                  {{ x.dia.strftime('%d/%m') }}</a>
                 {%- endfor %}
               {%- else %}<span class="pend">não desceu</span>{% endif %}</td>
             <td class="e nf" data-r="Nota">{{ n.numero }}</td>
@@ -684,8 +674,11 @@ body > .container-fluid:has(#fmg){
             <td class="e" data-r="Descargas">
               {%- if n.descargas %}
                 {%- for x in n.descargas %}
-                <span class="dsc" title="tanque {{ x.tanque }} · {{ litros(x.litros) }} L">
-                  {{ x.dia.strftime('%d/%m') }}</span>
+                <a class="dsc" target="_blank" rel="noopener"
+                   href="{{ url_for('estoque.index', tab='descargas',
+                            dia=x.dia.strftime('%Y-%m-%d')) }}#dia-{{ x.dia.strftime('%Y-%m-%d') }}"
+                   title="tanque {{ x.tanque }} · {{ litros(x.litros) }} L — abrir este dia em /estoque">
+                  {{ x.dia.strftime('%d/%m') }}</a>
                 {%- endfor %}
               {%- else %}<span class="pend">não desceu</span>{% endif %}</td>
             <td class="e nf" data-r="Nota">{{ n.numero }}</td>

@@ -181,6 +181,12 @@ def index():
         page_d = max(1, int(request.args.get('page_d', 1)))
     except (TypeError, ValueError):
         page_d = 1
+    # ?dia=AAAA-MM-DD: vem do relatorio de Fornecedores Migrados, onde a
+    # pilula da descarga e um link. Nao filtra nada — so escolhe a pagina em
+    # que aquele dia caiu, para a ancora #dia-... ter onde chegar.
+    dia_alvo = (request.args.get('dia') or '').strip()
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', dia_alvo):
+        dia_alvo = ''
 
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
@@ -267,6 +273,18 @@ def index():
 
         # -------- Descargas (paginada) --------
         tp_d = max(1, math.ceil(totais['descargas'] / POR_PAGINA))
+        # A lista vem em ordem decrescente: quem esta ANTES do dia alvo e
+        # quem desceu depois dele. Conta esses e a pagina sai da divisao.
+        if dia_alvo and 'page_d' not in request.args:
+            w_dia = (where_d + (" AND " if where_d else " WHERE ")
+                    + "COALESCE(d.data_final, d.data_inicial,"
+                      " d.data_descarga) >= %s")
+            cur.execute(
+                f"SELECT COUNT(*) AS n FROM descargas_pendentes d{w_dia}",
+                p_d + [dia_alvo + " 23:59:59"],
+            )
+            antes = (cur.fetchone() or {}).get('n') or 0
+            page_d = antes // POR_PAGINA + 1
         page_d = min(page_d, tp_d)
         # Antes da migration as colunas nao existem: finge 'els_email' em vez
         # de derrubar a tela.
@@ -360,7 +378,7 @@ def index():
             data_ini_default=data_ini_default, data_fim_default=data_fim_default,
             page_l=page_l, tp_l=tp_l, paginas_l=_janela_paginas(page_l, tp_l),
             page_d=page_d, tp_d=tp_d, paginas_d=_janela_paginas(page_d, tp_d),
-            qs_filtros=qs_filtros,
+            qs_filtros=qs_filtros, dia_alvo=dia_alvo,
         )
     finally:
         cur.close()

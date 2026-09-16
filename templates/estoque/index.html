@@ -305,7 +305,11 @@
       {% if dias_d %}
       <div class="mig-dias">
       {% for g in dias_d %}
-      <div class="mig-dia">
+      {#- id do dia: e a ancora de quem chega de fora (a pilula de descarga do
+          relatorio de Fornecedores Migrados aponta para #dia-AAAA-MM-DD). -#}
+      <div class="mig-dia{{ ' mig-dia--alvo' if g.chave and dia_alvo and
+             g.chave.strftime('%Y-%m-%d') == dia_alvo }}"
+           {% if g.chave %}id="dia-{{ g.chave.strftime('%Y-%m-%d') }}"{% endif %}>
         <div class="mig-dia__head">
           <div class="mig-dia__data">
             <i class="bi bi-calendar3"></i>
@@ -1184,6 +1188,18 @@
       history.replaceState(null, '', u.toString());
     });
   });
+
+  // Chegada por link de fora (?dia=AAAA-MM-DD#dia-...): a ancora do navegador
+  // nao serve aqui — a aba Descargas so fica visivel depois que o Bootstrap
+  // monta, e ai o scroll ja aconteceu com o painel escondido. Rolamos na mao,
+  // com folga para a barra do topo.
+  var alvo = document.querySelector('.mig-dia--alvo');
+  if (alvo) {
+    requestAnimationFrame(function () {
+      var y = alvo.getBoundingClientRect().top + window.pageYOffset - 90;
+      window.scrollTo({ top: y < 0 ? 0 : y, behavior: 'smooth' });
+    });
+  }
 })();
 </script>
 {% endblock %}

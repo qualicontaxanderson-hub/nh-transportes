@@ -220,7 +220,8 @@ open('_fmg_produto.html', 'w', encoding='utf-8').write(h3)
 prova('a aba abre 200', r3.status_code == 200)
 prova('a pilula "Por produto" esta acesa',
       re.search(r'class="on"[^>]*aba=produto', h3) is not None)
-prova('e a outra aba continua alcancavel', 'Por fornecedor' in h3)
+prova('e a outra aba continua alcancavel',
+      re.search(r'<i class="bi bi-truck"></i> Por fornecedor</a>', h3) is not None)
 for rot in ('Preço médio', 'Mais barato', 'Mais caro', 'fatia da compra',
             'preço dia a dia', 'Contra o melhor'):
     prova('a aba mostra "%s"' % rot, rot in h3)
@@ -231,10 +232,55 @@ for p in pp['produtos']:
     f0 = p['fornecedores'][0]
     prova('%s: o mais barato e %s a %s' % (p['nome'], f0['nome'], preco(f0['unit'])),
           preco(f0['unit']) in h3)
-prova('o aviso dos nao classificados aparece na tela',
-      ('%s L' % litros(pp['sem_classificar']['litros'])) in h3)
+# O aviso saiu da tela a pedido do Anderson (16/09/2026). O motor continua
+# contando o que falta classificar -- e a prova de cima --, mas a tela nao
+# fala mais disso.
+prova('o aviso dos nao classificados NAO aparece mais na tela',
+      'produto classificado' not in h3)
+prova('a tabela por fornecedor se chama "Por fornecedor"',
+      re.search(r'bi-tags"></i> Por fornecedor</div>', h3) is not None)
+prova('a relacao de notas se chama "Nota a nota"',
+      re.search(r'bi-calendar3"></i>\s*Nota a nota', h3) is not None)
+prova('as legendas velhas das duas tabelas sairam',
+      'De quem vem cada combustível' not in h3
+      and 'As notas, uma a uma' not in h3)
 prova('a aba respeita o filtro de fornecedor',
       client.get(url + '&aba=produto&forn=' + g0['chave']).status_code == 200)
+
+# ---- a pilula da descarga virou link para o dia dela em /estoque ----------
+# Cada data de descarga abre /estoque?tab=descargas&dia=AAAA-MM-DD#dia-...,
+# em outra aba do navegador. A rota do estoque usa o ?dia= so para escolher a
+# pagina; a ancora e o realce fazem o resto.
+_dias_desc = sorted({x['dia'] for n in pp['notas'] for x in n['descargas']})
+prova('ha descarga vinculada no periodo para virar link (%d dias)' % len(_dias_desc),
+      len(_dias_desc) > 0)
+_faltou = [d for d in _dias_desc
+           if ('/estoque?tab=descargas&amp;dia=%s#dia-%s' % (d, d)) not in h3]
+prova('toda data de descarga da tela e um link para o dia dela em /estoque'
+      + ('  -- sem link: %s' % _faltou if _faltou else ''), not _faltou)
+prova('o link abre em outra aba', 'class="dsc" target="_blank"' in h3)
+
+print('\n6b) do lado do estoque: ?dia= cai na pagina certa e marca o card')
+if _dias_desc:
+    _d = _dias_desc[-1]                      # a descarga mais nova do periodo
+    _re = client.get('/estoque?tab=descargas&dia=%s' % _d)
+    _he = _re.get_data(as_text=True)
+    open('_estoque_dia.html', 'w', encoding='utf-8').write(_he)
+    prova('/estoque?dia=%s abre 200' % _d, _re.status_code == 200)
+    prova('o card daquele dia esta na pagina servida', 'id="dia-%s"' % _d in _he)
+    prova('e vem marcado como alvo', 'mig-dia--alvo' in _he)
+    # O ?dia= nao pode filtrar nada: a tela continua sendo a lista inteira.
+    _rt = client.get('/estoque?tab=descargas')
+    prova('o ?dia= nao filtra: o total de descargas nao muda',
+          re.search(r'DESCARGAS\s*</div>\s*<div class="v">(\d+)', _he,
+                    re.S | re.I).group(1)
+          == re.search(r'DESCARGAS\s*</div>\s*<div class="v">(\d+)',
+                       _rt.get_data(as_text=True), re.S | re.I).group(1))
+    # Um dia velho, de outra pagina da paginacao: tem de vir junto assim mesmo.
+    _velho = _dias_desc[0]
+    _rv = client.get('/estoque?tab=descargas&dia=%s' % _velho)
+    prova('um dia mais antigo (%s) tambem vem servido' % _velho,
+          'id="dia-%s"' % _velho in _rv.get_data(as_text=True))
 
 print('\n7) a regua de meses')
 conn = get_db_connection()
