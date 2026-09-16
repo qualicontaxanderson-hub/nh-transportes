@@ -171,11 +171,33 @@ prova('o card Outros existe e junta o que nao tem produto classificado',
       len(outros) == 1 and outros[0]['pid'] == saida_migrada.PID_OUTROS)
 if outros:
     o = outros[0]
-    prova('Outros NAO inventa preco medio (ARLA em litro, oleo em unidade)',
+    prova('Outros NAO inventa preco medio (sao produtos diferentes, em unidade)',
           o['unit'] is None and o['menor'] is None and o['maior'] is None)
     prova('Outros diz o que tem dentro (%d itens diferentes)' % len(o['lista']),
           len(o['lista']) > 0 and perto(sum(v['rs'] for v in o['lista']), o['rs']))
     prova('e o maior deles aparece na tela', o['lista'][0]['nome'] in html)
+    # O que sobra em Outros e produto de loja, vendido em UNIDADE. Dizer "0 L"
+    # dele seria mentir de um jeito silencioso -- cada item sai na sua unidade.
+    prova('cada item de Outros traz a sua unidade, e nao um litro inventado',
+          all((v['unidade'] or '').strip() and v['qtd'] > 0 for v in o['lista']))
+    prova('o card de Outros mostra QUANTIDADE, e nao litros (%s)' % o['qtd_rotulo'],
+          o['qtd_rotulo'] != '—' and o['qtd_rotulo'] in html)
+    prova('e a quantidade de cada item sai impressa na tela',
+          all(('%s %s' % ('{:,.0f}'.format(v['qtd']).replace(',', '.'),
+                          v['unidade'])) in html for v in o['lista']))
+
+print('\n4b) o ARLA tem card proprio')
+arla = [p for p in apurado['produtos'] if p['nome'] == 'ARLA']
+prova('o ARLA saiu de dentro de Outros e virou card', len(arla) == 1)
+if arla:
+    a0 = arla[0]
+    prova('o card do ARLA nao e o card Outros', not a0['eh_outros'])
+    prova('ele e granel: sai em litro (%s L) e tem preco por litro (%s)'
+          % (litros(a0['litros']), preco(a0['unit'])),
+          a0['litros'] > 0 and a0['unit'] > 0)
+    prova('e nenhum item de Outros ainda e ARLA',
+          not any('ARLA' in (v['nome'] or '').upper()
+                  for v in (outros[0]['lista'] if outros else [])))
 
 print('\n5) o card TODOS')
 prova('os litros do card somam os dos produtos',
@@ -184,7 +206,7 @@ prova('os reais do card somam os dos produtos',
       perto(g['rs'], sum(p['rs'] for p in apurado['produtos'])))
 prova('as notas do card sao as notas do periodo (%d)' % g['notas'],
       g['notas'] == sql_tot['notas'])
-prova('conta so os COMBUSTIVEIS (%d), sem o Outros' % g['produtos'],
+prova('conta os produtos (%d), sem o Outros' % g['produtos'],
       g['produtos'] == len([p for p in apurado['produtos'] if not p['eh_outros']]))
 prova('o dia a dia soma o total em reais',
       perto(sum(d['rs'] for d in g['dia_a_dia']), g['rs']))

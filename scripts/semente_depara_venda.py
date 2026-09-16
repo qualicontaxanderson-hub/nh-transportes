@@ -4,8 +4,14 @@
 #
 #  Popula o de-para (cnpj_emitente + cprod -> nosso produto_id) e resolve o
 #  PASSIVO retroativo: preenche vendas_xml_itens.produto_id SO nos itens que
-#  casam no de-para (os 4 combustiveis do posto). O resto (lubrificante, ARLA,
-#  odorizante...) fica NULL de proposito -- nao e combustivel de tanque.
+#  casam no de-para. O resto (lubrificante, odorizante, tacografo...) fica NULL
+#  de proposito -- nao e produto de tanque nem de bomba.
+#
+#  O ARLA ENTROU (16/09/2026). Ele nao e combustivel de motor, mas e granel,
+#  sai em litro, tem estoque e o Anderson pediu para ve-lo separado nos
+#  relatorios -- dentro de "Outros" ele virava uma caixa com quarenta coisas.
+#  A chave e o cprod (64), e nao o cod_anp: o ANP do ARLA na venda e o
+#  620505001, o mesmo de outros 36 produtos de loja. So o cprod separa.
 #
 #  Espelha o de-para da COMPRA (dfe_classificacao_regra). Diferencas: a venda
 #  nao tem 'categoria' (venda e sempre produto) e a chave e o cnpj_emitente
@@ -45,6 +51,7 @@ PARES = [
     ("2", 1, "ETANOL HIDRATADO COMUM  -> Etanol   (id 1)"),
     ("3", 4, "OLEO DIESEL B S500      -> S-500    (id 4)"),
     ("4", 5, "OLEO DIESEL B S10       -> S-10     (id 5)"),
+    ("64", 7, "ARLA BIONITRO 32 GRANEL -> ARLA     (id 7)"),
 ]
 
 SEP = "=" * 74

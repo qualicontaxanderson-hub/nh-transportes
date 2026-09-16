@@ -171,6 +171,11 @@ def _linhas(cur, ini, fim, nomes):
                         else (nomes.get(pid) or ('Produto %s' % pid))),
             'produto_xml': r['produto_xml'] or '—',
             'litros': litros,
+            # A quantidade CRUA, com a unidade em que ela foi vendida. O
+            # litro serve ao combustivel; o tacografo e vendido em unidade, e
+            # dizer "0 L" dele seria mentir de um jeito silencioso.
+            'unidade': unid or '—',
+            'qtd': _f(r['quantidade']),
             # o que ENTROU: a linha do item, mais o acrescimo, menos o desconto
             'rs': (_f(r['valor_total']) + _f(r['vlr_acrescimo'])
                    - _f(r['vlr_desconto'])),
@@ -191,6 +196,20 @@ def _preco(rs, litros):
     return (rs / litros) if litros else 0.0
 
 
+def qtd_rotulo(unidades):
+    """{'L': 2365.0, 'UN': 448.0} -> '2.365 L · 448 UN'.
+
+    A quantidade de um produto que nao e combustivel nao e um litro. Somar
+    lata com granel daria um numero que nao e de nada, entao cada unidade sai
+    com o seu total, a maior primeiro.
+    """
+    if not unidades:
+        return '—'
+    partes = sorted(unidades.items(), key=lambda kv: -kv[1])
+    return ' · '.join('%s %s' % ('{:,.0f}'.format(q).replace(',', '.'), u)
+                      for u, q in partes if q)
+
+
 # ---------------------------------------------------------------- recortes --
 # Cada recorte responde "esse faturamento, aberto por quê?". Todos saem das
 # MESMAS linhas de item, entao todos fecham com o mesmo total -- e por isso
@@ -206,10 +225,14 @@ def _agrupa(linhas, chave, rotulo, sub=None, ordem=None):
         g = grupos.get(k)
         if g is None:
             g = grupos[k] = {'chave': k, 'rotulo': rotulo(x), 'sub': '',
-                             'litros': 0.0, 'rs': 0.0, 'notas': set()}
+                             'litros': 0.0, 'rs': 0.0, 'notas': set(),
+                             'unidades': defaultdict(float)}
         g['litros'] += x['litros']
         g['rs'] += x['rs']
         g['notas'].add(x['nota'])
+        # A quantidade na unidade de cada um: clicando no card Outros, um
+        # "0 L" em toda linha seria o numero errado em letra grande.
+        g['unidades'][x['unidade']] += x['qtd']
         if sub:
             g['sub'] = sub(x, g)
     total = sum(g['rs'] for g in grupos.values())
@@ -218,6 +241,8 @@ def _agrupa(linhas, chave, rotulo, sub=None, ordem=None):
         g['notas'] = len(g['notas'])
         g['unit'] = _preco(g['rs'], g['litros'])
         g['fatia'] = (g['rs'] / total * 100) if total else 0.0
+        g['qtd_rotulo'] = qtd_rotulo(g['unidades'])
+        del g['unidades']
         saida.append(g)
     saida.sort(key=ordem or (lambda g: -g['rs']))
     return saida
@@ -384,7 +409,8 @@ def apurar(cur, ini, fim, pid=None):
                 'rs': 0.0, 'acrescimo': 0.0, 'notas': set(), 'itens': 0,
                 'menor': None, 'maior': None,
                 'dias': defaultdict(lambda: [0.0, 0.0]),
-                'variantes': defaultdict(lambda: [0.0, 0.0]),
+                'variantes': defaultdict(lambda: [0.0, 0.0, 0.0, '']),
+                'unidades': defaultdict(float),
             }
         p['litros'] += x['litros']
         p['rs'] += x['rs']
@@ -400,9 +426,12 @@ def apurar(cur, ini, fim, pid=None):
         d[1] += x['rs']
         # O card Outros junta ARLA, oleo e acessorio: sem a lista do que ele
         # junta, ele seria uma caixa preta com R$ 60 mil dentro.
+        p['unidades'][x['unidade']] += x['qtd']
         v = p['variantes'][x['produto_xml']]
         v[0] += x['litros']
         v[1] += x['rs']
+        v[2] += x['qtd']
+        v[3] = x['unidade']
 
     total_rs = sum(p['rs'] for p in prods.values())
     saida = []
@@ -425,9 +454,11 @@ def apurar(cur, ini, fim, pid=None):
                            'unit': _preco(v[1], v[0])}
                           for d, v in sorted(p['dias'].items())]
         p['lista'] = sorted(
-            ({'nome': k, 'litros': v[0], 'rs': v[1]}
+            ({'nome': k, 'litros': v[0], 'rs': v[1], 'qtd': v[2],
+              'unidade': v[3]}
              for k, v in p['variantes'].items()), key=lambda v: -v['rs'])
-        del p['dias'], p['variantes']
+        p['qtd_rotulo'] = qtd_rotulo(p['unidades'])
+        del p['dias'], p['variantes'], p['unidades']
         saida.append(p)
     # O Outros vai para o fim da fila mesmo quando fatura mais que a gasolina:
     # ele nao e um combustivel, e a fila e dos combustiveis.
@@ -473,14 +504,15 @@ def apurar(cur, ini, fim, pid=None):
     # ---- daqui para baixo, o produto escolhido manda ----
     foco = [x for x in linhas if x['pid'] == pid] if pid else linhas
 
-    dias_f = defaultdict(lambda: [0.0, 0.0, set()])
+    dias_f = defaultdict(lambda: [0.0, 0.0, set(), defaultdict(float)])
     for x in foco:
         d = dias_f[x['dia']]
         d[0] += x['litros']
         d[1] += x['rs']
         d[2].add(x['nota'])
+        d[3][x['unidade']] += x['qtd']
     dias = [{'dia': d, 'litros': v[0], 'rs': v[1], 'notas': len(v[2]),
-             'unit': _preco(v[1], v[0])}
+             'unit': _preco(v[1], v[0]), 'qtd_rotulo': qtd_rotulo(v[3])}
             for d, v in sorted(dias_f.items(), reverse=True)]
 
     return {

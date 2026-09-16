@@ -263,7 +263,7 @@ body > .container-fluid:has(#smg){
   {% if sel %}
   <div class="sel"><i class="bi bi-funnel-fill"></i>
     <span>os recortes abaixo mostram só o <b>{{ sel.nome }}</b> —
-      {{ sel.notas }} notas, {{ litros(sel.litros) }} L</span>
+      {{ sel.notas }} notas, {{ sel.qtd_rotulo }}</span>
     <a class="bt bt--mini" href="{{ url_for('relatorios.saidas_migradas',
          data_inicio=data_inicio, data_fim=data_fim, corte=corte) }}">
       <i class="bi bi-x-lg"></i> ver todos os produtos</a></div>
@@ -274,7 +274,11 @@ body > .container-fluid:has(#smg){
       Sem preço médio de propósito — média entre S-10 a R$ 6,41 e etanol a
       R$ 3,41 não é preço de nada; ela sobe quando se vende mais diesel, e não
       quando o combustível encarece. -#}
-  <div class="pgrade" style="--cols:{{ [apurado.produtos|length + 1, 6]|min }}">
+  {#- Quantos cards por linha: com o ARLA separado sao sete (TODOS + quatro
+      combustiveis + ARLA + Outros), e sete em seis colunas deixa um sozinho
+      embaixo. Ate seis cabem numa linha; acima disso, duas linhas parelhas. -#}
+  {% set ncards = apurado.produtos|length + 1 %}
+  <div class="pgrade" style="--cols:{{ ncards if ncards <= 6 else ((ncards + 1) // 2) }}">
     {% set gmin = g.dia_a_dia | map(attribute='rs') | min %}
     {% set gmax = g.dia_a_dia | map(attribute='rs') | max %}
     <a class="pc pc--tot{{ ' pc--on' if not sel }}" style="--c:#475569"
@@ -283,13 +287,13 @@ body > .container-fluid:has(#smg){
       <div class="pc__t">
         <span class="pc__i"><i class="bi bi-stack"></i></span>
         <div><div class="pc__n">TODOS</div>
-          <div class="pc__r">{{ g.produtos }} combustíveis ·
+          <div class="pc__r">{{ g.produtos }} produtos ·
             {{ g.vendedores }} vendedor{{ 'es' if g.vendedores > 1 }}</div></div>
       </div>
-      <div class="pc__v"><b>{{ reais(g.rs) }}</b></div>
-      <div class="pc__r">faturado no período</div>
+      <div class="pc__v"><b>{{ litros(g.litros) }}</b><span>L</span></div>
+      <div class="pc__r">vendidos no período</div>
       <div class="pc__g">
-        <div><dt>Litros</dt><dd>{{ litros(g.litros) }} L</dd></div>
+        <div><dt>Faturado</dt><dd>{{ reais(g.rs) }}</dd></div>
         <div><dt>Notas</dt><dd>{{ g.notas }}</dd></div>
         <div><dt>Mais vendido</dt><dd>{{ g.maior }}</dd></div>
         <div><dt>Fatia dele</dt><dd>{{ '%.0f'|format(g.maior_fatia) }}%</dd></div>
@@ -330,22 +334,24 @@ body > .container-fluid:has(#smg){
           dentro tem ARLA em litro e lata de óleo em unidade: um total em
           litros seria a soma de coisas diferentes. -#}
       {% if p.eh_outros %}
-      <div class="pc__v"><b>{{ reais(p.rs) }}</b></div>
-      <div class="pc__r">faturado no período</div>
+      {#- Aqui o numero grande e a QUANTIDADE, e nao o litro: o que sobra em
+          Outros e produto de loja, vendido em unidade. -#}
+      <div class="pc__v"><b>{{ p.qtd_rotulo }}</b></div>
+      <div class="pc__r">vendidos no período</div>
       <div class="pc__g">
-        <div><dt>ARLA e granel</dt><dd>{{ litros(p.litros) }} L</dd></div>
+        <div><dt>Faturado</dt><dd>{{ reais(p.rs) }}</dd></div>
         <div><dt>Itens diferentes</dt><dd>{{ p.lista|length }}</dd></div>
       </div>
       <div class="pc__f"><span>o maior deles</span>
         <b>{{ p.lista[0].nome[:22] if p.lista }}</b></div>
-      <div class="pc__f"><span>sem preço médio: ARLA em litro e óleo em
-        unidade não dão média</span></div>
+      <div class="pc__f"><span>sem preço médio: são produtos diferentes,
+        e nem todos em litro</span></div>
       {% else %}
       <div class="pc__v"><b>{{ litros(p.litros) }}</b><span>L</span></div>
       <div class="pc__r">vendidos no período</div>
       <div class="pc__g">
         <div><dt>Preço médio</dt><dd>{{ preco(p.unit) }}</dd></div>
-        <div><dt>Total</dt><dd>{{ reais(p.rs) }}</dd></div>
+        <div><dt>Faturado</dt><dd>{{ reais(p.rs) }}</dd></div>
         <div><dt>Mais barato</dt><dd class="pos">{{ preco(p.menor) }}</dd></div>
         <div><dt>Mais caro</dt><dd class="neg">{{ preco(p.maior) }}</dd></div>
       </div>
@@ -382,24 +388,30 @@ body > .container-fluid:has(#smg){
   {% if outros and (not sel or sel.eh_outros) %}
   <div class="cx">
     <div class="cx__t"><i class="bi bi-box2"></i> O que está dentro de Outros
-      <span class="dir">o que não é um dos quatro combustíveis —
+      <span class="dir">produto de loja, vendido em unidade e não em litro —
         classificar em /vendas → Classificar tira daqui e dá card próprio</span></div>
     <div class="tab">
       <table>
-        <thead><tr><th class="e">Item, como vem no XML</th><th>Litros</th>
-          <th>Faturado</th></tr></thead>
+        <thead><tr><th class="e">Item, como vem no XML</th><th>Quantidade</th>
+          <th>Faturado</th><th>Preço médio</th></tr></thead>
         <tbody>
+          {#- Quantidade, e não litros: tacógrafo e lata de óleo são vendidos
+              em unidade, e um "0 L" neles seria mentira silenciosa. Cada item
+              sai na unidade em que foi vendido. -#}
           {% for v in outros.lista %}
           <tr>
             <td class="e" data-r="Item">{{ v.nome }}</td>
-            <td data-r="Litros">{{ litros(v.litros) if v.litros else '—' }}</td>
+            <td data-r="Quantidade">{{ litros(v.qtd) }} {{ v.unidade }}</td>
             <td data-r="Faturado" class="forte">{{ reais(v.rs) }}</td>
+            <td data-r="Preço médio">{{ reais(v.rs / v.qtd) if v.qtd else '—' }}
+              <span class="sub">por {{ v.unidade }}</span></td>
           </tr>
           {% endfor %}
         </tbody>
         <tfoot><tr><td class="e">{{ outros.lista|length }} itens</td>
-          <td>{{ litros(outros.litros) }}</td>
-          <td>{{ reais(outros.rs) }}</td></tr></tfoot>
+          <td>{{ outros.qtd_rotulo }}</td>
+          <td>{{ reais(outros.rs) }}</td>
+          <td>—</td></tr></tfoot>
       </table>
     </div>
   </div>
@@ -428,7 +440,7 @@ body > .container-fluid:has(#smg){
     <div class="tab">
       <table>
         <thead>
-          <tr><th class="e">{{ atual[1] }}</th><th>Notas</th><th>Litros</th>
+          <tr><th class="e">{{ atual[1] }}</th><th>Notas</th><th>Quantidade</th>
             <th>Faturado</th><th>Preço médio/L</th><th class="e">Fatia</th></tr>
         </thead>
         <tbody>
@@ -437,7 +449,9 @@ body > .container-fluid:has(#smg){
             <td class="e" data-r="{{ atual[1] }}">{{ l.rotulo }}
               {%- if l.sub %}<div class="sub">{{ l.sub }}</div>{% endif %}</td>
             <td data-r="Notas">{{ l.notas }}</td>
-            <td data-r="Litros">{{ litros(l.litros) }} L</td>
+            {#- Quantidade e nao litro: o produto de loja sai em unidade, e
+                "0 L" nele seria o numero errado em toda linha. -#}
+            <td data-r="Quantidade">{{ l.qtd_rotulo }}</td>
             <td data-r="Faturado" class="forte">{{ reais(l.rs) }}</td>
             {# Preço médio só quando é de um combustível só: no recorte de
                todos os produtos, esta média mistura diesel com etanol. #}
@@ -450,7 +464,7 @@ body > .container-fluid:has(#smg){
         <tfoot>
           <tr><td class="e">{{ linhas|length }} linha{{ 's' if linhas|length != 1 }}</td>
             <td>{{ (sel.notas if sel else g.notas) }}</td>
-            <td>{{ litros(sel.litros if sel else g.litros) }} L</td>
+            <td>{{ sel.qtd_rotulo if sel else (litros(g.litros) ~ ' L') }}</td>
             <td>{{ reais(sel.rs if sel else g.rs) }}</td>
             <td>{{ preco(sel.unit) if sel and not sel.eh_outros else '—' }}</td>
             <td class="e">100%</td></tr>
@@ -472,7 +486,7 @@ body > .container-fluid:has(#smg){
     <div class="tab">
       <table>
         <thead>
-          <tr><th class="e">Dia</th><th>Notas</th><th>Litros</th>
+          <tr><th class="e">Dia</th><th>Notas</th><th>Quantidade</th>
             <th>Faturado</th><th>Preço médio/L</th></tr>
         </thead>
         <tbody>
@@ -484,7 +498,7 @@ body > .container-fluid:has(#smg){
                  href="{{ url_for('vendas.index', data_ini=d.dia.strftime('%Y-%m-%d'),
                           data_fim=d.dia.strftime('%Y-%m-%d')) }}">{{ d.dia.strftime('%d/%m/%Y') }}</a></td>
             <td data-r="Notas">{{ d.notas }}</td>
-            <td data-r="Litros">{{ litros(d.litros) }} L</td>
+            <td data-r="Quantidade">{{ d.qtd_rotulo }}</td>
             <td data-r="Faturado" class="forte">{{ reais(d.rs) }}</td>
             <td data-r="Preço médio/L">{{ preco(d.unit) if sel and not sel.eh_outros else '—' }}</td>
           </tr>
@@ -493,7 +507,7 @@ body > .container-fluid:has(#smg){
         <tfoot>
           <tr><td class="e">{{ apurado.dias|length }} dia{{ 's' if apurado.dias|length != 1 }}</td>
             <td>{{ (sel.notas if sel else g.notas) }}</td>
-            <td>{{ litros(sel.litros if sel else g.litros) }} L</td>
+            <td>{{ sel.qtd_rotulo if sel else (litros(g.litros) ~ ' L') }}</td>
             <td>{{ reais(sel.rs if sel else g.rs) }}</td>
             <td>{{ preco(sel.unit) if sel and not sel.eh_outros else '—' }}</td></tr>
         </tfoot>
