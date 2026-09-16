@@ -367,5 +367,71 @@ prova('um pid que nao existe nao quebra a tela',
 prova('um pid podre nao quebra a tela',
       client.get(url + '&aba=produto&pid=xis').status_code == 200)
 
+print('\n10) o card TODOS, que soma os quatro')
+g = pp['geral']
+prova('os litros do card somam os dos produtos',
+      abs(g['litros'] - sum(p['litros'] for p in pp['produtos'])) < 0.01)
+prova('os reais do card somam os dos produtos',
+      abs(g['rs'] - sum(p['rs'] for p in pp['produtos'])) < 0.01)
+prova('e fecham com o total do periodo (%s / %s)'
+      % (litros(g['litros']), reais(g['rs'])),
+      abs(g['litros'] - tp['litros']) < 0.01 and abs(g['rs'] - tp['rs']) < 0.01)
+prova('as notas do card sao as notas do periodo (%d)' % g['notas'],
+      g['notas'] == tp['notas'] == len(set(n['doc'] for n in rel)))
+prova('conta os %d combustiveis' % g['produtos'],
+      g['produtos'] == len(pp['produtos']))
+prova('conta os fornecedores sem repetir (%d)' % g['fornecedores'],
+      g['fornecedores'] == len(set(f['chave'] for p in pp['produtos']
+                                   for f in p['fornecedores'])))
+prova('o dia a dia soma o total em reais',
+      abs(sum(d['rs'] for d in g['dia_a_dia']) - g['rs']) < 0.01)
+prova('o dia a dia soma o total em litros',
+      abs(sum(d['litros'] for d in g['dia_a_dia']) - g['litros']) < 0.01)
+prova('o "mais comprado" e mesmo o de maior fatia (%s, %.0f%%)'
+      % (g['maior'], g['maior_fatia']),
+      g['maior'] == max(pp['produtos'], key=lambda p: p['rs'])['nome']
+      and abs(g['maior_fatia'] - max(p['fatia'] for p in pp['produtos'])) < 0.01)
+prova('o card NAO inventa preco medio de cesta', 'unit' not in g)
+
+conn = get_db_connection()
+cur = conn.cursor(dictionary=True)
+cur.execute("SELECT COALESCE(SUM(i.valor_total),0) rs "
+            "  FROM dfe_itens i "
+            "  JOIN dfe_documentos d ON d.id = i.documento_id "
+            " WHERE d.tipo='NFe' AND d.resumo=0 "
+            "   AND (d.situacao IS NULL OR UPPER(d.situacao)='AUTORIZADO') "
+            "   AND i.categoria='combustivel' AND i.produto_id IS NOT NULL "
+            "   AND DATE(d.dh_emissao) BETWEEN %s AND %s",
+            (pp['ini_ant'], pp['fim_ant']))
+sql_ant = float(cur.fetchone()['rs'])
+cur.close()
+conn.close()
+prova('o periodo anterior do card bate com o SQL (%s)' % reais(sql_ant),
+      abs(g['antes_rs'] - sql_ant) < 0.01)
+prova('a variacao e comprado agora menos comprado antes',
+      abs(g['delta_rs'] - (g['rs'] - sql_ant)) < 0.01)
+
+prova('o card TODOS esta na tela', '>TODOS<' in h3)
+prova('agora sao %d cards' % (len(pp['produtos']) + 1),
+      h3.count('<a class="pc') == len(pp['produtos']) + 1)
+prova('a grade abre as %d colunas' % (len(pp['produtos']) + 1),
+      ('--cols:%d' % (len(pp['produtos']) + 1)) in h3)
+prova('sem produto escolhido, o card TODOS e o aceso',
+      'class="pc pc--tot pc--on"' in h3 and 'class="pc pc--on"' not in h3)
+prova('com um produto escolhido, o TODOS deixa de estar aceso',
+      'class="pc pc--tot pc--on"' not in hp and 'class="pc pc--tot"' in hp)
+prova('e ele nao fica apagado: e o caminho de volta',
+      'pc--tot pc--off' not in hp)
+prova('o card TODOS leva de volta a todos os produtos (sem pid)',
+      re.search(r'<a class="pc pc--tot"[^>]*\n?[^>]*\n?[^>]*href="([^"]*)"', hp)
+      is not None and 'pid=' not in re.search(
+          r'<a class="pc pc--tot"[^>]*href="([^"]*)"', hp.replace('\n', ' ')
+      ).group(1))
+prova('os numeros do card saem impressos: %s' % litros(g['litros']),
+      ('>%s<' % litros(g['litros'])) in h3)
+prova('e o total: %s' % reais(g['rs']), reais(g['rs']) in h3)
+prova('o card diz de onde vem a soma (%d combustiveis)' % g['produtos'],
+      '%d combustíveis' % g['produtos'] in h3)
+
 print('\n' + ('TUDO PROVADO' if ok else 'TEM FALHA'))
 sys.exit(0 if ok else 1)

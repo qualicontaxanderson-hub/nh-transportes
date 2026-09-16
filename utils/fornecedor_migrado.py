@@ -379,11 +379,13 @@ def por_produto(cur, ini, fim, chave=None):
     cur.execute("SELECT i.produto_id AS pid, SUM(i.quantidade) AS litros, "
                 "       SUM(i.valor_total) AS rs "
                 + _SO_COMB + " GROUP BY i.produto_id", (ini_ant, fim_ant))
-    antes = {}
+    antes, antes_tot = {}, {'litros': 0.0, 'rs': 0.0}
     for r in cur.fetchall():
-        litros = _f(r['litros'])
+        litros, rs = _f(r['litros']), _f(r['rs'])
+        antes_tot['litros'] += litros
+        antes_tot['rs'] += rs
         if litros:
-            antes[r['pid']] = _f(r['rs']) / litros
+            antes[r['pid']] = rs / litros
 
     # ---- o que fica de fora: combustivel sem produto classificado ----
     cur.execute("""
@@ -510,5 +512,32 @@ def por_produto(cur, ini, fim, chave=None):
         'produtos': len(saida),
     }
     tot['unit'] = (tot['rs'] / tot['litros']) if tot['litros'] else 0.0
+
+    # ---- o card que soma tudo -------------------------------------------
+    # De proposito NAO tem preco medio: media entre S-10 a R$ 6,11 e etanol a
+    # R$ 2,87 nao e preco de nada -- ela sobe quando se compra mais diesel, e
+    # nao quando o combustivel encarece. O que soma entre produtos diferentes
+    # e litro, real e nota; e e so isso que este card mostra.
+    dias_g = defaultdict(lambda: [0.0, 0.0])
+    for x in linhas:
+        d = dias_g[x['dia']]
+        d[0] += x['litros']
+        d[1] += x['rs']
+    geral = {
+        'litros': tot['litros'], 'rs': tot['rs'], 'notas': tot['notas'],
+        'produtos': len(saida),
+        'fornecedores': len(set(x['chave'] for x in linhas)),
+        'dia_a_dia': [{'dia': d, 'litros': v[0], 'rs': v[1]}
+                      for d, v in sorted(dias_g.items())],
+        'antes_rs': antes_tot['rs'], 'antes_litros': antes_tot['litros'],
+        'maior': (saida[0]['nome'] if saida else '-'),
+        'maior_fatia': (saida[0]['fatia'] if saida else 0.0),
+    }
+    # a comparacao aqui e de QUANTO se comprou, nao de preco: o preco de uma
+    # cesta que muda de composicao nao diz se subiu.
+    geral['delta_rs'] = ((geral['rs'] - geral['antes_rs'])
+                         if geral['antes_rs'] else None)
+
     return {'produtos': saida, 'total': tot, 'sem_classificar': sem,
-            'notas': relacao, 'ini_ant': ini_ant, 'fim_ant': fim_ant}
+            'notas': relacao, 'geral': geral,
+            'ini_ant': ini_ant, 'fim_ant': fim_ant}
