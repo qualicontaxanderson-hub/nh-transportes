@@ -3131,7 +3131,11 @@ def exportar_contabil():
     _has_despesa_cfg = any(v.get('despesa') and v['despesa'][0] for v in cartao_conta_map.values())
     if data_ini and data_fim and cartao_conta_map and _has_despesa_cfg:
         try:
-            # Load feriados for business-day calculation
+            # Feriados para a conta de dia util. Os NACIONAIS sao calculados
+            # (utils.feriados), os mesmos que a tela /relatorios/conf_cartoes
+            # usa -- se aqui lesse so a tabela, o dia 07/09 seria feriado la e
+            # dia util aqui, e a data esperada do credito sairia diferente nas
+            # duas telas. O cadastro manual soma-se a eles.
             _feriados_set = set()
             try:
                 cursor.execute("SELECT data FROM conf_cartoes_feriados")
@@ -3140,6 +3144,17 @@ def exportar_contabil():
                     _feriados_set.add(_fd.isoformat() if hasattr(_fd, 'isoformat') else str(_fd))
             except Exception:
                 pass
+            from utils import feriados as _fer_br
+            # O ano sai do proprio filtro ('AAAA-MM-DD'), com folga de um ano
+            # para cada lado -- o prazo de compensacao atravessa o virar do
+            # ano. Filtro estranho nao pode derrubar a conta: cai no ano de
+            # hoje, que e o caso comum.
+            try:
+                _y1 = int(str(data_ini)[:4]) - 1
+                _y2 = int(str(data_fim)[:4]) + 1
+            except (TypeError, ValueError):
+                _y1 = _y2 = _dt.date.today().year
+            _feriados_set |= _fer_br.set_iso(_y1 - 1, _y2 + 1)
 
             # Load vinculos: {forma_recebimento_id → [(bandeira_cartao_id, prazo), ...]}
             cursor.execute(

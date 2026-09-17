@@ -26,6 +26,7 @@ from flask_login import login_required
 
 from routes.auth import admin_required
 from utils.db import get_db_connection
+from utils import feriados as feriados_br
 
 import logging
 _logger = logging.getLogger(__name__)
@@ -268,8 +269,28 @@ def _ensure_feriados_table(conn):
     cur.close()
 
 
-def _get_feriados(conn):
-    """Retorna lista de feriados e um set com as datas ISO."""
+def _get_feriados(conn, ano_ini=None, ano_fim=None):
+    """Os feriados que a conta de dia útil enxerga: os NACIONAIS, calculados,
+    mais os que o usuário cadastrou à mão.
+
+    Os nacionais não moram na tabela — saem de utils.feriados, para valerem em
+    qualquer ano sem ninguém precisar lembrar de cadastrar, e para não poderem
+    ser apagados por engano. O cadastro manual continua existindo e serve para
+    o que é local (Carnaval e Corpus Christi, que não são feriado nacional mas
+    o banco não opera, já estão lá).
+
+    Devolve (linhas_para_a_tela, set_de_datas_iso). Na tela, um dia nacional
+    aparece uma vez só, marcado como nacional; se houver cadastro manual na
+    mesma data, ele continua excluível — é redundante, não errado.
+
+    A LISTA mostra os anos do período consultado; o SET vai um ano além para
+    cada lado, porque o prazo de compensação atravessa o virar do ano — uma
+    venda de 30/12 cai em janeiro, e o 01/01 tem de contar.
+    """
+    hoje = date.today()
+    ano_ini = ano_ini or hoje.year
+    ano_fim = ano_fim or hoje.year
+
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
@@ -280,8 +301,38 @@ def _get_feriados(conn):
     except Exception:
         rows = []
     cur.close()
-    feriados_set = {r['data_iso'] for r in rows}
-    return rows, feriados_set
+
+    manuais = {r['data_iso']: r for r in rows}
+    nacionais = {d.isoformat(): nome
+                 for d, nome in feriados_br.nacionais_periodo(ano_ini, ano_fim).items()}
+    # O que a CONTA enxerga vai alem do que a tela lista.
+    nac_conta = feriados_br.set_iso(ano_ini - 1, ano_fim + 1)
+
+    linhas = []
+    for iso, nome in nacionais.items():
+        m = manuais.get(iso)
+        linhas.append({
+            'id': (m['id'] if m else None),
+            'data_iso': iso,
+            'descricao': nome,
+            'nacional': True,
+        })
+    for iso, m in manuais.items():
+        if iso in nacionais:
+            continue
+        linhas.append({
+            'id': m['id'],
+            'data_iso': iso,
+            'descricao': m['descricao'],
+            'nacional': False,
+        })
+    linhas.sort(key=lambda x: x['data_iso'])
+
+    # O SET manda em TODA data cadastrada a mão, e não só nas do intervalo de
+    # anos: um feriado local de 2024 continua valendo para um relatório de
+    # 2024, mesmo que a tela liste só 2025-2027.
+    feriados_set = set(manuais) | nac_conta
+    return linhas, feriados_set
 
 
 def _get_empresas(conn):
@@ -715,7 +766,15 @@ def conf_cartoes():
         empresas = _get_empresas(conn)
         bandeiras = _get_bandeiras(conn)
         formas_cartao = _get_formas_recebimento_cartao(conn)
-        feriados, feriados_set = _get_feriados(conn)
+        # A tela lista o calendario dos anos do periodo consultado: quem abre
+        # o relatorio de setembro/2026 quer ver 2026, e nao uma lista de tres
+        # anos para rolar.
+        _ai = _parse_iso(data_inicio)
+        _af = _parse_iso(data_fim)
+        feriados, feriados_set = _get_feriados(
+            conn,
+            _ai.year if _ai else None,
+            _af.year if _af else None)
         plano_contas = _get_plano_contas(conn)
         config_contabil = _get_config_contabil(conn)
         # Serialise config_contabil to a JSON-safe dict keyed by "bandId_cliId"

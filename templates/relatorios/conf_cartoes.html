@@ -534,14 +534,22 @@
     <div class="modal-content">
       <div class="modal-header" style="background:#198754;color:#fff;">
         <h5 class="modal-title" id="labelModalFeriados">
-          <i class="bi bi-calendar-x me-2"></i>Feriados Municipais / Estaduais
+          <i class="bi bi-calendar-x me-2"></i>Feriados
         </h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <p class="small text-muted mb-3">
-          Cadastre aqui os feriados municipais e estaduais para que as linhas correspondentes sejam
-          destacadas em <strong style="color:#198754;">verde</strong> no relatório.
+          Os <strong>feriados nacionais</strong> já entram sozinhos — são calculados, valem para
+          qualquer ano e não precisam ser cadastrados. Use o campo abaixo só para o que não é
+          nacional, como Carnaval e Corpus Christi (que são ponto facultativo, mas o banco não
+          opera). As linhas correspondentes ficam destacadas em
+          <strong style="color:#198754;">verde</strong> no relatório.
+        </p>
+        <p class="small text-muted mb-3">
+          Feriado <strong>municipal ou estadual não entra</strong>: a praça do posto pode parar,
+          mas quem processa o cartão costuma estar em outro estado, onde o dia foi útil — e o
+          dinheiro anda.
         </p>
 
         <!-- Formulário de adição -->
@@ -572,14 +580,28 @@
             </tr>
           </thead>
           <tbody id="tbl-feriados-body">
+            {#- O nacional nao tem lixeira: ele nao esta cadastrado, e
+                calculado. So aparece a lixeira quando existe um cadastro
+                manual naquela data (f.id) -- e ai ela remove o cadastro
+                redundante, nao o feriado. -#}
             {% for f in feriados %}
-            <tr id="feriado-row-{{ f.id }}">
+            <tr {% if f.id %}id="feriado-row-{{ f.id }}"{% endif %}
+                {% if f.nacional %}class="table-light"{% endif %}>
               <td>{{ f.data_iso[8:10] }}/{{ f.data_iso[5:7] }}/{{ f.data_iso[0:4] }}</td>
-              <td>{{ f.descricao }}</td>
+              <td>{{ f.descricao }}
+                {%- if f.nacional %}
+                <span class="badge bg-secondary ms-1" style="font-size:.68rem;">nacional</span>
+                {%- endif %}</td>
               <td class="text-center">
-                <button class="btn btn-sm btn-outline-danger btn-feriado-del" data-id="{{ f.id }}" title="Excluir">
+                {% if f.id %}
+                <button class="btn btn-sm btn-outline-danger btn-feriado-del" data-id="{{ f.id }}"
+                        title="{{ 'Este dia já é feriado nacional — excluir remove só o cadastro manual repetido'
+                                 if f.nacional else 'Excluir' }}">
                   <i class="bi bi-trash"></i>
                 </button>
+                {% else %}
+                <span class="text-muted" title="Feriado nacional: entra sozinho, não é cadastrado">—</span>
+                {% endif %}
               </td>
             </tr>
             {% else %}
