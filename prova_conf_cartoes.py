@@ -194,8 +194,21 @@ prova('cada card lembra ate quando esta recebido',
 prova('e diz quando nao houve recebimento nenhum no periodo',
       'nenhum no período' in html or html.count('último recebimento') > 0)
 _filtro = html[html.index('id="form-filtros"'):html.index('</form>')]
-prova('no filtro sobrou um select so (empresa); o de cartao virou pilula',
-      _filtro.count('<select') == 1 and 'class="chips"' in _filtro)
+prova('o filtro nao tem mais NENHUMA caixa de rolagem -- so pilulas',
+      _filtro.count('<select') == 0 and _filtro.count('class="chips"') == 2)
+prova('empresa e cartao, cada um com o seu grupo de pilulas',
+      _filtro.count('class="grupo"') == 2)
+prova('cada grupo tem o "Todas/Todos", que e desmarcar e nao um valor',
+      _filtro.count('class="todos') == 2 and 'name="todos"' not in _filtro)
+_acesas = re.findall(r'<label class="on"[^>]*>\s*<input[^>]*value="(\d+)"', _filtro)
+prova('sem escolha, nenhuma pilula acesa e as duas de "Todas" acesas',
+      not _acesas and _filtro.count('class="todos on"') == 2)
+_r1 = client.get(url + '&bandeira_ids[]=4').get_data(as_text=True)
+_f1 = _r1[_r1.index('id="form-filtros"'):_r1.index('</form>')]
+prova('escolhendo um cartao, so ele acende',
+      re.findall(r'<label class="on"[^>]*>\s*<input[^>]*value="(\d+)"', _f1) == ['4'])
+prova('e o "Todos" dos cartoes apaga, o das empresas continua aceso',
+      _f1.count('class="todos on"') == 1)
 
 print('\n5) as linhas que explicam a data do recebimento')
 prova('a linha de fim de semana/feriado continua marcada',
@@ -228,10 +241,12 @@ print('\n7) o que a reforma NAO podia quebrar')
 # selBandeiras, buscaBandeira e periodo-btn sairam DE PROPOSITO: o cartao virou
 # pilula (dez pilulas nao precisam de busca) e os dois botoes de mes viraram a
 # regua com todos os meses. O que nao pode ter saido e o resto.
-for gancho in ('form-filtros', 'selEmpresas', 'data_inicio', 'data_fim',
+for gancho in ('form-filtros', 'data_inicio', 'data_fim',
                'bandeira_ids[]', 'empresa_ids[]'):
     prova('o gancho do formulario "%s" sobreviveu' % gancho, gancho in html)
-for saiu in ('buscaBandeira', 'periodo-btn'):
+# Sairam de proposito: a busca e o multi-select de bandeira (viraram pilula),
+# os botoes de mes (viraram regua) e o select de empresa (virou pilula).
+for saiu in ('buscaBandeira', 'periodo-btn', 'selEmpresas'):
     prova('e o "%s" saiu junto com o que ele servia' % saiu, saiu not in html)
 for modal in ('modalFeriados', 'modalContasContabeis', 'modalVinculos'):
     prova('o modal %s continua na tela' % modal, ('id="%s"' % modal) in html)

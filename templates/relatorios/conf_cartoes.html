@@ -36,45 +36,56 @@ body > .container-fluid:has(#ccz){
   #ccz .migalha a{ color:var(--blue-deep); text-decoration:none; font-weight:700; }
 
   #ccz .filtro{ background:#fff; border:1px solid var(--borda); border-radius:13px;
-    padding:.7rem .75rem; margin-bottom:.7rem; }
-  #ccz .filtro__g{ display:grid; gap:.5rem; grid-template-columns:1fr 1fr; }
-  @media (min-width:900px){
-    #ccz .filtro__g{ grid-template-columns:.8fr .8fr 1.3fr 1.3fr auto; align-items:end; } }
+    padding:.75rem .8rem .7rem; margin-bottom:.7rem; }
+  #ccz .linha1{ display:flex; gap:.5rem; align-items:end; flex-wrap:wrap; }
+  #ccz .linha1__b{ display:flex; gap:.4rem; margin-left:auto; }
   #ccz .campo{ display:flex; flex-direction:column; gap:.2rem; min-width:0; }
-  #ccz .campo > span{ font-size:.68rem; font-weight:800; color:var(--muted);
-    text-transform:uppercase; letter-spacing:.04em; }
-  #ccz .campo input, #ccz .campo select{ border:1px solid var(--borda);
-    border-radius:9px; padding:.42rem .5rem; font-size:.82rem; font-family:inherit;
-    background:#fff; color:var(--ink); min-width:0; }
-  #ccz .campo select[multiple]{ height:auto; min-height:4.6rem; padding:.3rem; }
-  #ccz .campo .dica{ font-size:.66rem; color:var(--muted); }
+  #ccz .campo > span{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.05em; }
+  #ccz .campo input{ border:1px solid var(--borda); border-radius:9px;
+    padding:.42rem .55rem; font-size:.84rem; font-family:inherit;
+    background:#fff; color:var(--ink); min-width:9.5rem; }
   #ccz .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
-    border-radius:9px; padding:.45rem .8rem; font-size:.83rem; font-weight:700;
+    border-radius:9px; padding:.45rem .85rem; font-size:.83rem; font-weight:700;
     font-family:inherit; cursor:pointer; text-decoration:none; display:inline-flex;
-    gap:.3rem; align-items:center; justify-content:center; white-space:nowrap; }
+    gap:.35rem; align-items:center; white-space:nowrap; }
   #ccz .bt--sim{ background:var(--blue); border-color:var(--blue); color:#fff; }
-  #ccz .filtro__acoes{ display:flex; flex-direction:column; gap:.35rem; }
 
-  #ccz .campo--w{ grid-column:1 / -1; }
-  #ccz .campo .opc{ font-weight:700; text-transform:none; letter-spacing:0;
-    color:#8a93a0; font-style:normal; }
+  /* Cada grupo é uma faixa com rótulo à esquerda e pílulas à direita: sem
+     caixa de rolagem e sem "Ctrl+clique". */
+  #ccz .grupo{ display:flex; gap:.6rem; align-items:flex-start;
+    margin-top:.6rem; padding-top:.55rem; border-top:1px solid var(--linha); }
+  #ccz .grupo__r{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.05em; padding-top:.42rem;
+    min-width:4.2rem; flex:0 0 auto; }
+  #ccz .chips{ display:flex; gap:.35rem; flex-wrap:wrap; flex:1 1 auto; }
 
-  /* os cartões em pílula, como os produtos do lucro_postos_migrados: sem
-     multi-select e sem "Ctrl+clique" */
-  #ccz .chips{ display:flex; gap:.35rem; flex-wrap:wrap; margin-top:.25rem; }
-  #ccz .chips label{ border:1px solid var(--borda); border-radius:99px;
-    padding:.3rem .7rem; font-size:.79rem; font-weight:800; cursor:pointer;
-    background:#fff; color:#3a4655; display:inline-flex; gap:.4rem;
-    align-items:center; }
-  #ccz .chips label:hover{ background:#f2f7fc; }
-  #ccz .chips label.on{ background:var(--blue); border-color:var(--blue);
-    color:#fff; }
-  #ccz .chips label.on .tp{ color:#dce9f6; }
+  /* NÃO escolhido: branco, borda fina, o texto em cinza-azulado.
+     Escolhido: preenchido na cor do cartão, com um ✓ que aparece.
+     Os dois estados têm de ser diferentes de longe — antes eram parecidos
+     demais e a tela parecia ter tudo selecionado. */
+  #ccz .chips label, #ccz .chips .todos{ border:1px solid var(--borda);
+    border-radius:99px; padding:.34rem .75rem; font-size:.79rem; font-weight:700;
+    cursor:pointer; background:#fff; color:#55606e; display:inline-flex;
+    gap:.35rem; align-items:center; font-family:inherit; line-height:1.15;
+    transition:background .12s, color .12s, border-color .12s; }
+  #ccz .chips label:hover, #ccz .chips .todos:hover{ background:#f2f7fc;
+    border-color:#bcd3ea; color:var(--blue-deep); }
+  #ccz .chips label{ --c:var(--blue); }
+  #ccz .chips label.on{ background:var(--c); border-color:var(--c); color:#fff;
+    font-weight:800; box-shadow:0 2px 8px rgba(20,35,60,.16); }
+  #ccz .chips .todos.on{ background:#3a4655; border-color:#3a4655; color:#fff;
+    font-weight:800; }
   #ccz .chips input{ position:absolute; opacity:0; width:0; height:0; }
-  #ccz .chips .pt{ width:.55rem; height:.55rem; border-radius:99px;
-    display:inline-block; flex:0 0 auto; }
-  #ccz .chips .tp{ font-size:.6rem; font-weight:800; color:#8a93a0;
-    font-style:normal; letter-spacing:.04em; }
+  /* o ✓ só ocupa espaço quando a pílula está escolhida */
+  #ccz .chips .tick{ display:none; font-size:.78rem; line-height:1; }
+  #ccz .chips label.on .tick{ display:inline-flex; }
+  #ccz .chips .pt{ width:.5rem; height:.5rem; border-radius:99px;
+    background:var(--c); display:inline-block; flex:0 0 auto; }
+  #ccz .chips label.on .pt{ background:rgba(255,255,255,.85); }
+  #ccz .chips .tp{ font-size:.62rem; font-weight:800; color:#97a1ad;
+    font-style:normal; letter-spacing:.03em; }
+  #ccz .chips label.on .tp{ color:rgba(255,255,255,.8); }
 
   /* a régua de meses e as pílulas de tipo: a mesma fileira dos irmãos */
   #ccz .meses, #ccz .tipos{ display:flex; gap:.35rem; flex-wrap:wrap;
@@ -314,45 +325,58 @@ body > .container-fluid:has(#ccz){
   </div>
 
   <form method="get" id="form-filtros" class="filtro">
-    {#- Só três campos, e nenhum "Ctrl+clique": as datas em cima, a empresa
-        larga embaixo e os cartões em pílula, como os produtos do
-        /relatorios/lucro_postos_migrados. Dois multi-select lado a lado era
-        o que deixava esta faixa pesada. -#}
+    {#- Nada de caixa de rolagem: empresa e cartão são pílulas, e a linha de
+        cima tem só as datas e os botões. Um multi-select de 5 linhas com
+        barra de rolagem é o que fazia esta faixa parecer rascunho. -#}
     {% if band %}<input type="hidden" name="band" value="{{ band }}">{% endif %}
     {% if tipo %}<input type="hidden" name="tipo" value="{{ tipo }}">{% endif %}
-    <div class="filtro__g">
+
+    <div class="linha1">
       <label class="campo"><span>De</span>
         <input type="date" name="data_inicio" value="{{ data_inicio }}"></label>
       <label class="campo"><span>Até</span>
         <input type="date" name="data_fim" value="{{ data_fim }}"></label>
-      <label class="campo campo--w"><span>Empresa</span>
-        <select name="empresa_ids[]" multiple id="selEmpresas" size="3">
-          {% for emp in empresas %}
-          <option value="{{ emp.id }}" {% if emp.id|string in empresa_ids %}selected{% endif %}>
-            {{ emp.nome }}</option>
-          {% endfor %}
-        </select></label>
+      <div class="linha1__b">
+        <button type="submit" class="bt bt--sim"><i class="bi bi-search"></i> Apurar</button>
+        <a class="bt" href="{{ url_for('conf_cartoes.conf_cartoes') }}">
+          <i class="bi bi-arrow-counterclockwise"></i> Limpar</a>
+      </div>
     </div>
 
-    <div class="campo" style="margin-top:.55rem">
-      <span>Cartões {% if not bandeira_ids %}<i class="opc">— nenhum escolhido é o mesmo que todos</i>{% endif %}</span>
+    {#- "Todas" não é um valor: é a ausência de escolha. Por isso ela é um
+        botão que desmarca o grupo, e fica acesa justamente quando não há
+        nada marcado. -#}
+    <div class="grupo">
+      <span class="grupo__r">Empresa</span>
       <div class="chips">
-        {% for b in bandeiras %}
-        {% set cor = '#1D63A5' if b.tipo|upper == 'DEBITO' else '#6f42c1' %}
-        <label class="{{ 'on' if b.id|string in bandeira_ids }}">
-          <input type="checkbox" name="bandeira_ids[]" value="{{ b.id }}"
-                 {{ 'checked' if b.id|string in bandeira_ids }}
-                 onchange="this.parentNode.classList.toggle('on', this.checked)">
-          <i class="pt" style="background:{{ cor }}"></i>
-          {{ b.nome }} <i class="tp">{{ b.tipo[:3] }}</i></label>
+        <button type="button" class="todos {{ 'on' if not empresa_ids }}"
+                onclick="ccLimpaGrupo(this)">Todas</button>
+        {% for emp in empresas %}
+        <label class="{{ 'on' if emp.id|string in empresa_ids }}">
+          <input type="checkbox" name="empresa_ids[]" value="{{ emp.id }}"
+                 {{ 'checked' if emp.id|string in empresa_ids }}
+                 onchange="ccMarca(this)">
+          <i class="tick"><i class="bi bi-check-lg"></i></i>{{ emp.nome }}</label>
         {% endfor %}
       </div>
     </div>
 
-    <div class="filtro__r">
-      <button type="submit" class="bt bt--sim"><i class="bi bi-search"></i> Apurar</button>
-      <a class="bt" href="{{ url_for('conf_cartoes.conf_cartoes') }}">
-        <i class="bi bi-x-circle"></i> Limpar</a>
+    <div class="grupo">
+      <span class="grupo__r">Cartão</span>
+      <div class="chips">
+        <button type="button" class="todos {{ 'on' if not bandeira_ids }}"
+                onclick="ccLimpaGrupo(this)">Todos</button>
+        {% for b in bandeiras %}
+        {% set cor = '#1D63A5' if b.tipo|upper == 'DEBITO' else '#6f42c1' %}
+        <label class="{{ 'on' if b.id|string in bandeira_ids }}" style="--c:{{ cor }}">
+          <input type="checkbox" name="bandeira_ids[]" value="{{ b.id }}"
+                 {{ 'checked' if b.id|string in bandeira_ids }}
+                 onchange="ccMarca(this)">
+          <i class="tick"><i class="bi bi-check-lg"></i></i>
+          <i class="pt"></i>{{ b.nome }}
+          <i class="tp">{{ 'déb' if b.tipo|upper == 'DEBITO' else 'créd' }}</i></label>
+        {% endfor %}
+      </div>
     </div>
   </form>
 
@@ -928,8 +952,28 @@ body > .container-fluid:has(#ccz){
   // a regua de meses, que vem do banco e cobre TODOS os meses com venda de
   // cartao -- nao so os dois ultimos. Ela e link, nao precisa de JS.
 
-  // A busca de bandeira saiu junto com o multi-select: os cartoes viraram
-  // pilulas, e dez pilulas na tela nao precisam de campo de busca.
+  // As pilulas do filtro. Elas sao checkbox de verdade -- o formulario
+  // continua mandando empresa_ids[] e bandeira_ids[] como sempre mandou --,
+  // e o JS so cuida do que a tela mostra: acender a pilula clicada e a de
+  // "Todas/Todos", que nao e um valor e sim a ausencia de escolha.
+  window.ccMarca = function (inp) {
+    inp.parentNode.classList.toggle('on', inp.checked);
+    ccAtualizaTodos(inp.closest('.chips'));
+  };
+  window.ccLimpaGrupo = function (btn) {
+    var chips = btn.closest('.chips');
+    chips.querySelectorAll('input[type=checkbox]').forEach(function (i) {
+      i.checked = false;
+      i.parentNode.classList.remove('on');
+    });
+    ccAtualizaTodos(chips);
+  };
+  function ccAtualizaTodos(chips) {
+    if (!chips) return;
+    var algum = chips.querySelector('input[type=checkbox]:checked');
+    var todos = chips.querySelector('.todos');
+    if (todos) todos.classList.toggle('on', !algum);
+  }
 
   // Salva vínculos (Forma 1 + Forma 2) e Prazo para uma bandeira
   document.querySelectorAll('.btn-vincular').forEach(btn => {
