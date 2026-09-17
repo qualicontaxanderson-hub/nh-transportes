@@ -759,13 +759,14 @@ def editar_regra():
                   JOIN dfe_documentos d ON d.id = i.documento_id
                    SET i.categoria = %s,
                        i.classificado_produto_id = %s,
+                       i.produto_id = %s,
                        i.classificado_em = NOW(),
                        i.classificado_modo = 'memorizado'
                  WHERE d.emit_cnpj = %s
                    AND i.cprod_fornecedor = %s
                    AND i.classificado_modo = 'memorizado'
                 """,
-                (categoria, produto_id, emit_cnpj, cprod),
+                (categoria, produto_id, produto_id, emit_cnpj, cprod),
             )
             tambem = cur.rowcount or 0
 
@@ -779,13 +780,14 @@ def editar_regra():
                   JOIN dfe_documentos d ON d.id = i.documento_id
                    SET i.categoria = %s,
                        i.classificado_produto_id = %s,
+                       i.produto_id = %s,
                        i.classificado_em = NOW(),
                        i.classificado_modo = 'so_desta_vez'
                  WHERE i.id = %s
                    AND d.emit_cnpj = %s
                    AND i.cprod_fornecedor = %s
                 """,
-                (categoria, produto_id, item_id, emit_cnpj, cprod),
+                (categoria, produto_id, produto_id, item_id, emit_cnpj, cprod),
             )
             tambem = cur.rowcount or 0
             if not tambem:
@@ -882,11 +884,13 @@ def classificar():
             UPDATE dfe_itens
                SET categoria = %s,
                    classificado_produto_id = %s,
+                   -- produto_id tambem: e a coluna que os relatorios leem.
+                   produto_id = %s,
                    classificado_em = NOW(),
                    classificado_modo = %s
              WHERE id = %s
             """,
-            (categoria, produto_id, modo_grava, item_id),
+            (categoria, produto_id, produto_id, modo_grava, item_id),
         )
 
         # 2) Memoriza a regra (se pedido e se houver cProd para chavear) e a
@@ -920,13 +924,14 @@ def classificar():
                     JOIN dfe_documentos d ON d.id = i.documento_id
                        SET i.categoria = %s,
                            i.classificado_produto_id = %s,
+                           i.produto_id = %s,
                            i.classificado_em = NOW(),
                            i.classificado_modo = 'memorizado'
                      WHERE i.categoria IS NULL
                        AND d.emit_cnpj = %s
                        AND i.cprod_fornecedor = %s
                     """,
-                    (categoria, produto_id, emit_cnpj, cprod),
+                    (categoria, produto_id, produto_id, emit_cnpj, cprod),
                 )
                 tambem = cur.rowcount or 0
             else:

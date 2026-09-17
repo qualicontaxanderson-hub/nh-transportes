@@ -26,6 +26,12 @@ _SQL_APLICAR = (
     " AND r.cprod_fornecedor = i.cprod_fornecedor "
     "SET i.categoria = r.categoria, "
     "    i.classificado_produto_id = r.produto_id, "
+    # produto_id tambem: e a coluna que os relatorios leem. Ate 16/09/2026 ela
+    # era preenchida na captura por um chute no cod_anp, e a classificacao do
+    # usuario nunca chegava ate ela -- 126 itens ja classificados (705.422 L)
+    # ficavam invisiveis no relatorio Por produto. Agora a regra escreve nas
+    # duas, e o ANP nao decide nada.
+    "    i.produto_id = r.produto_id, "
     "    i.classificado_em = NOW(), "
     "    i.classificado_modo = 'memorizado' "
     "WHERE i.categoria IS NULL "

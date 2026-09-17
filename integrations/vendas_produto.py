@@ -7,29 +7,24 @@ chave do de-para e o `cnpj_emitente` (a venda nao carrega cliente_id).
 
 REGRA DE RESOLUCAO (a mesma documentada na tela Classificar de vendas):
   1. De-para `vendas_xml_depara_produto` (cnpj_emitente + cprod) -> produto_id.
-     A GASOLINA sempre cai aqui: cod_anp 320102001 nao separa comum de
-     aditivada, so o cprod do posto separa.
-  2. Fallback por cod_anp SO para os combustiveis sem ambiguidade:
-     810101001->Etanol(1), 820101012->S-500(4), 820101034->S-10(5).
-     A gasolina (320102001) NUNCA entra no fallback.
-  3. Valida contra `cliente_produtos` (allow-list da empresa). Se a empresa
+     E o UNICO caminho. O cprod e o codigo que o proprio posto da ao produto;
+     e ele que separa a gasolina comum da aditivada, e o ARLA da lata de oleo.
+  2. Valida contra `cliente_produtos` (allow-list da empresa). Se a empresa
      nao for cliente conhecido, ou nao tiver produtos cadastrados, a validacao
      e PULADA (nao bloqueia) -- ela so serve para pegar erro grosseiro.
-  4. Sem resolucao -> None (o item fica NULL e aparece na aba Classificar).
+  3. Sem resolucao -> None (o item fica NULL e aparece na aba Classificar).
+
+O COD_ANP NAO DECIDE PRODUTO (16/09/2026). Havia um atalho por ANP para os
+tres combustiveis sem ambiguidade. Ele saiu: o ANP identifica familia, nao
+produto -- o 620505001 sozinho cobre 37 itens do posto, de ARLA a tacografo --
+e um sistema que adivinha por ele acaba jurando que uma caixa de Lubrax e
+ARLA. Quem decide e a regra que o usuario memorizou.
 
 Design (igual ao aplicar_regras da compra):
 - Recebe um CURSOR ja aberto (funciona com mysql.connector E pymysql; ambos
   usam %s). Funciona tanto com cursor tuple quanto dictionary=True.
 - NAO faz commit -- quem chama controla a transacao.
 """
-
-# cod_anp -> produto_id, SO os que nao tem ambiguidade (gasolina fica de fora).
-FALLBACK_ANP = {
-    '810101001': 1,   # Etanol
-    '820101012': 4,   # Diesel S-500
-    '820101034': 5,   # Diesel S-10
-}
-
 
 def _scalar(row):
     """Primeiro valor de uma linha, seja ela tuple (cursor comum) ou dict
@@ -69,10 +64,13 @@ def _empresa_vende(cur, cnpj_emitente, produto_id):
     return cur.fetchone() is not None
 
 
-def resolver_produto_id_venda(cur, cnpj_emitente, cprod, cod_anp):
+def resolver_produto_id_venda(cur, cnpj_emitente, cprod, cod_anp=None):
     """Resolve o nosso produto_id de UM item de venda. Ver regra no topo.
-    Retorna produto_id (int) ou None."""
-    # 1) de-para (cnpj_emitente + cprod)
+    Retorna produto_id (int) ou None.
+
+    `cod_anp` continua na assinatura porque quem chama ja o passa, mas ele NAO
+    decide nada -- ver a nota sobre o ANP no topo do modulo."""
+    # 1) de-para (cnpj_emitente + cprod) -- o unico caminho
     if cnpj_emitente and cprod:
         cur.execute(
             "SELECT produto_id FROM vendas_xml_depara_produto "
@@ -83,12 +81,7 @@ def resolver_produto_id_venda(cur, cnpj_emitente, cprod, cod_anp):
         if pid:
             return pid if _empresa_vende(cur, cnpj_emitente, pid) else None
 
-    # 2) fallback por cod_anp (sem gasolina)
-    pid = FALLBACK_ANP.get((cod_anp or '').strip())
-    if pid:
-        return pid if _empresa_vende(cur, cnpj_emitente, pid) else None
-
-    # 3) sem resolucao
+    # 2) sem regra memorizada -> fica NULL e aparece na aba Classificar
     return None
 
 

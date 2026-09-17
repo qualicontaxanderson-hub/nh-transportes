@@ -591,30 +591,20 @@ def extrair_resumo_cte(root):
 
 
 # ==========================================================================
-# De-para ANP -> produto_id: NAO ha tabela-fonte dedicada (produto so tem
-# id/nome/descricao). Reaproveita mapeamentos JA resolvidos em vendas_xml_itens
-# e dfe_itens. Retorna None se nao houver de-para conhecido (deixa NULL).
+# O PRODUTO NAO SAI DO COD_ANP (16/09/2026).
+#
+# Ate aqui a captura adivinhava o produto pelo codigo ANP do item, procurando
+# quem ja tivesse aquele ANP em vendas_xml_itens ou dfe_itens. O ANP nao serve
+# para isso: o 620505001 e o codigo generico de "outros produtos" e cobre, na
+# venda do posto, 37 coisas diferentes -- ARLA, oleo em lata, aditivo,
+# tacografo. Um chute nesse codigo transformaria uma caixa de Lubrax em ARLA.
+#
+# Quem diz qual e o produto e a REGRA que o usuario memorizou na tela
+# Classificar (dfe_classificacao_regra: emit_cnpj + cprod_fornecedor). A
+# captura entra com produto_id NULL e quem preenche e aplicar_regras(), logo
+# depois. Sem regra, o item cai na fila de pendentes -- que e onde ele deve
+# cair, e nao num produto adivinhado.
 # ==========================================================================
-def resolver_produto_id(cur, cod_anp):
-    if not cod_anp:
-        return None
-    cur.execute(
-        "SELECT produto_id FROM vendas_xml_itens "
-        "WHERE cod_anp = %s AND produto_id IS NOT NULL "
-        "GROUP BY produto_id ORDER BY COUNT(*) DESC LIMIT 1",
-        (cod_anp,),
-    )
-    row = cur.fetchone()
-    if row and row.get("produto_id"):
-        return row["produto_id"]
-    cur.execute(
-        "SELECT produto_id FROM dfe_itens "
-        "WHERE cod_anp = %s AND produto_id IS NOT NULL "
-        "GROUP BY produto_id ORDER BY COUNT(*) DESC LIMIT 1",
-        (cod_anp,),
-    )
-    row = cur.fetchone()
-    return row["produto_id"] if (row and row.get("produto_id")) else None
 
 
 # ==========================================================================
@@ -665,7 +655,9 @@ SQL_ITEM_UPSERT = (
     "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
     "ON DUPLICATE KEY UPDATE "
     "  produto_xml=VALUES(produto_xml), cprod_fornecedor=VALUES(cprod_fornecedor), "
-    "  cean=VALUES(cean), cod_anp=VALUES(cod_anp), produto_id=VALUES(produto_id), "
+    # produto_id fica FORA do UPDATE: recapturar a mesma nota nao pode
+    # apagar o produto que a regra (ou o usuario) ja resolveu.
+    "  cean=VALUES(cean), cod_anp=VALUES(cod_anp), "
     "  ncm=VALUES(ncm), unidade=VALUES(unidade), quantidade=VALUES(quantidade), "
     "  valor_unitario=VALUES(valor_unitario), valor_total=VALUES(valor_total)"
 )
@@ -796,11 +788,12 @@ def gravar_nota(conn, cur, cliente_id, cnpj_cert, nota, xml_bytes, nsu, schema,
 
     n_itens = 0
     for it in nota["itens"]:
-        produto_id = resolver_produto_id(cur, it["cod_anp"])
+        # produto_id entra NULL: quem decide o produto e aplicar_regras(),
+        # pela regra memorizada. Ver o bloco acima.
         cur.execute(SQL_ITEM_UPSERT, (
             documento_id, it["n_item"], it["produto_xml"],
             it["cprod_fornecedor"], it["cean"], it["cod_anp"],
-            produto_id, it["ncm"], it["unidade"], it["quantidade"],
+            None, it["ncm"], it["unidade"], it["quantidade"],
             it["valor_unitario"], it["valor_total"],
         ))
         n_itens += 1
