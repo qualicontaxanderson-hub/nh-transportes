@@ -70,8 +70,13 @@ prova('HTTP 200 (e nao um redirect para o login)', r.status_code == 200)
 prova('a tela usa o novo id #ccz', 'id="ccz"' in html)
 prova('o topo explica de onde vem cada numero',
       'A venda vem do fechamento de caixa' in html)
-prova('tem o painel do periodo inteiro', 'class="painel"' in html)
-prova('tem o ranking por bandeira', 'Por bandeira, e a que taxa' in html)
+prova('tem a grade de cards (a mesma do saidas_migradas)', 'class="pgrade"' in html)
+prova('tem o card que soma todas', 'pc pc--tot' in html)
+prova('tem a regua de meses, e nao os botoes de mes atual/anterior',
+      'class="meses"' in html and 'periodo-btn' not in html)
+prova('tem as pilulas de tipo (credito, debito, os dois)',
+      'Só débito' in html and 'Só crédito' in html and 'Crédito e débito' in html)
+prova('os cartoes viraram pilulas no filtro', 'class="chips"' in html)
 prova('tem o rodape que explica as colunas',
       'class="rod"' in html and 'Dif. acumulada' in html)
 prova('a tabela virou cartao no celular (tem data-r nas celulas)',
@@ -132,19 +137,22 @@ for q in por_bandeira:
     prova('%s: vendido = recebido + taxa + a receber' % q['nome'],
           q['venda'] >= q['receb'] + q['dif'] - 0.02)
 
-print('\n4) o painel do topo e a soma das bandeiras')
+print('\n4) o card TODAS e a soma das bandeiras')
 soma_v = sum(q['venda'] for q in por_bandeira)
 soma_r = sum(q['receb'] for q in por_bandeira)
-painel = html[html.index('class="painel"'):html.index('class="rank"')]
-p_venda = _num(re.search(r'class="caixa__v">([^<]*)', painel).group(1))
-m_receb = re.search(r'Recebido</span><b>([^<]*)', ' '.join(painel.split()))
+# O card que soma todas ocupa o lugar do antigo painel: e nele que a conta
+# do periodo inteiro aparece agora.
+painel = html[html.index('pc pc--tot'):]
+painel = painel[:painel.index('</a>')]
+p_venda = _num(re.search(r'class="pc__v"><b>([^<]*)', painel).group(1))
+m_receb = re.search(r'<dt>Recebido</dt><dd>([^<]*)', ' '.join(painel.split()))
 p_receb = _num(m_receb.group(1)) if m_receb else None
-prova('vendido do painel (%s) = soma das bandeiras (%s)'
+prova('vendido do card TODAS (%s) = soma das bandeiras (%s)'
       % (p_venda, round(soma_v, 2)), perto(p_venda, soma_v, 0.05))
-prova('recebido do painel (%s) = soma das bandeiras (%s)'
+prova('recebido do card TODAS (%s) = soma das bandeiras (%s)'
       % (p_receb, round(soma_r, 2)),
       p_receb is not None and perto(p_receb, soma_r, 0.05))
-prova('e o painel diz quantas bandeiras sao (%d)' % len(por_bandeira),
+prova('e o card diz quantas bandeiras sao (%d)' % len(por_bandeira),
       ('%d bandeira' % len(por_bandeira)) in ' '.join(html.split()))
 
 # A conta que o painel passou a mostrar separada: a taxa e o que ficou mesmo,
@@ -153,14 +161,14 @@ _pl = ' '.join(painel.split())
 
 
 def _caixa(rotulo):
-    """O valor da caixinha do painel que tem aquele rotulo."""
-    m = re.search(re.escape(rotulo) + r'</span>\s*<b[^>]*>([^<]*)', _pl)
+    """O valor da caixinha do card TODAS que tem aquele rotulo."""
+    m = re.search(r'<dt>' + re.escape(rotulo) + r'</dt>\s*<dd[^>]*>([^<]*)', _pl)
     return _num(m.group(1)) if m else None
 
 
 _taxa = _caixa('Taxa retida')
 _falta = _caixa('Ainda não caiu')
-prova('o painel separa a taxa retida (%s) do que ainda nao caiu (%s)'
+prova('o card separa a taxa retida (%s) do que ainda nao caiu (%s)'
       % (_taxa, _falta), _taxa is not None and _falta is not None)
 if _taxa is not None and _falta is not None:
     prova('e as tres partes fecham o vendido: %s + %s + %s = %s'
@@ -171,6 +179,24 @@ if _taxa is not None and _falta is not None:
 prova('e o rodape explica a conta',
       'vendido = recebido + taxa retida' in html)
 
+print('\n4b) o que o Anderson pediu nesta rodada')
+prova('a regua traz TODOS os meses com venda de cartao, e nao so dois',
+      len(re.findall(r'title="\d+ lançamento', html)) >= 3)
+prova('e ela tem o "Tudo" para o periodo inteiro',
+      '>Tudo</a>' in html)
+prova('o tipo separa credito de debito',
+      'tipo=DEBITO' in html and 'tipo=CREDITO' in html)
+prova('os cards saem agrupados por tipo (um bloco, depois o outro)',
+      [t for t in re.findall(r'class="pc__r">([A-Z]+) ·', html)]
+      == sorted(re.findall(r'class="pc__r">([A-Z]+) ·', html)))
+prova('cada card lembra ate quando esta recebido',
+      html.count('último recebimento') >= 2)
+prova('e diz quando nao houve recebimento nenhum no periodo',
+      'nenhum no período' in html or html.count('último recebimento') > 0)
+_filtro = html[html.index('id="form-filtros"'):html.index('</form>')]
+prova('no filtro sobrou um select so (empresa); o de cartao virou pilula',
+      _filtro.count('<select') == 1 and 'class="chips"' in _filtro)
+
 print('\n5) as linhas que explicam a data do recebimento')
 prova('a linha de fim de semana/feriado continua marcada',
       'class="fds"' in html or 'antes fds' in html)
@@ -179,20 +205,34 @@ prova('a venda de antes do periodo continua marcada',
 prova('e o rodape explica o que ela e', 'antes do período' in html)
 prova('o dia da semana continua ao lado da data', 'class="dia-semana"' in html)
 
-print('\n6) o link do painel cai no quadro da bandeira')
+print('\n6) o clique no card escolhe a bandeira, sem sumir com as outras')
 ancoras = set(re.findall(r'id="band-([^"]+)"', html))
-links = set(re.findall(r'href="#band-([^"]+)"', html))
-prova('toda bandeira tem ancora (%d)' % len(ancoras),
+cliques = set(re.findall(r'band=(\d+)"', html))
+prova('toda bandeira tem quadro com ancora (%d)' % len(ancoras),
       len(ancoras) == len(por_bandeira))
-prova('e todo link do painel tem para onde ir',
-      bool(links) and links <= ancoras)
+prova('e todo card tem um clique para a sua bandeira',
+      bool(cliques) and cliques <= ancoras)
 prova('nenhuma ancora saiu vazia', all(a.strip() for a in ancoras))
+# O clique NAO e o filtro: com ele, os cards continuam todos na tela -- eles
+# SAO o seletor, e sumir com eles tiraria o caminho de volta.
+_um = client.get(url + '&band=' + sorted(ancoras)[0]).get_data(as_text=True)
+prova('com um card escolhido, os cards continuam todos na grade',
+      _um.count('<a class="pc') == len(por_bandeira) + 1)
+prova('e so o quadro dele fica embaixo',
+      _um.count('<div class="cx" id="band-') == 1)
+prova('o card escolhido fica aceso e ha caminho de volta',
+      'pc pc--on' in _um and 'voltar a todas' in _um)
 
 
 print('\n7) o que a reforma NAO podia quebrar')
-for gancho in ('form-filtros', 'selEmpresas', 'selBandeiras', 'buscaBandeira',
-               'periodo-btn', 'data_inicio', 'data_fim'):
-    prova('o gancho do JS "%s" sobreviveu' % gancho, gancho in html)
+# selBandeiras, buscaBandeira e periodo-btn sairam DE PROPOSITO: o cartao virou
+# pilula (dez pilulas nao precisam de busca) e os dois botoes de mes viraram a
+# regua com todos os meses. O que nao pode ter saido e o resto.
+for gancho in ('form-filtros', 'selEmpresas', 'data_inicio', 'data_fim',
+               'bandeira_ids[]', 'empresa_ids[]'):
+    prova('o gancho do formulario "%s" sobreviveu' % gancho, gancho in html)
+for saiu in ('buscaBandeira', 'periodo-btn'):
+    prova('e o "%s" saiu junto com o que ele servia' % saiu, saiu not in html)
 for modal in ('modalFeriados', 'modalContasContabeis', 'modalVinculos'):
     prova('o modal %s continua na tela' % modal, ('id="%s"' % modal) in html)
 prova('o botao de cada modal continua abrindo ele',

@@ -55,15 +55,42 @@ body > .container-fluid:has(#ccz){
   #ccz .bt--sim{ background:var(--blue); border-color:var(--blue); color:#fff; }
   #ccz .filtro__acoes{ display:flex; flex-direction:column; gap:.35rem; }
 
-  /* os atalhos de período: as mesmas pílulas da régua de meses dos irmãos */
-  #ccz .atalhos{ display:flex; gap:.35rem; flex-wrap:wrap; align-items:center;
-    margin-top:.6rem; padding-top:.55rem; border-top:1px solid var(--linha); }
-  #ccz .atalhos > b{ font-size:.66rem; font-weight:800; color:var(--muted);
-    text-transform:uppercase; letter-spacing:.06em; margin-right:.15rem; }
-  #ccz .atalhos button{ border:1px solid var(--borda); background:#f7f9fc;
+  #ccz .campo--w{ grid-column:1 / -1; }
+  #ccz .campo .opc{ font-weight:700; text-transform:none; letter-spacing:0;
+    color:#8a93a0; font-style:normal; }
+
+  /* os cartões em pílula, como os produtos do lucro_postos_migrados: sem
+     multi-select e sem "Ctrl+clique" */
+  #ccz .chips{ display:flex; gap:.35rem; flex-wrap:wrap; margin-top:.25rem; }
+  #ccz .chips label{ border:1px solid var(--borda); border-radius:99px;
+    padding:.3rem .7rem; font-size:.79rem; font-weight:800; cursor:pointer;
+    background:#fff; color:#3a4655; display:inline-flex; gap:.4rem;
+    align-items:center; }
+  #ccz .chips label:hover{ background:#f2f7fc; }
+  #ccz .chips label.on{ background:var(--blue); border-color:var(--blue);
+    color:#fff; }
+  #ccz .chips label.on .tp{ color:#dce9f6; }
+  #ccz .chips input{ position:absolute; opacity:0; width:0; height:0; }
+  #ccz .chips .pt{ width:.55rem; height:.55rem; border-radius:99px;
+    display:inline-block; flex:0 0 auto; }
+  #ccz .chips .tp{ font-size:.6rem; font-weight:800; color:#8a93a0;
+    font-style:normal; letter-spacing:.04em; }
+
+  /* a régua de meses e as pílulas de tipo: a mesma fileira dos irmãos */
+  #ccz .meses, #ccz .tipos{ display:flex; gap:.35rem; flex-wrap:wrap;
+    align-items:center; background:#fff; border:1px solid var(--borda);
+    border-radius:13px; padding:.5rem .6rem; margin-bottom:.7rem; }
+  #ccz .meses > b, #ccz .tipos > b{ font-size:.66rem; font-weight:800;
+    color:var(--muted); text-transform:uppercase; letter-spacing:.06em;
+    margin-right:.15rem; }
+  #ccz .meses a, #ccz .tipos a{ border:1px solid var(--borda); background:#f7f9fc;
     border-radius:99px; padding:.26rem .72rem; font-size:.76rem; font-weight:800;
-    color:#3a4655; font-family:inherit; cursor:pointer; white-space:nowrap; }
-  #ccz .atalhos button:hover{ background:#eef5fd; color:var(--blue-deep); }
+    color:#3a4655; text-decoration:none; white-space:nowrap; }
+  #ccz .meses a:hover, #ccz .tipos a:hover{ background:#eef5fd; color:var(--blue-deep); }
+  #ccz .meses a.on, #ccz .tipos a.on{ background:var(--blue); border-color:var(--blue);
+    color:#fff; }
+  #ccz .meses .obs, #ccz .tipos .obs{ font-size:.68rem; color:var(--muted);
+    margin-left:auto; }
 
   #ccz .aviso{ display:flex; gap:.5rem; align-items:flex-start; background:#eaf1f9;
     color:var(--blue-deep); border-radius:11px; padding:.65rem .8rem; font-size:.82rem;
@@ -287,46 +314,66 @@ body > .container-fluid:has(#ccz){
   </div>
 
   <form method="get" id="form-filtros" class="filtro">
+    {#- Só três campos, e nenhum "Ctrl+clique": as datas em cima, a empresa
+        larga embaixo e os cartões em pílula, como os produtos do
+        /relatorios/lucro_postos_migrados. Dois multi-select lado a lado era
+        o que deixava esta faixa pesada. -#}
+    {% if band %}<input type="hidden" name="band" value="{{ band }}">{% endif %}
+    {% if tipo %}<input type="hidden" name="tipo" value="{{ tipo }}">{% endif %}
     <div class="filtro__g">
       <label class="campo"><span>De</span>
         <input type="date" name="data_inicio" value="{{ data_inicio }}"></label>
       <label class="campo"><span>Até</span>
         <input type="date" name="data_fim" value="{{ data_fim }}"></label>
-
-      <label class="campo"><span>Empresa</span>
-        <select name="empresa_ids[]" multiple id="selEmpresas">
+      <label class="campo campo--w"><span>Empresa</span>
+        <select name="empresa_ids[]" multiple id="selEmpresas" size="3">
           {% for emp in empresas %}
           <option value="{{ emp.id }}" {% if emp.id|string in empresa_ids %}selected{% endif %}>
             {{ emp.nome }}</option>
           {% endfor %}
-        </select>
-        <span class="dica">Ctrl+clique para escolher mais de uma</span></label>
+        </select></label>
+    </div>
 
-      <div class="campo"><span>Cartões</span>
-        <input type="text" id="buscaBandeira" placeholder="Buscar cartão…" autocomplete="off">
-        <select name="bandeira_ids[]" multiple id="selBandeiras">
-          {% for b in bandeiras %}
-          <option value="{{ b.id }}" data-nome="{{ b.nome|lower }}" data-tipo="{{ b.tipo|lower }}"
-            {% if b.id|string in bandeira_ids %}selected{% endif %}>
-            {{ b.nome }} ({{ b.tipo }})</option>
-          {% endfor %}
-        </select>
-        <span class="dica">Ctrl+clique para escolher mais de um</span></div>
-
-      <div class="filtro__acoes">
-        <button type="submit" class="bt bt--sim"><i class="bi bi-search"></i> Filtrar</button>
-        <a class="bt" href="{{ url_for('conf_cartoes.conf_cartoes') }}">
-          <i class="bi bi-x-circle"></i> Limpar</a>
+    <div class="campo" style="margin-top:.55rem">
+      <span>Cartões {% if not bandeira_ids %}<i class="opc">— nenhum escolhido é o mesmo que todos</i>{% endif %}</span>
+      <div class="chips">
+        {% for b in bandeiras %}
+        {% set cor = '#1D63A5' if b.tipo|upper == 'DEBITO' else '#6f42c1' %}
+        <label class="{{ 'on' if b.id|string in bandeira_ids }}">
+          <input type="checkbox" name="bandeira_ids[]" value="{{ b.id }}"
+                 {{ 'checked' if b.id|string in bandeira_ids }}
+                 onchange="this.parentNode.classList.toggle('on', this.checked)">
+          <i class="pt" style="background:{{ cor }}"></i>
+          {{ b.nome }} <i class="tp">{{ b.tipo[:3] }}</i></label>
+        {% endfor %}
       </div>
     </div>
 
-    <div class="atalhos">
-      <b><i class="bi bi-calendar3"></i> Período</b>
-      <button type="button" class="periodo-btn" data-periodo="mes_atual">Mês atual</button>
-      <button type="button" class="periodo-btn" data-periodo="mes_anterior">Mês anterior</button>
-      <button type="button" class="periodo-btn" data-periodo="ano_atual">Ano atual</button>
+    <div class="filtro__r">
+      <button type="submit" class="bt bt--sim"><i class="bi bi-search"></i> Apurar</button>
+      <a class="bt" href="{{ url_for('conf_cartoes.conf_cartoes') }}">
+        <i class="bi bi-x-circle"></i> Limpar</a>
     </div>
   </form>
+
+  {#- A régua de meses, a mesma dos relatórios migrados: um clique troca o
+      período inteiro. Sai do banco — mês sem venda de cartão não vira pílula
+      que só sabe dizer "não tem nada". -#}
+  {% if meses %}
+  {% set sep2 = '&' if qs_limpo else '' %}
+  <div class="meses">
+    <b><i class="bi bi-calendar3"></i> Mês</b>
+    <a class="{{ 'on' if data_inicio == meses[0].ini and data_fim == meses[-1].fim }}"
+       href="?{{ qs_limpo }}{{ sep2 }}data_inicio={{ meses[0].ini }}&data_fim={{ meses[-1].fim }}">Tudo</a>
+    {% for m in meses %}
+    <a class="{{ 'on' if data_inicio == m.ini and data_fim == m.fim }}"
+       title="{{ m.n }} lançamento{{ 's' if m.n != 1 }} de cartão"
+       href="?{{ qs_limpo }}{{ sep2 }}data_inicio={{ m.ini }}&data_fim={{ m.fim }}">{{ m.rotulo }}</a>
+    {% endfor %}
+    <span class="obs">o mês corrente vai até hoje · para um pedaço do mês,
+      use as datas acima</span>
+  </div>
+  {% endif %}
 
   {% if not report %}
   <div class="nada">
@@ -360,6 +407,19 @@ body > .container-fluid:has(#ccz){
   {% set sel = _sel[0] if _sel else none %}
   {% set sep = '&' if qs_base else '' %}
   {% set a_receber = grand_total_venda - grand_total_recebimento - grand_total_diferenca %}
+  {#- Débito e crédito não podem dividir a mesma fila: a MASTERCARD aparece
+      nas duas, com taxas que não se comparam (0,67% contra 2,02%). As
+      pílulas escolhem um tipo; com os dois, cada um sai no seu grupo. -#}
+  {% set sep3 = '&' if qs_limpo else '' %}
+  {% set _base_tipo = '?' ~ qs_limpo ~ sep3 ~ 'data_inicio=' ~ data_inicio ~ '&data_fim=' ~ data_fim %}
+  <div class="tipos">
+    <b><i class="bi bi-credit-card-2-front"></i> Tipo</b>
+    <a class="{{ 'on' if not tipo }}" href="{{ _base_tipo }}">Crédito e débito</a>
+    <a class="{{ 'on' if tipo == 'DEBITO' }}" href="{{ _base_tipo }}&tipo=DEBITO">Só débito</a>
+    <a class="{{ 'on' if tipo == 'CREDITO' }}" href="{{ _base_tipo }}&tipo=CREDITO">Só crédito</a>
+    <span class="obs">a taxa do débito e a do crédito não se comparam</span>
+  </div>
+
   {% set ncards = report|length + 1 %}
   <div class="pgrade" style="--cols:{{ ncards if ncards <= 6 else ((ncards + 1) // 2) }}">
 
@@ -407,7 +467,10 @@ body > .container-fluid:has(#ccz){
         {% else %}<i class="bi bi-check2"></i> vendo todas as bandeiras{% endif %}</div>
     </a>
 
-    {% for card in report | sort(attribute='total_venda', reverse=True) %}
+    {#- Dentro da grade, primeiro o débito e depois o crédito, cada bloco do
+        maior para o menor: é a ordem em que se lê "de onde vem o dinheiro". -#}
+    {% for card in report | sort(attribute='total_venda', reverse=True)
+                          | sort(attribute='tipo_cartao') %}
     {% set cor = '#1D63A5' if card.tipo_cartao == 'DEBITO' else '#6f42c1' %}
     {% set falta = card.total_venda - card.total_recebimento - card.total_diferenca %}
     {% set fatia = (card.total_venda / grand_total_venda * 100) if grand_total_venda else 0 %}
@@ -418,8 +481,9 @@ body > .container-fluid:has(#ccz){
       <div class="pc__t">
         <span class="pc__i"><i class="bi bi-credit-card"></i></span>
         <div><div class="pc__n">{{ card.bandeira_nome }}</div>
+          {% set _nd = card.linhas | selectattr('total_venda') | list | length %}
           <div class="pc__r">{{ card.tipo_cartao }} ·
-            {{ card.linhas | selectattr('total_venda') | list | length }} dias com venda</div></div>
+            {{ _nd }} dia{{ 's' if _nd != 1 }} com venda</div></div>
       </div>
       <div class="pc__v"><b>{{ card.total_venda | fmtmoney }}</b></div>
       <div class="pc__r">vendido no período</div>
@@ -442,8 +506,14 @@ body > .container-fluid:has(#ccz){
            title="{{ l.data_venda }}: {{ l.total_venda | fmtmoney }}"></i>
         {% endif %}{% endfor %}
       </div>
-      <div class="pc__f"><span>venda dia a dia</span>
-        <span>entra em <b>{{ card.forma_recebimento_nome or '—' }}</b></span></div>
+      {#- O lembrete que o Anderson pediu: ate onde esta conferido. E a
+          ultima linha que teve recebimento no extrato -- dali para frente e
+          venda esperando cair. -#}
+      {% set _rec = card.linhas | selectattr('total_recebimento') | list %}
+      <div class="pc__f"><span>último recebimento</span>
+        <b>{% if _rec %}{{ _rec[-1].data_recebimento }}{% else %}nenhum no período{% endif %}</b></div>
+      <div class="pc__f"><span>entra em</span>
+        <b>{{ card.forma_recebimento_nome or '—' }}</b></div>
       <div class="pc__f"><span>fatia da venda</span><b>{{ '%.0f'|format(fatia) }}%</b></div>
       <div class="pbar"><i style="width:{{ fatia }}%;background:{{ cor }}"></i></div>
       <div class="pc__cl">{% if sel and sel.bandeira_id == card.bandeira_id %}
@@ -854,40 +924,12 @@ body > .container-fluid:has(#ccz){
 <script>
 (function () {
   // Quick period buttons
-  const inp_ini = document.querySelector('[name="data_inicio"]');
-  const inp_fim = document.querySelector('[name="data_fim"]');
+  // Os botoes "mes atual / mes anterior" sairam: quem troca o periodo agora e
+  // a regua de meses, que vem do banco e cobre TODOS os meses com venda de
+  // cartao -- nao so os dois ultimos. Ela e link, nao precisa de JS.
 
-  document.querySelectorAll('.periodo-btn').forEach(btn => {
-    btn.addEventListener('click', function () {
-      const today = new Date();
-      let ini, fim;
-      if (this.dataset.periodo === 'mes_atual') {
-        ini = new Date(today.getFullYear(), today.getMonth(), 1);
-        fim = today;
-      } else if (this.dataset.periodo === 'mes_anterior') {
-        ini = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        fim = new Date(today.getFullYear(), today.getMonth(), 0);
-      } else {
-        ini = new Date(today.getFullYear(), 0, 1);
-        fim = today;
-      }
-      inp_ini.value = ini.toISOString().slice(0, 10);
-      inp_fim.value = fim.toISOString().slice(0, 10);
-    });
-  });
-
-  // Live search filter for bandeiras select
-  const buscaBandeira = document.getElementById('buscaBandeira');
-  const selBandeiras = document.getElementById('selBandeiras');
-  if (buscaBandeira && selBandeiras) {
-    buscaBandeira.addEventListener('input', function () {
-      const q = this.value.toLowerCase().trim();
-      Array.from(selBandeiras.options).forEach(opt => {
-        const match = !q || opt.dataset.nome.includes(q) || opt.dataset.tipo.includes(q);
-        opt.style.display = match ? '' : 'none';
-      });
-    });
-  }
+  // A busca de bandeira saiu junto com o multi-select: os cartoes viraram
+  // pilulas, e dez pilulas na tela nao precisam de campo de busca.
 
   // Salva vínculos (Forma 1 + Forma 2) e Prazo para uma bandeira
   document.querySelectorAll('.btn-vincular').forEach(btn => {

@@ -336,6 +336,43 @@ def _get_feriados(conn, ano_ini=None, ano_fim=None):
     return linhas, feriados_set
 
 
+_MES_PT = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN',
+           'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ']
+
+
+def _meses_com_cartao(conn, hoje=None):
+    """A régua de meses que TEM venda de cartão, do mais antigo ao mais novo.
+
+    A mesma dos relatórios migrados, e pela mesma razão: sai do banco, não de
+    um range fixo. "Mês atual / mês anterior" só serve para dois meses; quem
+    confere cartão precisa pular para março sem digitar data.
+    """
+    hoje = hoje or date.today()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT DATE_FORMAT(lc.data,'%Y-%m') AS mes, COUNT(*) AS n "
+            "  FROM lancamentos_caixa_comprovacao lcc "
+            "  JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id "
+            " WHERE lcc.bandeira_cartao_id IS NOT NULL "
+            " GROUP BY mes ORDER BY mes")
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    cur.close()
+    saida = []
+    for r in rows:
+        ano, mes = int(r['mes'][:4]), int(r['mes'][5:7])
+        ini = date(ano, mes, 1)
+        fim = date(ano + (mes == 12), (mes % 12) + 1, 1) - timedelta(days=1)
+        if fim > hoje:
+            fim = hoje
+        saida.append({'mes': r['mes'], 'ini': ini.isoformat(), 'fim': fim.isoformat(),
+                      'rotulo': '%s/%s' % (_MES_PT[mes - 1], r['mes'][2:4]),
+                      'n': int(r['n'] or 0)})
+    return saida
+
+
 def _get_empresas(conn):
     cur = conn.cursor(dictionary=True)
     cur.execute(
@@ -762,8 +799,19 @@ def conf_cartoes():
     # o seletor, e sumir com eles tiraria o caminho de volta. Quem filtra de
     # verdade (e some com as outras) e o bandeira_ids[] do formulario.
     band = (args.get('band') or '').strip()
+    # Debito e credito misturados na mesma grade confundem: a MASTERCARD
+    # aparece duas vezes, com taxas muito diferentes (0,67% e 2,02%). O tipo
+    # separa; vazio mostra os dois, cada um no seu grupo.
+    tipo = (args.get('tipo') or '').strip().upper()
+    if tipo not in ('DEBITO', 'CREDITO'):
+        tipo = ''
     qs_base = urlencode(
         [(k, v) for k, v in args.items(multi=True) if k != 'band'])
+    # A regua de meses e as pilulas de tipo trocam o periodo/tipo e NAO podem
+    # carregar o card escolhido nem o tipo antigo junto.
+    qs_limpo = urlencode(
+        [(k, v) for k, v in args.items(multi=True)
+         if k not in ('band', 'tipo', 'data_inicio', 'data_fim')])
 
     conn = get_db_connection()
     try:
@@ -783,6 +831,7 @@ def conf_cartoes():
             conn,
             _ai.year if _ai else None,
             _af.year if _af else None)
+        meses = _meses_com_cartao(conn)
         plano_contas = _get_plano_contas(conn)
         config_contabil = _get_config_contabil(conn)
         # Serialise config_contabil to a JSON-safe dict keyed by "bandId_cliId"
@@ -833,6 +882,15 @@ def conf_cartoes():
             report, grand_total_venda, grand_total_recebimento, grand_total_diferenca, grand_saldo = (
                 _build_report(bandeiras_filtered, vinculos_map, vendas_rows, receb_rows, feriados_set, data_inicio_obj)
             )
+            # O tipo escolhido corta a lista DEPOIS de apurada, e os totais do
+            # topo sao refeitos: o card TODAS tem de somar o que esta na tela,
+            # e nao o que ficou de fora dela.
+            if tipo:
+                report = [c for c in report if (c['tipo_cartao'] or '').upper() == tipo]
+                grand_total_venda = sum(c['total_venda'] for c in report)
+                grand_total_recebimento = sum(c['total_recebimento'] for c in report)
+                grand_total_diferenca = sum(c['total_diferenca'] for c in report)
+                grand_saldo = grand_total_recebimento - grand_total_venda
     finally:
         conn.close()
 
@@ -841,7 +899,8 @@ def conf_cartoes():
         empresas=empresas,
         bandeiras=bandeiras,
         formas_cartao=formas_cartao,
-        feriados=feriados, band=band, qs_base=qs_base,
+        feriados=feriados, band=band, tipo=tipo,
+        qs_base=qs_base, qs_limpo=qs_limpo, meses=meses,
         report=report,
         data_inicio=data_inicio,
         data_fim=data_fim,
