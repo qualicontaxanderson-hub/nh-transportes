@@ -3,318 +3,447 @@
 
 {% block styles %}
 <style>
-.page-hero {
-  background: linear-gradient(135deg, #1D63A5 0%, #154070 100%);
-  border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
+body > .container-fluid:has(#ccz){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
 }
-.page-hero .hero-icon {
-  width: 3rem; height: 3rem; background: rgba(255,255,255,.15);
-  border-radius: .6rem; display: flex; align-items: center; justify-content: center;
-  font-size: 1.5rem; flex-shrink: 0;
+@media (min-width:992px){
+  body > .container-fluid:has(#ccz){ padding:.7rem 1rem 0; }
 }
-.band-header {
-  background: #1D63A5; color: #fff; padding: .4rem .85rem;
-  border-radius: .4rem .4rem 0 0; font-weight: 700; font-size: .85rem;
-}
-.band-header.debito  { background: #0d6efd; }
-.band-header.credito { background: #6f42c1; }
-/* compact table */
-.tbl-cart {
-  font-size: .78rem;
-}
-.tbl-cart thead th {
-  font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
-  white-space: nowrap; padding: .3rem .45rem;
-}
-.tbl-cart td {
-  padding: .25rem .45rem;
-  vertical-align: middle;
-}
-.row-total  { background: #e9ecef; font-weight: 700; }
-.row-grand  { background: #1D63A5; color: #fff; font-weight: 700; }
-.saldo-pos  { color: #198754; font-weight: 700; }
-.saldo-neg  { color: #dc3545; font-weight: 700; }
-.saldo-zero { color: #6c757d; font-weight: 700; }
-.badge-debito  { background: #0d6efd; }
-.badge-credito { background: #6f42c1; }
-/* Weekend / holiday row highlight */
-.row-fds td { background-color: #d4edda !important; }
-.dia-semana { font-size: .68rem; color: #555; font-weight: 600; margin-left: .15rem; }
-.row-fds .dia-semana { color: #1a6a38; }
-/* Pre-period context rows (vendas fora do período que liquidam dentro da janela) */
-.row-preperiodo td { background-color: #f5f0ff !important; color: #6c757d; font-style: italic; }
-.row-preperiodo.row-fds td { background-color: #e8e0f7 !important; }
-.row-preperiodo .saldo-pos,
-.row-preperiodo .saldo-neg,
-.row-preperiodo .saldo-zero { opacity: .75; }
-/* Searchable select (csel) - used in Config. Contábil modal */
-.csel-wrap  { position: relative; }
-.csel-drop  { display:none; position:absolute; z-index:1090; background:#fff;
-              border:1px solid #ced4da; border-radius:.35rem; min-width:260px;
-              max-height:200px; overflow-y:auto; box-shadow:0 4px 12px rgba(0,0,0,.15); }
-.csel-item  { padding:4px 10px; cursor:pointer; font-size:.73rem; white-space:nowrap; }
-.csel-item:hover { background:#e8f0fe; }
-.csel-empty { padding:6px 10px; color:#6c757d; font-size:.73rem; font-style:italic; }
+</style>
+<style>
+  /* Mesma linguagem do /relatorios/fornecedores_migrados e do saidas_migradas:
+     topo em faixa, filtro em cartão, o período inteiro num painel e depois um
+     quadro por bandeira. O que mudou aqui foi a casca — a conta é a mesma. */
+  #ccz{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#146c43; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#4b5563; --ink:#151d27; --borda:#d9e0e8;
+        --linha:#eef1f5; --debito:#1D63A5; --credito:#6f42c1;
+        color:var(--ink); max-width:100%; }
+
+  #ccz .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .7rem; margin-bottom:.7rem;
+    display:flex; align-items:center; gap:.7rem; flex-wrap:wrap; }
+  #ccz .topo__t{ font-weight:800; font-size:1.02rem; }
+  #ccz .topo__s{ font-size:.76rem; opacity:.96; margin-top:.1rem; }
+  #ccz .topo__acoes{ margin-left:auto; display:flex; gap:.35rem; flex-wrap:wrap; }
+  #ccz .topo__acoes button{ border:1px solid rgba(255,255,255,.35);
+    background:rgba(255,255,255,.14); color:#fff; border-radius:9px;
+    padding:.35rem .7rem; font-size:.78rem; font-weight:700; font-family:inherit;
+    cursor:pointer; display:inline-flex; gap:.3rem; align-items:center; }
+  #ccz .topo__acoes button:hover{ background:rgba(255,255,255,.26); }
+
+  #ccz .migalha{ font-size:.72rem; color:var(--muted); margin-bottom:.5rem; }
+  #ccz .migalha a{ color:var(--blue-deep); text-decoration:none; font-weight:700; }
+
+  #ccz .filtro{ background:#fff; border:1px solid var(--borda); border-radius:13px;
+    padding:.7rem .75rem; margin-bottom:.7rem; }
+  #ccz .filtro__g{ display:grid; gap:.5rem; grid-template-columns:1fr 1fr; }
+  @media (min-width:900px){
+    #ccz .filtro__g{ grid-template-columns:.8fr .8fr 1.3fr 1.3fr auto; align-items:end; } }
+  #ccz .campo{ display:flex; flex-direction:column; gap:.2rem; min-width:0; }
+  #ccz .campo > span{ font-size:.68rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.04em; }
+  #ccz .campo input, #ccz .campo select{ border:1px solid var(--borda);
+    border-radius:9px; padding:.42rem .5rem; font-size:.82rem; font-family:inherit;
+    background:#fff; color:var(--ink); min-width:0; }
+  #ccz .campo select[multiple]{ height:auto; min-height:4.6rem; padding:.3rem; }
+  #ccz .campo .dica{ font-size:.66rem; color:var(--muted); }
+  #ccz .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:9px; padding:.45rem .8rem; font-size:.83rem; font-weight:700;
+    font-family:inherit; cursor:pointer; text-decoration:none; display:inline-flex;
+    gap:.3rem; align-items:center; justify-content:center; white-space:nowrap; }
+  #ccz .bt--sim{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #ccz .filtro__acoes{ display:flex; flex-direction:column; gap:.35rem; }
+
+  /* os atalhos de período: as mesmas pílulas da régua de meses dos irmãos */
+  #ccz .atalhos{ display:flex; gap:.35rem; flex-wrap:wrap; align-items:center;
+    margin-top:.6rem; padding-top:.55rem; border-top:1px solid var(--linha); }
+  #ccz .atalhos > b{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.06em; margin-right:.15rem; }
+  #ccz .atalhos button{ border:1px solid var(--borda); background:#f7f9fc;
+    border-radius:99px; padding:.26rem .72rem; font-size:.76rem; font-weight:800;
+    color:#3a4655; font-family:inherit; cursor:pointer; white-space:nowrap; }
+  #ccz .atalhos button:hover{ background:#eef5fd; color:var(--blue-deep); }
+
+  #ccz .aviso{ display:flex; gap:.5rem; align-items:flex-start; background:#eaf1f9;
+    color:var(--blue-deep); border-radius:11px; padding:.65rem .8rem; font-size:.82rem;
+    font-weight:600; margin-bottom:.7rem; }
+
+  /* ---- o período inteiro, antes das bandeiras ------------------------- */
+  #ccz .painel{ background:#fff; border:1px solid var(--borda); border-radius:16px;
+    margin-bottom:.7rem; overflow:hidden; box-shadow:0 3px 14px rgba(20,35,60,.07);
+    display:grid; }
+  @media (min-width:992px){ #ccz .painel{ grid-template-columns:minmax(290px,.9fr) 1.4fr; } }
+  #ccz .caixa{ padding:.9rem 1rem 1rem;
+    background:linear-gradient(160deg,#f2f7fc,#eaf2f9 70%,#e4eef8);
+    border-bottom:1px solid var(--linha); }
+  @media (min-width:992px){
+    #ccz .caixa{ border-bottom:0; border-right:1px solid var(--linha); } }
+  #ccz .caixa__r{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.07em; }
+  #ccz .caixa__v{ font-size:1.8rem; font-weight:800; line-height:1.1;
+    color:var(--blue-deep); font-variant-numeric:tabular-nums; margin-top:.1rem; }
+  #ccz .caixa__s{ font-size:.76rem; color:#3a4655; margin-top:.2rem; font-weight:600; }
+  #ccz .mini{ display:grid; grid-template-columns:1fr 1fr; gap:.4rem; margin-top:.7rem; }
+  #ccz .mini div{ background:#fff; border:1px solid var(--borda); border-radius:10px;
+    padding:.4rem .55rem; }
+  #ccz .mini b{ display:block; font-size:.86rem; font-weight:800;
+    font-variant-numeric:tabular-nums; }
+  #ccz .mini span{ font-size:.62rem; color:var(--muted); font-weight:800;
+    text-transform:uppercase; letter-spacing:.05em; }
+
+  /* o ranking das bandeiras, ao lado do painel */
+  #ccz .rank{ padding:.85rem 1rem .9rem; }
+  #ccz .rank__t{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.07em; margin-bottom:.6rem; }
+  #ccz .rk{ display:grid; grid-template-columns:1fr auto; gap:.15rem .6rem;
+    align-items:baseline; margin-bottom:.55rem; }
+  #ccz .rk:last-child{ margin-bottom:0; }
+  #ccz .rk__n{ font-weight:800; font-size:.84rem; display:flex; gap:.4rem;
+    align-items:center; min-width:0; }
+  #ccz .rk__n a{ color:inherit; text-decoration:none; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
+  #ccz .rk__n a:hover{ color:var(--blue); text-decoration:underline; }
+  #ccz .rk__v{ font-weight:800; font-size:.86rem; text-align:right;
+    font-variant-numeric:tabular-nums; }
+  #ccz .rk__b{ grid-column:1/-1; height:7px; border-radius:99px; background:#eef1f5;
+    overflow:hidden; }
+  #ccz .rk__b i{ display:block; height:100%; border-radius:99px; }
+  #ccz .rk__d{ grid-column:1/-1; font-size:.68rem; color:var(--muted); display:flex;
+    gap:.7rem; flex-wrap:wrap; font-variant-numeric:tabular-nums; }
+
+  /* ---- um quadro por bandeira ---------------------------------------- */
+  #ccz .cx{ background:#fff; border:1px solid var(--borda); border-radius:14px;
+    margin-bottom:.7rem; overflow:hidden; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #ccz .ph{ display:flex; align-items:center; gap:.6rem; padding:.6rem .8rem;
+    border-left:4px solid var(--c); background:#fff;
+    border-bottom:1px solid var(--linha); flex-wrap:wrap; }
+  #ccz .ph__i{ width:1.9rem; height:1.9rem; border-radius:8px; background:var(--c);
+    color:#fff; display:inline-grid; place-items:center; font-size:.9rem; opacity:.92; }
+  #ccz .ph__n{ font-weight:800; font-size:.95rem; }
+  #ccz .ph__c{ font-size:.68rem; color:var(--muted); font-weight:700; }
+  #ccz .ph__v{ margin-left:auto; text-align:right; }
+  #ccz .ph__l{ font-size:1.02rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  #ccz .ph__r{ font-size:.65rem; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.05em; font-weight:800; }
+  #ccz .selo{ font-size:.62rem; font-weight:800; letter-spacing:.04em;
+    text-transform:uppercase; border-radius:6px; padding:.1rem .4rem;
+    background:var(--c); color:#fff; }
+  #ccz .resumo{ display:grid; gap:.5rem; padding:.6rem .8rem;
+    grid-template-columns:repeat(2,1fr); }
+  @media (min-width:768px){ #ccz .resumo{ grid-template-columns:repeat(4,1fr); } }
+  #ccz .r{ background:#f7f9fc; border:1px solid var(--linha);
+    border-left:3px solid var(--c); border-radius:11px; padding:.45rem .6rem; }
+  #ccz .r__r{ font-size:.61rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.05em; }
+  #ccz .r__v{ font-size:.92rem; font-weight:800; font-variant-numeric:tabular-nums; }
+
+  /* ---- tabelas ------------------------------------------------------- */
+  #ccz .tab{ overflow-x:auto; border-top:1px solid var(--linha); }
+  #ccz table{ width:100%; border-collapse:collapse; font-size:.78rem;
+    font-variant-numeric:tabular-nums; }
+  #ccz th{ background:#f0f4f8; color:#3d4854; font-size:.63rem; text-transform:uppercase;
+    letter-spacing:.04em; font-weight:800; padding:.4rem .5rem; white-space:nowrap;
+    text-align:right; border-bottom:1px solid var(--borda); }
+  #ccz th.e, #ccz td.e{ text-align:left; }
+  #ccz td{ padding:.36rem .5rem; text-align:right; white-space:nowrap;
+    border-bottom:1px solid #f4f6f9; }
+  #ccz tbody tr:hover td{ background:#fafbfd; }
+  #ccz tfoot td{ background:#f0f4f8; font-weight:800; border-top:2px solid var(--borda); }
+  #ccz .forte{ font-weight:800; }
+  #ccz .neg{ color:var(--danger); font-weight:700; }
+  #ccz .pos{ color:var(--ok); font-weight:700; }
+  #ccz .zero{ color:var(--muted); font-weight:700; }
+  #ccz .ambar{ color:var(--ambar); font-weight:700; }
+  #ccz .dia-semana{ font-size:.68rem; color:var(--muted); font-weight:700;
+    margin-left:.2rem; }
+
+  /* O dia sem expediente bancario fica verde: e ele que explica o recebimento
+     que "atrasou" -- nao atrasou, o banco nao operou. */
+  #ccz tr.fds td{ background:#e8f4ec !important; }
+  #ccz tr.fds .dia-semana{ color:#146c43; }
+  /* Venda de antes do periodo, trazida porque o recebimento dela cai dentro
+     da janela consultada. Fica clara e em italico: e contexto, nao movimento
+     do periodo. */
+  #ccz tr.antes td{ background:#f6f2ff !important; color:#6b7280; font-style:italic; }
+  #ccz tr.antes.fds td{ background:#eee9fb !important; }
+  #ccz .selo-antes{ background:#e5e0f5; color:#4c3f8f; border-radius:6px;
+    padding:.02rem .3rem; font-size:.6rem; font-weight:800; font-style:normal;
+    text-transform:uppercase; letter-spacing:.03em; }
+  #ccz tr.saldo-ant td{ background:#fdf8ee !important; color:#6b4708; }
+
+  #ccz .nada{ background:#fff; border:1px solid var(--borda); border-radius:14px;
+    padding:2.2rem 1rem; text-align:center; color:var(--muted); font-size:.9rem; }
+  #ccz .rod{ font-size:.72rem; color:var(--muted); background:#fff;
+    border:1px solid var(--borda); border-radius:12px; padding:.7rem .85rem;
+    margin-bottom:.7rem; line-height:1.55; }
+  #ccz .rod b{ color:#26354d; }
+
+  /* No celular a tabela vira cartão: sete colunas não cabem em 400px, e rolar
+     de lado esconde justamente a data e a diferença. */
+  @media (max-width:640px){
+    #ccz .tab{ overflow-x:visible; }
+    #ccz .tab table, #ccz .tab tbody, #ccz .tab tr, #ccz .tab td{ display:block;
+      width:100%; }
+    #ccz .tab thead{ display:none; }
+    #ccz .tab tr{ border-bottom:1px solid var(--linha); padding:.35rem 0; }
+    #ccz .tab td{ border:0; text-align:right; padding:.16rem .7rem;
+      white-space:normal; display:flex; justify-content:space-between; gap:.6rem; }
+    #ccz .tab td::before{ content:attr(data-r); color:var(--muted); font-weight:700;
+      font-size:.7rem; text-transform:uppercase; letter-spacing:.03em; }
+    #ccz .tab td:empty{ display:none; }
+    #ccz .tab tfoot{ display:none; }
+  }
+
+  /* Searchable select (csel) — usado no modal de Config. Contábil */
+  .csel-wrap  { position: relative; }
+  .csel-drop  { display:none; position:absolute; z-index:1090; background:#fff;
+                border:1px solid #ced4da; border-radius:.35rem; min-width:260px;
+                max-height:200px; overflow-y:auto; box-shadow:0 4px 12px rgba(0,0,0,.15); }
+  .csel-item  { padding:4px 10px; cursor:pointer; font-size:.73rem; white-space:nowrap; }
+  .csel-item:hover { background:#e8f0fe; }
+  .csel-empty { padding:6px 10px; color:#6c757d; font-size:.73rem; font-style:italic; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
+{#- Conferência de Cartões — mesma leitura dos relatórios migrados: o período
+    inteiro primeiro, depois um quadro por bandeira com as suas linhas.
 
-  <!-- Breadcrumb -->
-  <nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb small">
-      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
-      <li class="breadcrumb-item">Relatórios</li>
-      <li class="breadcrumb-item active">Conf. Cartões</li>
-    </ol>
-  </nav>
+    A conta não mudou nada nesta reforma: a venda vem do fechamento de caixa, o
+    recebimento vem do extrato, e a data esperada sai do prazo em dias úteis
+    (que pula fim de semana e feriado nacional). O que mudou foi a casca.
+-#}
+<div id="ccz">
 
-  <!-- Hero -->
-  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mb-3">
-    <div class="hero-icon"><i class="bi bi-credit-card-2-front-fill"></i></div>
-    <div class="flex-grow-1">
-      <h4 class="mb-0 fw-bold">Conferência de Cartões</h4>
-      <p class="mb-0 opacity-75 small">Cruza vendas de cartão (Fechamento de Caixa) com recebimentos bancários para conferir diferenças</p>
+  <div class="migalha">
+    <a href="{{ url_for('index') }}">Dashboard</a> / Relatórios / Conf. Cartões
+  </div>
+
+  <div class="topo">
+    <div>
+      <div class="topo__t"><i class="bi bi-credit-card-2-front-fill"></i>
+        Conferência de Cartões</div>
+      <div class="topo__s">A venda vem do fechamento de caixa e o recebimento da
+        linha do extrato — a diferença entre os dois é a taxa da operadora</div>
     </div>
-    <div class="d-flex gap-2">
-      <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalFeriados">
-        <i class="bi bi-calendar-x"></i> Feriados
-      </button>
-      <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalContasContabeis">
-        <i class="bi bi-gear"></i> Config. Contábil
-      </button>
-      <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalVinculos">
-        <i class="bi bi-link-45deg"></i> Gerenciar Vinculações
-      </button>
+    <div class="topo__acoes">
+      <button type="button" data-bs-toggle="modal" data-bs-target="#modalFeriados">
+        <i class="bi bi-calendar-x"></i> Feriados</button>
+      <button type="button" data-bs-toggle="modal" data-bs-target="#modalContasContabeis">
+        <i class="bi bi-gear"></i> Config. Contábil</button>
+      <button type="button" data-bs-toggle="modal" data-bs-target="#modalVinculos">
+        <i class="bi bi-link-45deg"></i> Vinculações</button>
     </div>
   </div>
 
-  <!-- ── Filtros ────────────────────────────────────────────────────────── -->
-  <form method="get" id="form-filtros" class="card shadow-sm mb-4">
-    <div class="card-header py-2" style="background:#1D63A5;color:white;">
-      <h6 class="mb-0"><i class="bi bi-funnel me-1"></i> Filtros</h6>
+  <form method="get" id="form-filtros" class="filtro">
+    <div class="filtro__g">
+      <label class="campo"><span>De</span>
+        <input type="date" name="data_inicio" value="{{ data_inicio }}"></label>
+      <label class="campo"><span>Até</span>
+        <input type="date" name="data_fim" value="{{ data_fim }}"></label>
+
+      <label class="campo"><span>Empresa</span>
+        <select name="empresa_ids[]" multiple id="selEmpresas">
+          {% for emp in empresas %}
+          <option value="{{ emp.id }}" {% if emp.id|string in empresa_ids %}selected{% endif %}>
+            {{ emp.nome }}</option>
+          {% endfor %}
+        </select>
+        <span class="dica">Ctrl+clique para escolher mais de uma</span></label>
+
+      <div class="campo"><span>Cartões</span>
+        <input type="text" id="buscaBandeira" placeholder="Buscar cartão…" autocomplete="off">
+        <select name="bandeira_ids[]" multiple id="selBandeiras">
+          {% for b in bandeiras %}
+          <option value="{{ b.id }}" data-nome="{{ b.nome|lower }}" data-tipo="{{ b.tipo|lower }}"
+            {% if b.id|string in bandeira_ids %}selected{% endif %}>
+            {{ b.nome }} ({{ b.tipo }})</option>
+          {% endfor %}
+        </select>
+        <span class="dica">Ctrl+clique para escolher mais de um</span></div>
+
+      <div class="filtro__acoes">
+        <button type="submit" class="bt bt--sim"><i class="bi bi-search"></i> Filtrar</button>
+        <a class="bt" href="{{ url_for('conf_cartoes.conf_cartoes') }}">
+          <i class="bi bi-x-circle"></i> Limpar</a>
+      </div>
     </div>
-    <div class="card-body py-3">
-      <div class="row g-3 align-items-end">
 
-        <!-- Data Início -->
-        <div class="col-6 col-sm-3 col-md-2">
-          <label class="form-label small fw-semibold mb-1">
-            <i class="bi bi-calendar-event me-1 text-primary"></i>Data Início
-          </label>
-          <input type="date" name="data_inicio" value="{{ data_inicio }}" class="form-control form-control-sm">
-        </div>
-
-        <!-- Data Fim -->
-        <div class="col-6 col-sm-3 col-md-2">
-          <label class="form-label small fw-semibold mb-1">
-            <i class="bi bi-calendar-check me-1 text-primary"></i>Data Fim
-          </label>
-          <input type="date" name="data_fim" value="{{ data_fim }}" class="form-control form-control-sm">
-        </div>
-
-        <!-- Empresa (multi-select) -->
-        <div class="col-12 col-sm-6 col-md-3">
-          <label class="form-label small fw-semibold mb-1">
-            <i class="bi bi-building me-1 text-primary"></i>Empresa
-          </label>
-          <select name="empresa_ids[]" class="form-select form-select-sm" multiple id="selEmpresas"
-                  style="height:auto; min-height:2.1rem;">
-            {% for emp in empresas %}
-            <option value="{{ emp.id }}" {% if emp.id|string in empresa_ids %}selected{% endif %}>
-              {{ emp.nome }}
-            </option>
-            {% endfor %}
-          </select>
-          <div class="form-text" style="font-size:.7rem;"><i class="bi bi-info-circle me-1"></i>Ctrl+clique p/ múltiplos</div>
-        </div>
-
-        <!-- Cartões / Bandeiras (multi-select) -->
-        <div class="col-12 col-sm-6 col-md-3">
-          <label class="form-label small fw-semibold mb-1">
-            <i class="bi bi-credit-card me-1 text-primary"></i>Cartões
-          </label>
-          <div class="input-group input-group-sm mb-1">
-            <span class="input-group-text bg-white border-end-0 pe-1">
-              <i class="bi bi-search text-muted" style="font-size:.75rem;"></i>
-            </span>
-            <input type="text" id="buscaBandeira" class="form-control form-control-sm border-start-0 ps-1"
-                   placeholder="Buscar cartão..." autocomplete="off">
-          </div>
-          <select name="bandeira_ids[]" class="form-select form-select-sm" multiple id="selBandeiras"
-                  style="height:auto; min-height:2.1rem;">
-            {% for b in bandeiras %}
-            <option value="{{ b.id }}"
-              data-nome="{{ b.nome|lower }}"
-              data-tipo="{{ b.tipo|lower }}"
-              {% if b.id|string in bandeira_ids %}selected{% endif %}>
-              {{ b.nome }} ({{ b.tipo }})
-            </option>
-            {% endfor %}
-          </select>
-          <div class="form-text" style="font-size:.7rem;"><i class="bi bi-info-circle me-1"></i>Ctrl+clique p/ múltiplos</div>
-        </div>
-
-        <!-- Botões -->
-        <div class="col-12 col-md-2 d-flex flex-column gap-2">
-          <button type="submit" class="btn btn-primary btn-sm">
-            <i class="bi bi-search me-1"></i> Filtrar
-          </button>
-          <a href="{{ url_for('conf_cartoes.conf_cartoes') }}" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-x-circle me-1"></i> Limpar
-          </a>
-        </div>
-
-      </div>
-
-      <!-- Quick period buttons -->
-      <div class="mt-3 pt-2 border-top d-flex gap-1 flex-wrap align-items-center">
-        <span class="text-muted small me-1"><i class="bi bi-clock-history me-1"></i>Atalhos:</span>
-        <button type="button" class="btn btn-outline-primary btn-sm periodo-btn" data-periodo="mes_atual">
-          <i class="bi bi-calendar3 me-1"></i>Mês Atual
-        </button>
-        <button type="button" class="btn btn-outline-primary btn-sm periodo-btn" data-periodo="mes_anterior">
-          <i class="bi bi-calendar3 me-1"></i>Mês Anterior
-        </button>
-        <button type="button" class="btn btn-outline-primary btn-sm periodo-btn" data-periodo="ano_atual">
-          <i class="bi bi-calendar-range me-1"></i>Ano Atual
-        </button>
-      </div>
+    <div class="atalhos">
+      <b><i class="bi bi-calendar3"></i> Período</b>
+      <button type="button" class="periodo-btn" data-periodo="mes_atual">Mês atual</button>
+      <button type="button" class="periodo-btn" data-periodo="mes_anterior">Mês anterior</button>
+      <button type="button" class="periodo-btn" data-periodo="ano_atual">Ano atual</button>
     </div>
   </form>
 
   {% if not report %}
-  <div class="alert alert-info">
-    <i class="bi bi-info-circle me-2"></i>
+  <div class="nada">
     {% if not bandeiras %}
-    Nenhuma bandeira de cartão cadastrada. Acesse <strong>Cadastros → Cartões</strong> para adicionar.
+    Nenhuma bandeira de cartão cadastrada — cadastre em <b>Cadastros → Cartões</b>.
     {% else %}
-    Nenhum dado encontrado para os filtros selecionados.
+    Nenhum movimento de cartão neste período.
     {% if bandeiras | selectattr('forma_recebimento_id', 'none') | list | length == bandeiras | length %}
-    <br>Nenhuma bandeira está vinculada a uma forma de recebimento bancário.
-    Clique em <strong>Gerenciar Vinculações</strong> para configurar.
+    <br>Nenhuma bandeira está ligada a uma forma de recebimento do banco —
+    use <b>Vinculações</b>, ali em cima, para ligar.
     {% endif %}
     {% endif %}
   </div>
   {% else %}
 
-  <!-- ── Per-card tables ─────────────────────────────────────────────────── -->
-  {% for card in report %}
-  <div class="mb-4">
-    <div class="band-header {{ 'debito' if card.tipo_cartao == 'DEBITO' else 'credito' }} d-flex justify-content-between align-items-center">
-      <span>
-        <i class="bi bi-credit-card me-2"></i>
-        <span class="badge {% if card.tipo_cartao == 'DEBITO' %}badge-debito{% else %}badge-credito{% endif %} me-1" style="font-size:.7rem;">
-          {{ card.tipo_cartao }}
-        </span>
-        {{ card.bandeira_nome }}
-        {% if card.forma_recebimento_nome %}
-        <span class="opacity-75 small ms-2">→ {{ card.forma_recebimento_nome }}</span>
-        {% endif %}
-      </span>
-      <span class="small opacity-75">
-        Saldo Final:
-        <span class="fw-bold {% if card.saldo_final < -0.005 %}text-success{% elif card.saldo_final > 0.005 %}text-warning{% else %}text-light{% endif %}">
-          {{ card.saldo_final | fmtmoney }}
-        </span>
-      </span>
+  {#- O período inteiro, antes das bandeiras: é a pergunta "quanto vendi no
+      cartão, quanto entrou e quanto ficou pelo caminho". A taxa é a diferença
+      dividida pela venda — e é ela que se compara com o contrato. -#}
+  {% set n_deb = report | selectattr('tipo_cartao', 'equalto', 'DEBITO') | list | length %}
+  <div class="painel">
+    <div class="caixa">
+      <div class="caixa__r">Vendido no cartão</div>
+      <div class="caixa__v">{{ grand_total_venda | fmtmoney }}</div>
+      <div class="caixa__s">{{ report|length }}
+        bandeira{{ 's' if report|length != 1 }} ·
+        {{ n_deb }} de débito · {{ report|length - n_deb }} de crédito</div>
+      {#- Vendido = Recebido + Taxa retida + o que ainda nao caiu. A tela
+          antiga mostrava "saldo" (recebido menos vendido), que junta a taxa
+          com a venda a receber -- e quem le entende que a operadora esta
+          devendo tudo aquilo. Aqui as duas partes aparecem separadas: a taxa
+          e o que ficou mesmo, e o resto e dinheiro a caminho. -#}
+      {% set a_receber = grand_total_venda - grand_total_recebimento - grand_total_diferenca %}
+      <div class="mini">
+        <div><span>Recebido</span><b>{{ grand_total_recebimento | fmtmoney }}</b></div>
+        <div><span>Taxa retida</span>
+          <b class="{{ 'neg' if grand_total_diferenca > 0.005 else ('pos' if grand_total_diferenca < -0.005 else 'zero') }}">{{ grand_total_diferenca | fmtmoney }}</b></div>
+        <div><span>Taxa do período</span>
+          <b>{% if grand_total_venda %}{{ "%.2f"|format(grand_total_diferenca / grand_total_venda * 100) }}%{% else %}—{% endif %}</b></div>
+        <div><span>Ainda não caiu</span>
+          <b class="{{ 'ambar' if a_receber > 0.005 }}">{{ a_receber | fmtmoney }}</b></div>
+      </div>
     </div>
-    <div class="table-responsive">
-      <table class="table table-bordered table-sm tbl-cart mb-0">
-        <thead class="table-dark">
-          <tr>
-            <th class="text-center" style="width:88px;">Dt. Venda</th>
-            <th class="text-end"   style="width:110px;">Venda</th>
-            <th class="text-center" style="width:88px;">Dt. Recebimento</th>
-            <th class="text-end"   style="width:110px;">Recebimento</th>
-            <th class="text-end"   style="width:110px;">Diferença</th>
-            <th class="text-end"   style="width:110px;">Dif. Acumulada</th>
-            <th class="text-end"   style="width:70px;">%</th>
-          </tr>
+
+    {#- De onde vem a venda de cartão: a barra é a fatia de cada bandeira, e o
+        que interessa ao lado é a taxa dela — é assim que se vê a bandeira que
+        cobra mais caro sem abrir quadro por quadro. -#}
+    <div class="rank">
+      <div class="rank__t">Por bandeira, e a que taxa</div>
+      {% set maior = (report | map(attribute='total_venda') | max) or 0 %}
+      {% for card in report | sort(attribute='total_venda', reverse=True) %}
+      {% set cor = '#1D63A5' if card.tipo_cartao == 'DEBITO' else '#6f42c1' %}
+      <div class="rk">
+        <div class="rk__n">
+          <i class="selo" style="--c:{{ cor }};background:{{ cor }}">{{ card.tipo_cartao[:3] }}</i>
+          <a href="#band-{{ card.bandeira_id }}">{{ card.bandeira_nome }}</a>
+        </div>
+        <div class="rk__v">{{ card.total_venda | fmtmoney }}</div>
+        <div class="rk__b">
+          <i style="width:{{ (card.total_venda / maior * 100) if maior else 0 }}%;background:{{ cor }}"></i>
+        </div>
+        <div class="rk__d">
+          <span>recebido {{ card.total_recebimento | fmtmoney }}</span>
+          <span>taxa
+            <b>{% if card.total_venda %}{{ "%.2f"|format(card.total_diferenca / card.total_venda * 100) }}%{% else %}—{% endif %}</b></span>
+          <span>saldo
+            <b class="{{ 'pos' if card.saldo_final < -0.005 else ('neg' if card.saldo_final > 0.005 else 'zero') }}">{{ card.saldo_final | fmtmoney }}</b></span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {#- Um quadro por bandeira, cada linha um ciclo: a venda de um dia e o
+      recebimento que a liquidou. -#}
+  {% for card in report %}
+  {% set cor = '#1D63A5' if card.tipo_cartao == 'DEBITO' else '#6f42c1' %}
+  <div class="cx" id="band-{{ card.bandeira_id }}" style="--c:{{ cor }}">
+    <div class="ph">
+      <span class="ph__i"><i class="bi bi-credit-card"></i></span>
+      <div>
+        <div class="ph__n">{{ card.bandeira_nome }}
+          <span class="selo">{{ card.tipo_cartao }}</span></div>
+        <div class="ph__c">{% if card.forma_recebimento_nome %}
+          entra pela conta <b>{{ card.forma_recebimento_nome }}</b>
+          {% else %}sem forma de recebimento ligada{% endif %}</div>
+      </div>
+      <div class="ph__v">
+        <div class="ph__l {{ 'pos' if card.saldo_final < -0.005 else ('neg' if card.saldo_final > 0.005 else 'zero') }}">{{ card.saldo_final | fmtmoney }}</div>
+        <div class="ph__r">Saldo final</div>
+      </div>
+    </div>
+
+    <div class="resumo">
+      <div class="r"><div class="r__r">Vendido</div>
+        <div class="r__v">{{ card.total_venda | fmtmoney }}</div></div>
+      <div class="r"><div class="r__r">Recebido</div>
+        <div class="r__v">{{ card.total_recebimento | fmtmoney }}</div></div>
+      <div class="r"><div class="r__r">Diferença</div>
+        <div class="r__v {{ 'neg' if card.total_diferenca > 0.005 else ('pos' if card.total_diferenca < -0.005 else 'zero') }}">{{ card.total_diferenca | fmtmoney }}</div></div>
+      <div class="r"><div class="r__r">Taxa</div>
+        <div class="r__v">{% if card.total_venda %}{{ "%.2f"|format(card.total_diferenca / card.total_venda * 100) }}%{% else %}—{% endif %}</div></div>
+    </div>
+
+    <div class="tab">
+      <table>
+        <thead>
+          <tr><th class="e">Dt. venda</th><th>Venda</th><th class="e">Dt. recebimento</th>
+            <th>Recebimento</th><th>Diferença</th><th>Dif. acumulada</th><th>%</th></tr>
         </thead>
         <tbody>
           {% if card.saldo_anterior and card.saldo_anterior_aplicavel %}
-          <tr class="table-warning">
-            <td class="text-muted small fst-italic" colspan="2">Saldo Anterior</td>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td class="text-end {% if card.saldo_anterior > 0.005 %}saldo-pos{% elif card.saldo_anterior < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
-              {{ card.saldo_anterior | fmtmoney }}
-            </td>
+          <tr class="saldo-ant">
+            <td class="e" data-r="Dt. venda" colspan="5">Saldo anterior</td>
+            <td data-r="Dif. acumulada"
+                class="{{ 'neg' if card.saldo_anterior > 0.005 else ('pos' if card.saldo_anterior < -0.005 else 'zero') }}">{{ card.saldo_anterior | fmtmoney }}</td>
             <td></td>
           </tr>
           {% endif %}
           {% for linha in card.linhas %}
-          <tr{% if linha.is_preperiodo %} class="row-preperiodo{% if linha.is_destaque %} row-fds{% endif %}"{% elif linha.is_destaque %} class="row-fds"{% endif %}>
-            <td class="text-center">{% if linha.is_preperiodo %}<span class="badge bg-secondary" style="font-size:.6rem;vertical-align:middle;" title="Venda fora do período consultado — incluída para conferência do recebimento">anterior</span> {% endif %}{{ linha.data_venda }}{% if linha.data_venda %}<span class="dia-semana">{{ linha.dia_semana }}</span>{% endif %}</td>
-            <td class="text-end">{% if linha.total_venda %}{{ linha.total_venda | fmtmoney }}{% endif %}</td>
-            <td class="text-center">{{ linha.data_recebimento }}{% if linha.data_recebimento %}<span class="dia-semana">{{ linha.dia_semana_recebimento }}</span>{% endif %}</td>
-            <td class="text-end">{% if linha.total_recebimento %}{{ linha.total_recebimento | fmtmoney }}{% endif %}</td>
-            <td class="text-end {% if linha.diferenca is not none %}{% if linha.diferenca > 0.005 %}saldo-neg{% elif linha.diferenca < -0.005 %}saldo-pos{% else %}saldo-zero{% endif %}{% endif %}">
-              {% if linha.diferenca is not none %}{{ linha.diferenca | fmtmoney }}{% endif %}
-            </td>
-            <td class="text-end {% if linha.saldo_acumulado is not none %}{% if linha.saldo_acumulado > 0.005 %}saldo-neg{% elif linha.saldo_acumulado < -0.005 %}saldo-pos{% else %}saldo-zero{% endif %}{% endif %}">
-              {% if linha.saldo_acumulado is not none %}{{ linha.saldo_acumulado | fmtmoney }}{% endif %}
-            </td>
-            <td class="text-end {% if linha.porcentagem is not none %}{% if linha.porcentagem < 0 %}text-info{% elif linha.porcentagem <= 2 %}saldo-pos{% elif linha.porcentagem <= 5 %}text-warning{% else %}saldo-neg{% endif %}{% endif %}">
-              {% if linha.porcentagem is not none %}{{ "%.2f"|format(linha.porcentagem) }}%{% endif %}
-            </td>
+          <tr class="{{ 'antes ' if linha.is_preperiodo }}{{ 'fds' if linha.is_destaque }}">
+            <td class="e" data-r="Dt. venda">
+              {%- if linha.is_preperiodo %}<span class="selo-antes"
+                title="Venda de fora do período — está aqui porque o recebimento dela caiu dentro da janela">anterior</span>
+              {% endif %}{{ linha.data_venda }}
+              {%- if linha.data_venda %}<span class="dia-semana">{{ linha.dia_semana }}</span>{% endif %}</td>
+            <td data-r="Venda">{% if linha.total_venda %}{{ linha.total_venda | fmtmoney }}{% endif %}</td>
+            <td class="e" data-r="Dt. recebimento">{{ linha.data_recebimento }}
+              {%- if linha.data_recebimento %}<span class="dia-semana">{{ linha.dia_semana_recebimento }}</span>{% endif %}</td>
+            <td data-r="Recebimento">{% if linha.total_recebimento %}{{ linha.total_recebimento | fmtmoney }}{% endif %}</td>
+            <td data-r="Diferença" class="{% if linha.diferenca is not none %}{{ 'neg' if linha.diferenca > 0.005 else ('pos' if linha.diferenca < -0.005 else 'zero') }}{% endif %}">
+              {% if linha.diferenca is not none %}{{ linha.diferenca | fmtmoney }}{% endif %}</td>
+            <td data-r="Dif. acumulada" class="{% if linha.saldo_acumulado is not none %}{{ 'neg' if linha.saldo_acumulado > 0.005 else ('pos' if linha.saldo_acumulado < -0.005 else 'zero') }}{% endif %}">
+              {% if linha.saldo_acumulado is not none %}{{ linha.saldo_acumulado | fmtmoney }}{% endif %}</td>
+            <td data-r="%" class="{% if linha.porcentagem is not none %}{{ 'pos' if linha.porcentagem < 0 else ('pos' if linha.porcentagem <= 2 else ('neg' if linha.porcentagem > 5 else '')) }}{% endif %}">
+              {% if linha.porcentagem is not none %}{{ "%.2f"|format(linha.porcentagem) }}%{% endif %}</td>
           </tr>
           {% endfor %}
-          <!-- Card subtotal -->
-          <tr class="row-total">
-            <td class="text-end fw-bold" colspan="1">TOTAL {{ card.bandeira_nome }}</td>
-            <td class="text-end">{{ card.total_venda | fmtmoney }}</td>
-            <td></td>
-            <td class="text-end">{{ card.total_recebimento | fmtmoney }}</td>
-            <td class="text-end {% if card.total_diferenca > 0.005 %}saldo-neg{% elif card.total_diferenca < -0.005 %}saldo-pos{% else %}saldo-zero{% endif %}">
-              {{ card.total_diferenca | fmtmoney }}
-            </td>
-            <td class="text-end {% if card.saldo_final < -0.005 %}saldo-pos{% elif card.saldo_final > 0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
-              {{ card.saldo_final | fmtmoney }}
-            </td>
-            <td class="text-end">
-              {% if card.total_venda %}{{ "%.2f"|format(card.total_diferenca / card.total_venda * 100) }}%{% endif %}
-            </td>
-          </tr>
         </tbody>
+        <tfoot>
+          <tr><td class="e">Total {{ card.bandeira_nome }}</td>
+            <td>{{ card.total_venda | fmtmoney }}</td>
+            <td class="e"></td>
+            <td>{{ card.total_recebimento | fmtmoney }}</td>
+            <td class="{{ 'neg' if card.total_diferenca > 0.005 else ('pos' if card.total_diferenca < -0.005 else 'zero') }}">{{ card.total_diferenca | fmtmoney }}</td>
+            <td class="{{ 'pos' if card.saldo_final < -0.005 else ('neg' if card.saldo_final > 0.005 else 'zero') }}">{{ card.saldo_final | fmtmoney }}</td>
+            <td>{% if card.total_venda %}{{ "%.2f"|format(card.total_diferenca / card.total_venda * 100) }}%{% endif %}</td></tr>
+        </tfoot>
       </table>
     </div>
   </div>
   {% endfor %}
 
-  <!-- ── Grand total ────────────────────────────────────────────────────── -->
-  <div class="table-responsive mb-4">
-    <table class="table table-bordered table-sm tbl-cart">
-      <thead>
-        <tr class="row-grand">
-          <td class="fw-bold" style="width:88px;">TOTAL GERAL</td>
-          <td class="text-end fw-bold" style="width:110px;">{{ grand_total_venda | fmtmoney }}</td>
-          <td style="width:88px;"></td>
-          <td class="text-end fw-bold" style="width:110px;">{{ grand_total_recebimento | fmtmoney }}</td>
-          <td class="text-end fw-bold {% if grand_total_diferenca > 0.005 %}saldo-neg{% elif grand_total_diferenca < -0.005 %}saldo-pos{% else %}saldo-zero{% endif %}" style="width:110px;">
-            {{ grand_total_diferenca | fmtmoney }}
-          </td>
-          <td class="text-end fw-bold {% if grand_saldo < -0.005 %}saldo-pos{% elif grand_saldo > 0.005 %}saldo-neg{% else %}saldo-zero{% endif %}" style="width:110px;">
-            {{ grand_saldo | fmtmoney }}
-          </td>
-          <td class="text-end fw-bold" style="width:70px;">
-            {% if grand_total_venda %}{{ "%.2f"|format(grand_total_diferenca / grand_total_venda * 100) }}%{% endif %}
-          </td>
-        </tr>
-      </thead>
-    </table>
-  </div>
-
-  <!-- Legend -->
-  <div class="small text-muted mb-4">
-    <strong>Dt. Venda</strong>: data do fechamento de caixa. &nbsp;
-    <strong>Dt. Recebimento</strong>: data esperada de liquidação (conforme prazo em dias úteis). &nbsp;
-    <strong>Diferença</strong>: diferença do ciclo = Venda(s) do ciclo − Recebimento (positivo = taxa cobrada; negativo = operadora pagou a mais). &nbsp;
-    <strong>Dif. Acumulada</strong>: saldo acumulado de taxas ao longo dos ciclos. &nbsp;
-    <strong>%</strong> = Taxa cobrada pela operadora no ciclo = Diferença / Venda × 100.
+  <div class="rod">
+    <b>Dt. venda</b> é a data do fechamento de caixa. <b>Dt. recebimento</b> é a
+    data esperada da liquidação, contada no prazo em dias úteis da bandeira —
+    ela pula fim de semana e feriado nacional, e por isso a linha verde não é
+    atraso: é dia em que o banco não operou.
+    <b>Diferença</b> é a venda do ciclo menos o recebimento: positiva é taxa
+    cobrada, negativa é operadora que pagou a mais.
+    <b>Dif. acumulada</b> é o saldo dessas diferenças ao longo dos ciclos, e
+    <b>%</b> é a taxa do ciclo (diferença ÷ venda).
+    A linha roxa em itálico é venda de <b>antes do período</b>, trazida porque o
+    recebimento dela caiu dentro da janela consultada.
+    <br>No painel do topo, <b>vendido = recebido + taxa retida + o que ainda não
+    caiu</b>. A taxa só conta ciclo já liquidado; a venda cujo recebimento
+    ainda não apareceu no extrato fica no “ainda não caiu”, e não vira taxa.
   </div>
 
   {% endif %}
