@@ -69,6 +69,55 @@ body > .container-fluid:has(#ccz){
     color:var(--blue-deep); border-radius:11px; padding:.65rem .8rem; font-size:.82rem;
     font-weight:600; margin-bottom:.7rem; }
 
+  /* ---- a grade de cards, a mesma do saidas_migradas ------------------- */
+  #ccz .pgrade{ display:grid; gap:.6rem; grid-template-columns:1fr;
+    margin-bottom:.7rem; --cols:4; }
+  @media (min-width:760px){ #ccz .pgrade{ grid-template-columns:repeat(2,1fr); } }
+  @media (min-width:1180px){
+    /* a conta das colunas vem do Jinja: com dez bandeiras mais o card TODAS,
+       uma grade fixa deixaria cards sozinhos na última linha. */
+    #ccz .pgrade{ grid-template-columns:repeat(var(--cols),1fr); } }
+  #ccz a.pc{ display:block; color:inherit; text-decoration:none;
+    transition:box-shadow .12s, opacity .12s; }
+  #ccz a.pc:hover{ box-shadow:0 5px 18px rgba(20,35,60,.14); }
+  #ccz .pc{ background:#fff; border:1px solid var(--borda);
+    border-top:4px solid var(--c); border-radius:14px; padding:.7rem .8rem .6rem;
+    box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #ccz .pc--off{ opacity:.5; }
+  #ccz .pc--on{ box-shadow:0 0 0 2px var(--c), 0 4px 16px rgba(20,35,60,.12); }
+  /* o card que soma todas: cinza de propósito — ele não é uma bandeira */
+  #ccz .pc--tot{ background:linear-gradient(165deg,#fbfcfe,#f3f6fa); }
+  #ccz .pc__t{ display:flex; align-items:center; gap:.5rem; }
+  #ccz .pc__i{ width:2rem; height:2rem; border-radius:9px; background:var(--c);
+    color:#fff; display:inline-grid; place-items:center; font-size:1rem; opacity:.9; }
+  #ccz .pc__n{ font-weight:800; font-size:1rem; }
+  #ccz .pc__r{ font-size:.64rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.04em; }
+  #ccz .pc__v{ margin-top:.4rem; display:flex; align-items:baseline; gap:.3rem; }
+  #ccz .pc__v b{ font-size:1.45rem; font-weight:800; color:var(--c);
+    letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1; }
+  #ccz .pc__g{ display:grid; grid-template-columns:1fr 1fr; gap:.3rem; margin-top:.5rem; }
+  #ccz .pc__g div{ background:#f7f9fc; border:1px solid var(--linha);
+    border-radius:9px; padding:.3rem .45rem; }
+  #ccz .pc__g dt{ font-size:.6rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.03em; }
+  #ccz .pc__g dd{ margin:.05rem 0 0; font-size:.84rem; font-weight:800;
+    font-variant-numeric:tabular-nums; color:#26354d; }
+  #ccz .pc__f{ margin-top:.45rem; border-top:1px dashed var(--linha);
+    padding-top:.4rem; font-size:.73rem; color:var(--muted); display:flex;
+    justify-content:space-between; gap:.4rem; }
+  #ccz .pc__f b{ color:#26354d; font-variant-numeric:tabular-nums; }
+  #ccz .pc__cl{ font-size:.63rem; font-weight:800; color:var(--c); opacity:.75;
+    text-transform:uppercase; letter-spacing:.03em; margin-top:.35rem; }
+  #ccz .spark{ display:flex; align-items:flex-end; gap:2px; height:30px;
+    margin-top:.45rem; }
+  #ccz .spark i{ flex:1 1 0; background:var(--c); opacity:.28;
+    border-radius:2px 2px 0 0; min-height:2px; }
+  #ccz .spark i.ult{ opacity:.95; }
+  #ccz .pbar{ display:flex; height:6px; border-radius:99px; overflow:hidden;
+    background:#eef1f5; margin-top:.4rem; }
+  #ccz .pbar i{ display:block; height:100%; }
+
   /* ---- o período inteiro, antes das bandeiras ------------------------- */
   #ccz .painel{ background:#fff; border:1px solid var(--borda); border-radius:16px;
     margin-bottom:.7rem; overflow:hidden; box-shadow:0 3px 14px rgba(20,35,60,.07);
@@ -293,66 +342,120 @@ body > .container-fluid:has(#ccz){
   </div>
   {% else %}
 
-  {#- O período inteiro, antes das bandeiras: é a pergunta "quanto vendi no
-      cartão, quanto entrou e quanto ficou pelo caminho". A taxa é a diferença
-      dividida pela venda — e é ela que se compara com o contrato. -#}
+  {#- A grade de cards, a mesma do /relatorios/saidas_migradas: o primeiro soma
+      tudo e é o "todas"; cada um dos outros é uma bandeira. Clicar num card
+      não muda o período — só escolhe de qual bandeira falam os quadros de
+      baixo, usando o filtro de bandeira que a tela já tinha. -#}
   {% set n_deb = report | selectattr('tipo_cartao', 'equalto', 'DEBITO') | list | length %}
-  <div class="painel">
-    <div class="caixa">
-      <div class="caixa__r">Vendido no cartão</div>
-      <div class="caixa__v">{{ grand_total_venda | fmtmoney }}</div>
-      <div class="caixa__s">{{ report|length }}
-        bandeira{{ 's' if report|length != 1 }} ·
-        {{ n_deb }} de débito · {{ report|length - n_deb }} de crédito</div>
-      {#- Vendido = Recebido + Taxa retida + o que ainda nao caiu. A tela
-          antiga mostrava "saldo" (recebido menos vendido), que junta a taxa
-          com a venda a receber -- e quem le entende que a operadora esta
-          devendo tudo aquilo. Aqui as duas partes aparecem separadas: a taxa
-          e o que ficou mesmo, e o resto e dinheiro a caminho. -#}
-      {% set a_receber = grand_total_venda - grand_total_recebimento - grand_total_diferenca %}
-      <div class="mini">
-        <div><span>Recebido</span><b>{{ grand_total_recebimento | fmtmoney }}</b></div>
-        <div><span>Taxa retida</span>
-          <b class="{{ 'neg' if grand_total_diferenca > 0.005 else ('pos' if grand_total_diferenca < -0.005 else 'zero') }}">{{ grand_total_diferenca | fmtmoney }}</b></div>
-        <div><span>Taxa do período</span>
-          <b>{% if grand_total_venda %}{{ "%.2f"|format(grand_total_diferenca / grand_total_venda * 100) }}%{% else %}—{% endif %}</b></div>
-        <div><span>Ainda não caiu</span>
-          <b class="{{ 'ambar' if a_receber > 0.005 }}">{{ a_receber | fmtmoney }}</b></div>
-      </div>
-    </div>
+  {#- A bandeira escolhida no CLIQUE (?band=). Ela não filtra a consulta: os
+      cards continuam todos na grade, e só os quadros de baixo obedecem. A
+      comparação é por texto — a URL aceita qualquer coisa, e um int() aqui
+      derrubaria a tela com "?band=abc". -#}
+  {% set _sel = [] %}
+  {% for c in report %}
+    {%- if band and c.bandeira_id | string == band %}
+      {%- if _sel.append(c) %}{% endif %}
+    {%- endif %}
+  {% endfor %}
+  {% set sel = _sel[0] if _sel else none %}
+  {% set sep = '&' if qs_base else '' %}
+  {% set a_receber = grand_total_venda - grand_total_recebimento - grand_total_diferenca %}
+  {% set ncards = report|length + 1 %}
+  <div class="pgrade" style="--cols:{{ ncards if ncards <= 6 else ((ncards + 1) // 2) }}">
 
-    {#- De onde vem a venda de cartão: a barra é a fatia de cada bandeira, e o
-        que interessa ao lado é a taxa dela — é assim que se vê a bandeira que
-        cobra mais caro sem abrir quadro por quadro. -#}
-    <div class="rank">
-      <div class="rank__t">Por bandeira, e a que taxa</div>
-      {% set maior = (report | map(attribute='total_venda') | max) or 0 %}
-      {% for card in report | sort(attribute='total_venda', reverse=True) %}
-      {% set cor = '#1D63A5' if card.tipo_cartao == 'DEBITO' else '#6f42c1' %}
-      <div class="rk">
-        <div class="rk__n">
-          <i class="selo" style="--c:{{ cor }};background:{{ cor }}">{{ card.tipo_cartao[:3] }}</i>
-          <a href="#band-{{ card.bandeira_id }}">{{ card.bandeira_nome }}</a>
-        </div>
-        <div class="rk__v">{{ card.total_venda | fmtmoney }}</div>
-        <div class="rk__b">
-          <i style="width:{{ (card.total_venda / maior * 100) if maior else 0 }}%;background:{{ cor }}"></i>
-        </div>
-        <div class="rk__d">
-          <span>recebido {{ card.total_recebimento | fmtmoney }}</span>
-          <span>taxa
-            <b>{% if card.total_venda %}{{ "%.2f"|format(card.total_diferenca / card.total_venda * 100) }}%{% else %}—{% endif %}</b></span>
-          <span>saldo
-            <b class="{{ 'pos' if card.saldo_final < -0.005 else ('neg' if card.saldo_final > 0.005 else 'zero') }}">{{ card.saldo_final | fmtmoney }}</b></span>
-        </div>
+    {#- O card que soma todas. Sem "taxa média" inventada: a taxa daqui é a do
+        período inteiro, que é a diferença sobre a venda — e essa soma. -#}
+    <a class="pc pc--tot{{ ' pc--on' if not sel }}" style="--c:#475569"
+       href="?{{ qs_base }}">
+      <div class="pc__t">
+        <span class="pc__i"><i class="bi bi-stack"></i></span>
+        <div><div class="pc__n">TODAS</div>
+          <div class="pc__r">{{ report|length }} bandeiras ·
+            {{ n_deb }} débito · {{ report|length - n_deb }} crédito</div></div>
       </div>
-      {% endfor %}
-    </div>
+      <div class="pc__v"><b>{{ grand_total_venda | fmtmoney }}</b></div>
+      <div class="pc__r">vendido no cartão</div>
+      <div class="pc__g">
+        <div><dt>Recebido</dt><dd>{{ grand_total_recebimento | fmtmoney }}</dd></div>
+        <div><dt>Taxa retida</dt><dd class="neg">{{ grand_total_diferenca | fmtmoney }}</dd></div>
+        <div><dt>Taxa do período</dt>
+          <dd>{% if grand_total_venda %}{{ "%.2f"|format(grand_total_diferenca / grand_total_venda * 100) }}%{% else %}—{% endif %}</dd></div>
+        <div><dt>Ainda não caiu</dt>
+          <dd class="{{ 'ambar' if a_receber > 0.005 }}">{{ a_receber | fmtmoney }}</dd></div>
+      </div>
+      {#- A barra de cada dia é a venda daquele ciclo, somando as bandeiras. -#}
+      {% set dias = {} %}
+      {% for c in report %}{% for l in c.linhas %}{% if l.total_venda %}
+        {% if dias.update({l.data_venda: dias.get(l.data_venda, 0) + l.total_venda}) %}{% endif %}
+      {% endif %}{% endfor %}{% endfor %}
+      {% set vmax = (dias.values() | max) if dias else 0 %}
+      {% set vmin = (dias.values() | min) if dias else 0 %}
+      <div class="spark">
+        {% for d, v in dias | dictsort %}
+        <i class="{{ 'ult' if loop.last }}"
+           style="height:{{ 18 + 82 * ((v - vmin) / (vmax - vmin)) if vmax > vmin else 60 }}%"
+           title="{{ d }}: {{ v | fmtmoney }}"></i>
+        {% endfor %}
+      </div>
+      <div class="pc__f"><span>venda dia a dia</span>
+        <span>{{ dias|length }} dia{{ 's' if dias|length != 1 }} com venda</span></div>
+      <div class="pc__f"><span>a taxa é a do período, e não média de médias —
+        ela é a retida sobre o vendido</span></div>
+      <div class="pbar"><i style="width:100%;background:#475569"></i></div>
+      <div class="pc__cl">{% if sel %}
+        <i class="bi bi-arrow-left"></i> clique para voltar a todas
+        {% else %}<i class="bi bi-check2"></i> vendo todas as bandeiras{% endif %}</div>
+    </a>
+
+    {% for card in report | sort(attribute='total_venda', reverse=True) %}
+    {% set cor = '#1D63A5' if card.tipo_cartao == 'DEBITO' else '#6f42c1' %}
+    {% set falta = card.total_venda - card.total_recebimento - card.total_diferenca %}
+    {% set fatia = (card.total_venda / grand_total_venda * 100) if grand_total_venda else 0 %}
+    <a class="pc{{ ' pc--on' if sel and sel.bandeira_id == card.bandeira_id }}{{ ' pc--off' if sel and sel.bandeira_id != card.bandeira_id }}"
+       style="--c:{{ cor }}"
+       href="?{{ qs_base }}{{ (sep ~ 'band=' ~ card.bandeira_id)
+                if not (sel and sel.bandeira_id == card.bandeira_id) }}">
+      <div class="pc__t">
+        <span class="pc__i"><i class="bi bi-credit-card"></i></span>
+        <div><div class="pc__n">{{ card.bandeira_nome }}</div>
+          <div class="pc__r">{{ card.tipo_cartao }} ·
+            {{ card.linhas | selectattr('total_venda') | list | length }} dias com venda</div></div>
+      </div>
+      <div class="pc__v"><b>{{ card.total_venda | fmtmoney }}</b></div>
+      <div class="pc__r">vendido no período</div>
+      <div class="pc__g">
+        <div><dt>Recebido</dt><dd>{{ card.total_recebimento | fmtmoney }}</dd></div>
+        <div><dt>Taxa retida</dt>
+          <dd class="{{ 'neg' if card.total_diferenca > 0.005 else ('pos' if card.total_diferenca < -0.005 else 'zero') }}">{{ card.total_diferenca | fmtmoney }}</dd></div>
+        <div><dt>Taxa</dt>
+          <dd>{% if card.total_venda %}{{ "%.2f"|format(card.total_diferenca / card.total_venda * 100) }}%{% else %}—{% endif %}</dd></div>
+        <div><dt>Ainda não caiu</dt>
+          <dd class="{{ 'ambar' if falta > 0.005 }}">{{ falta | fmtmoney }}</dd></div>
+      </div>
+      {% set vals = card.linhas | selectattr('total_venda') | map(attribute='total_venda') | list %}
+      {% set cmax = (vals | max) if vals else 0 %}
+      {% set cmin = (vals | min) if vals else 0 %}
+      <div class="spark">
+        {% for l in card.linhas %}{% if l.total_venda %}
+        <i class="{{ 'ult' if loop.last }}"
+           style="height:{{ 18 + 82 * ((l.total_venda - cmin) / (cmax - cmin)) if cmax > cmin else 60 }}%"
+           title="{{ l.data_venda }}: {{ l.total_venda | fmtmoney }}"></i>
+        {% endif %}{% endfor %}
+      </div>
+      <div class="pc__f"><span>venda dia a dia</span>
+        <span>entra em <b>{{ card.forma_recebimento_nome or '—' }}</b></span></div>
+      <div class="pc__f"><span>fatia da venda</span><b>{{ '%.0f'|format(fatia) }}%</b></div>
+      <div class="pbar"><i style="width:{{ fatia }}%;background:{{ cor }}"></i></div>
+      <div class="pc__cl">{% if sel and sel.bandeira_id == card.bandeira_id %}
+        <i class="bi bi-check2"></i> vendo só esta — clique para voltar a todas
+        {% else %}<i class="bi bi-hand-index"></i> clique para ver só esta{% endif %}</div>
+    </a>
+    {% endfor %}
   </div>
 
   {#- Um quadro por bandeira, cada linha um ciclo: a venda de um dia e o
-      recebimento que a liquidou. -#}
-  {% for card in report %}
+      recebimento que a liquidou. Com um card escolhido, só o dele aparece. -#}
+  {% for card in (([sel] if sel else report)) %}
   {% set cor = '#1D63A5' if card.tipo_cartao == 'DEBITO' else '#6f42c1' %}
   <div class="cx" id="band-{{ card.bandeira_id }}" style="--c:{{ cor }}">
     <div class="ph">

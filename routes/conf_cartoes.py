@@ -26,6 +26,7 @@ from flask_login import login_required
 
 from routes.auth import admin_required
 from utils.db import get_db_connection
+from urllib.parse import urlencode
 from utils import feriados as feriados_br
 
 import logging
@@ -756,6 +757,13 @@ def conf_cartoes():
 
     empresa_ids = [e for e in args.getlist('empresa_ids[]') if e]
     bandeira_ids = [b for b in args.getlist('bandeira_ids[]') if b]
+    # `band` NAO e filtro: e o clique num card. Ele escolhe de qual bandeira
+    # falam os quadros de baixo, sem tirar as outras da grade -- os cards SAO
+    # o seletor, e sumir com eles tiraria o caminho de volta. Quem filtra de
+    # verdade (e some com as outras) e o bandeira_ids[] do formulario.
+    band = (args.get('band') or '').strip()
+    qs_base = urlencode(
+        [(k, v) for k, v in args.items(multi=True) if k != 'band'])
 
     conn = get_db_connection()
     try:
@@ -833,7 +841,7 @@ def conf_cartoes():
         empresas=empresas,
         bandeiras=bandeiras,
         formas_cartao=formas_cartao,
-        feriados=feriados,
+        feriados=feriados, band=band, qs_base=qs_base,
         report=report,
         data_inicio=data_inicio,
         data_fim=data_fim,
