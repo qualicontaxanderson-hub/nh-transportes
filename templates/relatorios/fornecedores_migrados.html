@@ -384,7 +384,11 @@ body > .container-fluid:has(#fmg){
       escolhido, é o caminho de volta. Sem preço médio de propósito: média
       entre S-10 e etanol não é preço de nada. -#}
   {% set g = produtos.geral %}
-  <div class="pgrade" style="--cols:{{ [produtos.produtos|length + 1, 5]|min }}">
+  {#- Quantos cards por linha. Com o ARLA da compra aparecendo (16/09/2026)
+      passaram a ser seis, e um teto fixo de cinco deixaria um sozinho
+      embaixo. Ate seis cabem numa linha; acima disso, duas linhas parelhas. -#}
+  {% set ncards = produtos.produtos|length + 1 %}
+  <div class="pgrade" style="--cols:{{ ncards if ncards <= 6 else ((ncards + 1) // 2) }}">
     {% set gmin = g.dia_a_dia | map(attribute='rs') | min %}
     {% set gmax = g.dia_a_dia | map(attribute='rs') | max %}
     <a class="pc pc--tot{{ ' pc--on' if not sel }}" style="--c:#475569"

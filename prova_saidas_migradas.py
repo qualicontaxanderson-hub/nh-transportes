@@ -311,8 +311,12 @@ prova('e os outros cards continuam na tela (o seletor nao some)',
 prova('a barra diz o que esta filtrado',
       'os recortes abaixo mostram só o' in hp and p0['nome'] in hp)
 prova('e tem o caminho de volta', 'ver todos os produtos' in hp)
+# Defensivo: se a requisicao acima falhar (a conexao com o Railway cai de vez
+# em quando), esta prova tem de FALHAR e seguir -- nao derrubar a rodada
+# inteira com um IndexError e esconder as 30 provas seguintes.
+_dep = hp.split('Preço médio/L')
 prova('o preco medio aparece no recorte quando e de um produto so',
-      '—</td>' not in hp.split('Preço médio/L')[1][:400])
+      len(_dep) > 1 and '—</td>' not in _dep[1][:400])
 
 conn = get_db_connection()
 cur = conn.cursor(dictionary=True)

@@ -211,8 +211,34 @@ prova('o primeiro fornecedor de cada produto e o mais barato (acima = 0)',
       all(p['fornecedores'][0]['acima'] < 0.0001 for p in pp['produtos']))
 prova('as fatias somam 100%',
       abs(sum(p['fatia'] for p in pp['produtos']) - 100) < 0.01)
-prova('o aviso conta os itens de combustivel SEM produto classificado (%d)'
-      % pp['sem_classificar']['itens'], pp['sem_classificar']['itens'] > 0)
+# 16/09/2026: o passivo acabou. Ate aqui, 126 itens que o usuario JA tinha
+# classificado na tela nao apareciam neste relatorio -- a tela gravava em
+# classificado_produto_id e o relatorio le produto_id, e quem enchia produto_id
+# era um chute no cod_anp. O chute saiu, a regra passou a escrever nas duas
+# colunas e o passivo foi copiado. Esta prova agora cobra que nao volte.
+prova('nao sobrou combustivel classificado e invisivel (%d itens)'
+      % pp['sem_classificar']['itens'], pp['sem_classificar']['itens'] == 0)
+conn = get_db_connection()
+cur = conn.cursor(dictionary=True)
+cur.execute("SELECT COUNT(*) n FROM dfe_itens "
+            " WHERE produto_id IS NULL AND classificado_produto_id IS NOT NULL")
+_parados = (cur.fetchone() or {}).get('n')
+cur.execute("SELECT COUNT(*) n FROM dfe_itens "
+            " WHERE produto_id IS NOT NULL AND classificado_produto_id IS NOT NULL "
+            "   AND produto_id <> classificado_produto_id")
+_discordam = (cur.fetchone() or {}).get('n')
+cur.close()
+conn.close()
+prova('nenhum item classificado ficou fora da coluna que o relatorio le',
+      _parados == 0)
+prova('e as duas colunas nunca discordam', _discordam == 0)
+conn = get_db_connection()
+cur = conn.cursor(dictionary=True)
+_amplo = fornecedor_migrado.por_produto(cur, date(2026, 6, 1), date(2026, 9, 16))
+cur.close()
+conn.close()
+prova('o ARLA da COMPRA virou produto (antes so a venda tinha)',
+      any(x['nome'] == 'ARLA' for x in _amplo['produtos']))
 
 r3 = client.get(url + '&aba=produto')
 h3 = r3.get_data(as_text=True)
@@ -460,8 +486,12 @@ prova('a variacao e comprado agora menos comprado antes',
 prova('o card TODOS esta na tela', '>TODOS<' in h3)
 prova('agora sao %d cards' % (len(pp['produtos']) + 1),
       h3.count('<a class="pc') == len(pp['produtos']) + 1)
-prova('a grade abre as %d colunas' % (len(pp['produtos']) + 1),
-      ('--cols:%d' % (len(pp['produtos']) + 1)) in h3)
+# Ate seis cards cabem numa linha; acima disso, duas linhas parelhas -- seis
+# cards em cinco colunas deixavam um sozinho embaixo.
+_nc = len(pp['produtos']) + 1
+_cols = _nc if _nc <= 6 else ((_nc + 1) // 2)
+prova('a grade abre as %d colunas para os %d cards' % (_cols, _nc),
+      ('--cols:%d' % _cols) in h3)
 prova('sem produto escolhido, o card TODOS e o aceso',
       'class="pc pc--tot pc--on"' in h3 and 'class="pc pc--on"' not in h3)
 prova('com um produto escolhido, o TODOS deixa de estar aceso',
