@@ -6,13 +6,11 @@ from utils.db import get_db_connection
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
-# De-para ANP -> nome curto do combustível (mesma regra dura do dashboard).
-_ONDA1_FUEL = {
-    '820101012': 'Diesel S-500',
-    '820101034': 'Diesel S-10',
-    '810101001': 'Etanol',
-    '320102001': 'Gasolina C',
-}
+# O nome do produto NAO sai do cod_ANP (17/09/2026). Havia aqui um de-para
+# ANP -> nome, com um "se o cprod for 64, escreve ARLA" pregado do lado. O ANP
+# identifica familia, nao produto: o 620505001 sozinho cobre 37 itens do posto.
+# Hoje o item ja carrega o produto que o usuario classificou (produto_id), e o
+# nome sai do cadastro -- o mesmo nome que os relatorios mostram.
 
 
 @api_bp.route('/rota/<int:origem_id>/<int:destino_id>', methods=['GET'])
@@ -56,9 +54,12 @@ def vendas_ultimas():
             ids = [n['id'] for n in notas]
             place = ",".join(["%s"] * len(ids))
             cur.execute(
-                "SELECT venda_id, produto_xml, cod_anp, cprod, quantidade, unidade, valor_total "
-                "FROM vendas_xml_itens WHERE venda_id IN (" + place + ") "
-                "ORDER BY venda_id, valor_total DESC", ids)
+                "SELECT i.venda_id, i.produto_xml, i.quantidade, i.unidade, "
+                "       i.valor_total, p.nome AS produto_nome "
+                "  FROM vendas_xml_itens i "
+                "  LEFT JOIN produto p ON p.id = i.produto_id "
+                " WHERE i.venda_id IN (" + place + ") "
+                " ORDER BY i.venda_id, i.valor_total DESC", ids)
             for it in cur.fetchall():
                 qt_itens[it['venda_id']] = qt_itens.get(it['venda_id'], 0) + 1
                 principal.setdefault(it['venda_id'], it)  # 1º = item de maior valor
@@ -66,13 +67,9 @@ def vendas_ultimas():
         vendas = []
         for n in notas:
             it = principal.get(n['id']) or {}
-            anp = it.get('cod_anp') or ''
-            if anp in _ONDA1_FUEL:
-                produto = _ONDA1_FUEL[anp]
-            elif (it.get('cprod') or '') == '64':
-                produto = 'ARLA'
-            else:
-                produto = it.get('produto_xml') or '—'
+            # O produto classificado; sem classificacao, o nome cru do XML --
+            # que e a verdade daquele item, e nao um palpite.
+            produto = it.get('produto_nome') or it.get('produto_xml') or '—'
             vendas.append({
                 'id': n['id'],
                 'hora': n['dh_emissao'].strftime('%H:%M') if n['dh_emissao'] else '',
