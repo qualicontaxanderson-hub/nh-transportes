@@ -3159,14 +3159,20 @@ def exportar_contabil():
             # Load vinculos: {forma_recebimento_id → [(bandeira_cartao_id, prazo), ...]}
             cursor.execute(
                 """SELECT v.forma_recebimento_id, v.bandeira_cartao_id,
-                          COALESCE(bc.prazo_compensacao_dias, 1) AS prazo
+                          COALESCE(bc.prazo_compensacao_dias, 1) AS prazo,
+                          COALESCE(bc.prazo_tipo, 'UTIL')        AS prazo_tipo
                      FROM conf_cartoes_vinculos v
                      JOIN bandeiras_cartao bc ON bc.id = v.bandeira_cartao_id"""
             )
             _forma_to_band = defaultdict(list)
             for _vr in cursor.fetchall():
+                # O tipo do prazo vem junto: ha bandeira que paga em dias
+                # CORRIDOS (a X7 BANK paga em 3), e contar em uteis aqui faria
+                # esta tela discordar do /relatorios/conf_cartoes sobre a data
+                # do credito -- a mesma venda com duas datas esperadas.
                 _forma_to_band[_vr['forma_recebimento_id']].append(
-                    (_vr['bandeira_cartao_id'], int(_vr['prazo']))
+                    (_vr['bandeira_cartao_id'], int(_vr['prazo']),
+                     (_vr['prazo_tipo'] or 'UTIL'))
                 )
 
             if _forma_to_band:
@@ -3252,6 +3258,19 @@ def exportar_contabil():
                                 n -= 1
                         return d
 
+                    def _esperada(d, n, tipo, fs):
+                        """A data esperada do credito, do jeito da bandeira:
+                        dias uteis (o comum) ou dias corridos (a X7 BANK). E a
+                        mesma regra de conf_cartoes._data_esperada."""
+                        if n == 0:
+                            return d
+                        if (tipo or 'UTIL').upper() == 'CORRIDO':
+                            d = d + _dt.timedelta(days=n)
+                            while d.weekday() >= 5 or d.isoformat() in fs:
+                                d += _dt.timedelta(days=1)
+                            return d
+                        return _nbd(d, n, fs)
+
                     for _rec in _receipts:
                         _rd = _rec['data_transacao']
                         _rd_obj = (
@@ -3261,7 +3280,8 @@ def exportar_contabil():
                         _cli_id = int(_rec['cliente_id'])
                         _receipt_amt = float(_rec['total_recebimento'] or 0)
 
-                        for _band_id, _prazo in _forma_to_band.get(_rec['forma_recebimento_id'], []):
+                        for _band_id, _prazo, _prazo_tipo in _forma_to_band.get(
+                                _rec['forma_recebimento_id'], []):
                             _contas = cartao_conta_map.get((_band_id, _cli_id))
                             if not _contas or not _contas.get('despesa') or not _contas['despesa'][0]:
                                 continue
@@ -3270,7 +3290,7 @@ def exportar_contabil():
                             _cycle_venda = 0.0
                             for _delta in range(_lookback + 1):
                                 _sd_obj = _rd_obj - _dt.timedelta(days=_delta)
-                                _exp_rd = _nbd(_sd_obj, _prazo, _feriados_set)
+                                _exp_rd = _esperada(_sd_obj, _prazo, _prazo_tipo, _feriados_set)
                                 if _exp_rd == _rd_obj:
                                     _sd_iso = _sd_obj.isoformat()
                                     _cycle_venda += _sales_idx.get((_band_id, _sd_iso, _cli_id), 0.0)

@@ -62,6 +62,29 @@ def _next_business_day(d, n, feriados_set):
     return d
 
 
+def _next_calendar_day(d, n, feriados_set):
+    """D+n em dias CORRIDOS, andando para a frente se cair em dia sem banco.
+
+    A X7 BANK paga assim: três dias corridos depois da venda, e se o terceiro
+    dia for sábado, domingo ou feriado, o crédito entra no próximo dia útil.
+    Contar em dias úteis erra justamente a venda de fim de semana -- a de
+    sábado 22/08/2026 caiu na terça 25/08, e em dias úteis daria quarta.
+    """
+    d = d + timedelta(days=n)
+    while d.weekday() >= 5 or d.isoformat() in feriados_set:
+        d = d + timedelta(days=1)
+    return d
+
+
+def _data_esperada(d, prazo, tipo, feriados_set):
+    """A data em que o crédito daquela venda deve cair, do jeito da bandeira."""
+    if prazo == 0:
+        return d
+    if (tipo or 'UTIL').upper() == 'CORRIDO':
+        return _next_calendar_day(d, prazo, feriados_set)
+    return _next_business_day(d, prazo, feriados_set)
+
+
 def _last_day_of_next_month(d):
     """Retorna o último dia do mês seguinte ao mês de d."""
     if d.month == 12:
@@ -122,6 +145,19 @@ def _ensure_vinculos_table(conn):
         cur.execute(
             "ALTER TABLE bandeiras_cartao "
             "ADD COLUMN prazo_compensacao_dias INT NOT NULL DEFAULT 1"
+        )
+        conn.commit()
+    except Exception:
+        pass  # coluna já existe
+    # Migração: como o prazo é contado. A maioria das bandeiras paga em dias
+    # ÚTEIS, mas a X7 BANK paga em 3 dias CORRIDOS -- medido contra a fatura
+    # dela: 29 das 39 linhas casam com o caixa em 3 dias corridos, sempre. Com
+    # a contagem em dias úteis a venda de sábado cai na quarta, e a de verdade
+    # caiu na terça -- e aí nada casa.
+    try:
+        cur.execute(
+            "ALTER TABLE bandeiras_cartao "
+            "ADD COLUMN prazo_tipo ENUM('UTIL','CORRIDO') NOT NULL DEFAULT 'UTIL'"
         )
         conn.commit()
     except Exception:
@@ -397,6 +433,7 @@ def _get_bandeiras(conn):
         """
         SELECT bc.id, bc.nome, bc.tipo,
                COALESCE(bc.prazo_compensacao_dias, 1) AS prazo_compensacao_dias,
+               COALESCE(bc.prazo_tipo, 'UTIL')         AS prazo_tipo,
                COALESCE(bc.saldo_anterior, 0)         AS saldo_anterior,
                bc.saldo_anterior_data
           FROM bandeiras_cartao bc
@@ -583,12 +620,15 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
 
     report = []
     grand_total_venda = 0.0
+    grand_a_receber = 0.0
+    grand_sem_venda = 0.0
     grand_total_recebimento = 0.0
     grand_total_diferenca = 0.0
 
     for band in bandeiras:
         bid = band['id']
         prazo = int(band.get('prazo_compensacao_dias', 1))
+        prazo_tipo = (band.get('prazo_tipo') or 'UTIL')
         forma_ids = vinculos_map.get(bid, [])
         saldo_anterior = float(band.get('saldo_anterior', 0.0))
 
@@ -628,7 +668,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
         for sd in sale_dates:
             sd_obj = _parse_iso(sd)
             if sd_obj:
-                rd_obj = sd_obj if prazo == 0 else _next_business_day(sd_obj, prazo, feriados_set)
+                rd_obj = _data_esperada(sd_obj, prazo, prazo_tipo, feriados_set)
                 # Ignora vendas pré-período cujo recebimento já ocorreu antes do período
                 if data_inicio_obj and rd_obj < data_inicio_obj:
                     continue
@@ -648,6 +688,15 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
         total_venda = 0.0
         total_recebimento = 0.0
         total_diferenca = 0.0
+        # O que ainda NAO CAIU e o que ainda NAO FOI VENDIDO sao contados aqui,
+        # ciclo a ciclo -- e nao deduzidos por subtracao dos totais. A subtracao
+        # (vendido - recebido - taxa) so fecha quando a diferenca e taxa de
+        # verdade; num cartao que recebeu MAIS do que vendeu ela devolve um
+        # numero que nao e de nada. Foi o que aconteceu no X7 BANK: a tela
+        # dizia "ainda nao caiu 7.578,36" sendo que ele tinha recebido 2,4 mil
+        # a mais do que vendeu.
+        total_a_receber = 0.0     # venda de ciclo que ainda nao teve recebimento
+        total_sem_venda = 0.0     # recebimento de ciclo que nao teve venda
         saldo = 0.0          # DIF acumulada (sign: negativo = taxas cobradas)
         is_first_cycle = True
 
@@ -681,6 +730,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                 if has_receipt:
                     saldo += actual_receipt
                     total_diferenca -= actual_receipt  # recebimento sem venda = overpayment (negative fee)
+                    total_sem_venda += actual_receipt
                 is_destaque_rd = (rd_obj is not None and rd_obj.weekday() >= 5) or (rd in feriados_set)
                 linhas.append({
                     'data_venda': '',
@@ -746,12 +796,16 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
 
             total_venda += cycle_venda
             total_recebimento += actual_receipt
+            if not has_receipt:
+                total_a_receber += cycle_venda
 
         if not linhas:
             continue
 
         grand_total_venda += total_venda
         grand_total_recebimento += total_recebimento
+        grand_a_receber += total_a_receber
+        grand_sem_venda += total_sem_venda
         grand_total_diferenca += total_diferenca
 
         # Build names of linked formas for display
@@ -770,11 +824,14 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
             'saldo_anterior': saldo_anterior,
             'saldo_anterior_aplicavel': saldo_aplicavel,
             'saldo_final': saldo,
+            'total_a_receber': total_a_receber,
+            'total_sem_venda': total_sem_venda,
         })
 
     grand_saldo = grand_total_recebimento - grand_total_venda
 
-    return report, grand_total_venda, grand_total_recebimento, grand_total_diferenca, grand_saldo
+    return (report, grand_total_venda, grand_total_recebimento,
+            grand_total_diferenca, grand_saldo, grand_a_receber, grand_sem_venda)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -866,6 +923,8 @@ def conf_cartoes():
         grand_total_recebimento = 0.0
         grand_total_diferenca = 0.0
         grand_saldo = 0.0
+        grand_a_receber = 0.0
+        grand_sem_venda = 0.0
 
         if data_inicio and data_fim:
             data_inicio_obj = _parse_iso(data_inicio)
@@ -879,9 +938,11 @@ def conf_cartoes():
             receb_rows = _fetch_recebimentos(
                 conn, data_inicio, data_fim, empresa_ids, forma_ids
             )
-            report, grand_total_venda, grand_total_recebimento, grand_total_diferenca, grand_saldo = (
-                _build_report(bandeiras_filtered, vinculos_map, vendas_rows, receb_rows, feriados_set, data_inicio_obj)
-            )
+            (report, grand_total_venda, grand_total_recebimento,
+             grand_total_diferenca, grand_saldo, grand_a_receber,
+             grand_sem_venda) = _build_report(
+                bandeiras_filtered, vinculos_map, vendas_rows, receb_rows,
+                feriados_set, data_inicio_obj)
             # O tipo escolhido corta a lista DEPOIS de apurada, e os totais do
             # topo sao refeitos: o card TODAS tem de somar o que esta na tela,
             # e nao o que ficou de fora dela.
@@ -891,6 +952,8 @@ def conf_cartoes():
                 grand_total_recebimento = sum(c['total_recebimento'] for c in report)
                 grand_total_diferenca = sum(c['total_diferenca'] for c in report)
                 grand_saldo = grand_total_recebimento - grand_total_venda
+                grand_a_receber = sum(c['total_a_receber'] for c in report)
+                grand_sem_venda = sum(c['total_sem_venda'] for c in report)
     finally:
         conn.close()
 
@@ -901,6 +964,7 @@ def conf_cartoes():
         formas_cartao=formas_cartao,
         feriados=feriados, band=band, tipo=tipo,
         qs_base=qs_base, qs_limpo=qs_limpo, meses=meses,
+        grand_a_receber=grand_a_receber, grand_sem_venda=grand_sem_venda,
         report=report,
         data_inicio=data_inicio,
         data_fim=data_fim,
@@ -1059,10 +1123,14 @@ def desvincular_cartao():
 @login_required
 @admin_required
 def prazo_salvar():
-    """Salva o prazo de compensação (dias úteis) para uma bandeira de cartão."""
+    """Salva o prazo de compensação de uma bandeira: quantos dias, e se a
+    contagem é em dias ÚTEIS ou CORRIDOS."""
     data = request.get_json(silent=True) or {}
     bandeira_id = data.get('bandeira_cartao_id')
     prazo_dias = data.get('prazo_dias')
+    prazo_tipo = (data.get('prazo_tipo') or 'UTIL').strip().upper()
+    if prazo_tipo not in ('UTIL', 'CORRIDO'):
+        prazo_tipo = 'UTIL'
 
     if not bandeira_id or prazo_dias is None:
         return jsonify({'success': False, 'message': 'Parâmetros inválidos.'}), 400
@@ -1078,8 +1146,9 @@ def prazo_salvar():
     try:
         cur = conn.cursor()
         cur.execute(
-            "UPDATE bandeiras_cartao SET prazo_compensacao_dias = %s WHERE id = %s",
-            (prazo_dias, bandeira_id),
+            "UPDATE bandeiras_cartao SET prazo_compensacao_dias = %s, "
+            "       prazo_tipo = %s WHERE id = %s",
+            (prazo_dias, prazo_tipo, bandeira_id),
         )
         conn.commit()
         cur.close()

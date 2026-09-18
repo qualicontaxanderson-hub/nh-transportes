@@ -176,8 +176,15 @@ if _taxa is not None and _falta is not None:
           perto(p_receb + _taxa + _falta, p_venda, 0.05))
     prova('a taxa retida e a soma das diferencas das bandeiras',
           perto(_taxa, sum(q['dif'] for q in por_bandeira), 0.05))
-prova('e o rodape explica a conta',
-      'vendido = recebido + taxa retida' in html)
+# O rodape nao promete mais a identidade "vendido = recebido + taxa + a
+# receber": ela so vale quando todo credito tem venda casada. Quando entra
+# credito sem venda (X7 BANK), ela deixa de fechar -- e o rodape passou a
+# explicar cada parcela pelo que ela e, inclusive o "caiu sem venda".
+prova('o rodape explica a taxa retida', 'taxa retida</b> é a soma' in html)
+prova('e explica o "ainda nao caiu" como contagem, nao subtracao',
+      'contada ciclo a ciclo' in html)
+prova('e explica o "caiu sem venda"',
+      'caiu sem venda</b>, é crédito que entrou num' in html)
 
 print('\n4b) o que o Anderson pediu nesta rodada')
 prova('a regua traz TODOS os meses com venda de cartao, e nao so dois',
@@ -210,7 +217,31 @@ prova('escolhendo um cartao, so ele acende',
 prova('e o "Todos" dos cartoes apaga, o das empresas continua aceso',
       _f1.count('class="todos on"') == 1)
 
-print('\n5) as linhas que explicam a data do recebimento')
+print('\n4c) o prazo da bandeira: dias uteis ou corridos')
+# A X7 BANK paga em 3 dias CORRIDOS -- medido contra a fatura dela. Contar em
+# dias uteis erra a venda de fim de semana e desencontra tudo: a mesma quantia
+# vira "ainda nao caiu" de um lado e "caiu sem venda" do outro.
+from routes.conf_cartoes import _data_esperada, _next_business_day
+from datetime import date as _d
+_fs = set()
+prova('em dias UTEIS, a venda de sabado 22/08/2026 + 3 cai na quarta 26/08',
+      _data_esperada(_d(2026, 8, 22), 3, 'UTIL', _fs) == _d(2026, 8, 26))
+prova('em dias CORRIDOS, ela cai na terca 25/08 -- que foi o que aconteceu',
+      _data_esperada(_d(2026, 8, 22), 3, 'CORRIDO', _fs) == _d(2026, 8, 25))
+prova('corrido que cai no domingo anda para a segunda',
+      _data_esperada(_d(2026, 8, 20), 3, 'CORRIDO', _fs) == _d(2026, 8, 24))
+prova('e corrido tambem pula feriado nacional',
+      _data_esperada(_d(2026, 9, 4), 3, 'CORRIDO', {'2026-09-07'}) == _d(2026, 9, 8))
+prova('prazo 0 e o proprio dia, nos dois tipos',
+      _data_esperada(_d(2026, 8, 22), 0, 'CORRIDO', _fs) == _d(2026, 8, 22)
+      and _data_esperada(_d(2026, 8, 22), 0, 'UTIL', _fs) == _d(2026, 8, 22))
+prova('tipo vazio cai em dias uteis (o comum)',
+      _data_esperada(_d(2026, 8, 22), 3, '', _fs)
+      == _next_business_day(_d(2026, 8, 22), 3, _fs))
+prova('a tela deixa escolher o tipo na bandeira',
+      'inp-prazo-tipo' in html and '>corridos<' in html and '>úteis<' in html)
+
+print('5) as linhas que explicam a data do recebimento')
 prova('a linha de fim de semana/feriado continua marcada',
       'class="fds"' in html or 'antes fds' in html)
 prova('a venda de antes do periodo continua marcada',

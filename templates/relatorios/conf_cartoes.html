@@ -430,7 +430,12 @@ body > .container-fluid:has(#ccz){
   {% endfor %}
   {% set sel = _sel[0] if _sel else none %}
   {% set sep = '&' if qs_base else '' %}
-  {% set a_receber = grand_total_venda - grand_total_recebimento - grand_total_diferenca %}
+  {#- "Ainda não caiu" é contado ciclo a ciclo pelo motor: é a venda cujo
+      recebimento não apareceu no extrato. Era deduzido por subtração
+      (vendido − recebido − taxa), e dava número errado justamente onde
+      mais importava: no X7 BANK, que recebeu MAIS do que vendeu, a tela
+      dizia "ainda não caiu 7.578,36" sem nada para cair. -#}
+  {% set a_receber = grand_a_receber %}
   {#- Débito e crédito não podem dividir a mesma fila: a MASTERCARD aparece
       nas duas, com taxas que não se comparam (0,67% contra 2,02%). As
       pílulas escolhem um tipo; com os dois, cada um sai no seu grupo. -#}
@@ -466,6 +471,10 @@ body > .container-fluid:has(#ccz){
           <dd>{% if grand_total_venda %}{{ "%.2f"|format(grand_total_diferenca / grand_total_venda * 100) }}%{% else %}—{% endif %}</dd></div>
         <div><dt>Ainda não caiu</dt>
           <dd class="{{ 'ambar' if a_receber > 0.005 }}">{{ a_receber | fmtmoney }}</dd></div>
+        {%- if grand_sem_venda > 0.005 %}
+        <div><dt>Caiu sem venda</dt>
+          <dd class="neg" title="Crédito no extrato em dia que não teve venda deste cartão no caixa">{{ grand_sem_venda | fmtmoney }}</dd></div>
+        {%- endif %}
       </div>
       {#- A barra de cada dia é a venda daquele ciclo, somando as bandeiras. -#}
       {% set dias = {} %}
@@ -496,7 +505,7 @@ body > .container-fluid:has(#ccz){
     {% for card in report | sort(attribute='total_venda', reverse=True)
                           | sort(attribute='tipo_cartao') %}
     {% set cor = '#1D63A5' if card.tipo_cartao == 'DEBITO' else '#6f42c1' %}
-    {% set falta = card.total_venda - card.total_recebimento - card.total_diferenca %}
+    {% set falta = card.total_a_receber %}
     {% set fatia = (card.total_venda / grand_total_venda * 100) if grand_total_venda else 0 %}
     <a class="pc{{ ' pc--on' if sel and sel.bandeira_id == card.bandeira_id }}{{ ' pc--off' if sel and sel.bandeira_id != card.bandeira_id }}"
        style="--c:{{ cor }}"
@@ -519,6 +528,10 @@ body > .container-fluid:has(#ccz){
           <dd>{% if card.total_venda %}{{ "%.2f"|format(card.total_diferenca / card.total_venda * 100) }}%{% else %}—{% endif %}</dd></div>
         <div><dt>Ainda não caiu</dt>
           <dd class="{{ 'ambar' if falta > 0.005 }}">{{ falta | fmtmoney }}</dd></div>
+        {%- if card.total_sem_venda > 0.005 %}
+        <div><dt>Caiu sem venda</dt>
+          <dd class="neg" title="Crédito no extrato em dia sem venda deste cartão no caixa">{{ card.total_sem_venda | fmtmoney }}</dd></div>
+        {%- endif %}
       </div>
       {% set vals = card.linhas | selectattr('total_venda') | map(attribute='total_venda') | list %}
       {% set cmax = (vals | max) if vals else 0 %}
@@ -638,9 +651,12 @@ body > .container-fluid:has(#ccz){
     <b>%</b> é a taxa do ciclo (diferença ÷ venda).
     A linha roxa em itálico é venda de <b>antes do período</b>, trazida porque o
     recebimento dela caiu dentro da janela consultada.
-    <br>No painel do topo, <b>vendido = recebido + taxa retida + o que ainda não
-    caiu</b>. A taxa só conta ciclo já liquidado; a venda cujo recebimento
-    ainda não apareceu no extrato fica no “ainda não caiu”, e não vira taxa.
+    <br>Nos cards: <b>taxa retida</b> é a soma das diferenças dos ciclos já
+    liquidados; <b>ainda não caiu</b> é a venda dos ciclos que ainda não
+    tiveram recebimento no extrato — contada ciclo a ciclo, e não deduzida por
+    subtração. Quando aparece <b>caiu sem venda</b>, é crédito que entrou num
+    dia sem venda daquele cartão no caixa: ou a venda não foi lançada, ou o
+    crédito é de antes do período. É ele que faz a taxa ficar negativa.
   </div>
 
   {% endif %}
@@ -766,7 +782,7 @@ body > .container-fluid:has(#ccz){
               <th style="width:70px;">Tipo</th>
               <th>Forma 1 de Recebimento (Banco)</th>
               <th>Forma 2 de Recebimento (Banco)</th>
-              <th class="text-center" style="width:110px;" title="Número de dias úteis até o depósito aparecer no banco">Prazo (dias úteis)</th>
+              <th class="text-center" style="width:150px;" title="Quantos dias até o crédito aparecer no banco, e se a contagem é em dias úteis ou corridos">Prazo</th>
               <th class="text-end" style="width:130px;" title="Saldo acumulado de vendas anteriores ao período (ex: vendas de dez/2025 não recebidas). Use valor negativo para vendas pendentes.">Saldo Anterior (R$)</th>
               <th class="text-center" style="width:130px;" title="Data de referência do saldo (ex: 31/12/2025). O saldo será exibido e considerado apenas em relatórios com data de início dentro do mês seguinte a esta data.">Ref. Saldo</th>
               <th class="text-center" style="width:60px;">Salvar</th>
@@ -805,13 +821,24 @@ body > .container-fluid:has(#ccz){
                   {% endfor %}
                 </select>
               </td>
+              {#- A maioria paga em dias ÚTEIS; a X7 BANK paga em 3 dias
+                  CORRIDOS. Sem essa escolha, a venda de sábado cai na quarta
+                  na conta e na terça na vida, e nada casa. -#}
               <td class="text-center">
-                <input type="number" min="0" max="60"
-                       class="form-control form-control-sm text-center inp-prazo"
-                       data-bandeira="{{ b.id }}"
-                       value="{{ b.prazo_compensacao_dias }}"
-                       style="width:70px; display:inline-block;"
-                       title="0 = mesmo dia, 1 = próximo dia útil, 2 = dois dias úteis, …">
+                <div class="d-flex gap-1 justify-content-center">
+                  <input type="number" min="0" max="60"
+                         class="form-control form-control-sm text-center inp-prazo"
+                         data-bandeira="{{ b.id }}"
+                         value="{{ b.prazo_compensacao_dias }}"
+                         style="width:62px;"
+                         title="0 = mesmo dia; 1 = um dia; 3 = três dias…">
+                  <select class="form-select form-select-sm inp-prazo-tipo"
+                          data-bandeira="{{ b.id }}" style="width:82px;"
+                          title="Úteis pula fim de semana e feriado. Corridos conta direto, e só empurra o crédito se o dia cair sem banco.">
+                    <option value="UTIL" {{ 'selected' if (b.prazo_tipo or 'UTIL') == 'UTIL' }}>úteis</option>
+                    <option value="CORRIDO" {{ 'selected' if b.prazo_tipo == 'CORRIDO' }}>corridos</option>
+                  </select>
+                </div>
               </td>
               <td class="text-end">
                 <input type="number" step="0.01"
@@ -983,11 +1010,13 @@ body > .container-fluid:has(#ccz){
       const sel1 = row.querySelector('.sel-forma-1');
       const sel2 = row.querySelector('.sel-forma-2');
       const inpPrazo = row.querySelector('.inp-prazo');
+      const selPrazoTipo = row.querySelector('.inp-prazo-tipo');
       const inpSaldoAnterior = row.querySelector('.inp-saldo-anterior');
       const inpSaldoAnteriorData = row.querySelector('.inp-saldo-anterior-data');
       const forma1 = parseInt(sel1.value) || null;
       const forma2 = parseInt(sel2.value) || null;
       const prazoDias = parseInt(inpPrazo.value) || 0;
+      const prazoTipo = selPrazoTipo ? selPrazoTipo.value : 'UTIL';
       const saldoAnterior = parseFloat(inpSaldoAnterior.value) || 0;
       const saldoAnteriorData = inpSaldoAnteriorData ? (inpSaldoAnteriorData.value || null) : null;
       const msgEl = document.getElementById('msg-vinculos');
@@ -1025,7 +1054,8 @@ body > .container-fluid:has(#ccz){
         await fetch('{{ url_for("conf_cartoes.prazo_salvar") }}', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bandeira_cartao_id: bandeiraId, prazo_dias: prazoDias }),
+          body: JSON.stringify({ bandeira_cartao_id: bandeiraId,
+                                 prazo_dias: prazoDias, prazo_tipo: prazoTipo }),
         });
 
         // Salva saldo anterior e data de referência
