@@ -241,6 +241,50 @@ prova('tipo vazio cai em dias uteis (o comum)',
 prova('a tela deixa escolher o tipo na bandeira',
       'inp-prazo-tipo' in html and '>corridos<' in html and '>úteis<' in html)
 
+print('4d) a taxa: a dos ciclos, a direta, e o veredito')
+# A pergunta que a tela existe para responder: "estou sendo roubado na taxa?".
+# Duas contas respondem coisas diferentes, e misturar as duas foi o erro que
+# esta prova impede de voltar.
+from routes.conf_cartoes import _build_report
+
+_band = [{'id': 1, 'nome': 'TESTE', 'tipo': 'CREDITO', 'prazo_compensacao_dias': 1,
+          'prazo_tipo': 'UTIL', 'saldo_anterior': 0, 'saldo_anterior_data': None,
+          'taxa_contratada': 2.00}]
+# Tres dias de venda de 1.000, e so os dois primeiros ja foram pagos (980 =
+# 2% de taxa). O terceiro e a PONTA: vendeu e ainda nao caiu.
+_vend = [{'data_venda': d, 'bandeira_id': 1, 'total_venda': 1000.0}
+         for d in ('2026-03-02', '2026-03-03', '2026-03-04')]
+_rec = [{'data_recebimento': d, 'forma_id': 9, 'total_recebimento': 980.0}
+        for d in ('2026-03-03', '2026-03-04')]
+_r, _v, _rb, _dif, _sld, _ar, _sv = _build_report(
+    _band, {1: [9]}, _vend, _rec, set(), None)
+_c = _r[0]
+prova('a ponta e contada: 1.000 vendidos e ainda nao pagos', perto(_c['total_a_receber'], 1000))
+prova('a taxa dos CICLOS olha so o que foi liquidado: 2,00%%, e nao 3,33%%',
+      perto(_c['taxa'], 2.0, 0.01))
+prova('a taxa DIRETA, no mesmo caso, le 34,67%% -- a ponta infla',
+      perto(_c['taxa_direta'], (3000 - 1960) / 3000 * 100, 0.01))
+prova('e por isso a direta nao e a do card (ela fica no rodape)',
+      abs(_c['taxa'] - _c['taxa_direta']) > 1)
+prova('sem credito orfao, a tela pode comparar com o contrato',
+      _c['falta_lancamento'] is False)
+
+# Agora com um credito que caiu em dia sem venda: falta lancamento no caixa,
+# e a partir dai nenhuma taxa vale.
+_rec2 = _rec + [{'data_recebimento': '2026-03-10', 'forma_id': 9, 'total_recebimento': 500.0}]
+_r2 = _build_report(_band, {1: [9]}, _vend, _rec2, set(), None)[0][0]
+prova('credito em dia sem venda acende o alerta', _r2['falta_lancamento'] is True)
+prova('e ele entra no "caiu sem venda" (500,00)', perto(_r2['total_sem_venda'], 500))
+# E na tela de verdade: o X7 BANK no historico inteiro tem credito orfao, e
+# e o caso que deu origem a tudo isto -- a tela mostrava -82,94% de taxa sem
+# dizer por que.
+_hx = client.get('/relatorios/conf_cartoes?data_inicio=2025-01-01'
+                 '&data_fim=2026-12-31&band=8').get_data(as_text=True)
+prova('na tela, o card com credito orfao avisa em vez de mostrar a taxa seca',
+      'a taxa não vale' in _hx and 'caíram sem venda' in _hx)
+prova('e o card traz a conta direta no rodape, para o periodo inteiro',
+      'vendido × recebido' in _hx)
+
 print('5) as linhas que explicam a data do recebimento')
 prova('a linha de fim de semana/feriado continua marcada',
       'class="fds"' in html or 'antes fds' in html)

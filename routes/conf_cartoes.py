@@ -149,6 +149,17 @@ def _ensure_vinculos_table(conn):
         conn.commit()
     except Exception:
         pass  # coluna já existe
+    # Migração: a taxa CONTRATADA com a operadora. É contra ela que a taxa
+    # realizada se compara -- sem esse número, a tela mostra um percentual e
+    # quem olha não sabe se está certo. NULL = não informada.
+    try:
+        cur.execute(
+            "ALTER TABLE bandeiras_cartao "
+            "ADD COLUMN taxa_contratada DECIMAL(6,4) NULL"
+        )
+        conn.commit()
+    except Exception:
+        pass  # coluna já existe
     # Migração: como o prazo é contado. A maioria das bandeiras paga em dias
     # ÚTEIS, mas a X7 BANK paga em 3 dias CORRIDOS -- medido contra a fatura
     # dela: 29 das 39 linhas casam com o caixa em 3 dias corridos, sempre. Com
@@ -434,6 +445,7 @@ def _get_bandeiras(conn):
         SELECT bc.id, bc.nome, bc.tipo,
                COALESCE(bc.prazo_compensacao_dias, 1) AS prazo_compensacao_dias,
                COALESCE(bc.prazo_tipo, 'UTIL')         AS prazo_tipo,
+               bc.taxa_contratada,
                COALESCE(bc.saldo_anterior, 0)         AS saldo_anterior,
                bc.saldo_anterior_data
           FROM bandeiras_cartao bc
@@ -826,6 +838,33 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
             'saldo_final': saldo,
             'total_a_receber': total_a_receber,
             'total_sem_venda': total_sem_venda,
+            'taxa_contratada': (float(band['taxa_contratada'])
+                                if band.get('taxa_contratada') is not None else None),
+            # DUAS TAXAS, e elas respondem coisas diferentes.
+            #
+            # `taxa` (a dos ciclos) e a que vale: compara a venda com o
+            # recebimento que a liquidou. Medida em agosto/2026, ela devolve
+            # 2,09% na MASTERCARD credito e 0,67% no debito -- as taxas reais.
+            #
+            # `taxa_direta` e (vendido - recebido) / vendido, sem casar data.
+            # Parece a conta obvia e NAO e: num mes fechado ela le 4,43% na
+            # mesma MASTERCARD, porque a venda dos ultimos dias so cai no mes
+            # seguinte e entra no vendido sem entrar no recebido. Ela so
+            # converge para a verdade num periodo longo, onde a ponta nao
+            # pesa -- e e por isso que fica aqui, para a tela mostrar quando o
+            # periodo for o historico inteiro.
+            # A taxa dos ciclos e a diferenca acumulada sobre a venda que
+            # JA FOI LIQUIDADA -- e nao sobre a venda toda. Dividir pela venda
+            # toda dilui a taxa com a ponta que ainda nao caiu.
+            'taxa': ((total_diferenca / (total_venda - total_a_receber) * 100)
+                     if (total_venda - total_a_receber) > _MONETARY_EPSILON else None),
+            'taxa_direta': (((total_venda - total_recebimento) / total_venda * 100)
+                            if total_venda else None),
+            # Credito sem venda no caixa e falta de lancamento: enquanto ele
+            # existir, nenhuma das duas taxas vale. A ponta (venda do fim do
+            # periodo ainda nao paga) e normal -- so incomoda quando e grande.
+            'falta_lancamento': total_sem_venda > _MONETARY_EPSILON,
+            'ponta': ((total_a_receber / total_venda * 100) if total_venda else 0.0),
         })
 
     grand_saldo = grand_total_recebimento - grand_total_venda
@@ -1131,6 +1170,16 @@ def prazo_salvar():
     prazo_tipo = (data.get('prazo_tipo') or 'UTIL').strip().upper()
     if prazo_tipo not in ('UTIL', 'CORRIDO'):
         prazo_tipo = 'UTIL'
+    # Em branco e' "sem contrato cadastrado" (NULL), e nao zero: sem ele a
+    # tela mostra a taxa realizada mas nao diz se esta certa.
+    taxa_raw = data.get('taxa_contratada')
+    try:
+        taxa_contratada = (None if taxa_raw in (None, '', 'null')
+                           else round(float(taxa_raw), 4))
+        if taxa_contratada is not None and not (0 <= taxa_contratada < 100):
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'message': 'Taxa inválida.'}), 400
 
     if not bandeira_id or prazo_dias is None:
         return jsonify({'success': False, 'message': 'Parâmetros inválidos.'}), 400
@@ -1147,8 +1196,8 @@ def prazo_salvar():
         cur = conn.cursor()
         cur.execute(
             "UPDATE bandeiras_cartao SET prazo_compensacao_dias = %s, "
-            "       prazo_tipo = %s WHERE id = %s",
-            (prazo_dias, prazo_tipo, bandeira_id),
+            "       prazo_tipo = %s, taxa_contratada = %s WHERE id = %s",
+            (prazo_dias, prazo_tipo, taxa_contratada, bandeira_id),
         )
         conn.commit()
         cur.close()
