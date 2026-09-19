@@ -637,10 +637,18 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
     grand_total_recebimento = 0.0
     grand_total_diferenca = 0.0
 
+    # Quanto o ciclo pode fugir da taxa contratada antes de virar suspeita.
+    # 0,15 ponto: no X7 BANK os ciclos certos dao 1,75% ou 1,76% (arredondamento
+    # de centavo), e os errados dao 5,65%, 40% ou negativo -- nao ha meio termo.
+    _TOL_TAXA = 0.15
+
     for band in bandeiras:
         bid = band['id']
         prazo = int(band.get('prazo_compensacao_dias', 1))
         prazo_tipo = (band.get('prazo_tipo') or 'UTIL')
+        taxa_contrato = (float(band['taxa_contratada'])
+                         if band.get('taxa_contratada') is not None else None)
+        fora_contrato = 0
         forma_ids = vinculos_map.get(bid, [])
         saldo_anterior = float(band.get('saldo_anterior', 0.0))
 
@@ -709,6 +717,12 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
         # a mais do que vendeu.
         total_a_receber = 0.0     # venda de ciclo que ainda nao teve recebimento
         total_sem_venda = 0.0     # recebimento de ciclo que nao teve venda
+        # O ciclo COMPLETO -- teve venda e teve recebimento -- e o unico em
+        # que a diferenca e taxa de verdade. E sobre ele que a taxa do card e
+        # calculada; o ciclo sem venda entra em total_diferenca como taxa
+        # negativa e destruiria o percentual.
+        venda_casada = 0.0
+        taxa_casada = 0.0
         saldo = 0.0          # DIF acumulada (sign: negativo = taxas cobradas)
         is_first_cycle = True
 
@@ -737,6 +751,16 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
             dia_semana_rd = _DIAS_PT[rd_obj.weekday()] if rd_obj else ''
             num_sale_rows = len(cycle_sale_dates)
 
+            # O ciclo fugiu do contrato? E esta a pergunta que a tela existe
+            # para responder, e ela se responde LINHA A LINHA -- no agregado,
+            # um ciclo errado se esconde atras de dez certos: no X7 BANK, 13
+            # ciclos dao 1,75% exato e 6 fogem, e sao esses 6 que apontam o
+            # lancamento que falta.
+            _fora = (taxa_contrato is not None and pct is not None
+                     and abs(pct - taxa_contrato) > _TOL_TAXA)
+            if _fora:
+                fora_contrato += 1
+
             if num_sale_rows == 0:
                 # Recebimento avulso sem vendas no período
                 if has_receipt:
@@ -757,6 +781,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                     'dia_semana_recebimento': dia_semana_rd,
                     'is_destaque': is_destaque_rd,
                     'is_preperiodo': False,
+                    'fora_contrato': False,
                 })
             else:
                 if has_receipt:
@@ -788,6 +813,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                             'dia_semana_recebimento': dia_semana_rd,
                             'is_destaque': is_destaque,
                             'is_preperiodo': is_preperiodo,
+                            'fora_contrato': _fora,
                         })
                     else:
                         # Linhas intermediárias: mostra data esperada de recebimento, sem valor
@@ -804,12 +830,18 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                             'dia_semana_recebimento': dia_semana_rd,
                             'is_destaque': is_destaque,
                             'is_preperiodo': is_preperiodo,
+                            # a linha intermediaria nao tem taxa propria: ela
+                            # e a venda do mesmo ciclo, sem o recebimento
+                            'fora_contrato': False,
                         })
 
             total_venda += cycle_venda
             total_recebimento += actual_receipt
             if not has_receipt:
                 total_a_receber += cycle_venda
+            elif cycle_venda > _MONETARY_EPSILON:
+                venda_casada += effective_sales
+                taxa_casada += cycle_fee
 
         if not linhas:
             continue
@@ -853,11 +885,13 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
             # converge para a verdade num periodo longo, onde a ponta nao
             # pesa -- e e por isso que fica aqui, para a tela mostrar quando o
             # periodo for o historico inteiro.
-            # A taxa dos ciclos e a diferenca acumulada sobre a venda que
-            # JA FOI LIQUIDADA -- e nao sobre a venda toda. Dividir pela venda
-            # toda dilui a taxa com a ponta que ainda nao caiu.
-            'taxa': ((total_diferenca / (total_venda - total_a_receber) * 100)
-                     if (total_venda - total_a_receber) > _MONETARY_EPSILON else None),
+            # A taxa do card sai SO dos ciclos completos: venda de um lado e
+            # recebimento do outro. Assim ela e a taxa mesmo quando ha credito
+            # orfao no periodo -- o orfao vira aviso, e nao percentual torto.
+            'taxa': ((taxa_casada / venda_casada * 100)
+                     if venda_casada > _MONETARY_EPSILON else None),
+            'venda_casada': venda_casada,
+            'fora_contrato': fora_contrato,
             'taxa_direta': (((total_venda - total_recebimento) / total_venda * 100)
                             if total_venda else None),
             # Credito sem venda no caixa e falta de lancamento: enquanto ele

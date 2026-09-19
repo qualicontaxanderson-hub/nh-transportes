@@ -266,6 +266,9 @@ body > .container-fluid:has(#ccz){
     padding:.02rem .3rem; font-size:.6rem; font-weight:800; font-style:normal;
     text-transform:uppercase; letter-spacing:.03em; }
   #ccz tr.saldo-ant td{ background:#fdf8ee !important; color:#6b4708; }
+  /* O ciclo que fugiu da taxa de contrato: e ele que se quer achar. */
+  #ccz tr.fora td{ background:#fdeeee !important; }
+  #ccz tr.fora.fds td{ background:#f6ecea !important; }
 
   #ccz .nada{ background:#fff; border:1px solid var(--borda); border-radius:14px;
     padding:2.2rem 1rem; text-align:center; color:var(--muted); font-size:.9rem; }
@@ -556,6 +559,12 @@ body > .container-fluid:has(#ccz){
           percentual. Sem isto, quem olha conclui que está sendo roubado. -#}
       {#- O veredito. Ele só sai quando dá para confiar: crédito sem venda no
           caixa é falta de lançamento, e enquanto existir nenhuma taxa vale. -#}
+      {% if card.fora_contrato %}
+      <div class="alerta alerta--neg"><i class="bi bi-exclamation-triangle-fill"></i>
+        {{ card.fora_contrato }} ciclo{{ 's' if card.fora_contrato != 1 }} fora da
+        taxa de contrato — {{ 'estão' if card.fora_contrato != 1 else 'está' }}
+        em vermelho na tabela abaixo</div>
+      {% endif %}
       {% if card.falta_lancamento %}
       <div class="alerta alerta--neg"><i class="bi bi-exclamation-triangle-fill"></i>
         a taxa não vale: {{ card.total_sem_venda | fmtmoney }} caíram sem venda
@@ -657,7 +666,7 @@ body > .container-fluid:has(#ccz){
           </tr>
           {% endif %}
           {% for linha in card.linhas %}
-          <tr class="{{ 'antes ' if linha.is_preperiodo }}{{ 'fds' if linha.is_destaque }}">
+          <tr class="{{ 'antes ' if linha.is_preperiodo }}{{ 'fds ' if linha.is_destaque }}{{ 'fora' if linha.fora_contrato }}">
             <td class="e" data-r="Dt. venda">
               {%- if linha.is_preperiodo %}<span class="selo-antes"
                 title="Venda de fora do período — está aqui porque o recebimento dela caiu dentro da janela">anterior</span>
@@ -671,8 +680,13 @@ body > .container-fluid:has(#ccz){
               {% if linha.diferenca is not none %}{{ linha.diferenca | fmtmoney }}{% endif %}</td>
             <td data-r="Dif. acumulada" class="{% if linha.saldo_acumulado is not none %}{{ 'neg' if linha.saldo_acumulado > 0.005 else ('pos' if linha.saldo_acumulado < -0.005 else 'zero') }}{% endif %}">
               {% if linha.saldo_acumulado is not none %}{{ linha.saldo_acumulado | fmtmoney }}{% endif %}</td>
-            <td data-r="%" class="{% if linha.porcentagem is not none %}{{ 'pos' if linha.porcentagem < 0 else ('pos' if linha.porcentagem <= 2 else ('neg' if linha.porcentagem > 5 else '')) }}{% endif %}">
-              {% if linha.porcentagem is not none %}{{ "%.2f"|format(linha.porcentagem) }}%{% endif %}</td>
+            {#- O % do ciclo contra o contrato: e aqui que se vê se a
+                operadora cobrou o combinado naquele dia. -#}
+            <td data-r="%" class="{{ 'neg forte' if linha.fora_contrato }}">
+              {% if linha.porcentagem is not none %}{{ "%.2f"|format(linha.porcentagem) }}%
+              {%- if linha.fora_contrato %} <i class="bi bi-exclamation-triangle-fill"
+                 title="Fora da taxa de contrato — confira este ciclo"></i>{% endif %}
+              {% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>

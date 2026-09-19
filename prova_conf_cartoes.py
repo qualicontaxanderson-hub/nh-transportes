@@ -285,6 +285,44 @@ prova('na tela, o card com credito orfao avisa em vez de mostrar a taxa seca',
 prova('e o card traz a conta direta no rodape, para o periodo inteiro',
       'vendido × recebido' in _hx)
 
+print('4e) o ciclo que fugiu do contrato')
+# O detector: a pergunta "estou sendo roubado" se responde LINHA A LINHA. No
+# agregado, um ciclo errado se esconde atras de dez certos -- no X7 BANK sao
+# 13 ciclos a 1,75% exato e 6 fora, e os 6 apontam o lancamento que falta.
+_b2 = [{'id': 1, 'nome': 'T', 'tipo': 'CREDITO', 'prazo_compensacao_dias': 1,
+        'prazo_tipo': 'UTIL', 'saldo_anterior': 0, 'saldo_anterior_data': None,
+        'taxa_contratada': 2.00}]
+_v2 = [{'data_venda': '2026-03-02', 'bandeira_id': 1, 'total_venda': 1000.0},
+       {'data_venda': '2026-03-03', 'bandeira_id': 1, 'total_venda': 1000.0}]
+# o primeiro ciclo paga 980 (2%, certo); o segundo paga 900 (10%, fora)
+_r2 = [{'data_recebimento': '2026-03-03', 'forma_id': 9, 'total_recebimento': 980.0},
+       {'data_recebimento': '2026-03-04', 'forma_id': 9, 'total_recebimento': 900.0}]
+_c2 = _build_report(_b2, {1: [9]}, _v2, _r2, set(), None)[0][0]
+prova('um ciclo fora do contrato e contado (1)', _c2['fora_contrato'] == 1)
+_marcadas = [l for l in _c2['linhas'] if l.get('fora_contrato')]
+prova('e e a linha do ciclo errado que fica marcada, nao a do certo',
+      len(_marcadas) == 1 and perto(_marcadas[0]['porcentagem'], 10.0, 0.01))
+prova('a linha do ciclo certo (2,00%) nao e marcada',
+      any((not l.get('fora_contrato')) and l.get('porcentagem') is not None
+          and perto(l['porcentagem'], 2.0, 0.01) for l in _c2['linhas']))
+# sem contrato cadastrado, nada e marcado -- a tela nao inventa suspeita
+_b3 = [dict(_b2[0], taxa_contratada=None)]
+_c3 = _build_report(_b3, {1: [9]}, _v2, _r2, set(), None)[0][0]
+prova('sem taxa de contrato, nenhum ciclo e acusado', _c3['fora_contrato'] == 0)
+# e o arredondamento de centavo nao vira acusacao: 1,75%% e 1,76%% passam
+_b4 = [dict(_b2[0], taxa_contratada=1.75)]
+_r4 = [{'data_recebimento': '2026-03-03', 'forma_id': 9, 'total_recebimento': 982.5},
+       {'data_recebimento': '2026-03-04', 'forma_id': 9, 'total_recebimento': 982.4}]
+_c4 = _build_report(_b4, {1: [9]}, _v2, _r4, set(), None)[0][0]
+prova('centavo de arredondamento (1,75% e 1,76%) nao vira acusacao',
+      _c4['fora_contrato'] == 0)
+_hx2 = client.get('/relatorios/conf_cartoes?data_inicio=2025-01-01'
+                  '&data_fim=2026-12-31&band=8').get_data(as_text=True)
+prova('na tela do X7, os ciclos fora saem marcados em vermelho',
+      len(re.findall(r'<tr class="[^"]*fora"', _hx2)) > 0)
+prova('e o card diz quantos sao',
+      'ciclos fora da taxa de contrato' in ' '.join(_hx2.split()))
+
 print('5) as linhas que explicam a data do recebimento')
 prova('a linha de fim de semana/feriado continua marcada',
       'class="fds"' in html or 'antes fds' in html)
