@@ -288,6 +288,11 @@ body > .container-fluid:has(#ccz){
   #ccz tr.fora td{ background:#fdeeee !important; }
   #ccz tr.fora.fds td{ background:#f6ecea !important; }
 
+  /* quantos lançamentos do extrato foram somados naquele dia */
+  #ccz .ncred{ background:#eef1f5; color:#4b5563; border-radius:6px;
+    padding:.02rem .3rem; font-size:.63rem; font-weight:800; margin-left:.2rem;
+    white-space:nowrap; }
+
   #ccz .nada{ background:#fff; border:1px solid var(--borda); border-radius:14px;
     padding:2.2rem 1rem; text-align:center; color:var(--muted); font-size:.9rem; }
   #ccz .rod{ font-size:.72rem; color:var(--muted); background:#fff;
@@ -733,12 +738,13 @@ body > .container-fluid:has(#ccz){
       <table>
         <thead>
           <tr><th class="e">Dt. venda</th><th>Venda</th><th class="e">Dt. recebimento</th>
+            <th class="e">Banco</th>
             <th>Recebimento</th><th>Diferença</th><th>Dif. acumulada</th><th>%</th></tr>
         </thead>
         <tbody>
           {% if card.saldo_anterior and card.saldo_anterior_aplicavel %}
           <tr class="saldo-ant">
-            <td class="e" data-r="Dt. venda" colspan="5">Saldo anterior</td>
+            <td class="e" data-r="Dt. venda" colspan="6">Saldo anterior</td>
             <td data-r="Dif. acumulada"
                 class="{{ 'neg' if card.saldo_anterior > 0.005 else ('pos' if card.saldo_anterior < -0.005 else 'zero') }}">{{ card.saldo_anterior | fmtmoney }}</td>
             <td></td>
@@ -754,6 +760,13 @@ body > .container-fluid:has(#ccz){
             <td data-r="Venda">{% if linha.total_venda %}{{ linha.total_venda | fmtmoney }}{% endif %}</td>
             <td class="e" data-r="Dt. recebimento">{{ linha.data_recebimento }}
               {%- if linha.data_recebimento %}<span class="dia-semana">{{ linha.dia_semana_recebimento }}</span>{% endif %}</td>
+            {#- Em qual conta caiu, e quantas linhas do extrato foram somadas
+                naquele dia. Sem isso o valor da tela não se acha no extrato:
+                os 483,20 de 24/08 são quatro PIX. -#}
+            <td class="e sub" data-r="Banco">{{ linha.banco }}
+              {%- if linha.n_creditos and linha.n_creditos > 1 %}
+              <span class="ncred" title="{{ linha.n_creditos }} lançamentos do extrato somados neste dia">{{ linha.n_creditos }} créditos</span>
+              {%- endif %}</td>
             <td data-r="Recebimento">{% if linha.total_recebimento %}{{ linha.total_recebimento | fmtmoney }}{% endif %}</td>
             <td data-r="Diferença" class="{% if linha.diferenca is not none %}{{ 'neg' if linha.diferenca > 0.005 else ('pos' if linha.diferenca < -0.005 else 'zero') }}{% endif %}">
               {% if linha.diferenca is not none %}{{ linha.diferenca | fmtmoney }}{% endif %}</td>
@@ -772,6 +785,7 @@ body > .container-fluid:has(#ccz){
         <tfoot>
           <tr><td class="e">Total {{ card.bandeira_nome }}</td>
             <td>{{ card.total_venda | fmtmoney }}</td>
+            <td class="e"></td>
             <td class="e"></td>
             <td>{{ card.total_recebimento | fmtmoney }}</td>
             <td class="{{ 'neg' if card.total_diferenca > 0.005 else ('pos' if card.total_diferenca < -0.005 else 'zero') }}">{{ card.total_diferenca | fmtmoney }}</td>

@@ -117,9 +117,12 @@ for b in blocos:
         'venda': _num(caixas.get('Vendido')),
         'receb': _num(caixas.get('Recebido')),
         'dif': _num(caixas.get('Diferença')),
+        # O rodape tem: Total | Venda | (vazio) | Banco | Recebimento |
+        # Diferenca | Dif. acumulada | %. A coluna Banco entrou em 20/09/2026
+        # e empurrou as de valor uma casa.
         'rod_venda': _num(tds[1]) if len(tds) > 1 else None,
-        'rod_receb': _num(tds[3]) if len(tds) > 3 else None,
-        'rod_dif': _num(tds[4]) if len(tds) > 4 else None,
+        'rod_receb': _num(tds[4]) if len(tds) > 4 else None,
+        'rod_dif': _num(tds[5]) if len(tds) > 5 else None,
     })
 
 print('\n3) o rodape de cada quadro repete o resumo dele')
@@ -371,6 +374,21 @@ prova('e diz que o que casou saiu no contrato',
       'cobrou os' in ' '.join(_hc.split()))
 prova('e lista o que nao casou, com o que fazer',
       'lançar no caixa a venda de' in _hc)
+
+print('4g) o banco em que o dinheiro caiu')
+# "vamos arrumar tb incluindo quando banco que foi recebido, isso e
+# importante" -- sem saber em qual conta caiu, a linha da tela nao se acha no
+# extrato. E quando o dia teve mais de um credito, a tela diz quantos: os
+# 483,20 de 24/08 no X7 sao quatro PIX.
+_hb = client.get('/relatorios/conf_cartoes?data_inicio=2026-08-01'
+                 '&data_fim=2026-08-31&band=8').get_data(as_text=True)
+prova('a tabela tem a coluna Banco', '<th class="e">Banco</th>' in _hb)
+prova('e a linha diz em qual conta caiu', 'data-r="Banco"' in _hb
+      and 'SICREDI' in _hb)
+prova('o dia com mais de um credito diz quantos foram somados',
+      'créditos</span>' in _hb)
+prova('o rodape acompanhou a coluna nova (8 celulas)',
+      len(re.findall(r'<td[^>]*>', re.search(r'<tfoot>(.*?)</tfoot>', _hb, re.S).group(1))) == 8)
 
 print('5) as linhas que explicam a data do recebimento')
 prova('a linha de fim de semana/feriado continua marcada',

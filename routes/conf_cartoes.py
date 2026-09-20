@@ -563,7 +563,12 @@ def _fetch_recebimentos(conn, data_inicio, data_fim, empresa_ids, forma_ids):
             bt.data_transacao                   AS data_recebimento,
             bt.forma_recebimento_id             AS forma_id,
             fr.nome                             AS forma_nome,
-            SUM(bt.valor)                       AS total_recebimento
+            SUM(bt.valor)                       AS total_recebimento,
+            COUNT(*)                            AS n_creditos,
+            -- Em qual conta o dinheiro caiu. Mais de uma no mesmo dia e caso
+            -- normal (o posto tem mais de um banco), entao vem a lista.
+            GROUP_CONCAT(DISTINCT COALESCE(NULLIF(ba.apelido,''), ba.banco_nome)
+                         ORDER BY 1 SEPARATOR ' + ') AS bancos
           FROM bank_transactions bt
           JOIN bank_accounts ba ON ba.id = bt.account_id
           JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
@@ -769,6 +774,9 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
         vendas_idx[(int(r['bandeira_id']), str(d))] = float(r['total_venda'] or 0)
 
     # Index recebimentos: (forma_id, data_iso) → total_recebimento
+    # (forma_id, data_iso) -> (banco(s), quantos creditos): o extrato nao e
+    # so um valor, e saber ONDE caiu importa para achar a linha no banco.
+    receb_info = {}
     receb_idx = {}
     for r in recebimentos_rows:
         d = r['data_recebimento']
@@ -776,6 +784,8 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
             d = d.isoformat()
         key = (int(r['forma_id']), str(d))
         receb_idx[key] = float(r['total_recebimento'] or 0)
+        receb_info[key] = {'bancos': r.get('bancos') or '',
+                           'n': int(r.get('n_creditos') or 0)}
 
     report = []
     grand_total_venda = 0.0
@@ -876,6 +886,16 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
         for rd in sorted_cycle_dates:
             cycle_sale_dates = sorted(cycles[rd])
             actual_receipt = sum(receb_idx.get((fid, rd), 0.0) for fid in forma_ids)
+            # De qual banco veio, e quantas linhas do extrato foram somadas.
+            # Sem isso, "483,20" nao se acha no extrato: sao quatro PIX.
+            _bancos, _ncred = [], 0
+            for fid in forma_ids:
+                _i = receb_info.get((fid, rd))
+                if _i:
+                    _ncred += _i['n']
+                    if _i['bancos'] and _i['bancos'] not in _bancos:
+                        _bancos.append(_i['bancos'])
+            _banco_txt = ' + '.join(_bancos)
             cycle_venda = sum(vendas_idx.get((bid, sd), 0.0) for sd in cycle_sale_dates)
 
             # No 1º ciclo: se o saldo_anterior for aplicável para o período consultado,
@@ -920,6 +940,8 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                     'total_venda': 0.0,
                     'data_recebimento': _fmt_date(rd) if has_receipt else '',
                     'total_recebimento': actual_receipt,
+                    'banco': _banco_txt if has_receipt else '',
+                    'n_creditos': _ncred if has_receipt else 0,
                     'diferenca': -actual_receipt if has_receipt else None,
                     'saldo_acumulado': saldo if has_receipt else None,
                     'porcentagem': None,
@@ -952,6 +974,8 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                             'total_venda': venda,
                             'data_recebimento': _fmt_date(rd),
                             'total_recebimento': actual_receipt,
+                            'banco': _banco_txt if has_receipt else '',
+                            'n_creditos': _ncred if has_receipt else 0,
                             'diferenca': cycle_fee if has_receipt else None,
                             'saldo_acumulado': saldo if has_receipt else None,
                             'porcentagem': pct,
@@ -969,6 +993,8 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                             'total_venda': venda,
                             'data_recebimento': _fmt_date(rd),
                             'total_recebimento': 0.0,
+                            'banco': '',
+                            'n_creditos': 0,
                             'diferenca': None,
                             'saldo_acumulado': None,
                             'porcentagem': None,
