@@ -289,6 +289,13 @@ body > .container-fluid:has(#ccz){
   #ccz tr.fora.fds td{ background:#f6ecea !important; }
 
   /* quantos lançamentos do extrato foram somados naquele dia */
+  #ccz .bt-mini{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:7px; padding:.15rem .45rem; font-size:.71rem; font-weight:700;
+    font-family:inherit; cursor:pointer; white-space:nowrap; }
+  #ccz .bt-mini:hover{ background:#dceafa; }
+  #ccz .selo-ajuste{ background:#fdf8ee; color:#6b4708; border:1px solid #f0dcae;
+    border-radius:6px; padding:.02rem .3rem; font-size:.62rem; font-weight:800;
+    text-transform:uppercase; letter-spacing:.03em; margin-right:.3rem; }
   #ccz .ncred{ background:#eef1f5; color:#4b5563; border-radius:6px;
     padding:.02rem .3rem; font-size:.63rem; font-weight:800; margin-left:.2rem;
     white-space:nowrap; }
@@ -706,6 +713,30 @@ body > .container-fluid:has(#ccz){
         {{ (cf.venda * (cf.taxa - card.taxa_contratada) / 100) | fmtmoney }} de diferença
         {% endif %}</div>
       {% endif %}
+      {#- Os ajustes lançados: eles são venda para este relatório e para mais
+          nada, e ficam aqui à vista, com o botão de apagar. Ajuste escondido
+          é pior do que ajuste. -#}
+      {% if card.ajustes %}
+      <div class="tab">
+        <table>
+          <thead><tr><th class="e">Ajuste da conferência</th><th class="e">Data</th>
+            <th>Valor</th><th class="e">Motivo</th><th style="width:48px"></th></tr></thead>
+          <tbody>
+            {% for a in card.ajustes %}
+            <tr id="ajuste-{{ a.id }}">
+              <td class="e"><span class="selo-ajuste">ajuste</span> venda sem lançamento no caixa</td>
+              <td class="e">{{ a.data_venda.strftime('%d/%m/%Y') }}</td>
+              <td class="forte">{{ a.total_venda | fmtmoney }}</td>
+              <td class="e sub">{{ a.motivo }}</td>
+              <td class="e"><button type="button" class="bt-mini btn-ajuste-del"
+                    data-id="{{ a.id }}" title="Apagar este ajuste">
+                    <i class="bi bi-trash"></i></button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
       {% if cf.creditos_orfaos or cf.vendas_orfas %}
       <div class="tab">
         <table>
@@ -716,8 +747,15 @@ body > .container-fluid:has(#ccz){
             <tr><td class="e">Crédito sem venda</td>
               <td class="e">{{ o.data.strftime('%d/%m/%Y') }}</td>
               <td class="forte">{{ o.valor | fmtmoney }}</td>
-              <td class="e">lançar no caixa a venda de
-                <b>{{ o.venda_esperada | fmtmoney }}</b></td></tr>
+              <td class="e">venda de <b>{{ o.venda_esperada | fmtmoney }}</b>
+                {%- if o.data_venda %} em {{ o.data_venda.strftime('%d/%m') }}{% endif %} —
+                <button type="button" class="bt-mini btn-ajuste-add"
+                        data-band="{{ card.bandeira_id }}"
+                        data-valor="{{ '%.2f'|format(o.venda_esperada) }}"
+                        data-data="{{ (o.data_venda or o.data).isoformat() }}"
+                        data-nome="{{ card.bandeira_nome }}"
+                        title="Lançar como ajuste da conferência (não mexe no caixa)">
+                  <i class="bi bi-plus-lg"></i> lançar ajuste</button></td></tr>
             {% endfor %}
             {% for v in cf.vendas_orfas %}
             <tr><td class="e">Venda sem crédito</td>
@@ -1151,6 +1189,45 @@ body > .container-fluid:has(#ccz){
   // Os botoes "mes atual / mes anterior" sairam: quem troca o periodo agora e
   // a regua de meses, que vem do banco e cobre TODOS os meses com venda de
   // cartao -- nao so os dois ultimos. Ela e link, nao precisa de JS.
+
+  // Ajuste da conferencia: lancar e apagar. Ele NAO vai para o caixa -- e
+  // venda so para este relatorio, e por isso da para desfazer apagando.
+  document.addEventListener('click', async function (ev) {
+    var add = ev.target.closest('.btn-ajuste-add');
+    if (add) {
+      var valor = add.dataset.valor, data = add.dataset.data;
+      if (!confirm('Lançar ajuste de R$ ' + valor + ' em ' + data + ' para '
+                   + add.dataset.nome + '?
+
+Ele entra só nesta conferência; '
+                   + 'o fechamento de caixa não é alterado.')) return;
+      add.disabled = true;
+      try {
+        var r = await fetch('{{ url_for("conf_cartoes.ajuste_add") }}', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bandeira_cartao_id: parseInt(add.dataset.band),
+                                 data: data, valor: parseFloat(valor),
+                                 motivo: 'crédito sem venda no caixa' }) });
+        var j = await r.json();
+        if (!j.success) { alert(j.message || 'não deu para lançar'); add.disabled = false; return; }
+        location.reload();
+      } catch (e) { alert('falhou: ' + e); add.disabled = false; }
+      return;
+    }
+    var del = ev.target.closest('.btn-ajuste-del');
+    if (del) {
+      if (!confirm('Apagar este ajuste?')) return;
+      del.disabled = true;
+      try {
+        var r2 = await fetch('{{ url_for("conf_cartoes.ajuste_del") }}', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: parseInt(del.dataset.id) }) });
+        var j2 = await r2.json();
+        if (!j2.success) { alert(j2.message || 'não deu para apagar'); del.disabled = false; return; }
+        location.reload();
+      } catch (e) { alert('falhou: ' + e); del.disabled = false; }
+    }
+  });
 
   // As pilulas do filtro. Elas sao checkbox de verdade -- o formulario
   // continua mandando empresa_ids[] e bandeira_ids[] como sempre mandou --,

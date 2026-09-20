@@ -373,7 +373,19 @@ prova('a tela mostra a conferencia no quadro da bandeira',
 prova('e diz que o que casou saiu no contrato',
       'cobrou os' in ' '.join(_hc.split()))
 prova('e lista o que nao casou, com o que fazer',
-      'lançar no caixa a venda de' in _hc)
+      'lançar ajuste' in _hc and 'venda de' in _hc)
+# O ajuste tem de entrar na data da VENDA, e nao na do credito: datar no dia
+# do credito consertaria a conferencia e criaria uma venda orfa nova no ciclo,
+# tres dias a frente.
+from routes.conf_cartoes import _data_venda_provavel
+prova('o botao sugere a data da venda, voltando o prazo da bandeira',
+      _data_venda_provavel(_dd(2026, 7, 29), 3, 'CORRIDO', set()) == _dd(2026, 7, 26))
+prova('em dias uteis, ele volta pulando fim de semana',
+      _data_venda_provavel(_dd(2026, 8, 24), 3, 'UTIL', set()) == _dd(2026, 8, 19))
+prova('e com prazo 0 a data e a do proprio credito',
+      _data_venda_provavel(_dd(2026, 8, 24), 0, 'UTIL', set()) == _dd(2026, 8, 24))
+prova('a tela mostra a data sugerida no botao',
+      'lançar ajuste' in _hc and 'data-data="2026-07-26"' in _hc)
 
 print('4g) o banco em que o dinheiro caiu')
 # "vamos arrumar tb incluindo quando banco que foi recebido, isso e

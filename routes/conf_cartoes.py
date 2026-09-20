@@ -317,6 +317,61 @@ def _ensure_feriados_table(conn):
     cur.close()
 
 
+def _ensure_ajustes_table(conn):
+    """A venda que a operadora pagou e o caixa nao tem.
+
+    Ela NAO vai para o fechamento de caixa: aqueles dias ja foram conferidos e
+    assinados por gente, e reescrever um dia fechado e pior do que a falta.
+    Fica aqui, so para a conferencia de cartoes, marcada como ajuste, visivel
+    na tela e apagavel.
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS conf_cartoes_ajustes (
+                id                 INT AUTO_INCREMENT PRIMARY KEY,
+                bandeira_cartao_id INT NOT NULL,
+                data               DATE NOT NULL,
+                valor              DECIMAL(12,2) NOT NULL,
+                motivo             VARCHAR(200) NOT NULL DEFAULT '',
+                criado_em          DATETIME DEFAULT CURRENT_TIMESTAMP,
+                KEY ix_band_data (bandeira_cartao_id, data)
+            )
+            """
+        )
+        conn.commit()
+    except Exception:
+        _logger.exception('[conf_cartoes] tabela de ajustes')
+    cur.close()
+
+
+def _get_ajustes(conn, data_inicio, data_fim, bandeira_ids=None):
+    """Os ajustes do periodo, no mesmo formato de _fetch_vendas -- assim eles
+    entram no relatorio pelo mesmo caminho da venda de verdade."""
+    if not data_inicio or not data_fim:
+        return []
+    cur = conn.cursor(dictionary=True)
+    try:
+        sql = ("SELECT a.id, a.data AS data_venda, a.bandeira_cartao_id AS bandeira_id, "
+               "       a.valor AS total_venda, a.motivo, "
+               "       bc.nome AS bandeira_nome, bc.tipo AS tipo_cartao "
+               "  FROM conf_cartoes_ajustes a "
+               "  JOIN bandeiras_cartao bc ON bc.id = a.bandeira_cartao_id "
+               " WHERE a.data BETWEEN %s AND %s")
+        p = [data_inicio, data_fim]
+        if bandeira_ids:
+            ph = ','.join(['%s'] * len(bandeira_ids))
+            sql += f" AND a.bandeira_cartao_id IN ({ph})"
+            p.extend(bandeira_ids)
+        cur.execute(sql + " ORDER BY a.data", p)
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    cur.close()
+    return rows
+
+
 def _get_feriados(conn, ano_ini=None, ano_fim=None):
     """Os feriados que a conta de dia útil enxerga: os NACIONAIS, calculados,
     mais os que o usuário cadastrou à mão.
@@ -599,6 +654,26 @@ def _fmt_date(d):
     return str(d)
 
 
+def _data_venda_provavel(data_credito, prazo, tipo, feriados_set):
+    """O caminho de volta: dada a data do crédito, em que dia a venda foi.
+
+    Serve ao ajuste -- ele precisa entrar na data da VENDA, e não na do
+    crédito. Datar no dia do crédito consertaria a conferência e criaria uma
+    venda órfã nova no ciclo, três dias à frente.
+    """
+    if not prazo:
+        return data_credito
+    d = data_credito
+    if (tipo or 'UTIL').upper() == 'CORRIDO':
+        return d - timedelta(days=prazo)
+    n = prazo
+    while n > 0:
+        d = d - timedelta(days=1)
+        if d.weekday() < 5 and d.isoformat() not in (feriados_set or set()):
+            n -= 1
+    return d
+
+
 def _conferir_taxa(vendas, recebimentos, taxa, tol=0.02):
     """Casa cada crédito com a venda que ele pagou, PELO VALOR.
 
@@ -665,7 +740,8 @@ def _conferir_taxa(vendas, recebimentos, taxa, tol=0.02):
     return pares, orfaos, sobra
 
 
-def _conferencia(conn, data_inicio, data_fim, empresa_ids, report, vinculos_map):
+def _conferencia(conn, data_inicio, data_fim, empresa_ids, report, vinculos_map,
+                 ajustes=None, feriados_set=None):
     """Anexa a cada bandeira a conferência da taxa, casada por VALOR.
 
     Busca o lançamento CRU dos dois lados -- e não a soma do dia, que é o que
@@ -698,6 +774,12 @@ def _conferencia(conn, data_inicio, data_fim, empresa_ids, report, vinculos_map)
         for r in cur.fetchall():
             vendas[int(r['bid'])].append({'data': _parse_iso(r['d']),
                                           'valor': float(r['v'] or 0)})
+        # O ajuste conta como venda tambem aqui: e ele que faz o credito
+        # orfao encontrar par.
+        for a in (ajustes or []):
+            vendas[int(a['bandeira_id'])].append(
+                {'data': _parse_iso(a['data_venda']),
+                 'valor': float(a['total_venda'] or 0)})
 
         fp = ','.join(['%s'] * len(formas))
         w_emp2, p_emp2 = '', []
@@ -733,6 +815,12 @@ def _conferencia(conn, data_inicio, data_fim, empresa_ids, report, vinculos_map)
         for fid in vinculos_map.get(card['bandeira_id'], []):
             cr.extend(creditos.get(fid, []))
         pares, orf_cred, orf_venda = _conferir_taxa(cv, cr, taxa)
+        # Em que dia a venda do credito orfao provavelmente aconteceu -- e
+        # nessa data que o ajuste tem de entrar.
+        for o in orf_cred:
+            o['data_venda'] = _data_venda_provavel(
+                o['data'], int(card.get('prazo_compensacao_dias') or 0),
+                card.get('prazo_tipo'), feriados_set)
         venda = sum(p['venda_valor'] for p in pares)
         credito = sum(p['cred_valor'] for p in pares)
         card['conf'] = {
@@ -1045,6 +1133,10 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
             'total_sem_venda': total_sem_venda,
             'taxa_contratada': (float(band['taxa_contratada'])
                                 if band.get('taxa_contratada') is not None else None),
+            # o prazo viaja no card: o ajuste precisa dele para voltar da data
+            # do credito ate a data provavel da venda
+            'prazo_compensacao_dias': prazo,
+            'prazo_tipo': prazo_tipo,
             # DUAS TAXAS, e elas respondem coisas diferentes.
             #
             # `taxa` (a dos ciclos) e a que vale: compara a venda com o
@@ -1125,6 +1217,7 @@ def conf_cartoes():
         _ensure_vinculos_table(conn)
         _ensure_feriados_table(conn)
         _ensure_conta_contabil_table(conn)
+        _ensure_ajustes_table(conn)
 
         empresas = _get_empresas(conn)
         bandeiras = _get_bandeiras(conn)
@@ -1185,6 +1278,14 @@ def conf_cartoes():
                 if data_inicio_obj else data_inicio
             )
             vendas_rows = _fetch_vendas(conn, data_inicio, data_fim, empresa_ids, data_inicio_extended)
+            # O ajuste entra pelo MESMO caminho da venda de verdade -- assim
+            # ele aparece no card, no ciclo e na conferencia, sem um "se" em
+            # cada conta. O que ele nao faz e virar lancamento de caixa.
+            ajustes = _get_ajustes(conn, data_inicio_extended or data_inicio, data_fim)
+            vendas_rows = list(vendas_rows) + [
+                {'data_venda': a['data_venda'], 'bandeira_id': a['bandeira_id'],
+                 'bandeira_nome': a['bandeira_nome'], 'tipo_cartao': a['tipo_cartao'],
+                 'total_venda': a['total_venda']} for a in ajustes]
             receb_rows = _fetch_recebimentos(
                 conn, data_inicio, data_fim, empresa_ids, forma_ids
             )
@@ -1197,7 +1298,14 @@ def conf_cartoes():
             # topo sao refeitos: o card TODAS tem de somar o que esta na tela,
             # e nao o que ficou de fora dela.
             _conferencia(conn, data_inicio, data_fim, empresa_ids, report,
-                         vinculos_map)
+                         vinculos_map, ajustes, feriados_set)
+            # Os ajustes de cada bandeira vao para a tela, para ficarem
+            # visiveis e apagaveis -- ajuste escondido e pior do que ajuste.
+            _aj_por_band = defaultdict(list)
+            for a in ajustes:
+                _aj_por_band[int(a['bandeira_id'])].append(a)
+            for _c in report:
+                _c['ajustes'] = _aj_por_band.get(_c['bandeira_id'], [])
             if tipo:
                 report = [c for c in report if (c['tipo_cartao'] or '').upper() == tipo]
                 grand_total_venda = sum(c['total_venda'] for c in report)
@@ -1524,3 +1632,68 @@ def feriado_del():
         conn.close()
 
     return jsonify({'success': True, 'message': 'Feriado removido.'})
+
+
+@bp.route('/conf_cartoes/ajuste_add', methods=['POST'])
+@login_required
+@admin_required
+def ajuste_add():
+    """Lança uma venda que a operadora pagou e o caixa não tem.
+
+    Ela vive só na conferência de cartões — o fechamento de caixa não é
+    tocado. Ver _ensure_ajustes_table.
+    """
+    d = request.get_json(silent=True) or {}
+    try:
+        bandeira_id = int(d.get('bandeira_cartao_id'))
+        valor = round(float(d.get('valor')), 2)
+        data = datetime.strptime((d.get('data') or '').strip(), '%Y-%m-%d').date()
+        if valor <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'message': 'Dados inválidos.'}), 400
+    motivo = (d.get('motivo') or '')[:200]
+
+    conn = get_db_connection()
+    try:
+        _ensure_ajustes_table(conn)
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO conf_cartoes_ajustes (bandeira_cartao_id, data, valor, motivo) "
+            "VALUES (%s, %s, %s, %s)",
+            (bandeira_id, data, valor, motivo),
+        )
+        novo_id = cur.lastrowid
+        conn.commit()
+        cur.close()
+        return jsonify({'success': True, 'id': novo_id})
+    except Exception as e:
+        conn.rollback()
+        _logger.exception('[conf_cartoes] ajuste_add')
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@bp.route('/conf_cartoes/ajuste_del', methods=['POST'])
+@login_required
+@admin_required
+def ajuste_del():
+    """Apaga um ajuste. Ele é do relatório, então desfazer é só apagar."""
+    d = request.get_json(silent=True) or {}
+    try:
+        ajuste_id = int(d.get('id'))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'message': 'id inválido.'}), 400
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM conf_cartoes_ajustes WHERE id = %s", (ajuste_id,))
+        conn.commit()
+        cur.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        conn.close()
