@@ -594,6 +594,153 @@ def _fmt_date(d):
     return str(d)
 
 
+def _conferir_taxa(vendas, recebimentos, taxa, tol=0.02):
+    """Casa cada crédito com a venda que ele pagou, PELO VALOR.
+
+    O relatório casa por data (venda de hoje, crédito em N dias). Isso quebra
+    quando o pagamento atrasa -- e ele atrasa: quando a nota dá erro, a
+    operadora só paga depois que o posto arruma. No X7 BANK os atrasos medidos
+    foram de 0 a 44 dias, e mesmo assim 29 dos 38 créditos casam pelo valor,
+    todos a 1,7502% -- exatamente o contrato.
+
+    A chave é `venda x (1 - taxa) = crédito`. Só entra crédito cuja venda seja
+    anterior ou do mesmo dia, e cada venda casa uma vez só.
+
+    Devolve (pares, creditos_orfaos, vendas_orfas):
+        pares           [(venda, credito, dias, taxa_real)]
+        creditos_orfaos crédito sem venda no caixa -- com a venda que teria
+                        sido, para o usuário ir procurar
+        vendas_orfas    venda que ainda não foi paga (ou nunca será)
+
+    SOMENTE LEITURA, sem banco: recebe as duas listas já carregadas.
+    """
+    if not taxa or taxa <= 0:
+        return [], [], list(vendas)
+    fator = 1.0 - (taxa / 100.0)
+    if fator <= 0:
+        return [], [], list(vendas)
+
+    # Indice da venda pelo valor, para nao varrer a lista a cada credito.
+    por_valor = defaultdict(list)
+    for v in vendas:
+        por_valor[round(v['valor'], 2)].append(v)
+    for lista in por_valor.values():
+        lista.sort(key=lambda v: v['data'])
+
+    usadas = set()
+    pares, orfaos = [], []
+    for r in sorted(recebimentos, key=lambda r: r['data']):
+        alvo = r['valor'] / fator
+        achou = None
+        # O centavo de arredondamento anda para os dois lados: procura o valor
+        # exato e os vizinhos de um centavo.
+        for cent in (0, 1, -1, 2, -2):
+            chave = round(alvo + cent / 100.0, 2)
+            for v in por_valor.get(chave, []):
+                if id(v) in usadas or v['data'] > r['data']:
+                    continue
+                if abs(v['valor'] * fator - r['valor']) <= tol:
+                    achou = v
+                    break
+            if achou:
+                break
+        if achou is None:
+            orfaos.append({'data': r['data'], 'valor': r['valor'],
+                           'venda_esperada': round(alvo, 2)})
+            continue
+        usadas.add(id(achou))
+        pares.append({
+            'venda_data': achou['data'], 'venda_valor': achou['valor'],
+            'cred_data': r['data'], 'cred_valor': r['valor'],
+            'dias': (r['data'] - achou['data']).days,
+            'taxa': ((achou['valor'] - r['valor']) / achou['valor'] * 100)
+                    if achou['valor'] else 0.0,
+        })
+    sobra = [v for v in vendas if id(v) not in usadas]
+    return pares, orfaos, sobra
+
+
+def _conferencia(conn, data_inicio, data_fim, empresa_ids, report, vinculos_map):
+    """Anexa a cada bandeira a conferência da taxa, casada por VALOR.
+
+    Busca o lançamento CRU dos dois lados -- e não a soma do dia, que é o que
+    o resto do relatório usa. Faz diferença: o X7 BANK manda quatro PIX no
+    mesmo 24/08, e a soma deles (483,20) não casa com venda nenhuma, enquanto
+    cada um casa com a sua.
+    """
+    formas = sorted({f for fids in vinculos_map.values() for f in fids})
+    bids = [c['bandeira_id'] for c in report if c.get('taxa_contratada')]
+    if not bids or not formas or not data_inicio or not data_fim:
+        return
+
+    cur = conn.cursor(dictionary=True)
+    try:
+        ph = ','.join(['%s'] * len(bids))
+        w_emp, p_emp = '', []
+        if empresa_ids:
+            ep = ','.join(['%s'] * len(empresa_ids))
+            w_emp = f' AND lc.cliente_id IN ({ep})'
+            p_emp = list(empresa_ids)
+        cur.execute(
+            f"""SELECT lcc.bandeira_cartao_id AS bid, lc.data AS d,
+                       lcc.valor AS v
+                  FROM lancamentos_caixa_comprovacao lcc
+                  JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+                 WHERE lcc.bandeira_cartao_id IN ({ph})
+                   AND lc.data BETWEEN %s AND %s{w_emp}""",
+            bids + [data_inicio, data_fim] + p_emp)
+        vendas = defaultdict(list)
+        for r in cur.fetchall():
+            vendas[int(r['bid'])].append({'data': _parse_iso(r['d']),
+                                          'valor': float(r['v'] or 0)})
+
+        fp = ','.join(['%s'] * len(formas))
+        w_emp2, p_emp2 = '', []
+        if empresa_ids:
+            ep = ','.join(['%s'] * len(empresa_ids))
+            w_emp2 = f' AND ba.cliente_id IN ({ep})'
+            p_emp2 = list(empresa_ids)
+        cur.execute(
+            f"""SELECT bt.forma_recebimento_id AS fid, bt.data_transacao AS d,
+                       bt.valor AS v
+                  FROM bank_transactions bt
+                  JOIN bank_accounts ba ON ba.id = bt.account_id
+                 WHERE bt.tipo = 'CREDIT'
+                   AND bt.forma_recebimento_id IN ({fp})
+                   AND bt.data_transacao BETWEEN %s AND %s{w_emp2}""",
+            list(formas) + [data_inicio, data_fim] + p_emp2)
+        creditos = defaultdict(list)
+        for r in cur.fetchall():
+            creditos[int(r['fid'])].append({'data': _parse_iso(r['d']),
+                                            'valor': float(r['v'] or 0)})
+    except Exception:
+        _logger.exception('[conf_cartoes] conferência por valor')
+        cur.close()
+        return
+    cur.close()
+
+    for card in report:
+        taxa = card.get('taxa_contratada')
+        if not taxa:
+            continue
+        cv = vendas.get(card['bandeira_id'], [])
+        cr = []
+        for fid in vinculos_map.get(card['bandeira_id'], []):
+            cr.extend(creditos.get(fid, []))
+        pares, orf_cred, orf_venda = _conferir_taxa(cv, cr, taxa)
+        venda = sum(p['venda_valor'] for p in pares)
+        credito = sum(p['cred_valor'] for p in pares)
+        card['conf'] = {
+            'pares': sorted(pares, key=lambda p: p['cred_data']),
+            'creditos_orfaos': sorted(orf_cred, key=lambda o: o['data']),
+            'vendas_orfas': sorted(orf_venda, key=lambda v: v['data']),
+            'venda': venda, 'credito': credito,
+            'n_creditos': len(cr), 'n_vendas': len(cv),
+            'taxa': (((venda - credito) / venda * 100) if venda else None),
+            'dias_max': max((p['dias'] for p in pares), default=0),
+        }
+
+
 def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feriados_set=None, data_inicio_obj=None):
     """
     Para cada bandeira vinculada, organiza as vendas em ciclos de liquidação
@@ -892,6 +1039,10 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                      if venda_casada > _MONETARY_EPSILON else None),
             'venda_casada': venda_casada,
             'fora_contrato': fora_contrato,
+            # A conferencia por VALOR e anexada depois, pela rota: ela precisa
+            # do lancamento CRU (o X7 manda varios PIX no mesmo dia, e a soma
+            # do dia nao casa com venda nenhuma).
+            'conf': None,
             'taxa_direta': (((total_venda - total_recebimento) / total_venda * 100)
                             if total_venda else None),
             # Credito sem venda no caixa e falta de lancamento: enquanto ele
@@ -1019,6 +1170,8 @@ def conf_cartoes():
             # O tipo escolhido corta a lista DEPOIS de apurada, e os totais do
             # topo sao refeitos: o card TODAS tem de somar o que esta na tela,
             # e nao o que ficou de fora dela.
+            _conferencia(conn, data_inicio, data_fim, empresa_ids, report,
+                         vinculos_map)
             if tipo:
                 report = [c for c in report if (c['tipo_cartao'] or '').upper() == tipo]
                 grand_total_venda = sum(c['total_venda'] for c in report)

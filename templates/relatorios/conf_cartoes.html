@@ -103,6 +103,22 @@ body > .container-fluid:has(#ccz){
   #ccz .meses .obs, #ccz .tipos .obs{ font-size:.68rem; color:var(--muted);
     margin-left:auto; }
 
+  /* A conferência da taxa, dentro do quadro da bandeira. */
+  #ccz .conf{ border-top:1px solid var(--linha); background:#fbfcfe; }
+  #ccz .conf__t{ display:flex; gap:.5rem; align-items:center; padding:.6rem .8rem;
+    font-size:.7rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--blue-deep); }
+  #ccz .conf__t .dir{ margin-left:auto; font-weight:700; color:var(--muted);
+    text-transform:none; letter-spacing:0; font-size:.72rem; }
+  #ccz .conf__g{ display:grid; gap:.5rem; padding:0 .8rem .2rem;
+    grid-template-columns:repeat(2,1fr); }
+  @media (min-width:768px){ #ccz .conf__g{ grid-template-columns:repeat(4,1fr); } }
+  #ccz .conf__g div{ background:#fff; border:1px solid var(--linha);
+    border-radius:10px; padding:.4rem .55rem; }
+  #ccz .conf__g span{ font-size:.61rem; color:var(--muted); font-weight:800;
+    text-transform:uppercase; letter-spacing:.05em; display:block; }
+  #ccz .conf__g b{ font-size:.9rem; font-weight:800; font-variant-numeric:tabular-nums; }
+
   /* O veredito do card: bate com o contrato, ou ainda não vale. */
   #ccz .alerta{ display:flex; gap:.35rem; align-items:flex-start; margin-top:.45rem;
     border-radius:9px; padding:.35rem .5rem; font-size:.72rem; font-weight:700;
@@ -116,13 +132,15 @@ body > .container-fluid:has(#ccz){
     font-weight:600; margin-bottom:.7rem; }
 
   /* ---- a grade de cards, a mesma do saidas_migradas ------------------- */
-  #ccz .pgrade{ display:grid; gap:.6rem; grid-template-columns:1fr;
-    margin-bottom:.7rem; --cols:4; }
-  @media (min-width:760px){ #ccz .pgrade{ grid-template-columns:repeat(2,1fr); } }
-  @media (min-width:1180px){
-    /* a conta das colunas vem do Jinja: com dez bandeiras mais o card TODAS,
-       uma grade fixa deixaria cards sozinhos na última linha. */
-    #ccz .pgrade{ grid-template-columns:repeat(var(--cols),1fr); } }
+  /* A grade se ajusta sozinha ao espaço: cada card tem uma largura MÍNIMA e
+     o navegador decide quantos cabem. Antes a conta vinha do Jinja e, com
+     onze cards, abria seis colunas -- os cards ficavam estreitos demais para
+     o conteúdo e a tela estourava para o lado. */
+  #ccz .pgrade{ display:grid; gap:.6rem; margin-bottom:.7rem;
+    grid-template-columns:repeat(auto-fill, minmax(270px, 1fr));
+    align-items:start; }
+  @media (min-width:1500px){
+    #ccz .pgrade{ grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); } }
   #ccz a.pc{ display:block; color:inherit; text-decoration:none;
     transition:box-shadow .12s, opacity .12s; }
   #ccz a.pc:hover{ box-shadow:0 5px 18px rgba(20,35,60,.14); }
@@ -460,8 +478,7 @@ body > .container-fluid:has(#ccz){
     <span class="obs">a taxa do débito e a do crédito não se comparam</span>
   </div>
 
-  {% set ncards = report|length + 1 %}
-  <div class="pgrade" style="--cols:{{ ncards if ncards <= 6 else ((ncards + 1) // 2) }}">
+  <div class="pgrade">
 
     {#- O card que soma todas. Sem "taxa média" inventada: a taxa daqui é a do
         período inteiro, que é a diferença sobre a venda — e essa soma. -#}
@@ -649,6 +666,68 @@ body > .container-fluid:has(#ccz){
       <div class="r"><div class="r__r">Taxa</div>
         <div class="r__v">{% if card.total_venda %}{{ "%.2f"|format(card.total_diferenca / card.total_venda * 100) }}%{% else %}—{% endif %}</div></div>
     </div>
+
+    {#- A CONFERÊNCIA DA TAXA, casando por VALOR: venda × (1 − taxa) = crédito.
+        Ela não olha data, e é por isso que funciona quando o pagamento atrasa
+        — no X7 BANK os atrasos vão de 0 a 44 dias e mesmo assim 29 dos 38
+        créditos casam, todos a 1,7502%. É esta a resposta para "a operadora
+        está cobrando o que combinamos?". -#}
+    {% if card.taxa_contratada and card.conf.n_creditos %}
+    {% set cf = card.conf %}
+    <div class="conf">
+      <div class="conf__t"><i class="bi bi-search"></i>
+        Conferência da taxa — casando por valor, sem olhar data
+        <span class="dir">{{ cf.pares|length }} de {{ cf.n_creditos }} créditos
+          casaram{% if cf.dias_max %} · o mais atrasado levou {{ cf.dias_max }} dias{% endif %}</span></div>
+      <div class="conf__g">
+        <div><span>Venda casada</span><b>{{ cf.venda | fmtmoney }}</b></div>
+        <div><span>Crédito casado</span><b>{{ cf.credito | fmtmoney }}</b></div>
+        <div><span>Taxa do que casou</span>
+          <b class="{{ 'pos' if cf.taxa is not none and (cf.taxa - card.taxa_contratada)|abs < 0.02
+                       else 'neg' }}">{% if cf.taxa is not none %}{{ '%.4f'|format(cf.taxa) }}%{% else %}—{% endif %}</b></div>
+        <div><span>Contrato</span><b>{{ '%.2f'|format(card.taxa_contratada) }}%</b></div>
+      </div>
+      {% if cf.taxa is not none %}
+      <div class="alerta {{ 'alerta--ok' if (cf.taxa - card.taxa_contratada)|abs < 0.02 else 'alerta--neg' }}"
+           style="margin:.5rem .8rem">
+        <i class="bi {{ 'bi-check-circle-fill' if (cf.taxa - card.taxa_contratada)|abs < 0.02
+                        else 'bi-exclamation-triangle-fill' }}"></i>
+        {% if (cf.taxa - card.taxa_contratada)|abs < 0.02 %}
+        em todo crédito que casou, a operadora cobrou os
+        {{ '%.2f'|format(card.taxa_contratada) }}% combinados
+        {% else %}
+        o que casou saiu a {{ '%.4f'|format(cf.taxa) }}%, e não a
+        {{ '%.2f'|format(card.taxa_contratada) }}% do contrato —
+        {{ (cf.venda * (cf.taxa - card.taxa_contratada) / 100) | fmtmoney }} de diferença
+        {% endif %}</div>
+      {% endif %}
+      {% if cf.creditos_orfaos or cf.vendas_orfas %}
+      <div class="tab">
+        <table>
+          <thead><tr><th class="e">O que não casou</th><th class="e">Data</th>
+            <th>Valor</th><th class="e">O que fazer</th></tr></thead>
+          <tbody>
+            {% for o in cf.creditos_orfaos %}
+            <tr><td class="e">Crédito sem venda</td>
+              <td class="e">{{ o.data.strftime('%d/%m/%Y') }}</td>
+              <td class="forte">{{ o.valor | fmtmoney }}</td>
+              <td class="e">lançar no caixa a venda de
+                <b>{{ o.venda_esperada | fmtmoney }}</b></td></tr>
+            {% endfor %}
+            {% for v in cf.vendas_orfas %}
+            <tr><td class="e">Venda sem crédito</td>
+              <td class="e">{{ v.data.strftime('%d/%m/%Y') }}</td>
+              <td class="forte">{{ v.valor | fmtmoney }}</td>
+              <td class="e">esperar o crédito de
+                <b>{{ (v.valor * (1 - card.taxa_contratada / 100)) | fmtmoney }}</b>,
+                ou conferir o lançamento</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
 
     <div class="tab">
       <table>

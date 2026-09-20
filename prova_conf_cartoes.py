@@ -323,6 +323,55 @@ prova('na tela do X7, os ciclos fora saem marcados em vermelho',
 prova('e o card diz quantos sao',
       'ciclos fora da taxa de contrato' in ' '.join(_hx2.split()))
 
+print('4f) a conferencia da taxa, casada por VALOR')
+# E a resposta para "a operadora esta cobrando o combinado?". Ela nao olha
+# data, e por isso funciona quando o pagamento atrasa -- no X7 BANK os atrasos
+# medidos vao de 0 a 44 dias.
+from routes.conf_cartoes import _conferir_taxa
+from datetime import date as _dd
+
+_v = [{'data': _dd(2026, 3, 2), 'valor': 1000.0},
+      {'data': _dd(2026, 3, 3), 'valor': 500.0},
+      {'data': _dd(2026, 3, 4), 'valor': 200.0}]
+# o de 1.000 pago 44 dias depois; o de 500 pago no dia seguinte; o de 200
+# ainda nao pago. E um credito de 300 que nao tem venda nenhuma.
+_r = [{'data': _dd(2026, 4, 15), 'valor': 982.50},
+      {'data': _dd(2026, 3, 4), 'valor': 491.25},
+      {'data': _dd(2026, 3, 9), 'valor': 294.75}]
+_p, _oc, _ov = _conferir_taxa(_v, _r, 1.75)
+prova('casa os dois que tem par, mesmo com 44 dias de atraso', len(_p) == 2)
+prova('e a taxa de cada um bate no contrato',
+      all(perto(x['taxa'], 1.75, 0.01) for x in _p))
+prova('o atraso e medido em dias corridos (44)',
+      max(x['dias'] for x in _p) == 44)
+prova('o credito sem venda sobra, com a venda que teria sido (300,00)',
+      len(_oc) == 1 and perto(_oc[0]['venda_esperada'], 300.0, 0.01))
+prova('e a venda sem credito tambem sobra (200,00)',
+      len(_ov) == 1 and perto(_ov[0]['valor'], 200.0))
+prova('cada venda casa uma vez so',
+      len(set(id(x) for x in _v)) == 3 and len(_p) + len(_ov) == 3)
+prova('sem taxa de contrato, nao ha o que conferir',
+      _conferir_taxa(_v, _r, None) == ([], [], _v))
+# O caso real: varios creditos no mesmo dia. A soma deles nao casa com venda
+# nenhuma, mas cada um casa com a sua -- foi isso que fez a conta sair de 17
+# para 29 creditos casados no X7.
+_v2 = [{'data': _dd(2026, 8, 21), 'valor': 214.02},
+       {'data': _dd(2026, 8, 19), 'valor': 98.88}]
+_r2 = [{'data': _dd(2026, 8, 24), 'valor': 210.27},
+       {'data': _dd(2026, 8, 24), 'valor': 97.15}]
+_p2, _oc2, _ov2 = _conferir_taxa(_v2, _r2, 1.75)
+prova('dois creditos no mesmo dia casam cada um com a sua venda',
+      len(_p2) == 2 and not _oc2 and not _ov2)
+# E na tela de verdade
+_hc = client.get('/relatorios/conf_cartoes?data_inicio=2026-01-01'
+                 '&data_fim=2026-09-30&band=8').get_data(as_text=True)
+prova('a tela mostra a conferencia no quadro da bandeira',
+      'Conferência da taxa' in _hc)
+prova('e diz que o que casou saiu no contrato',
+      'cobrou os' in ' '.join(_hc.split()))
+prova('e lista o que nao casou, com o que fazer',
+      'lançar no caixa a venda de' in _hc)
+
 print('5) as linhas que explicam a data do recebimento')
 prova('a linha de fim de semana/feriado continua marcada',
       'class="fds"' in html or 'antes fds' in html)
