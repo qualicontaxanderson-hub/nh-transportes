@@ -114,10 +114,12 @@
     <div class="cmp {{ 'vazio-aviso' if not c.destino_id }}">
       <label>Destino padrão deste cliente</label>
       <select name="destino_id" id="cli-destino" onchange="cliRotas()">
-        <option value="">— sem destino padrão —</option>
+        {#- Sem travessão nas pontas: no celular o rótulo quebrava e sobrava
+            um "—" sozinho na segunda linha. E a opção toda numa linha só —
+            quebra de linha dentro do <option> vira espaço antes do texto. -#}
+        <option value="">Sem destino padrão</option>
         {% for d in destinos %}
-        <option value="{{ d.id }}" {{ 'selected' if c.destino_id == d.id }}>
-          {{ d.nome }} - {{ d.estado }}</option>
+        <option value="{{ d.id }}" {{ 'selected' if c.destino_id == d.id }}>{{ d.nome }} ({{ d.estado }})</option>
         {% endfor %}
       </select>
       <span class="aj">Casa com a origem na tabela de rotas e define o
@@ -150,10 +152,9 @@
     <div class="cmp">
       <label>Grupo do plano de contas</label>
       <select name="grupo_contabil_id">
-        <option value="">— sem grupo contábil —</option>
+        <option value="">Sem grupo contábil</option>
         {% for g in grupos %}
-        <option value="{{ g.id }}" {{ 'selected' if c.grupo_contabil_id == g.id }}>
-          {{ g.codigo }} — {{ g.nome }}</option>
+        <option value="{{ g.id }}" {{ 'selected' if c.grupo_contabil_id == g.id }}>{{ g.codigo }} · {{ g.nome }}</option>
         {% endfor %}
       </select>
     </div>

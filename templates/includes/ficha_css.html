@@ -52,6 +52,16 @@
   {{ esc }} .cmp input, {{ esc }} .cmp select{ width:100%; border:1px solid var(--borda);
     border-radius:9px; padding:.48rem .6rem; font-size:.86rem;
     font-family:inherit; background:#fff; color:var(--ink); }
+  /* O select fechado com a setinha desenhada por nós: a nativa muda de forma
+     em cada navegador, e no celular vinha grande demais ao lado do texto.
+     A lista aberta continua sendo a do sistema — ela não se estiliza, e é
+     ela que o dedo já sabe usar. */
+  {{ esc }} .cmp select{ appearance:none; -webkit-appearance:none;
+    padding-right:2rem; cursor:pointer;
+    background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%234b5563'%3E%3Cpath d='M8 11L3.5 6h9z'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right .65rem center;
+    background-size:.7rem; text-overflow:ellipsis; }
+  {{ esc }} .cmp select:disabled{ background-color:#f4f6f9; color:var(--muted); }
   {{ esc }} .cmp input:focus, {{ esc }} .cmp select:focus{ outline:2px solid #bcd3ea;
     outline-offset:1px; border-color:var(--blue); }
   {{ esc }} .cmp .aj{ font-size:.7rem; color:var(--muted); margin-top:.22rem;
