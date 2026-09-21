@@ -75,6 +75,12 @@ body > .container-fluid:has(#pfn){
   #pfn .regua a.on small, #pfn .regua a.on em{ color:rgba(255,255,255,.85); }
   #pfn .vg__dia{ color:var(--blue-deep); font-weight:800; }
 
+  /* Posto sem destino no cadastro: o frete nao vai nascer, e a tela diz
+     isso no campo em vez de deixar o banco recusar la no fim. */
+  #pfn .nf__dest.falta{ border-color:#e3b7b7; background:#fdeeee; }
+  #pfn .nf__dest-aviso{ display:block; font-size:.7rem; font-weight:700;
+    color:#a32d2d; margin-top:.2rem; line-height:1.3; }
+
   #pfn .frota{ display:flex; gap:.35rem; overflow-x:auto; padding-bottom:.2rem;
     margin-bottom:.7rem; }
   #pfn .frota a{ flex:0 0 auto; border:1px solid var(--borda); background:#fff;
@@ -512,7 +518,8 @@ body > .container-fluid:has(#pfn){
                           data-lista="clientes" data-valor=""
                           onclick="pfnEscolher(this, 'Escolha o posto')">— escolha —</button></div>
                 <div class="nf__c">Destino
-                  <input class="nf__dest" readonly placeholder="—"></div>
+                  <input class="nf__dest" readonly placeholder="—">
+                  <span class="nf__dest-aviso" hidden></span></div>
                 <div class="nf__c">Origem
                   <button type="button" class="esc nf__ori"
                           data-lista="origens" data-valor=""
@@ -1911,7 +1918,23 @@ function pfnPosto(sel){
   if (!form) return;
   var cli = pfnCliente(sel);
   var dest = form.querySelector('.nf__dest');
-  if (dest) dest.value = cli.destino || '';
+  if (dest){
+    dest.value = cli.destino || '';
+    // Posto sem destino no cadastro nao consegue virar frete: a coluna e
+    // NOT NULL e o erro so aparecia no fim, em SQL. Agora o campo avisa na
+    // hora em que o posto e escolhido.
+    var semDest = !!(cli.id && !cli.destino_id);
+    dest.classList.toggle('falta', semDest);
+    dest.placeholder = semDest ? 'sem destino no cadastro' : '—';
+    var avisoD = form.querySelector('.nf__dest-aviso');
+    if (avisoD){
+      avisoD.hidden = !semDest;
+      avisoD.textContent = semDest
+        ? ('Este posto não tem destino no cadastro, e o frete precisa de um — '
+           + 'cadastre em Cadastros → Clientes.')
+        : '';
+    }
+  }
 
   // Posto da casa nao paga frete: 625 dos 626 fretes do Novo Horizonte estao
   // em R$ 0,00, e nenhum outro cliente tem um zerado sequer. O campo ia em

@@ -1880,11 +1880,34 @@ def lancar():
                             'erro': 'esta carga está fechada — reabra antes de '
                                     'adicionar um posto'}), 409
 
-        cursor.execute("SELECT destino_id FROM clientes WHERE id = %s", (cliente_id,))
+        cursor.execute("SELECT destino_id, razao_social, municipio "
+                       "  FROM clientes WHERE id = %s", (cliente_id,))
         cli = cursor.fetchone()
         if not cli:
             return jsonify({'ok': False, 'erro': 'posto não encontrado'}), 404
         destino_id = cli['destino_id']
+        # O frete nao existe sem destino -- a coluna e NOT NULL. Sem esta
+        # checagem o erro so aparecia no fim, como "Column 'destino_id' cannot
+        # be null", depois de a pessoa preencher a tela inteira. Agora ela sabe
+        # o que falta e onde resolver.
+        if not destino_id:
+            _dica = ''
+            if cli.get('municipio'):
+                cursor.execute("SELECT id, nome FROM destinos WHERE nome = %s",
+                               (cli['municipio'],))
+                _d = cursor.fetchone()
+                if _d:
+                    _dica = (' O posto fica em %s, e esse destino já existe — '
+                             'é só escolhê-lo no cadastro.' % _d['nome'])
+                else:
+                    _dica = (' O posto fica em %s, e esse destino ainda não '
+                             'existe: cadastre-o em Cadastros → Destinos.'
+                             % cli['municipio'])
+            return jsonify({
+                'ok': False,
+                'erro': ('o posto %s não tem DESTINO no cadastro, e o frete '
+                         'precisa de um.%s'
+                         % (cli['razao_social'], _dica))}), 400
 
         cursor.execute("SELECT paga_comissao FROM motoristas WHERE id = %s", (mid,))
         mot = cursor.fetchone()
