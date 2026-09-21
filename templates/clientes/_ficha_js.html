@@ -12,11 +12,14 @@ function cliMoeda(v) {
 /* Mostra o que o destino escolhido ATIVA. Sem destino (ou sem rota), avisa
    o que isso custa na hora do lançamento. */
 function cliRotas() {
+  // O destino deixou de ser <select> e virou gaveta: o valor mora num input
+  // escondido e o nome, no botao que abre a lista.
   var sel = document.getElementById('cli-destino');
   var alvo = document.getElementById('cli-rotas');
   if (!sel || !alvo) return;
   var id = sel.value;
-  var nome = id ? sel.options[sel.selectedIndex].text.trim() : '';
+  var bt = document.getElementById('cli-destino-bt');
+  var nome = id && bt ? bt.textContent.trim() : '';
   if (!id) {
     alvo.innerHTML = '<div class="rota rota--vazia"><div class="rota__t">' +
       'Sem destino padrão</div><div style="font-size:.72rem;color:#8a5a00">' +

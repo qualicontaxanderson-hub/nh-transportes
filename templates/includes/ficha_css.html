@@ -62,6 +62,17 @@
     background-repeat:no-repeat; background-position:right .65rem center;
     background-size:.7rem; text-overflow:ellipsis; }
   {{ esc }} .cmp select:disabled{ background-color:#f4f6f9; color:var(--muted); }
+  /* O botao que abre a gaveta de escolha. Parece um campo, e nao um botao,
+     porque no formulario ele ocupa o lugar de um. */
+  {{ esc }} .cmp .esc{ display:block; width:100%; text-align:left;
+    border:1px solid var(--borda); border-radius:9px; padding:.48rem .6rem;
+    padding-right:2rem; font-size:.86rem; font-family:inherit; background:#fff;
+    color:var(--ink); font-weight:600; cursor:pointer; position:relative;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  {{ esc }} .cmp .esc::after{ content:'⌄'; position:absolute; right:.7rem;
+    top:.28rem; color:var(--muted); font-size:1rem; }
+  {{ esc }} .cmp .esc:hover{ border-color:#a8c4de; background:#fbfdff; }
+  {{ esc }} .vazio-aviso .esc{ border-color:#f0d8a8; background:#fffdf7; }
   {{ esc }} .cmp input:focus, {{ esc }} .cmp select:focus{ outline:2px solid #bcd3ea;
     outline-offset:1px; border-color:var(--blue); }
   {{ esc }} .cmp .aj{ font-size:.7rem; color:var(--muted); margin-top:.22rem;

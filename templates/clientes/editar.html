@@ -18,7 +18,11 @@ body > .container-fluid:has(#cfi){
    de fora e sobrava faixa dos dois lados. */
 #cfi.container-fluid{ padding-left:0; padding-right:0; }
 </style>
-{% with esc = '#cfi' %}{% include 'includes/ficha_css.html' %}{% endwith %}{% endblock %}
+{% with esc = '#cfi' %}{% include 'includes/ficha_css.html' %}{% endwith %}
+{#- A gaveta de escolha: a mesma do frete e do financeiro. O <select> nativo
+    no celular abre uma lista do sistema que nao se estiliza -- no iPhone ela
+    quebrava o nome longo em duas linhas e ficava feia. -#}
+{% with esc = '#cfi' %}{% include 'includes/gaveta_css.html' %}{% endwith %}{% endblock %}
 
 {% block content %}
 <div id="cfi">

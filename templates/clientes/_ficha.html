@@ -113,15 +113,16 @@
   <div class="lin duas">
     <div class="cmp {{ 'vazio-aviso' if not c.destino_id }}">
       <label>Destino padrão deste cliente</label>
-      <select name="destino_id" id="cli-destino" onchange="cliRotas()">
-        {#- Sem travessão nas pontas: no celular o rótulo quebrava e sobrava
-            um "—" sozinho na segunda linha. E a opção toda numa linha só —
-            quebra de linha dentro do <option> vira espaço antes do texto. -#}
-        <option value="">Sem destino padrão</option>
-        {% for d in destinos %}
-        <option value="{{ d.id }}" {{ 'selected' if c.destino_id == d.id }}>{{ d.nome }} ({{ d.estado }})</option>
-        {% endfor %}
-      </select>
+      {#- Não é mais um <select>: no celular a lista do sistema não se
+          estiliza e quebrava o nome longo em duas linhas. Agora é a mesma
+          gaveta do frete e do financeiro — o valor continua indo no POST
+          por um input escondido, com o mesmo name de antes. -#}
+      <input type="hidden" name="destino_id" id="cli-destino"
+             value="{{ c.destino_id or '' }}">
+      <button type="button" class="esc" id="cli-destino-bt"
+              onclick="cliAbreDestino()">
+        {%- set _d = (destinos | selectattr('id', 'equalto', c.destino_id) | list | first) -%}
+        {{ (_d.nome ~ ' (' ~ _d.estado ~ ')') if _d else 'Sem destino padrão' }}</button>
       <span class="aj">Casa com a origem na tabela de rotas e define o
         <b>valor por litro do CT-e</b>. É escolha sua — a Receita não mexe nele.</span>
     </div>
@@ -162,3 +163,56 @@
   </div>
   {% endif %}
 </div>
+
+{#- A gaveta de destinos. Fica no fim da ficha, fora das seções, porque ela é
+    sobreposta: dentro de uma seção com overflow ela ficaria cortada. -#}
+<div class="escuro" id="cli-esc" onclick="cliFechaDestino()"></div>
+<div class="gav" id="cli-gav" role="dialog" aria-label="Escolha o destino">
+  <div class="gav__pega"></div>
+  <div class="pnome">Destino padrão do cliente</div>
+  <div class="gav__b">
+    <div class="opcs" id="cli-gav-l">
+      <div class="opc{{ ' on' if not c.destino_id }}" data-id="" data-nome="Sem destino padrão"
+           onclick="cliEscolheDestino(this)">Sem destino padrão
+        <small>o frete pede o destino a cada lançamento</small></div>
+      {% for d in destinos %}
+      <div class="opc{{ ' on' if c.destino_id == d.id }}" data-id="{{ d.id }}"
+           data-nome="{{ d.nome }} ({{ d.estado }})"
+           onclick="cliEscolheDestino(this)">{{ d.nome }}
+        <small>{{ d.estado }}</small></div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="gav__f">
+    <button type="button" class="bt-g bt-g--ca" onclick="cliFechaDestino()">Cancelar</button>
+  </div>
+</div>
+
+<script>
+// A gaveta do destino. O <select> nativo no celular abre a lista do sistema,
+// que nao se estiliza: no iPhone ela quebrava "PROFESSOR JAMIL (GO)" em duas
+// linhas. Esta e a mesma gaveta do frete e do financeiro.
+function cliAbreDestino(){
+  document.getElementById('cli-esc').classList.add('on');
+  document.getElementById('cli-gav').classList.add('on');
+}
+function cliFechaDestino(){
+  document.getElementById('cli-esc').classList.remove('on');
+  document.getElementById('cli-gav').classList.remove('on');
+}
+function cliEscolheDestino(el){
+  var hid = document.getElementById('cli-destino');
+  var bt  = document.getElementById('cli-destino-bt');
+  hid.value = el.getAttribute('data-id') || '';
+  bt.textContent = el.getAttribute('data-nome');
+  var lista = document.getElementById('cli-gav-l');
+  var itens = lista.querySelectorAll('.opc');
+  for (var i = 0; i < itens.length; i++) itens[i].classList.remove('on');
+  el.classList.add('on');
+  // O campo vazio fica com a moldura ambar, como os outros obrigatorios.
+  var cmp = bt.closest('.cmp');
+  if (cmp) cmp.classList.toggle('vazio-aviso', !hid.value);
+  cliFechaDestino();
+  if (typeof cliRotas === 'function') cliRotas();
+}
+</script>
