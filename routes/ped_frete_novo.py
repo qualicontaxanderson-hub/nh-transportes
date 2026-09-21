@@ -1171,18 +1171,37 @@ def _opcoes(cur):
     for r in cur.fetchall():
         # Primeiro que chega vence: a consulta ja vem da data mais nova.
         cte_hist.setdefault(r['cid'], {}).setdefault(r['oid'], round(_f(r['cte']), 4))
+
+    # A ROTA CADASTRADA, para quando nao ha historico. O cadastro de rotas
+    # (origem -> destino, com o valor por litro) existe desde sempre e a tela
+    # nova nao olhava para ele: numa rota estreando, o campo vinha vazio e o
+    # usuario achava que precisava "criar a rota" -- criava, e nada mudava.
+    # Agora o valor cadastrado entra como segunda opcao, depois do historico:
+    # o que foi cobrado de verdade manda sobre o que foi combinado.
+    rotas_tab = {}
+    try:
+        cur.execute("SELECT origem_id, destino_id, valor_por_litro "
+                    "  FROM rotas WHERE ativo = 1")
+        for r in cur.fetchall():
+            rotas_tab['%s-%s' % (r['origem_id'], r['destino_id'])] = round(
+                _f(r['valor_por_litro']), 4)
+    except Exception:
+        rotas_tab = {}
     # Vai pra tela como JSON unico, nao como <option> repetido em cada cartao
     # de carga: no celular a lista de postos sozinha ja e enorme, e repetida
     # por caminhao ela dobrava o tamanho da pagina.
     js = {
         'clientes': [{'id': c['id'], 'nome': c['razao_social'],
                       'destino': c['destino'] or '',
+                      'destino_id': c['destino_id'] or 0,
                       'nao_cobra': c['id'] in nao_cobram,
                       'hist': hist.get(c['id']) or [],
                       # {origem_id: cte_por_litro} do ultimo frete daquela rota
                       'cte': {str(k): v for k, v in
                               (cte_hist.get(c['id']) or {}).items() if k},
                       } for c in clientes],
+        # {'origem-destino': valor}: o de-para do cadastro de rotas
+        'rotas': rotas_tab,
         'fornecedores': [{'id': f['id'], 'nome': f['razao_social']} for f in fornecedores],
         'produtos': [{'id': p['id'], 'nome': p['nome']} for p in produtos],
         'origens': [{'id': o['id'], 'nome': o['nome']} for o in origens],

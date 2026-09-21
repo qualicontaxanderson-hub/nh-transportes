@@ -1933,6 +1933,19 @@ function pfnCteDaRota(form){
   return (oid && tab[oid] != null) ? tab[oid] : null;
 }
 
+// O valor da ROTA CADASTRADA (Cadastros -> Rotas), pelo par origem-destino.
+// Ele e a segunda opcao: vale quando a rota esta estreando e nao ha frete
+// anterior para copiar. O que ja foi cobrado manda sobre o que foi combinado.
+function pfnCteDoCadastro(form){
+  var cli = pfnCliente(form.querySelector('.nf__cli'));
+  var ori = form.querySelector('.nf__ori');
+  var oid = ori ? ori.getAttribute('data-valor') : '';
+  var did = cli ? cli.destino_id : 0;
+  if (!oid || !did) return null;
+  var v = (PFN_OP.rotas || {})[oid + '-' + did];
+  return (v != null) ? v : null;
+}
+
 function pfnFmtCte(v){
   return Number(v).toFixed(3).replace('.', ',');
 }
@@ -1965,7 +1978,9 @@ function pfnLimpaCteAuto(pc){
 function pfnRegraFrete(form){
   if (!form) return;
   var cli = pfnCliente(form.querySelector('.nf__cli'));
+  // Primeiro o que ja foi cobrado; sem historico, o valor da rota cadastrada.
   var doHist = pfnCteDaRota(form);
+  if (doHist === null) doHist = pfnCteDoCadastro(form);
   var itens = form.querySelectorAll('.nf__i');
 
   for (var k = 0; k < itens.length; k++){
@@ -2119,12 +2134,17 @@ function pfnContaItem(item){
     // o CT-e saiu a 0,0800 em Senador Canedo ate maio e 0,1300 depois, 0,1000
     // em Goiatuba e Itumbiara, 0,1300 em Goiania. Entao a dica diz o numero da
     // ROTA, ou avisa que nao ha um.
-    var h = pfnCteDaRota(item.closest('.novo__f'));
+    var _form = item.closest('.novo__f');
+    var h = pfnCteDaRota(_form);
+    var hCad = (h === null) ? pfnCteDoCadastro(_form) : null;
     dica.textContent = (h !== null)
       ? ('Último CT-e desta rota: ' + pfnFmtCte(h) + '/L.')
-      : ((temPl && pl === 0)
-         ? 'Esta rota não tem CT-e anterior — digite o valor, senão ele vai zerado.'
-         : 'Acompanha o frete.');
+      : (hCad !== null
+         ? ('Rota cadastrada: ' + pfnFmtCte(hCad) + '/L — ainda não houve frete nela.')
+         : ((temPl && pl === 0)
+            ? 'Esta rota não tem CT-e anterior nem cadastro — digite o valor, '
+              + 'ou cadastre em Cadastros → Rotas.'
+            : 'Acompanha o frete.'));
   }
 
   var conta = item.querySelector('.nf__conta');
@@ -2221,6 +2241,11 @@ function pfnRegraEdicao(cx){
   var rotCte = pc ? pc.closest('.nf__c') : null;
   var tab = cli.cte || {};
   var doHist = (oid && tab[oid] != null) ? tab[oid] : null;
+  // Sem historico, o valor da rota cadastrada (origem -> destino do posto).
+  if (doHist === null && oid && cli.destino_id){
+    var _vc = (PFN_OP.rotas || {})[oid + '-' + cli.destino_id];
+    if (_vc != null) doHist = _vc;
+  }
 
   if (cli.nao_cobra){
     if (pl) pl.value = '0,000';
