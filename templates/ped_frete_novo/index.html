@@ -492,15 +492,18 @@ body > .container-fluid:has(#pfn){
 {% endblock %}
 
 {% block content %}
-{% macro form_carga(dia, vid, mid, placa, sem, cap, ocup, mnome='') %}
+{% macro form_carga(dia, vid, mid, placa, sem, cap, ocup, mnome='', pedido=0) %}
           <div class="novo">
+            {#- `data-pedido` amarra o lançamento à viagem deste cartão. Com
+                duas viagens no mesmo dia, sem ele o posto caía na última. -#}
             <div class="novo__f" hidden
                  data-data="{{ dia.isoformat() }}"
                  data-veiculo="{{ vid }}"
                  data-motorista="{{ mid }}"
+                 data-pedido="{{ pedido or 0 }}"
                  data-capacidade="{{ '%.0f' | format(cap or 0) }}"
                  data-ocupado="{{ '%.0f' | format(ocup or 0) }}">
-              <div class="nf__t">Novo posto em {{ placa }} ·
+              <div class="nf__t novo__t">Novo posto em {{ placa }} ·
                 {{ sem }} {{ dia.strftime('%d/%m') }}</div>
               {#- O motorista vem do cadastro do caminhao, mas o do dia pode
                   ser outro: sem poder trocar aqui, a carga nascia no nome
@@ -888,7 +891,14 @@ body > .container-fluid:has(#pfn){
               <i class="bi bi-whatsapp"></i> Mandar pedido no WhatsApp</button>
             <button type="button" class="bd__b"
                     onclick="pfnReabrir(this, '{{ v.data.isoformat() }}',
-                             {{ v.veiculo_id }}, {{ v.motorista_id or 0 }})">reabrir</button>
+                             {{ v.veiculo_id }}, {{ v.motorista_id or 0 }},
+                             {{ v.pedido_id or 0 }})">reabrir</button>
+            {#- O caminhao volta e sai de novo no mesmo dia: e a segunda
+                viagem. Ela nasce como uma carga NOVA (outro pedido), e nao
+                como item dentro desta, que ja saiu. -#}
+            <button type="button" class="bd__b bd__b--novo novo__abre"
+                    onclick="pfnAbreNovo(this, 1)">
+              <i class="bi bi-arrow-repeat"></i> Nova carga neste caminhão</button>
           </div>
           {% else %}
           <div class="fechou fechou--abre">
@@ -942,16 +952,25 @@ body > .container-fluid:has(#pfn){
             {% endif %}
             <button type="button" class="bd__b bd__b--sim"
                     onclick="pfnMoverCarga(this, '{{ v.data.isoformat() }}',
-                             {{ v.veiculo_id }}, {{ v.motorista_id or 0 }})">Mover
+                             {{ v.veiculo_id }}, {{ v.motorista_id or 0 }},
+                             {{ v.pedido_id or 0 }})">Mover
               carga</button>
             <button type="button" class="bd__b" onclick="pfnFechaMover(this)">✕</button>
           </div>
           {% endif %}
           {% endif %}
 
-          {% if not v.fechada %}
+          {#- O formulario vem SEMPRE, escondido. Na carga fechada ele e a
+              segunda viagem: comeca vazia (ocupado 0) e sem pedido, porque
+              vai abrir um pedido proprio. Sem ele aqui, o botao "Nova carga
+              neste caminhao" nao teria o que abrir. -#}
+          {% if v.fechada %}
           {{ form_carga(v.data, v.veiculo_id, v.motorista_id or 0, v.placa,
-                        v.semana, v.capacidade, v.ocupado, v.motorista) }}
+                        v.semana, v.capacidade, 0, v.motorista, 0) }}
+          {% else %}
+          {{ form_carga(v.data, v.veiculo_id, v.motorista_id or 0, v.placa,
+                        v.semana, v.capacidade, v.ocupado, v.motorista,
+                        v.pedido_id or 0) }}
           {% endif %}
 
           {% if v.bordo %}
@@ -975,6 +994,7 @@ body > .container-fluid:has(#pfn){
                data-data="{{ v.data.isoformat() }}"
                data-veiculo="{{ v.veiculo_id }}"
                data-motorista="{{ v.motorista_id or 0 }}"
+               data-pedido="{{ v.pedido_id or 0 }}"
                data-espaco="{{ '1' if v.tem_espaco else '0' }}">
             <div class="bordo__t"><i class="bi bi-box-seam"></i>
               <span class="pnl__t">O que ficou no caminhão</span></div>
@@ -1472,6 +1492,9 @@ function pfnPainelBordo(botao, modo){
         data: d.getAttribute('data-data'),
         veiculo_id: parseInt(d.getAttribute('data-veiculo'), 10),
         motorista_id: parseInt(d.getAttribute('data-motorista'), 10),
+        // Qual viagem esta fechando: sem isso, fechar a segunda marcava a
+        // primeira, e a segunda ficava aberta para sempre.
+        pedido_id: parseInt(d.getAttribute('data-pedido') || '0', 10) || 0,
         bordo: []
       });
       return;
@@ -1527,14 +1550,18 @@ function pfnConfirmaBordo(botao, usarMarcados){
     data: painel.getAttribute('data-data'),
     veiculo_id: parseInt(painel.getAttribute('data-veiculo'), 10),
     motorista_id: parseInt(painel.getAttribute('data-motorista'), 10),
+    pedido_id: parseInt(painel.getAttribute('data-pedido') || '0', 10) || 0,
     bordo: bordo,
     apenas_bordo: (modo === 'bordo')
   });
 }
 
-function pfnReabrir(botao, data, veiculoId, motoristaId){
+function pfnReabrir(botao, data, veiculoId, motoristaId, pedidoId){
+  // O pedido diz QUAL viagem reabrir: sem ele, reabrir a segunda reabria a
+  // primeira junto, porque a chave antiga era so data + caminhao + motorista.
   pfnEnvia(botao, '/ped-frete-novo/reabrir',
-           {data: data, veiculo_id: veiculoId, motorista_id: motoristaId});
+           {data: data, veiculo_id: veiculoId, motorista_id: motoristaId,
+            pedido_id: pedidoId || 0});
 }
 
 // ─── lancar posto na carga ──────────────────────────────────────────────
@@ -1863,13 +1890,24 @@ function pfnNum(campo){
   return parseFloat(String(campo.value).replace(/\./g, '').replace(',', '.')) || 0;
 }
 
-function pfnAbreNovo(botao){
+function pfnAbreNovo(botao, nova){
   var corpo = botao.closest('.vg__c2');
   var form = corpo ? corpo.querySelector('.novo__f') : null;
   var faixa = botao.closest('.fechou');
   if (!form) return;
   form.hidden = false;
-  if (faixa) faixa.hidden = true;
+  // A faixa "Carga em montagem" da lugar ao formulario. A faixa "Carga
+  // fechada" fica: ela continua verdadeira, o que abriu foi outra carga.
+  if (faixa && !nova) faixa.hidden = true;
+  // `nova` = o caminhao vai sair OUTRA vez no mesmo dia. O lancamento entao
+  // abre um pedido novo em vez de entrar na carga que ja saiu.
+  form.setAttribute('data-nova-carga', nova ? '1' : '');
+  var tit = form.querySelector('.novo__t');
+  if (tit && nova && tit.getAttribute('data-2a') !== '1'){
+    tit.setAttribute('data-2a', '1');
+    tit.textContent = '2ª carga do dia · ' + tit.textContent
+                        .replace('Novo posto em ', '');
+  }
   if (!form.querySelector('.nf__i')) pfnMaisItem(form.querySelector('.nf__mais'));
 }
 
@@ -2428,7 +2466,7 @@ function pfnMover(botao, freteId){
 
 // A carga inteira. Mesmo painel, mesma regra de quem levou — o que muda e que
 // vai a chave da carga de origem, e nao um frete.
-function pfnMoverCarga(botao, dataOrigem, vidOrigem, midOrigem){
+function pfnMoverCarga(botao, dataOrigem, vidOrigem, midOrigem, pedOrigem){
   var cx = botao.closest('.mv');
   var sel = cx ? cx.querySelector('.mv__d') : null;
   if (!sel || !sel.value){ alert('Escolha o caminhão.'); return; }
@@ -2449,7 +2487,7 @@ function pfnMoverCarga(botao, dataOrigem, vidOrigem, midOrigem){
   }
   pfnEnvia(botao, '/ped-frete-novo/mover-carga', {
     origem_data: dataOrigem, origem_veiculo_id: vidOrigem,
-    origem_motorista_id: midOrigem,
+    origem_motorista_id: midOrigem, origem_pedido_id: pedOrigem || 0,
     data: data, veiculo_id: vid, motorista_id: mid
   });
 }
@@ -2506,6 +2544,10 @@ function pfnLancar(botao){
     motorista_id: parseInt(val('.nf__mot') || form.getAttribute('data-motorista'), 10),
     cliente_id: parseInt(val('.nf__cli'), 10),
     origem_id: parseInt(val('.nf__ori'), 10),
+    // Em qual viagem o posto entra. Vazio = a ultima do dia; `nova_carga`
+    // abre outra, para o caminhao que volta e sai de novo.
+    pedido_id: parseInt(form.getAttribute('data-pedido') || '0', 10) || 0,
+    nova_carga: form.getAttribute('data-nova-carga') === '1',
     itens: payload
   });
 }

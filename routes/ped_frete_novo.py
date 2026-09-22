@@ -129,6 +129,90 @@ def _ensure_tabela():
                 UNIQUE KEY uq_carga_fechada (data_frete, veiculo_id, motorista_id)
             )
         """)
+        # A carga passou a ser o PEDIDO: o mesmo caminhao com o mesmo motorista
+        # sai duas vezes no mesmo dia, e a chave antiga so fechava a primeira.
+        # A coluna entra NULL nas linhas velhas, e elas continuam valendo para
+        # a carga inteira daquele dia -- reescrever o passado seria pior.
+        try:
+            cur.execute("ALTER TABLE carga_fechada ADD COLUMN pedido_id INT NULL")
+            conn.commit()
+        except Exception:
+            pass  # ja existe
+        # A chave unica precisa passar a incluir o pedido. Aqui NAO se engole
+        # erro: a primeira versao disto fazia DROP e ADD dentro de um unico
+        # try, o ADD falhou, e a tabela ficou SEM chave nenhuma -- a migracao
+        # de baixo entao duplicava linha a cada boot. Agora a tabela e
+        # perguntada, limpa e so depois indexada, e o que der errado aparece
+        # no log em vez de virar sucesso.
+        cur.execute("""SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index) cols
+                         FROM information_schema.statistics
+                        WHERE table_schema = DATABASE()
+                          AND table_name = 'carga_fechada'
+                          AND index_name = 'uq_carga_fechada'""")
+        cols = ((cur.fetchone() or [None])[0] or '')
+        if cols != 'data_frete,veiculo_id,motorista_id,pedido_id':
+            try:
+                if cols:
+                    cur.execute("ALTER TABLE carga_fechada DROP INDEX uq_carga_fechada")
+                    conn.commit()
+                # Sem a chave, o boot anterior pode ter duplicado linhas. Fica
+                # a mais antiga de cada carga -- e a que registrou o fechamento.
+                cur.execute("""DELETE cf FROM carga_fechada cf
+                                 JOIN carga_fechada o
+                                   ON o.data_frete = cf.data_frete
+                                  AND o.veiculo_id = cf.veiculo_id
+                                  AND o.motorista_id = cf.motorista_id
+                                  AND o.pedido_id <=> cf.pedido_id
+                                  AND o.id < cf.id""")
+                conn.commit()
+                cur.execute("ALTER TABLE carga_fechada ADD UNIQUE KEY "
+                            "uq_carga_fechada (data_frete, veiculo_id, "
+                            "motorista_id, pedido_id)")
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                logging.getLogger(__name__).error(
+                    '[ped_frete_novo] chave de carga_fechada nao migrou: %s', e)
+        # Cada linha velha (sem pedido) vira uma linha por pedido daquele dia.
+        # Ela foi gravada quando a carga era o dia inteiro, e o dia inteiro era
+        # UMA viagem; agora que a viagem tem pedido proprio, a mesma carga
+        # fechada precisa dizer QUAL viagem fechou -- senao a segunda carga do
+        # caminhao ja nasce trancada pela primeira.
+        try:
+            cur.execute("""
+                INSERT IGNORE INTO carga_fechada
+                       (data_frete, veiculo_id, motorista_id, pedido_id,
+                        fechada_por, fechada_em)
+                SELECT cf.data_frete, cf.veiculo_id, cf.motorista_id, f.pedido_id,
+                       cf.fechada_por, cf.fechada_em
+                  FROM carga_fechada cf
+                  JOIN fretes f
+                    ON f.data_frete = cf.data_frete
+                   AND f.veiculos_id = cf.veiculo_id
+                   AND COALESCE(f.motoristas_id, 0) = cf.motorista_id
+                 WHERE cf.pedido_id IS NULL AND f.pedido_id IS NOT NULL
+                 GROUP BY cf.data_frete, cf.veiculo_id, cf.motorista_id,
+                          f.pedido_id, cf.fechada_por, cf.fechada_em
+            """)
+            # A linha velha so sai quando nao sobrou nenhum frete sem pedido
+            # para ela fechar. Se sobrou, ela fica -- e fecha so esses.
+            cur.execute("""
+                DELETE cf FROM carga_fechada cf
+                 WHERE cf.pedido_id IS NULL
+                   AND EXISTS (SELECT 1 FROM fretes f
+                                WHERE f.data_frete = cf.data_frete
+                                  AND f.veiculos_id = cf.veiculo_id
+                                  AND COALESCE(f.motoristas_id, 0) = cf.motorista_id
+                                  AND f.pedido_id IS NOT NULL)
+                   AND NOT EXISTS (SELECT 1 FROM fretes f
+                                    WHERE f.data_frete = cf.data_frete
+                                      AND f.veiculos_id = cf.veiculo_id
+                                      AND COALESCE(f.motoristas_id, 0) = cf.motorista_id
+                                      AND f.pedido_id IS NULL)
+            """)
+            conn.commit()
+        except Exception:
+            conn.rollback()  # sem a coluna nova nao ha o que migrar
         cur.execute("""
             CREATE TABLE IF NOT EXISTS frete_saldo_bordo (
                 id                 INT AUTO_INCREMENT PRIMARY KEY,
@@ -183,16 +267,46 @@ def _ensure_tabela():
 
 
 def _chave(v):
-    """A carga em tres campos: data + veiculo + motorista."""
+    """A carga em tres campos: data + veiculo + motorista.
+
+    Continua sendo essa a chave de `frete_saldo_bordo` e da carga ANTIGA em
+    `carga_fechada` -- as duas tabelas nasceram com ela.
+    """
     return (v['data'], v['veiculo_id'], v['motorista_id'] or 0)
 
 
+# Marca que o banco ainda nao ganhou carga_fechada.pedido_id: sem ela, a
+# unica chave que existe e a antiga, e a viagem com pedido precisa
+# aceita-la -- senao toda carga fechada apareceria aberta.
+_SEM_PEDIDO = ('__sem_coluna_pedido__',)
+
+
 def _fechadas(cur, dia):
-    """{(data, veiculo, motorista): quem/quando} das cargas ja fechadas no dia."""
-    cur.execute("""SELECT data_frete, veiculo_id, motorista_id, fechada_por, fechada_em
-                     FROM carga_fechada WHERE data_frete = %s""", (dia,))
-    return {(r['data_frete'], r['veiculo_id'], r['motorista_id']): r
-            for r in cur.fetchall()}
+    """Cargas ja fechadas no dia, nas DUAS chaves.
+
+    A linha nova traz o pedido (uma carga por viagem). A linha antiga nao tem
+    pedido, e vale para a carga inteira daquele caminhao no dia -- e assim que
+    ela foi gravada, e desfaze-la seria reescrever o passado.
+    """
+    try:
+        cur.execute("""SELECT data_frete, veiculo_id, motorista_id, pedido_id,
+                              fechada_por, fechada_em
+                         FROM carga_fechada WHERE data_frete = %s""", (dia,))
+        linhas = cur.fetchall()
+    except Exception:
+        cur.execute("""SELECT data_frete, veiculo_id, motorista_id,
+                              fechada_por, fechada_em
+                         FROM carga_fechada WHERE data_frete = %s""", (dia,))
+        linhas = [dict(r, pedido_id=None) for r in cur.fetchall()]
+        saida = {_SEM_PEDIDO: True}
+    else:
+        saida = {}
+    for r in linhas:
+        if r.get('pedido_id'):
+            saida[('P', r['pedido_id'])] = r
+        else:
+            saida[(r['data_frete'], r['veiculo_id'], r['motorista_id'])] = r
+    return saida
 
 
 def _bordo_registrado(cur, dia):
@@ -476,6 +590,7 @@ def _fretes_do_periodo(cur, ini, fim, veiculo_id=None):
                f.preco_produto_unitario AS preco_unit, f.total_nf_compra AS total_nf,
                f.fornecedores_id, f.produto_id, f.quantidade_id, f.origem_id,
                f.preco_por_litro, f.valor_cte, pi.base_id, pi.id AS item_id,
+               f.pedido_id,
                COALESCE(cob.n, 0) AS cob_n, COALESCE(cob.pago, 0) AS cob_pago
           FROM fretes f
           LEFT JOIN quantidades q ON q.id = f.quantidade_id
@@ -517,17 +632,28 @@ def _estado_cobranca(fr):
     return 'falta'
 
 
-def _montar_viagens(fretes, cap):
-    """Agrupa os fretes na chave fisica da carga: data + veiculo + motorista.
+def _chave_viagem(fr):
+    """A chave fisica da carga.
 
-    Motorista entra na chave porque e o que separa duas viagens do mesmo
-    caminhao no mesmo dia — foi o caso de 21/08, quando o RDT saiu com o
-    Marcos e depois com o Wellington. Quando o mesmo motorista estoura a
-    carreta, a tela avisa em vez de inventar uma segunda viagem.
+    E o PEDIDO: ele ja e a carga fisica, e e ele que separa duas viagens do
+    mesmo caminhao com o MESMO motorista no mesmo dia. Isso acontece de
+    verdade -- em 18/06/2026 o RDT7H76 saiu duas vezes com 30.000 L, em dois
+    pedidos (PED-00275 e PED-00277), e a tela somava os dois num cartao de
+    60.000 L numa carreta que leva 30.000. Sao 15 casos assim so em 2026.
+
+    Frete anterior a marco/2026 nao tem pedido (sao 995): esse cai na chave
+    velha, data + veiculo + motorista, e continua aparecendo como sempre.
     """
+    if fr.get('pedido_id'):
+        return ('P', fr['pedido_id'])
+    return (fr['data_frete'], fr['veiculos_id'], fr['motoristas_id'])
+
+
+def _montar_viagens(fretes, cap):
+    """Agrupa os fretes na carga fisica -- ver _chave_viagem."""
     viagens = {}
     for fr in fretes:
-        ch = (fr['data_frete'], fr['veiculos_id'], fr['motoristas_id'])
+        ch = _chave_viagem(fr)
         v = viagens.get(ch)
         if v is None:
             c = cap.get(fr['veiculos_id']) or {'bocas': [], 'total': 0.0, 'carreta': None}
@@ -543,6 +669,7 @@ def _montar_viagens(fretes, cap):
                 'motorista': fr['motorista'] or '—',
                 'bocas': c['bocas'], 'capacidade': c['total'], 'carreta': c['carreta'],
                 'fretes': [], 'pedidos': [], 'postos': {},
+                'pedido_id': fr.get('pedido_id') or 0,
                 'litros': 0.0, 'a_cobrar': 0.0, 'emitido': 0.0,
             }
         fr['estado'] = _estado_cobranca(fr)
@@ -641,7 +768,11 @@ def _aplicar_estado(viagens, fechadas, bordo, candidatos):
     """
     for v in viagens:
         ch = _chave(v)
-        f = fechadas.get(ch)
+        # Fechada pela chave do PEDIDO (carga nova) ou pela chave velha
+        # (carga fechada antes de a viagem ter pedido proprio).
+        f = fechadas.get(('P', v.get('pedido_id'))) if v.get('pedido_id') else None
+        if f is None and (not v.get('pedido_id') or fechadas.get(_SEM_PEDIDO)):
+            f = fechadas.get(ch)
         v['fechada'] = bool(f)
         v['fechada_por'] = (f or {}).get('fechada_por')
         v['fechada_em'] = (f or {}).get('fechada_em')
@@ -1332,19 +1463,54 @@ def _destinos(cur, viagens, veiculos):
     return destinos, ext_id, transportadoras
 
 
-def _carga_do_dia(cursor, dia, vid, mid, criar=True):
-    """Acha o pedido daquela carga (data + veiculo + motorista), ou cria um.
+def _carga_esta_fechada(cursor, dia, vid, mid, pedido_id=None):
+    """Essa viagem esta fechada? (e so essa)
 
-    Nao fatia: se o caminhao ja tem carga naquela data, o item entra nela. O
-    pedido continua sendo a carga fisica.
+    Cada viagem responde pelo SEU pedido: com duas cargas no mesmo caminhao no
+    mesmo dia, fechar a primeira nao pode trancar a segunda. A linha sem pedido
+    e a do tempo em que a carga era o dia inteiro, e vale apenas para os fretes
+    que tambem nao tem pedido -- a migracao de _ensure_tabela ja deu pedido
+    proprio a todas as outras.
     """
-    cursor.execute("""SELECT id, numero FROM pedidos
-                       WHERE data_pedido=%s AND veiculo_id=%s
-                         AND COALESCE(motorista_id,0)=%s LIMIT 1""",
-                   (dia, vid, mid))
-    ped = cursor.fetchone()
-    if ped:
-        return ped['id'], ped['numero'], False
+    try:
+        cursor.execute("""SELECT id FROM carga_fechada
+                           WHERE data_frete=%s AND veiculo_id=%s AND motorista_id=%s
+                             AND pedido_id <=> %s""",
+                       (dia, vid, mid or 0, pedido_id or None))
+    except Exception:
+        # Banco ainda sem a coluna: a chave antiga e a unica que existe.
+        cursor.execute("""SELECT id FROM carga_fechada
+                           WHERE data_frete=%s AND veiculo_id=%s AND motorista_id=%s""",
+                       (dia, vid, mid or 0))
+    return cursor.fetchone()
+
+
+def _carga_do_dia(cursor, dia, vid, mid, criar=True, pedido_id=None, novo=False):
+    """Acha o pedido daquela carga, ou cria um.
+
+    O pedido E a carga fisica. Por padrao o item entra na carga que o caminhao
+    ja tem no dia; `pedido_id` manda entrar numa viagem especifica, e `novo`
+    abre uma SEGUNDA viagem -- o mesmo caminhao com o mesmo motorista saindo
+    duas vezes no mesmo dia, o que acontece (15 vezes so em 2026).
+    """
+    if pedido_id:
+        cursor.execute("""SELECT id, numero FROM pedidos
+                           WHERE id=%s AND data_pedido=%s AND veiculo_id=%s
+                             AND COALESCE(motorista_id,0)=%s LIMIT 1""",
+                       (pedido_id, dia, vid, mid))
+        ped = cursor.fetchone()
+        if ped:
+            return ped['id'], ped['numero'], False
+    if not novo:
+        # A ULTIMA carga do dia: com duas viagens, a nova e a que recebe.
+        cursor.execute("""SELECT id, numero FROM pedidos
+                           WHERE data_pedido=%s AND veiculo_id=%s
+                             AND COALESCE(motorista_id,0)=%s
+                           ORDER BY id DESC LIMIT 1""",
+                       (dia, vid, mid))
+        ped = cursor.fetchone()
+        if ped:
+            return ped['id'], ped['numero'], False
     if not criar:
         return None, None, False
     cursor.execute("SELECT COALESCE(MAX(CAST(SUBSTRING(numero, 5) AS UNSIGNED)), 0) "
@@ -1406,10 +1572,8 @@ def editar():
         if not fr:
             return jsonify({'ok': False, 'erro': 'frete não encontrado'}), 404
 
-        cursor.execute("""SELECT id FROM carga_fechada
-                           WHERE data_frete=%s AND veiculo_id=%s AND motorista_id=%s""",
-                       (fr['data_frete'], fr['veiculos_id'], fr['motoristas_id'] or 0))
-        if cursor.fetchone():
+        if _carga_esta_fechada(cursor, fr['data_frete'], fr['veiculos_id'],
+                               fr['motoristas_id'] or 0, fr.get('pedido_id')):
             return jsonify({'ok': False,
                             'erro': 'a carga está fechada — reabra antes de editar'}), 409
 
@@ -1518,10 +1682,8 @@ def excluir():
         if not fr:
             return jsonify({'ok': False, 'erro': 'frete não encontrado'}), 404
 
-        cursor.execute("""SELECT id FROM carga_fechada
-                           WHERE data_frete=%s AND veiculo_id=%s AND motorista_id=%s""",
-                       (fr['data_frete'], fr['veiculos_id'], fr['motoristas_id'] or 0))
-        if cursor.fetchone():
+        if _carga_esta_fechada(cursor, fr['data_frete'], fr['veiculos_id'],
+                               fr['motoristas_id'] or 0, fr.get('pedido_id')):
             return jsonify({'ok': False,
                             'erro': 'a carga está fechada — reabra antes de excluir'}), 409
 
@@ -1616,13 +1778,14 @@ def mover():
         # Cada lado no SEU dia: quando a carga muda de data, a de origem esta
         # num dia e a de destino noutro, e conferir as duas no mesmo dia
         # deixaria passar movimento para uma carga ja fechada.
-        for d_, v_, m_, onde in ((dia, fr['veiculos_id'], fr['motoristas_id'] or 0,
-                                  'de origem'),
-                                 (destino_dia, vid, mid, 'de destino')):
-            cursor.execute("""SELECT id FROM carga_fechada
-                               WHERE data_frete=%s AND veiculo_id=%s AND motorista_id=%s""",
-                           (d_, v_, m_))
-            if cursor.fetchone():
+        # A viagem de destino e a que o frete vai encontrar la -- a mesma que
+        # _carga_do_dia escolheria. Perguntamos sem criar nada.
+        ped_destino, _, _ = _carga_do_dia(cursor, destino_dia, vid, mid, criar=False)
+        for d_, v_, m_, pd_, onde in (
+                (dia, fr['veiculos_id'], fr['motoristas_id'] or 0,
+                 fr.get('pedido_id'), 'de origem'),
+                (destino_dia, vid, mid, ped_destino, 'de destino')):
+            if _carga_esta_fechada(cursor, d_, v_, m_, pd_):
                 return jsonify({'ok': False,
                                 'erro': 'a carga %s está fechada — reabra antes '
                                         'de mover' % onde}), 409
@@ -1721,6 +1884,7 @@ def mover_carga():
         mid = int(dados.get('motorista_id') or 0)
         o_vid = int(dados.get('origem_veiculo_id') or 0)
         o_mid = int(dados.get('origem_motorista_id') or 0)
+        o_ped = int(dados.get('origem_pedido_id') or 0) or None
     except (TypeError, ValueError):
         return jsonify({'ok': False, 'erro': 'dados inválidos'}), 400
     origem_dia = _data_ou_none(dados.get('origem_data'))
@@ -1740,28 +1904,36 @@ def mover_carga():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        for d_, v_, m_, onde in ((origem_dia, o_vid, o_mid, 'de origem'),
-                                 (destino_dia, vid, mid, 'de destino')):
-            cursor.execute("""SELECT id FROM carga_fechada
-                               WHERE data_frete=%s AND veiculo_id=%s AND motorista_id=%s""",
-                           (d_, v_, m_))
-            if cursor.fetchone():
+        ped_destino, _, _ = _carga_do_dia(cursor, destino_dia, vid, mid, criar=False)
+        for d_, v_, m_, pd_, onde in (
+                (origem_dia, o_vid, o_mid, o_ped, 'de origem'),
+                (destino_dia, vid, mid, ped_destino, 'de destino')):
+            if _carga_esta_fechada(cursor, d_, v_, m_, pd_):
                 return jsonify({'ok': False,
                                 'erro': 'a carga %s está fechada — reabra antes '
                                         'de mover' % onde}), 409
 
-        # A carga e a chave fisica inteira: data + caminhao + motorista. Sem o
-        # motorista na conta, duas viagens do mesmo caminhao no mesmo dia
-        # viriam juntas, e so uma delas mudou de dia.
-        cursor.execute("""SELECT id FROM fretes
-                           WHERE data_frete=%s AND veiculos_id=%s
-                             AND COALESCE(motoristas_id,0)=%s""",
-                       (origem_dia, o_vid, o_mid))
+        # A carga e a VIAGEM: data + caminhao + motorista + pedido. Sem o
+        # pedido na conta, o caminhao que saiu duas vezes no mesmo dia teria as
+        # duas cargas movidas de uma vez, e so uma delas mudou de dia. Sem o
+        # pedido informado (carga velha, de antes do pedido proprio) a chave
+        # volta a ser o dia inteiro, que era o que ela significava.
+        if o_ped:
+            cursor.execute("""SELECT id FROM fretes
+                               WHERE data_frete=%s AND veiculos_id=%s
+                                 AND COALESCE(motoristas_id,0)=%s AND pedido_id=%s""",
+                           (origem_dia, o_vid, o_mid, o_ped))
+        else:
+            cursor.execute("""SELECT id FROM fretes
+                               WHERE data_frete=%s AND veiculos_id=%s
+                                 AND COALESCE(motoristas_id,0)=%s""",
+                           (origem_dia, o_vid, o_mid))
         ids = [r['id'] for r in cursor.fetchall()]
         if not ids:
             return jsonify({'ok': False, 'erro': 'essa carga não tem fretes'}), 404
 
-        pedido_id, numero, criou = _carga_do_dia(cursor, destino_dia, vid, mid)
+        pedido_id, numero, criou = _carga_do_dia(cursor, destino_dia, vid, mid,
+                                                 pedido_id=ped_destino)
         marcas = ','.join(['%s'] * len(ids))
         cursor.execute("UPDATE fretes SET data_frete=%s, veiculos_id=%s, "
                        "motoristas_id=%s, pedido_id=%s, updated_at=NOW() "
@@ -1872,10 +2044,17 @@ def lancar():
 
         # Carga fechada nao recebe item novo: fechar significa que o caminhao
         # saiu com aquilo. Reabrir e um clique, e deixa o rastro certo.
-        cursor.execute("""SELECT id FROM carga_fechada
-                           WHERE data_frete=%s AND veiculo_id=%s AND motorista_id=%s""",
-                       (dia, vid, mid))
-        if cursor.fetchone():
+        #
+        # Abrir uma SEGUNDA viagem nao esbarra nisso: a primeira esta fechada,
+        # a nova nasce aberta. Por isso a checagem pula quando veio
+        # `nova_carga` -- era ela que impedia o caminhao de sair duas vezes.
+        _fechada = None
+        if not dados.get('nova_carga'):
+            _ped = _int(dados, 'pedido_id') or None
+            if not _ped:
+                _ped, _, _ = _carga_do_dia(cursor, dia, vid, mid, criar=False)
+            _fechada = _carga_esta_fechada(cursor, dia, vid, mid, _ped)
+        if _fechada:
             return jsonify({'ok': False,
                             'erro': 'esta carga está fechada — reabra antes de '
                                     'adicionar um posto'}), 409
@@ -1913,7 +2092,10 @@ def lancar():
         mot = cursor.fetchone()
         paga = bool((mot or {}).get('paga_comissao', 1))
 
-        pedido_id, numero, criou_pedido = _carga_do_dia(cursor, dia, vid, mid)
+        pedido_id, numero, criou_pedido = _carga_do_dia(
+            cursor, dia, vid, mid,
+            pedido_id=_int(dados, 'pedido_id') or None,
+            novo=bool(dados.get('nova_carga')))
 
         criados = []
         for ln in linhas:
@@ -2015,6 +2197,11 @@ def fechar():
     if not carga:
         return jsonify({'ok': False, 'erro': 'carga não informada'}), 400
     dia, vid, mid = carga
+    # Qual das viagens do dia. Vazio = carga antiga, sem pedido proprio.
+    try:
+        pedido_id = int(dados.get('pedido_id') or 0)
+    except (TypeError, ValueError):
+        pedido_id = 0
 
     itens = dados.get('bordo') or []
     if not isinstance(itens, list):
@@ -2029,6 +2216,10 @@ def fechar():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        # Pagina velha em cache nao manda o pedido. Sem ele a carga fecharia
+        # sem dizer qual viagem, e a tela mostraria a viagem ainda aberta.
+        if not pedido_id:
+            pedido_id, _, _ = _carga_do_dia(cursor, dia, vid, mid, criar=False)
 
         gravados = 0
         for it in itens:
@@ -2057,11 +2248,11 @@ def fechar():
         if not so_bordo:
             cursor.execute("""
                 INSERT INTO carga_fechada (data_frete, veiculo_id, motorista_id,
-                                           fechada_por, fechada_em)
-                     VALUES (%s, %s, %s, %s, NOW())
+                                           pedido_id, fechada_por, fechada_em)
+                     VALUES (%s, %s, %s, %s, %s, NOW())
                 ON DUPLICATE KEY UPDATE fechada_por = VALUES(fechada_por),
                                         fechada_em = NOW()
-            """, (dia, vid, mid, _quem()))
+            """, (dia, vid, mid, pedido_id or None, _quem()))
         conn.commit()
         return jsonify({'ok': True, 'bordo': gravados, 'fechou': not so_bordo})
     except Exception as e:
@@ -2098,15 +2289,29 @@ def reabrir():
     if not carga:
         return jsonify({'ok': False, 'erro': 'carga não informada'}), 400
     dia, vid, mid = carga
+    try:
+        pedido_id = int(dados.get('pedido_id') or 0)
+    except (TypeError, ValueError):
+        pedido_id = 0
 
     _ensure_tabela()
     conn = cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("""DELETE FROM carga_fechada
-                           WHERE data_frete=%s AND veiculo_id=%s AND motorista_id=%s""",
-                       (dia, vid, mid))
+        # Reabrir apaga a carga DAQUELA viagem, e so dela. Sem o pedido na
+        # clausula, reabrir a segunda viagem reabria a primeira junto.
+        try:
+            cursor.execute("""DELETE FROM carga_fechada
+                               WHERE data_frete=%s AND veiculo_id=%s
+                                 AND motorista_id=%s AND pedido_id <=> %s""",
+                           (dia, vid, mid, pedido_id or None))
+        except Exception:
+            # Banco ainda sem a coluna: a chave antiga e a unica que existe.
+            cursor.execute("""DELETE FROM carga_fechada
+                               WHERE data_frete=%s AND veiculo_id=%s
+                                 AND motorista_id=%s""",
+                           (dia, vid, mid))
         cursor.execute("""DELETE FROM frete_saldo_bordo
                            WHERE carga_data=%s AND carga_veiculo_id=%s""",
                        (dia, vid))
