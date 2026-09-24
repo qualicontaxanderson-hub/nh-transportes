@@ -108,6 +108,9 @@ def _load_empresas_com_produtos(cur):
                COALESCE(c.nome_fantasia, c.razao_social) AS nome
           FROM clientes c
           JOIN cliente_produtos cp ON cp.cliente_id = c.id AND cp.ativo = 1
+         WHERE EXISTS (SELECT 1 FROM vendas_posto v WHERE v.cliente_id = c.id)
+           AND (EXISTS (SELECT 1 FROM dfe_documentos d WHERE d.cliente_id = c.id)
+                OR EXISTS (SELECT 1 FROM pedidos_itens pi WHERE pi.cliente_id = c.id))
          GROUP BY c.id, nome
          ORDER BY nome
     """)
