@@ -30,6 +30,19 @@ _PRODUTO_ABREV = [
 ]
 
 
+# As mesmas cores do Lucro Postos Migrados e da conciliacao de estoque: o
+# combustivel e o mesmo objeto em todas as telas. Aditivada e ARLA nao
+# aparecem la, e ganham aqui um tom que nao se confunde com os outros.
+_CORES_PRODUTO = {
+    1: '#639922',    # etanol
+    2: '#BA7517',    # gasolina
+    3: '#993C1D',    # gasolina aditivada
+    4: '#185FA5',    # S-500
+    5: '#534AB7',    # S-10
+    7: '#0F6E56',    # ARLA
+}
+
+
 def _abrev_produto(nome):
     n = nome.lower().strip()
     for chave, abrev in _PRODUTO_ABREV:
@@ -162,6 +175,7 @@ def index():
                 produtos_raw = cur.fetchall()
                 for p in produtos_raw:
                     p['abrev'] = _abrev_produto(p['nome'])
+                    p['cor'] = _CORES_PRODUTO.get(p['id'], '#9aa3ad')
                 produtos_lista = produtos_raw
 
                 cur.execute("""

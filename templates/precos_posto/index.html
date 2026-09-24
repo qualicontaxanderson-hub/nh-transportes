@@ -1,335 +1,389 @@
 {% extends "base.html" %}
 {% block title %}Preços por Forma de Recebimento{% endblock %}
 
+{#- A mesma linguagem do Lucro Postos Migrados: topo em faixa, a escolha em
+    cartao, e depois o que se edita e o que se copia, um quadro cada.
+
+    A conta nao mudou: preco a vista + acrescimo da forma = preco da forma.
+    Os nomes dos campos (produto_id[], preco_base[], forma_id[], acrescimo[])
+    sao os mesmos, o /precos/salvar recebe exatamente o que recebia. -#}
+
 {% block styles %}
 <style>
-  .page-hero {
-    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
-    border-radius: .75rem;
-    padding: 1.5rem 2rem;
-    margin-bottom: 1.5rem;
-    color: #fff;
+body > .container-fluid:has(#prc){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#prc){ padding:.7rem 1rem 0; }
+}
+</style>
+<style>
+  #prc{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#146c43; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#4b5563; --ink:#151d27; --borda:#d9e0e8;
+        --linha:#eef1f5; --zap:#1f9d55; --zap-deep:#137a41;
+        color:var(--ink); max-width:100%; }
+
+  #prc .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .7rem;
+    margin-bottom:.7rem; display:flex; align-items:center; gap:.7rem;
+    flex-wrap:wrap; }
+  #prc .topo__t{ font-weight:800; font-size:1.02rem; }
+  #prc .topo__s{ font-size:.76rem; opacity:.96; margin-top:.1rem; }
+  #prc .topo__b{ margin-left:auto; border:1px solid rgba(255,255,255,.4);
+    background:rgba(255,255,255,.14); color:#fff; border-radius:9px;
+    padding:.4rem .75rem; font-size:.8rem; font-weight:700;
+    text-decoration:none; display:inline-flex; gap:.35rem; align-items:center; }
+  #prc .topo__b:hover{ background:rgba(255,255,255,.24); color:#fff; }
+
+  #prc .aviso{ display:flex; gap:.5rem; align-items:flex-start;
+    background:#e9f5ee; color:var(--ok); border-radius:11px;
+    padding:.55rem .7rem; font-size:.82rem; font-weight:700;
+    margin-bottom:.7rem; }
+  #prc .aviso--danger, #prc .aviso--warning{ background:#fbe9e9; color:var(--danger); }
+
+  /* ---- a escolha da empresa ----------------------------------------- */
+  #prc .filtro{ background:#fff; border:1px solid var(--borda);
+    border-radius:13px; padding:.65rem .75rem; margin-bottom:.7rem; }
+  #prc .rot{ font-size:.68rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.04em; }
+  #prc .emps{ display:flex; gap:.35rem; flex-wrap:wrap; margin-top:.35rem; }
+  #prc .emps a{ border:1px solid var(--borda); border-radius:99px;
+    padding:.35rem .8rem; font-size:.82rem; font-weight:800;
+    background:#fff; color:#3a4655; text-decoration:none;
+    display:inline-flex; gap:.4rem; align-items:center; }
+  #prc .emps a:hover{ border-color:var(--blue); color:var(--blue-deep); }
+  #prc .emps a.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+
+  #prc .nada{ padding:1.8rem .8rem; text-align:center; color:var(--muted);
+    font-size:.88rem; background:#fff; border:1px solid var(--borda);
+    border-radius:14px; }
+  #prc .nada i{ display:block; font-size:2rem; color:#b9cbe0;
+    margin-bottom:.4rem; }
+
+  /* ---- o que se edita ----------------------------------------------- */
+  #prc .painel{ background:#fff; border:1px solid var(--borda);
+    border-radius:16px; margin-bottom:.7rem; overflow:hidden;
+    box-shadow:0 3px 14px rgba(20,35,60,.07); }
+  #prc .painel__c{ display:grid; }
+  @media (min-width:992px){
+    #prc .painel__c{ grid-template-columns:1fr 1fr; } }
+  #prc .lado{ padding:.85rem 1rem .9rem; }
+  #prc .lado--base{ background:linear-gradient(160deg,#f4f8fc,#eef4fa 70%,#e9f1f9);
+    border-bottom:1px solid var(--linha); }
+  @media (min-width:992px){
+    #prc .lado--base{ border-bottom:0; border-right:1px solid var(--linha); } }
+  #prc .lado__t{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.07em; margin-bottom:.15rem; }
+  #prc .lado__s{ font-size:.74rem; color:var(--muted); margin-bottom:.6rem; }
+
+  #prc .ln{ display:flex; align-items:center; gap:.6rem; padding:.4rem 0;
+    border-bottom:1px solid var(--linha); }
+  #prc .ln:last-child{ border-bottom:0; }
+  #prc .ln__n{ font-weight:800; font-size:.88rem; display:flex; gap:.45rem;
+    align-items:center; min-width:0; }
+  #prc .ln__d{ font-size:.7rem; color:var(--muted); font-weight:600;
+    font-variant-numeric:tabular-nums; }
+  #prc .ln__i{ margin-left:auto; flex:0 0 auto; }
+  #prc .pt{ width:.6rem; height:.6rem; border-radius:99px; background:var(--c);
+    display:inline-block; flex:0 0 auto; }
+
+  /* o campo de dinheiro: R$ na frente, /L atras, o numero no meio */
+  #prc .din{ display:inline-flex; align-items:center; border:1px solid var(--borda);
+    border-radius:10px; background:#fff; overflow:hidden; }
+  #prc .din:focus-within{ border-color:var(--blue);
+    box-shadow:0 0 0 3px rgba(29,99,165,.15); }
+  #prc .din span{ font-size:.72rem; font-weight:800; color:var(--muted);
+    padding:0 .45rem; background:#f4f7fa; align-self:stretch;
+    display:flex; align-items:center; }
+  #prc .din input{ border:0; outline:0; width:6.2rem; padding:.42rem .5rem;
+    text-align:right; font-size:.95rem; font-weight:800; color:var(--ink);
+    font-family:inherit; font-variant-numeric:tabular-nums;
+    background:transparent; -moz-appearance:textfield; }
+  #prc .din input::-webkit-outer-spin-button,
+  #prc .din input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+  #prc .din--acr span:first-child{ color:var(--ok); }
+  #prc .din--acr input{ width:5.4rem; font-size:.88rem; }
+
+  #prc .salvar{ display:flex; gap:.6rem; align-items:center; flex-wrap:wrap;
+    padding:.65rem 1rem; border-top:1px solid var(--linha); background:#fafbfd; }
+  #prc .salvar__s{ font-size:.74rem; color:var(--muted); }
+  #prc .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:9px; padding:.48rem .9rem; font-size:.84rem; font-weight:800;
+    font-family:inherit; cursor:pointer; text-decoration:none;
+    display:inline-flex; gap:.35rem; align-items:center; }
+  #prc .bt--sim{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #prc .bt--sim:hover{ background:var(--blue-deep); }
+  #prc .bt--zap{ background:var(--zap); border-color:var(--zap); color:#fff; }
+  #prc .bt--zap:hover{ background:var(--zap-deep); }
+  #prc .zap{ border:0; background:#e6f5ec; color:var(--zap-deep);
+    border-radius:8px; padding:.28rem .5rem; font-size:.78rem; font-weight:800;
+    cursor:pointer; display:inline-flex; gap:.3rem; align-items:center;
+    font-family:inherit; }
+  #prc .zap:hover{ background:var(--zap); color:#fff; }
+
+  /* ---- os precos que saem da conta ---------------------------------- */
+  #prc .cx{ background:#fff; border:1px solid var(--borda);
+    border-radius:14px; margin-bottom:.7rem; overflow:hidden;
+    box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #prc .cx__t{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
+    padding:.6rem .8rem; font-size:.7rem; font-weight:800;
+    text-transform:uppercase; letter-spacing:.06em; color:var(--blue-deep);
+    background:#f7fafd; border-bottom:1px solid var(--linha); }
+  #prc .cx__t .dir{ margin-left:auto; text-transform:none; letter-spacing:0; }
+
+  #prc .tab{ overflow-x:auto; }
+  #prc table{ width:100%; border-collapse:collapse; font-size:.84rem;
+    font-variant-numeric:tabular-nums; }
+  #prc th{ background:#f0f4f8; color:#3d4854; font-size:.66rem;
+    text-transform:uppercase; letter-spacing:.04em; font-weight:800;
+    padding:.45rem .6rem; white-space:nowrap; text-align:right;
+    border-bottom:1px solid var(--borda); vertical-align:bottom; }
+  #prc th:first-child{ text-align:left; }
+  #prc th.p{ border-top:3px solid var(--c); }
+  #prc th.p .zap{ margin-top:.25rem; padding:.18rem .42rem; font-size:.7rem; }
+  #prc td{ padding:.5rem .6rem; text-align:right; white-space:nowrap;
+    border-bottom:1px solid #f1f4f8; }
+  #prc td:first-child{ text-align:left; }
+  #prc tr:hover td{ background:#fafbfd; }
+  #prc .f__n{ font-weight:800; color:var(--ink); }
+  #prc .f__a{ font-size:.72rem; color:var(--ok); font-weight:700; margin-left:.3rem; }
+  #prc .tag{ font-size:.62rem; font-weight:800; background:#dcebf9;
+    color:var(--blue-deep); border-radius:6px; padding:.1rem .4rem;
+    margin-left:.35rem; letter-spacing:.04em; vertical-align:middle; }
+  #prc tr.base td{ background:#f6f9fd; }
+  #prc .v{ font-weight:800; }
+  #prc .vazio{ color:#a3adb9; font-weight:600; }
+
+  /* ---- os textos do WhatsApp ---------------------------------------- */
+  #prc .wp{ display:grid; gap:.6rem; padding:.7rem .8rem .8rem; }
+  @media (min-width:768px){ #prc .wp{ grid-template-columns:repeat(2,1fr); } }
+  @media (min-width:1400px){ #prc .wp{ grid-template-columns:repeat(3,1fr); } }
+  #prc .wb{ border:1px solid #cfe7d8; border-radius:12px; overflow:hidden;
+    background:#f5fbf7; display:flex; flex-direction:column; }
+  #prc .wb__t{ display:flex; align-items:center; gap:.5rem;
+    padding:.45rem .6rem; font-weight:800; font-size:.82rem;
+    border-bottom:1px solid #dcefe3; background:#eaf6ef; }
+  #prc .wb__t .zap{ margin-left:auto; }
+  #prc .wb pre{ margin:0; padding:.6rem .7rem; font-size:.78rem;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    white-space:pre-wrap; word-break:break-word; color:#1d2b22; }
+  #prc .sub{ padding:.55rem .8rem 0; font-size:.66rem; font-weight:800;
+    color:var(--muted); text-transform:uppercase; letter-spacing:.07em; }
+
+  #prc .toast-c{ position:fixed; left:50%; bottom:1.2rem; transform:translateX(-50%);
+    background:#10231a; color:#fff; border-radius:99px; padding:.55rem 1rem;
+    font-size:.84rem; font-weight:700; z-index:9999;
+    box-shadow:0 6px 20px rgba(0,0,0,.25); }
+
+  /* ---- o celular ------------------------------------------------------
+     Uma tabela de formas x produtos num telefone rola de lado e esconde o
+     preco que se veio buscar. No celular cada FORMA vira um cartao, com os
+     produtos um embaixo do outro, e o botao do WhatsApp no proprio cartao. */
+  @media (max-width:767px){
+    #prc .topo__b{ margin-left:0; }
+    #prc .lado{ padding:.75rem .8rem; }
+    #prc .din input{ width:5.4rem; }
+    #prc .din--acr input{ width:4.8rem; }
+    #prc .ln{ flex-wrap:wrap; }
+    #prc .salvar .bt--sim{ flex:1 1 100%; justify-content:center; padding:.65rem; }
+
+    #prc .tab table, #prc .tab tbody, #prc .tab tr, #prc .tab td{
+      display:block; width:auto; }
+    #prc .tab thead{ display:none; }
+    #prc .tab tr{ border:1px solid var(--borda); border-radius:12px;
+      margin:.5rem .55rem; overflow:hidden; background:#fff; }
+    #prc .tab tr.base{ border-color:#bcd3ea; }
+    #prc .tab td{ display:flex; justify-content:space-between; align-items:center;
+      gap:.7rem; padding:.34rem .7rem; border:0; font-size:.88rem; }
+    #prc .tab td::before{ content:attr(data-r); text-align:left;
+      font-size:.74rem; font-weight:800; color:#3a4655;
+      display:flex; align-items:center; gap:.4rem; }
+    #prc .tab td[data-c]::before{ border-left:4px solid var(--c);
+      padding-left:.45rem; }
+    #prc .tab td:first-child{ background:#f2f6fa; padding:.5rem .7rem;
+      border-bottom:1px solid var(--linha); display:block; }
+    #prc .tab tr.base td{ background:#fff; }
+    #prc .tab tr.base td:first-child{ background:#e7f0fa; }
+    #prc .tab td:first-child::before{ content:none; }
+    #prc .tab td:last-child{ justify-content:flex-end; padding:.45rem .7rem .55rem;
+      border-top:1px solid var(--linha); }
+    #prc .tab td:last-child::before{ content:none; }
+    #prc .tab td:last-child .zap{ width:100%; justify-content:center; padding:.45rem; }
+    #prc .tab tr:hover td{ background:inherit; }
+    #prc .cx__t .dir{ margin-left:0; width:100%; }
+    #prc .cx__t .dir .bt{ width:100%; justify-content:center; }
   }
-  .page-hero .hero-icon {
-    width: 3rem; height: 3rem;
-    background: rgba(255,255,255,.15);
-    border-radius: .6rem;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.5rem;
-    flex-shrink: 0;
-  }
-  .section-title {
-    font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
-    letter-spacing: .05em; color: #1D63A5;
-    padding-bottom: .4rem; border-bottom: 2px solid #e0eaf5; margin-bottom: 1rem;
-  }
-  .price-table thead th {
-    background: #f0f4f8; font-size: .72rem; text-transform: uppercase;
-    letter-spacing: .04em; font-weight: 700; color: #374151;
-    padding: .5rem .75rem; white-space: nowrap;
-  }
-  .price-table tbody td { padding: .45rem .75rem; vertical-align: middle; font-size: .85rem; }
-  .price-table tbody tr:nth-child(even) td { background: #f8fafc; }
-  .price-table .method-header td {
-    background: #e8f0fe; font-weight: 700; color: #1D63A5; font-size: .82rem;
-  }
-  .whatsapp-block {
-    background: #f0fff4;
-    border: 1px solid #c3e6cb;
-    border-radius: .5rem;
-    padding: 1rem;
-    margin-bottom: .75rem;
-    font-family: monospace;
-    font-size: .85rem;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-  .btn-copy {
-    background: #25d366; color: #fff; border: none;
-    border-radius: .4rem; padding: .3rem .8rem;
-    font-size: .78rem; font-weight: 600;
-    cursor: pointer; transition: background .15s;
-  }
-  .btn-copy:hover { background: #1da851; }
-  .btn-copy-all {
-    background: #128c7e; color: #fff; border: none;
-    border-radius: .4rem; padding: .45rem 1.2rem;
-    font-size: .85rem; font-weight: 600;
-    cursor: pointer; transition: background .15s;
-  }
-  .btn-copy-all:hover { background: #0d6b5e; }
-  .input-preco {
-    width: 100px; text-align: right;
-  }
-  .input-acrescimo {
-    width: 90px; text-align: right;
-  }
-  .tag-base {
-    font-size: .68rem; font-weight: 700;
-    background: #d1ecf1; color: #0c5460;
-    border-radius: 3px; padding: 1px 5px;
-    vertical-align: middle;
-  }
-  .empresa-card {
-    border: 2px solid #e0eaf5; border-radius: .6rem; cursor: pointer;
-    transition: border-color .15s, box-shadow .15s;
-    padding: .75rem 1rem;
-  }
-  .empresa-card:hover, .empresa-card.active {
-    border-color: #1D63A5; box-shadow: 0 2px 10px rgba(29,99,165,.12);
-  }
-  .empresa-card.active { background: #e8f0fe; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
+<div id="prc">
 
-  {# ── Hero ──────────────────────────────────────────────────────── #}
-  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-    <div class="hero-icon"><i class="bi bi-tags-fill"></i></div>
-    <div class="flex-grow-1">
-      <h4 class="mb-0 fw-bold">Preços por Forma de Recebimento</h4>
-      <p class="mb-0 opacity-75 small">
-        Cadastre os preços à vista e gere automaticamente os preços para cada forma de recebimento.
-      </p>
+  <div class="topo">
+    <div>
+      <div class="topo__t"><i class="bi bi-tags-fill"></i> Preços por Forma de Recebimento</div>
+      <div class="topo__s">O preço à vista mais o acréscimo de cada forma — e o texto
+        pronto para o WhatsApp</div>
     </div>
-    <a href="{{ url_for('precos_posto.formas') }}"
-       class="btn btn-sm px-3 fw-semibold"
-       style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
-      <i class="bi bi-gear me-1"></i> Configurar Formas
-    </a>
+    <a class="topo__b" href="{{ url_for('precos_posto.formas') }}">
+      <i class="bi bi-gear"></i> Configurar formas</a>
   </div>
 
   {% with msgs = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in msgs %}
-    <div class="alert alert-{{ cat }} alert-dismissible fade show mb-3" role="alert">
-      {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
+    <div class="aviso aviso--{{ cat }}">
+      <i class="bi {{ 'bi-check-circle-fill' if cat == 'success' else 'bi-exclamation-triangle-fill' }}"></i>
+      <span>{{ msg }}</span></div>
     {% endfor %}
   {% endwith %}
 
-  <div class="row g-3">
+  <div class="filtro">
+    <div class="rot">Empresa</div>
+    {% if empresas %}
+    <div class="emps">
+      {% for emp in empresas %}
+      <a href="{{ url_for('precos_posto.index', empresa=emp.id) }}"
+         class="{{ 'on' if cliente_id == emp.id }}">
+        <i class="bi bi-building{{ '-fill' if cliente_id == emp.id }}"></i>{{ emp.nome }}</a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="ln__d" style="margin-top:.3rem">Nenhuma empresa com compras e vendas de produtos.</div>
+    {% endif %}
+  </div>
 
-    {# ── Painel esquerdo: selecionar empresa ──────────────────────── #}
-    <div class="col-12 col-lg-3">
-      <div class="card shadow-sm border-0 h-100">
-        <div class="card-body">
-          <div class="section-title"><i class="bi bi-building me-1"></i>Empresa</div>
-          {% if empresas %}
-          <div class="d-flex flex-column gap-2">
-            {% for emp in empresas %}
-            <a href="{{ url_for('precos_posto.index', empresa=emp.id) }}"
-               class="empresa-card text-decoration-none text-dark {% if cliente_id == emp.id %}active{% endif %}">
-              <i class="bi bi-building-fill me-2" style="color:#1D63A5;"></i>
-              <span class="fw-semibold" style="font-size:.85rem;">{{ emp.nome }}</span>
-            </a>
+  {% if not empresa_sel %}
+  <div class="nada"><i class="bi bi-building"></i>
+    Escolha a empresa acima para ver e editar os preços.</div>
+  {% else %}
+
+  {# ---- o que se edita: preco a vista e acrescimo de cada forma ----------- #}
+  <form method="POST" action="{{ url_for('precos_posto.salvar') }}" id="formPrecos" class="painel">
+    <input type="hidden" name="cliente_id" value="{{ cliente_id }}">
+    <div class="painel__c">
+      <div class="lado lado--base">
+        <div class="lado__t"><i class="bi bi-droplet-fill"></i> Preço à vista</div>
+        <div class="lado__s">PIX, dinheiro e cheque — a base de todas as formas</div>
+        {% for prod in produtos_lista %}
+        <div class="ln" style="--c:{{ prod.cor }}">
+          <div class="ln__n"><i class="pt"></i>{{ prod.nome }}</div>
+          <div class="ln__i">
+            <input type="hidden" name="produto_id[]" value="{{ prod.id }}">
+            <label class="din"><span>R$</span>
+              <input type="number" step="0.0001" min="0" inputmode="decimal"
+                     name="preco_base[]" id="preco_{{ prod.id }}"
+                     value="{{ '%.4f'|format(prod.preco_base|float) }}"
+                     aria-label="Preço à vista de {{ prod.nome }}"
+                     oninput="recalcular()"><span>/L</span></label>
+          </div>
+        </div>
+        {% else %}
+        <div class="ln__d">Nenhum produto vinculado a esta empresa.</div>
+        {% endfor %}
+      </div>
+
+      {% set formas_acrescimo = formas | selectattr('is_base', 'equalto', 0) | list %}
+      <div class="lado">
+        <div class="lado__t"><i class="bi bi-plus-circle-fill"></i> Acréscimo por forma</div>
+        <div class="lado__s">Quanto cada forma soma ao litro, só nesta empresa</div>
+        {% for forma in formas_acrescimo %}
+        <div class="ln">
+          <div>
+            <div class="ln__n">{{ forma.nome }}</div>
+            <div class="ln__d">padrão + R$ {{ '%.4f'|format(forma.acrescimo_padrao|float) | replace('.', ',') }}/L</div>
+          </div>
+          <div class="ln__i">
+            <input type="hidden" name="forma_id[]" value="{{ forma.id }}">
+            <label class="din din--acr"><span>+ R$</span>
+              <input type="number" step="0.0001" min="0" inputmode="decimal"
+                     name="acrescimo[]" id="acr_{{ forma.id }}"
+                     value="{{ '%.4f'|format(acrescimos_emp.get(forma.id, forma.acrescimo_padrao)|float) }}"
+                     aria-label="Acréscimo de {{ forma.nome }}"><span>/L</span></label>
+          </div>
+        </div>
+        {% else %}
+        <div class="ln__d">Nenhuma forma com acréscimo cadastrada.</div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="salvar">
+      <button type="submit" class="bt bt--sim"><i class="bi bi-floppy-fill"></i> Salvar preços</button>
+      <span class="salvar__s">A tabela abaixo muda enquanto você digita; só grava ao salvar.</span>
+    </div>
+  </form>
+
+  {# ---- o que sai da conta ------------------------------------------------ #}
+  <div class="cx">
+    <div class="cx__t"><i class="bi bi-table"></i> Preço de cada forma
+      <span class="dir"><button type="button" class="bt bt--zap" id="btCopiarTodos">
+        <i class="bi bi-whatsapp"></i> Copiar tudo para o WhatsApp</button></span></div>
+    <div class="tab">
+      <table>
+        <thead>
+          <tr>
+            <th>Forma de recebimento</th>
+            {% for prod in produtos_lista %}
+            <th class="p" style="--c:{{ prod.cor }}">{{ prod.nome }}<br>
+              <button type="button" class="zap" onclick="copiarTextoProduto({{ prod.id }})"
+                      title="Copiar {{ prod.nome }} para o WhatsApp"><i class="bi bi-whatsapp"></i></button></th>
             {% endfor %}
-          </div>
-          {% else %}
-          <p class="text-muted small">Nenhuma empresa com produtos cadastrados.</p>
-          {% endif %}
-        </div>
-      </div>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbodyPrecos">{# preenchido pelo recalcular() #}</tbody>
+      </table>
     </div>
+  </div>
 
-    {# ── Painel direito: form de preços ───────────────────────────── #}
-    <div class="col-12 col-lg-9">
-      {% if empresa_sel %}
-
-      {# ── Formulário ────────────────────────────────────────────── #}
-      <div class="card shadow-sm border-0 mb-3">
-        <div class="card-body">
-          <div class="section-title">
-            <i class="bi bi-building-fill me-1"></i>{{ empresa_sel.nome }}
-          </div>
-
-          <form method="POST" action="{{ url_for('precos_posto.salvar') }}" id="formPrecos">
-            <input type="hidden" name="cliente_id" value="{{ cliente_id }}">
-
-            {# ── Preços base por produto ──────────────────────── #}
-            <p class="fw-semibold mb-2" style="font-size:.85rem; color:#374151;">
-              <i class="bi bi-droplet-fill me-1" style="color:#1D63A5;"></i>
-              Preço à Vista / PIX / Dinheiro (R$/L)
-            </p>
-            {% if produtos_lista %}
-            <div class="table-responsive mb-3">
-              <table class="table table-sm price-table mb-0">
-                <thead>
-                  <tr>
-                    <th>Produto</th>
-                    <th class="text-end">Preço à Vista (R$/L)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for prod in produtos_lista %}
-                  <tr>
-                    <td>{{ prod.nome }}</td>
-                    <td class="text-end">
-                      <input type="hidden" name="produto_id[]" value="{{ prod.id }}">
-                      <input type="number" step="0.0001" min="0"
-                             name="preco_base[]"
-                             id="preco_{{ prod.id }}"
-                             value="{{ '%.4f'|format(prod.preco_base|float) }}"
-                             class="form-control form-control-sm input-preco d-inline-block"
-                             style="width:110px;"
-                             oninput="recalcular()">
-                    </td>
-                  </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-            {% else %}
-            <p class="text-muted small mb-3">Nenhum produto vinculado a esta empresa.</p>
-            {% endif %}
-
-            {# ── Acréscimos por forma ─────────────────────────── #}
-            {% set formas_acrescimo = formas | selectattr('is_base', 'equalto', 0) | list %}
-            {% if formas_acrescimo %}
-            <details class="mb-3">
-              <summary class="fw-semibold mb-2 user-select-none"
-                       style="font-size:.85rem; color:#374151; cursor:pointer;">
-                <i class="bi bi-percent me-1" style="color:#6c757d;"></i>
-                Acréscimos por Forma de Recebimento
-                <span class="text-muted fw-normal small ms-1">(clique para expandir)</span>
-              </summary>
-              <div class="table-responsive mt-2">
-                <table class="table table-sm price-table mb-0">
-                  <thead>
-                    <tr>
-                      <th>Forma de Recebimento</th>
-                      <th class="text-end">Padrão (R$/L)</th>
-                      <th class="text-end">Esta Empresa (R$/L)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for forma in formas_acrescimo %}
-                    <tr>
-                      <td>{{ forma.nome }}</td>
-                      <td class="text-end text-muted">{{ '%.4f'|format(forma.acrescimo_padrao|float) }}</td>
-                      <td class="text-end">
-                        <input type="hidden" name="forma_id[]" value="{{ forma.id }}">
-                        <input type="number" step="0.0001" min="0"
-                               name="acrescimo[]"
-                               id="acr_{{ forma.id }}"
-                               value="{{ '%.4f'|format(acrescimos_emp.get(forma.id, forma.acrescimo_padrao)|float) }}"
-                               class="form-control form-control-sm input-acrescimo d-inline-block"
-                               style="width:100px;"
-                               oninput="recalcular()">
-                      </td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-            {% endif %}
-
-            <button type="submit" class="btn btn-primary btn-sm px-4 fw-semibold">
-              <i class="bi bi-floppy me-1"></i> Salvar Preços
-            </button>
-          </form>
-        </div>
-      </div>
-
-      {# ── Tabela de preços calculados + WhatsApp ─────────────────── #}
-      <div class="card shadow-sm border-0">
-        <div class="card-body">
-          <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
-            <div class="section-title mb-0">
-              <i class="bi bi-table me-1"></i>Preços por Forma de Recebimento
-            </div>
-            <button class="btn-copy-all" onclick="copiarTodos()">
-              <i class="bi bi-whatsapp me-1"></i> Copiar Todos para WhatsApp
-            </button>
-          </div>
-
-          {# Tabela de preços ─────────────────────────────────────── #}
-          <div class="table-responsive mb-3">
-            <table class="table table-sm price-table mb-0" id="tblPrecos">
-              <thead>
-                <tr>
-                  <th>Forma de Recebimento</th>
-                  {% for prod in produtos_lista %}
-                  <th class="text-end" data-prod-id="{{ prod.id }}">{{ prod.nome }}</th>
-                  {% endfor %}
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="tbodyPrecos">
-                {# preenchido por JS via recalcular() #}
-              </tbody>
-            </table>
-          </div>
-
-          {# Blocos WhatsApp por Forma ─────────────────────────────── #}
-          <div id="wpBlocks"></div>
-
-          {# Blocos WhatsApp por Produto ───────────────────────────── #}
-          <div id="wpProdutosSection" style="display:none;">
-            <hr class="my-3">
-            <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
-              <div class="fw-semibold" style="font-size:.85rem;color:#374151;">
-                <i class="bi bi-droplet-fill me-1" style="color:#1D63A5;"></i>Copiar por Produto
-              </div>
-            </div>
-            <div id="wpProdutosBlocks"></div>
-          </div>
-
-          {# JSON para o JS ─────────────────────────────────────────── #}
-          <script id="dadosPrecos" type="application/json">
-          {
-            "formas": [
-              {% for forma in formas %}
-              {
-                "id": {{ forma.id }},
-                "nome": {{ forma.nome | tojson }},
-                "acrescimo_padrao": {{ forma.acrescimo_padrao | float }},
-                "is_base": {{ 1 if forma.is_base else 0 }}
-              }{% if not loop.last %},{% endif %}
-              {% endfor %}
-            ],
-            "produtos": [
-              {% for prod in produtos_lista %}
-              {
-                "id": {{ prod.id }},
-                "nome": {{ prod.nome | tojson }},
-                "abrev": {{ prod.abrev | tojson }},
-                "preco_base": {{ prod.preco_base | float }}
-              }{% if not loop.last %},{% endif %}
-              {% endfor %}
-            ],
-            "acrescimosEmpresa": {
-              {% for fid, acr in acrescimos_emp.items() %}
-              "{{ fid }}": {{ acr }}{% if not loop.last %},{% endif %}
-              {% endfor %}
-            },
-            "ocultosPorForma": {
-              {% for forma in formas %}
-              "{{ forma.id }}": {{ ocultos_por_forma.get(forma.id, []) | tojson }}{% if not loop.last %},{% endif %}
-              {% endfor %}
-            },
-            "empresaNome": {{ empresa_sel.nome | tojson }}
-          }
-          </script>
-
-        </div>
-      </div>
-
-      {% else %}
-      {# Nenhuma empresa selecionada #}
-      <div class="card shadow-sm border-0">
-        <div class="card-body text-center py-5">
-          <i class="bi bi-building" style="font-size:3rem;color:#c5d5e8;"></i>
-          <p class="text-muted mt-3 mb-0">Selecione uma empresa à esquerda para configurar os preços.</p>
-        </div>
-      </div>
-      {% endif %}
+  <div class="cx">
+    <div class="cx__t"><i class="bi bi-whatsapp"></i> Textos prontos para o WhatsApp</div>
+    <div class="sub">Por forma de recebimento</div>
+    <div class="wp" id="wpBlocks"></div>
+    <div id="wpProdutosSection" style="display:none;">
+      <div class="sub">Por produto</div>
+      <div class="wp" id="wpProdutosBlocks"></div>
     </div>
+  </div>
 
-  </div>{# /row #}
-</div>{# /container #}
+  <script id="dadosPrecos" type="application/json">
+  {
+    "formas": [
+      {% for forma in formas %}
+      {
+        "id": {{ forma.id }},
+        "nome": {{ forma.nome | tojson }},
+        "acrescimo_padrao": {{ forma.acrescimo_padrao | float }},
+        "is_base": {{ 1 if forma.is_base else 0 }}
+      }{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ],
+    "produtos": [
+      {% for prod in produtos_lista %}
+      {
+        "id": {{ prod.id }},
+        "nome": {{ prod.nome | tojson }},
+        "abrev": {{ prod.abrev | tojson }},
+        "cor": {{ prod.cor | tojson }},
+        "preco_base": {{ prod.preco_base | float }}
+      }{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ],
+    "acrescimosEmpresa": {
+      {% for fid, acr in acrescimos_emp.items() %}
+      "{{ fid }}": {{ acr }}{% if not loop.last %},{% endif %}
+      {% endfor %}
+    },
+    "ocultosPorForma": {
+      {% for forma in formas %}
+      "{{ forma.id }}": {{ ocultos_por_forma.get(forma.id, []) | tojson }}{% if not loop.last %},{% endif %}
+      {% endfor %}
+    },
+    "empresaNome": {{ empresa_sel.nome | tojson }}
+  }
+  </script>
+  {% endif %}
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -354,7 +408,6 @@
     return el ? (parseFloat(el.value) || 0) : 0;
   }
 
-  // Ouvir mudanças nos inputs de acréscimo
   raw.formas.forEach(f => {
     const el = document.getElementById('acr_' + f.id);
     if (el) {
@@ -365,9 +418,10 @@
     }
   });
 
-  // Armazena textos individuais por forma.id para evitar problemas de escape inline
+  // Textos guardados por id, para o botão não carregar o texto no onclick
   window._textosFormas = {};
   window._textosProdutos = {};
+  let textoCompleto = '';
 
   window.copiarTextoForma = function (formaId) {
     const txt = window._textosFormas[formaId];
@@ -378,6 +432,13 @@
     const txt = window._textosProdutos[prodId];
     if (txt) copiarTexto(txt);
   };
+
+  function blocoWp(titulo, txt, onclick) {
+    return '<div class="wb"><div class="wb__t">' + titulo +
+      '<button type="button" class="zap" onclick="' + onclick + '">' +
+      '<i class="bi bi-whatsapp"></i> Copiar</button></div>' +
+      '<pre>' + htmlEsc(txt) + '</pre></div>';
+  }
 
   window.recalcular = function () {
     const tbody = document.getElementById('tbodyPrecos');
@@ -391,83 +452,57 @@
     raw.formas.forEach(forma => {
       const acr = forma.is_base ? 0 : getAcrescimo(forma.id);
 
-      // Linha da tabela
-      let tr = '<tr>';
-      tr += '<td class="fw-semibold" style="color:#1D63A5;">' + htmlEsc(forma.nome);
-      if (!forma.is_base) {
-        tr += ' <small class="text-muted fw-normal">(+R$ ' + fmtN(acr, 4) + '/L)</small>';
-      } else {
-        tr += ' <span class="tag-base ms-1">BASE</span>';
-      }
+      let tr = '<tr class="' + (forma.is_base ? 'base' : '') + '">';
+      tr += '<td><span class="f__n">' + htmlEsc(forma.nome) + '</span>';
+      tr += forma.is_base
+        ? '<span class="tag">BASE</span>'
+        : '<span class="f__a">+R$ ' + fmtN(acr, 4) + '/L</span>';
       tr += '</td>';
 
       raw.produtos.forEach(prod => {
-        const base = getPrecoBase(prod.id);
-        const preco = base + acr;
-        tr += '<td class="text-end fw-semibold ' + (preco > 0 ? '' : 'text-muted') + '">';
-        tr += preco > 0 ? 'R$ ' + fmtN(preco, 4) : '—';
+        const preco = getPrecoBase(prod.id) + acr;
+        tr += '<td data-r="' + htmlEsc(prod.nome) + '" data-c style="--c:' + prod.cor + '">';
+        tr += preco > 0 ? '<span class="v">R$ ' + fmtN(preco, 4) + '</span>'
+                        : '<span class="vazio">—</span>';
         tr += '</td>';
       });
 
-      // Botão copiar apenas esta forma – referencia pelo ID (sem escape inline de string)
       const textForm = gerarTextoForma(forma, acr);
       window._textosFormas[forma.id] = textForm;
-      tr += '<td class="text-end">';
-      tr += '<button class="btn-copy" onclick="copiarTextoForma(' + forma.id + ')" title="Copiar para WhatsApp">';
-      tr += '<i class="bi bi-whatsapp"></i></button>';
-      tr += '</td>';
+      tr += '<td><button type="button" class="zap" onclick="copiarTextoForma(' + forma.id + ')" ' +
+            'title="Copiar para o WhatsApp"><i class="bi bi-whatsapp"></i>' +
+            '<span class="d-md-none">Copiar ' + htmlEsc(forma.nome) + '</span></button></td>';
       tr += '</tr>';
       tbody.insertAdjacentHTML('beforeend', tr);
 
-      // Bloco WhatsApp
-      const blockHtml = '<div class="mb-2">' +
-        '<div class="d-flex align-items-center justify-content-between mb-1">' +
-        '<span class="fw-semibold" style="font-size:.82rem;color:#374151;">' + htmlEsc(forma.nome) + '</span>' +
-        '<button class="btn-copy" onclick="copiarTextoForma(' + forma.id + ')">' +
-        '<i class="bi bi-whatsapp me-1"></i>Copiar</button></div>' +
-        '<div class="whatsapp-block">' + htmlEsc(textForm) + '</div></div>';
-      wpDiv.insertAdjacentHTML('beforeend', blockHtml);
+      wpDiv.insertAdjacentHTML('beforeend',
+        blocoWp(getEmojiForma(forma.nome) + ' ' + htmlEsc(forma.nome), textForm,
+                'copiarTextoForma(' + forma.id + ')'));
     });
 
-    // Guardar texto total no botão "Copiar Todos"
-    const textoCompleto = gerarTextoTodos();
-    document.querySelector('.btn-copy-all').onclick = function () {
-      copiarTexto(textoCompleto);
-    };
+    textoCompleto = gerarTextoTodos();
 
-    // Atualizar cabeçalhos das colunas de produto com botão copiar por produto
-    // e popular os blocos de cópia por produto
     window._textosProdutos = {};
     const wpProdDiv = document.getElementById('wpProdutosBlocks');
     const wpProdSection = document.getElementById('wpProdutosSection');
     if (wpProdDiv) wpProdDiv.innerHTML = '';
     raw.produtos.forEach(prod => {
-      const th = document.querySelector('th[data-prod-id="' + prod.id + '"]');
-      if (!th) return;
       const txt = gerarTextoProduto(prod.id);
       window._textosProdutos[prod.id] = txt;
-      th.innerHTML = htmlEsc(prod.nome) +
-        '<br><button class="btn-copy" onclick="copiarTextoProduto(' + prod.id + ')" ' +
-        'title="Copiar ' + htmlEsc(prod.nome) + ' para WhatsApp" ' +
-        'style="font-size:.65rem;padding:1px 6px;margin-top:2px;">' +
-        '<i class="bi bi-whatsapp"></i></button>';
-
-      // Bloco WhatsApp por produto
       if (wpProdDiv) {
-        const blockHtml = '<div class="mb-2">' +
-          '<div class="d-flex align-items-center justify-content-between mb-1">' +
-          '<span class="fw-semibold" style="font-size:.82rem;color:#374151;">' +
-          getEmojiProduto(prod.nome) + ' ' + htmlEsc(prod.nome) + '</span>' +
-          '<button class="btn-copy" onclick="copiarTextoProduto(' + prod.id + ')">' +
-          '<i class="bi bi-whatsapp me-1"></i>Copiar</button></div>' +
-          '<div class="whatsapp-block">' + htmlEsc(txt) + '</div></div>';
-        wpProdDiv.insertAdjacentHTML('beforeend', blockHtml);
+        wpProdDiv.insertAdjacentHTML('beforeend',
+          blocoWp('<i class="pt" style="--c:' + prod.cor + '"></i>' + htmlEsc(prod.nome), txt,
+                  'copiarTextoProduto(' + prod.id + ')'));
       }
     });
     if (wpProdSection) {
       wpProdSection.style.display = raw.produtos.length > 0 ? '' : 'none';
     }
   };
+
+  document.getElementById('btCopiarTodos').addEventListener('click', function () {
+    copiarTexto(textoCompleto);
+  });
 
   function getEmojiForma(nome) {
     const n = nome.toLowerCase();
@@ -501,8 +536,7 @@
   }
 
   function gerarTextoForma(forma, acr) {
-    const hoje = new Date();
-    const dataStr = hoje.toLocaleDateString('pt-BR');
+    const dataStr = new Date().toLocaleDateString('pt-BR');
     const sep = '═══════════════════════════';
     const linhas = [
       '🏢 *' + raw.empresaNome.toUpperCase() + '*',
@@ -519,8 +553,7 @@
   }
 
   function gerarTextoTodos() {
-    const hoje = new Date();
-    const dataStr = hoje.toLocaleDateString('pt-BR');
+    const dataStr = new Date().toLocaleDateString('pt-BR');
     const sep = '═══════════════════════════';
     const linhas = [
       '🏢 *' + raw.empresaNome.toUpperCase() + '*',
@@ -550,8 +583,7 @@
   function gerarTextoProduto(prodId) {
     const prod = raw.produtos.find(p => p.id === prodId);
     if (!prod) return '';
-    const hoje = new Date();
-    const dataStr = hoje.toLocaleDateString('pt-BR');
+    const dataStr = new Date().toLocaleDateString('pt-BR');
     const sep = '═══════════════════════════';
     const linhas = [
       '🏢 *' + raw.empresaNome.toUpperCase() + '*',
@@ -567,11 +599,10 @@
       if (ocultos.has(prodId)) return;
       const preco = getPrecoBase(prodId) + acr;
       if (preco <= 0) return;
-      const emoji = getEmojiForma(forma.nome);
       const nomeForma = forma.is_base
         ? forma.nome
         : forma.nome + ' (+R$ ' + fmtN(acr, 2) + '/L)';
-      linhas.push(emoji + ' ' + nomeForma + ': R$ ' + fmtN(preco, 2));
+      linhas.push(getEmojiForma(forma.nome) + ' ' + nomeForma + ': R$ ' + fmtN(preco, 2));
     });
     linhas.push('');
     linhas.push(sep);
@@ -581,17 +612,13 @@
   window.copiarTexto = function (txt) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(txt).then(function () {
-        mostrarToast('Copiado para a área de transferência! ✅');
+        mostrarToast('Copiado — é só colar no WhatsApp');
       }).catch(function () {
         fallbackCopy(txt);
       });
     } else {
       fallbackCopy(txt);
     }
-  };
-
-  window.copiarTodos = function () {
-    document.querySelector('.btn-copy-all').click();
   };
 
   function fallbackCopy(txt) {
@@ -601,18 +628,17 @@
     ta.style.opacity = '0';
     document.body.appendChild(ta);
     ta.focus(); ta.select();
-    try { document.execCommand('copy'); mostrarToast('Copiado! ✅'); }
-    catch (e) { mostrarToast('Não foi possível copiar.', 'danger'); }
+    try { document.execCommand('copy'); mostrarToast('Copiado — é só colar no WhatsApp'); }
+    catch (e) { mostrarToast('Não foi possível copiar.'); }
     document.body.removeChild(ta);
   }
 
-  function mostrarToast(msg, tipo) {
+  function mostrarToast(msg) {
     const t = document.createElement('div');
-    t.className = 'position-fixed bottom-0 end-0 m-3 alert alert-' + (tipo || 'success') + ' shadow fw-semibold';
-    t.style.zIndex = 9999;
-    t.textContent = msg;
-    document.body.appendChild(t);
-    setTimeout(() => t.remove(), 2500);
+    t.className = 'toast-c';
+    t.innerHTML = '<i class="bi bi-check-circle-fill"></i> ' + htmlEsc(msg);
+    document.getElementById('prc').appendChild(t);
+    setTimeout(() => t.remove(), 2200);
   }
 
   function fmtN(v, dec) {
@@ -627,7 +653,6 @@
       .replace(/"/g, '&quot;');
   }
 
-  // Calcular ao carregar
   recalcular();
 })();
 </script>
