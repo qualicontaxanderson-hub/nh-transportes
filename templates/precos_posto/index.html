@@ -530,11 +530,14 @@ body > .container-fluid:has(#prc){
       .filter(p => !ocultos.has(p.id))
       .map(p => ({ abrev: p.abrev, preco: getPrecoBase(p.id) + acr }))
       .filter(p => p.preco > 0);
+    if (!abrevs.length) return linhas;
+    // Bloco ``` do WhatsApp: letra de largura fixa, alinha no celular e no PC
     const maxLen = abrevs.reduce((m, p) => Math.max(m, p.abrev.length), 0);
+    linhas.push('```');
     abrevs.forEach(p => {
-      const pad = '.'.repeat(Math.max(2, maxLen - p.abrev.length + 4));
-      linhas.push('• ' + p.abrev + pad + 'R$ ' + fmtN(p.preco, 2));
+      linhas.push(p.abrev.padEnd(maxLen) + ' ➜ R$ ' + fmtN(p.preco, 2));
     });
+    linhas.push('```');
     return linhas;
   }
 
@@ -547,14 +550,13 @@ body > .container-fluid:has(#prc){
 
   function gerarTextoForma(forma, acr) {
     const dataStr = new Date().toLocaleDateString('pt-BR');
-    const sep = '════════════════';
+    const sep = '━━━━━━━━━━━━';
     const linhas = [
       '🏢 *' + raw.empresaNome.toUpperCase() + '*',
-      '📋 Tabela de Preços – ' + dataStr,
+      '📋 Tabela de Preços · ' + dataStr,
       sep,
       '',
       getEmojiForma(forma.nome) + ' *' + forma.nome + '*',
-      '',
     ];
     _linhasProdutos(acr, forma.id).forEach(l => linhas.push(l));
     linhas.push('');
@@ -564,10 +566,10 @@ body > .container-fluid:has(#prc){
 
   function gerarTextoTodos() {
     const dataStr = new Date().toLocaleDateString('pt-BR');
-    const sep = '════════════════';
+    const sep = '━━━━━━━━━━━━';
     const linhas = [
       '🏢 *' + raw.empresaNome.toUpperCase() + '*',
-      '📋 Tabela de Preços – ' + dataStr,
+      '📋 Tabela de Preços · ' + dataStr,
       sep,
     ];
     raw.formas.forEach(forma => {
@@ -594,10 +596,10 @@ body > .container-fluid:has(#prc){
     const prod = raw.produtos.find(p => p.id === prodId);
     if (!prod) return '';
     const dataStr = new Date().toLocaleDateString('pt-BR');
-    const sep = '════════════════';
+    const sep = '━━━━━━━━━━━━';
     const linhas = [
       '🏢 *' + raw.empresaNome.toUpperCase() + '*',
-      '📋 Tabela de Preços – ' + dataStr,
+      '📋 Tabela de Preços · ' + dataStr,
       sep,
       '',
       getEmojiProduto(prod.nome) + ' *' + prod.nome.toUpperCase() + '*',
@@ -612,7 +614,7 @@ body > .container-fluid:has(#prc){
       const nomeForma = forma.is_base
         ? forma.nome
         : forma.nome + ' (+R$ ' + fmtN(acr, 2) + '/L)';
-      linhas.push(getEmojiForma(forma.nome) + ' ' + nomeForma + ': R$ ' + fmtN(preco, 2));
+      linhas.push(getEmojiForma(forma.nome) + ' ' + nomeForma + ' ➜ *R$ ' + fmtN(preco, 2) + '*');
     });
     linhas.push('');
     linhas.push(sep);
