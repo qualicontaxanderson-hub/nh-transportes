@@ -547,7 +547,7 @@ body > .container-fluid:has(#prc){
 
   function gerarTextoForma(forma, acr) {
     const dataStr = new Date().toLocaleDateString('pt-BR');
-    const sep = '═══════════════════════════';
+    const sep = '════════════════';
     const linhas = [
       '🏢 *' + raw.empresaNome.toUpperCase() + '*',
       '📋 Tabela de Preços – ' + dataStr,
@@ -564,7 +564,7 @@ body > .container-fluid:has(#prc){
 
   function gerarTextoTodos() {
     const dataStr = new Date().toLocaleDateString('pt-BR');
-    const sep = '═══════════════════════════';
+    const sep = '════════════════';
     const linhas = [
       '🏢 *' + raw.empresaNome.toUpperCase() + '*',
       '📋 Tabela de Preços – ' + dataStr,
@@ -594,7 +594,7 @@ body > .container-fluid:has(#prc){
     const prod = raw.produtos.find(p => p.id === prodId);
     if (!prod) return '';
     const dataStr = new Date().toLocaleDateString('pt-BR');
-    const sep = '═══════════════════════════';
+    const sep = '════════════════';
     const linhas = [
       '🏢 *' + raw.empresaNome.toUpperCase() + '*',
       '📋 Tabela de Preços – ' + dataStr,
