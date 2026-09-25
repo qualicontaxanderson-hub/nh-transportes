@@ -290,14 +290,14 @@ body > .container-fluid:has(#prc){
         <div class="ln">
           <div>
             <div class="ln__n">{{ forma.nome }}</div>
-            <div class="ln__d">padrão + R$ {{ '%.4f'|format(forma.acrescimo_padrao|float) | replace('.', ',') }}/L</div>
+            <div class="ln__d">padrão + R$ {{ '%.2f'|format(forma.acrescimo_padrao|float) | replace('.', ',') }}/L</div>
           </div>
           <div class="ln__i">
             <input type="hidden" name="forma_id[]" value="{{ forma.id }}">
             <label class="din din--acr"><span>+ R$</span>
-              <input type="number" step="0.0001" min="0" inputmode="decimal"
+              <input type="text" inputmode="numeric" autocomplete="off" class="js-centavos"
                      name="acrescimo[]" id="acr_{{ forma.id }}"
-                     value="{{ '%.4f'|format(acrescimos_emp.get(forma.id, forma.acrescimo_padrao)|float) }}"
+                     value="{{ ('%.2f'|format(acrescimos_emp.get(forma.id, forma.acrescimo_padrao)|float)) | replace('.', ',') }}"
                      aria-label="Acréscimo de {{ forma.nome }}"><span>/L</span></label>
           </div>
         </div>
@@ -407,7 +407,7 @@ body > .container-fluid:has(#prc){
     return el ? (parseFloat(el.value.replace(',', '.')) || 0) : 0;
   }
 
-  // Preço à vista: digita só números e a vírgula entra sozinha nas 2 últimas
+  // Preço e acréscimo: digita só números e a vírgula entra sozinha nas 2 últimas
   // casas (299 -> 2,99). O servidor já aceita vírgula.
   document.querySelectorAll('.js-centavos').forEach(el => {
     el.addEventListener('input', function () {
@@ -422,7 +422,7 @@ body > .container-fluid:has(#prc){
     const el = document.getElementById('acr_' + f.id);
     if (el) {
       el.addEventListener('input', function () {
-        acrescimosEmpresa[f.id] = parseFloat(this.value) || 0;
+        acrescimosEmpresa[f.id] = parseFloat(this.value.replace(',', '.')) || 0;
         recalcular();
       });
     }
@@ -466,13 +466,13 @@ body > .container-fluid:has(#prc){
       tr += '<td><span class="f__n">' + htmlEsc(forma.nome) + '</span>';
       tr += forma.is_base
         ? '<span class="tag">BASE</span>'
-        : '<span class="f__a">+R$ ' + fmtN(acr, 4) + '/L</span>';
+        : '<span class="f__a">+R$ ' + fmtN(acr, 2) + '/L</span>';
       tr += '</td>';
 
       raw.produtos.forEach(prod => {
         const preco = getPrecoBase(prod.id) + acr;
         tr += '<td data-r="' + htmlEsc(prod.nome) + '" data-c style="--c:' + prod.cor + '">';
-        tr += preco > 0 ? '<span class="v">R$ ' + fmtN(preco, 4) + '</span>'
+        tr += preco > 0 ? '<span class="v">R$ ' + fmtN(preco, 2) + '</span>'
                         : '<span class="vazio">—</span>';
         tr += '</td>';
       });
