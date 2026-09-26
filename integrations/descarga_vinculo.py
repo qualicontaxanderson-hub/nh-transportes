@@ -34,6 +34,10 @@ from datetime import date
 # Janela folgada de proposito: o produto carrega sexta e desce segunda, ou
 # carrega terca e desce quarta. 5 dias cobre o padrao real de viagem.
 JANELA_DIAS = 5
+# Fora da janela, nota ABERTA e com saldo ainda entra (a que ficou pra tras,
+# ex.: emitida 19/09 e descendo 26/09). Mesmo corte da tela "Pendente pra
+# descer" (routes/estoque.py DATA_CORTE_PENDENTE) — mude os dois juntos.
+DATA_CORTE_ABERTAS = '2026-08-01'
 TOLERANCIA_L = 500.0
 # Abaixo disso o saldo e ruido de arredondamento, nao litro descarregavel.
 EPS_L = 0.001
@@ -373,10 +377,16 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
           AND doc.cliente_id = %s
           AND COALESCE(i.classificado_produto_id, i.produto_id) = %s
           AND (i.categoria IS NULL OR i.categoria <> 'ignorar')
-          AND ABS(DATEDIFF(DATE(doc.dh_emissao), %s)) <= %s
+          AND (ABS(DATEDIFF(DATE(doc.dh_emissao), %s)) <= %s
+               -- antiga fora da janela: so se ainda aberta e com saldo
+               OR (DATE(doc.dh_emissao) BETWEEN %s AND %s
+                   AND NOT EXISTS (SELECT 1 FROM descarga_nota f2
+                                    WHERE f2.item_id = i.id AND f2.modo = 'integral')
+                   AND i.quantidade - COALESCE(v.litros, 0) > %s))
         ORDER BY doc.dh_emissao DESC, doc.id, i.n_item
         """,
-        (descarga_id, descarga_id, d["cliente_id"], d["produto_id"], dia, janela_dias),
+        (descarga_id, descarga_id, d["cliente_id"], d["produto_id"], dia, janela_dias,
+         DATA_CORTE_ABERTAS, dia, EPS_L),
     )
     brutas = cur.fetchall()
     if not brutas:
