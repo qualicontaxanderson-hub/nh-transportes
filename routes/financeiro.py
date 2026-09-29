@@ -1335,8 +1335,14 @@ def cancelar_boleto(charge_id):
                 "UPDATE cobrancas SET status = %s, data_cancelamento = NOW() WHERE charge_id = %s",
                 ("cancelado", str(charge_id))
             )
-            rows = cursor.rowcount
             conn.commit()
+            # rowcount não serve: cancel_charge já gravou 'cancelado' no mesmo
+            # segundo, o UPDATE acima não muda nada e o MySQL devolve 0 linhas.
+            cursor.execute(
+                "SELECT COUNT(*) FROM cobrancas WHERE charge_id = %s AND status = 'cancelado'",
+                (str(charge_id),)
+            )
+            rows = (cursor.fetchone() or [0])[0]
             if rows == 0:
                 current_app.logger.warning("cancelar_boleto: UPDATE não afetou linhas para charge_id=%s", charge_id)
                 flash("Boleto cancelado no provedor, mas cobrança não encontrada no banco local.", "warning")
