@@ -1,0 +1,241 @@
+{%- macro brl(v) -%}{{ ('{:,.2f}'.format(v or 0)).replace(',', 'X').replace('.', ',').replace('X', '.') }}{%- endmacro -%}
+{%- macro num(v, casas=0) -%}{{ (('{:,.' ~ casas ~ 'f}').format(v or 0)).replace(',', 'X').replace('.', ',').replace('X', '.') }}{%- endmacro -%}
+{%- macro dt(d) -%}{{ d.strftime('%d/%m/%Y') if d else '' }}{%- endmacro -%}
+{%- set um_cliente = grupos|length == 1 -%}
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relatório de Fretes{% if um_cliente %} - {{ grupos[0].cliente }}{% endif %}{% if periodo_ini %} - {{ periodo_ini|replace('/', '-') }} a {{ periodo_fim|replace('/', '-') }}{% endif %}</title>
+<style>
+  :root {
+    --navy: #2b2f8f;
+    --orange: #f28c1e;
+    --ink: #1d2230;
+    --muted: #6b7280;
+    --line: #e4e7ee;
+    --soft: #f6f7fb;
+    --green: #15803d;  --green-bg: #e8f6ec;
+    --amber: #b45309;  --amber-bg: #fdf1e1;
+    --blue: #1d4ed8;   --blue-bg: #e7eefe;
+    --red: #b91c1c;    --red-bg: #fde8e8;
+    --grey: #4b5563;   --grey-bg: #eef0f3;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #e9ebf0; color: var(--ink);
+    font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 12px;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .tnum { font-variant-numeric: tabular-nums; }
+
+  /* barra de ações (só na tela) */
+  .acoes { position: sticky; top: 0; z-index: 5; display: flex; gap: 8px; justify-content: center;
+    padding: 10px 16px; background: #fff; border-bottom: 1px solid var(--line); }
+  .acoes button, .acoes a { font: 600 13px/1 inherit; font-family: inherit; padding: 10px 16px; border-radius: 8px;
+    border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; text-decoration: none; }
+  .acoes .pri { background: var(--navy); border-color: var(--navy); color: #fff; }
+
+  .folha { width: 210mm; max-width: 100%; margin: 16px auto; background: #fff; padding: 14mm 12mm;
+    box-shadow: 0 2px 14px rgba(20,24,60,.12); }
+  .grupo + .grupo { margin-top: 28px; padding-top: 22px; border-top: 2px dashed var(--line); }
+
+  /* cabeçalho */
+  .topo { display: flex; align-items: center; gap: 14px; padding-bottom: 12px;
+    border-bottom: 3px solid var(--navy); position: relative; }
+  .topo::after { content: ""; position: absolute; left: 0; bottom: -3px; width: 90px; height: 3px; background: var(--orange); }
+  .topo img { width: 46px; height: auto; }
+  .topo .marca b { display: block; font-size: 17px; color: var(--navy); letter-spacing: .3px; }
+  .topo .marca span { color: var(--muted); font-size: 11px; }
+  .topo .meta { margin-left: auto; text-align: right; font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .topo .meta .tit { font-size: 15px; font-weight: 700; color: var(--ink); }
+
+  .cliente { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 20px;
+    margin: 14px 0 12px; padding: 10px 14px; background: var(--soft); border-left: 4px solid var(--orange); border-radius: 4px; }
+  .cliente .lab { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+  .cliente .nome { font-size: 14px; font-weight: 700; }
+
+  /* resumo */
+  .resumo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  .card { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+  .card .lab { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+  .card .val { font-size: 15px; font-weight: 700; margin-top: 2px; }
+  .card.total { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .card.total .lab { color: rgba(255,255,255,.75); }
+  .card.pago .val { color: var(--green); }
+  .card.aberto .val { color: var(--blue); }
+  .card.vencido .val { color: var(--red); }
+  .card.nfat .val { color: var(--amber); }
+  .card .sub { font-size: 10px; color: var(--muted); }
+
+  /* tabela */
+  table { width: 100%; border-collapse: collapse; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  th { background: var(--navy); color: #fff; font-size: 9.5px; text-transform: uppercase; letter-spacing: .4px;
+    font-weight: 600; text-align: left; padding: 6px 6px; white-space: nowrap; }
+  td { padding: 6px 6px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 11px; }
+  tbody tr:nth-child(even) td { background: #fafbfd; }
+  .num { text-align: right; white-space: nowrap; }
+  td .sub { display: block; color: var(--muted); font-size: 9.5px; margin-top: 1px; }
+  tfoot td { font-weight: 700; background: var(--soft); border-top: 2px solid var(--navy); border-bottom: 0; }
+
+  .sit { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 9.5px; font-weight: 700; white-space: nowrap; }
+  .sit.pago { color: var(--green); background: var(--green-bg); }
+  .sit.aberto { color: var(--blue); background: var(--blue-bg); }
+  .sit.vencido { color: var(--red); background: var(--red-bg); }
+  .sit.nao_faturado { color: var(--amber); background: var(--amber-bg); }
+  .sit.isento { color: var(--grey); background: var(--grey-bg); }
+
+  .rodape { margin-top: 18px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--muted);
+    font-size: 9.5px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .vazio { padding: 40px; text-align: center; color: var(--muted); }
+
+  @page { size: A4 portrait; margin: 10mm 8mm 12mm;
+    @bottom-right { content: "Página " counter(page) " de " counter(pages); font-size: 9px; color: #6b7280; } }
+  @media print {
+    html, body { background: #fff; }
+    .acoes { display: none; }
+    .folha { width: auto; margin: 0; padding: 0; box-shadow: none; }
+    .grupo + .grupo { break-before: page; page-break-before: always; margin-top: 0; padding-top: 0; border-top: 0; }
+  }
+  @media (max-width: 700px) {
+    .folha { padding: 16px; margin: 0; }
+    .resumo { grid-template-columns: repeat(2, 1fr); }
+    .tabwrap { overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="acoes">
+  <button class="pri" onclick="window.print()">Salvar PDF / Imprimir</button>
+  <button onclick="window.close()">Fechar</button>
+</div>
+
+<div class="folha">
+{% if not grupos %}
+  <div class="vazio">Nenhum frete para listar. Volte à tela de fretes, ajuste os filtros e gere o relatório de novo.</div>
+{% endif %}
+
+{% for g in grupos %}
+{% set r = g.resumo %}
+<section class="grupo">
+  <div class="topo">
+    <img src="{{ url_for('static', filename='logo-nh.png') }}" alt="NH">
+    <div class="marca"><b>NH TRANSPORTES</b><span>Transporte de combustíveis</span></div>
+    <div class="meta">
+      <div class="tit">Relatório de Fretes</div>
+      {% if periodo_ini %}Período: {{ periodo_ini }} a {{ periodo_fim }}<br>{% endif %}
+      Emitido em {{ gerado_em.strftime('%d/%m/%Y às %H:%M') }}
+    </div>
+  </div>
+
+  <div class="cliente">
+    <div>
+      <div class="lab">Cliente</div>
+      <div class="nome">{{ g.cliente or '—' }}</div>
+    </div>
+    {% if g.cnpj %}
+    <div>
+      <div class="lab">CNPJ</div>
+      <div class="nome tnum">{{ g.cnpj }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="resumo">
+    <div class="card total">
+      <div class="lab">Valor total dos fretes</div>
+      <div class="val tnum">R$ {{ brl(r.total) }}</div>
+      <div class="sub" style="color:rgba(255,255,255,.75)">{{ r.qtd }} frete{{ 's' if r.qtd != 1 }} · {{ num(r.litros) }} L</div>
+    </div>
+    <div class="card pago">
+      <div class="lab">Pago</div>
+      <div class="val tnum">R$ {{ brl(r.pago) }}</div>
+    </div>
+    <div class="card nfat">
+      <div class="lab">Não faturado</div>
+      <div class="val tnum">R$ {{ brl(r.nao_faturado) }}</div>
+      <div class="sub">a faturar</div>
+    </div>
+    <div class="card aberto">
+      <div class="lab">Em aberto (a vencer)</div>
+      <div class="val tnum">R$ {{ brl(r.aberto) }}</div>
+      <div class="sub">faturado, aguardando pagamento</div>
+    </div>
+    <div class="card vencido">
+      <div class="lab">Vencido</div>
+      <div class="val tnum">R$ {{ brl(r.vencido) }}</div>
+    </div>
+    <div class="card">
+      <div class="lab">Saldo a receber</div>
+      <div class="val tnum">R$ {{ brl(r.aberto + r.vencido + r.nao_faturado) }}</div>
+      <div class="sub">em aberto + vencido + não faturado</div>
+    </div>
+  </div>
+
+  <div class="tabwrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Data</th>
+        <th>Nº</th>
+        <th>Produto / Origem</th>
+        <th>Motorista</th>
+        <th class="num">Qtd (L)</th>
+        <th class="num">R$/L</th>
+        <th class="num">Valor</th>
+        <th>Situação</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for f in g.fretes %}
+      <tr>
+        <td class="tnum">{{ dt(f.data_frete) }}</td>
+        <td class="tnum">{{ f.id }}</td>
+        <td><b>{{ f.produto }}</b><span class="sub">{{ f.fornecedor }}</span></td>
+        <td>{{ f.motorista }}{% if f.placa %}<span class="sub">{{ f.placa }}</span>{% endif %}</td>
+        <td class="num tnum">{{ num(f.quantidade) }}</td>
+        <td class="num tnum">{{ num(f.preco_por_litro, 3) }}</td>
+        <td class="num tnum"><b>{{ brl(f.valor) }}</b></td>
+        <td>
+          {% if f.situacao == 'pago' %}
+            <span class="sit pago">Pago</span>
+            {% if f.pagamento %}<span class="sub tnum">em {{ dt(f.pagamento) }}</span>{% endif %}
+          {% elif f.situacao == 'aberto' %}
+            <span class="sit aberto">Em aberto</span>
+            {% if f.vencimento %}<span class="sub tnum">vence {{ dt(f.vencimento) }}</span>{% endif %}
+          {% elif f.situacao == 'vencido' %}
+            <span class="sit vencido">Vencido</span>
+            {% if f.vencimento %}<span class="sub tnum">venceu {{ dt(f.vencimento) }}</span>{% endif %}
+          {% elif f.situacao == 'isento' %}
+            <span class="sit isento">Isento</span>
+          {% else %}
+            <span class="sit nao_faturado">Não faturado</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="4">Total · {{ r.qtd }} frete{{ 's' if r.qtd != 1 }}</td>
+        <td class="num tnum">{{ num(r.litros) }}</td>
+        <td></td>
+        <td class="num tnum">{{ brl(r.total) }}</td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+  </div>
+
+  <div class="rodape">
+    <span>NH Transportes · Relatório gerado pelo sistema em {{ gerado_em.strftime('%d/%m/%Y %H:%M') }}</span>
+    <span>Situação na data de emissão. Pagamentos após essa data não aparecem aqui.</span>
+  </div>
+</section>
+{% endfor %}
+</div>
+
+</body>
+</html>

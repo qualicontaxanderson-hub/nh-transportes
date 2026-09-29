@@ -1056,3 +1056,129 @@ def deletar(id):
         except Exception:
             pass
     return redirect(url_for('fretes.lista'))
+
+
+@bp.route('/relatorio', methods=['GET'])
+@login_required
+@admin_required
+def relatorio():
+    """Relatório para o cliente (salvar em PDF): os fretes que estavam na tela,
+    em ordem de data, com a situação de cada um — Pago, Em aberto, Vencido,
+    Não faturado ou Isento. Só leitura."""
+    ids = [int(x) for x in re.findall(r'\d+', request.args.get('ids', ''))][:2000]
+    data_inicio = request.args.get('data_inicio', '')
+    data_fim = request.args.get('data_fim', '')
+    from utils.fuso import hoje_brasilia, agora_brasilia
+    hoje = hoje_brasilia()
+
+    fretes = []
+    if ids:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            ph = ','.join(['%s'] * len(ids))
+            cursor.execute(f"""
+                SELECT f.id, f.data_frete, f.clientes_id,
+                       COALESCE(c.razao_social, '') AS cliente,
+                       COALESCE(c.cnpj, '') AS cliente_cnpj,
+                       COALESCE(fo.razao_social, '') AS fornecedor,
+                       COALESCE(p.nome, '') AS produto,
+                       COALESCE(m.nome, '') AS motorista,
+                       COALESCE(v.placa, '') AS placa,
+                       COALESCE(f.quantidade_manual, q.valor, 0) AS quantidade,
+                       COALESCE(f.preco_por_litro, 0) AS preco_por_litro,
+                       COALESCE(f.valor_total_frete, 0) AS valor
+                FROM fretes f
+                LEFT JOIN clientes c ON f.clientes_id = c.id
+                LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
+                LEFT JOIN produto p ON f.produto_id = p.id
+                LEFT JOIN motoristas m ON f.motoristas_id = m.id
+                LEFT JOIN veiculos v ON f.veiculos_id = v.id
+                LEFT JOIN quantidades q ON f.quantidade_id = q.id
+                WHERE f.id IN ({ph})
+                ORDER BY f.data_frete ASC, f.id ASC
+            """, tuple(ids))
+            fretes = cursor.fetchall()
+
+            # Cobranças ativas (mesma regra da lista: direta por frete_id ou via cobrancas_freites)
+            cursor.execute(f"""
+                SELECT x.frete_id, cb.id, cb.status, cb.data_vencimento, cb.data_pagamento
+                FROM (
+                    SELECT frete_id, id AS cobranca_id FROM cobrancas WHERE frete_id IN ({ph})
+                    UNION
+                    SELECT frete_id, cobranca_id FROM cobrancas_freites WHERE frete_id IN ({ph})
+                ) x
+                JOIN cobrancas cb ON cb.id = x.cobranca_id
+                WHERE cb.status IS NULL OR cb.status != 'cancelado'
+            """, tuple(ids) + tuple(ids))
+            cobs = {}
+            for r in cursor.fetchall():
+                cobs.setdefault(r['frete_id'], []).append(r)
+        finally:
+            try:
+                cursor.close()
+                conn.close()
+            except Exception:
+                pass
+
+        for f in fretes:
+            f['valor'] = float(f['valor'] or 0)
+            f['quantidade'] = float(f['quantidade'] or 0)
+            f['preco_por_litro'] = float(f['preco_por_litro'] or 0)
+            lista_cb = cobs.get(f['id'], [])
+            pagas = [c for c in lista_cb if (c['status'] or '') == 'pago']
+            abertas = [c for c in lista_cb if (c['status'] or '') != 'pago']
+            f['vencimento'] = None
+            f['pagamento'] = None
+            if pagas:
+                f['situacao'] = 'pago'
+                datas = [c['data_pagamento'] for c in pagas if c['data_pagamento']]
+                f['pagamento'] = max(datas) if datas else None
+                vencs = [c['data_vencimento'] for c in pagas if c['data_vencimento']]
+                f['vencimento'] = min(vencs) if vencs else None
+            elif abertas:
+                vencs = [c['data_vencimento'] for c in abertas if c['data_vencimento']]
+                f['vencimento'] = min(vencs) if vencs else None
+                f['situacao'] = 'vencido' if (f['vencimento'] and f['vencimento'] < hoje) else 'aberto'
+            elif f['valor'] == 0:
+                f['situacao'] = 'isento'
+            else:
+                f['situacao'] = 'nao_faturado'
+
+    # Agrupa por cliente, mantendo a ordem de data dentro de cada um
+    grupos = {}
+    for f in fretes:
+        g = grupos.setdefault(f['clientes_id'], {
+            'cliente': f['cliente'], 'cnpj': f['cliente_cnpj'], 'fretes': [],
+        })
+        g['fretes'].append(f)
+    grupos = sorted(grupos.values(), key=lambda g: g['cliente'])
+
+    def _resumo(lst):
+        r = {'qtd': len(lst), 'litros': 0.0, 'total': 0.0,
+             'pago': 0.0, 'aberto': 0.0, 'vencido': 0.0, 'nao_faturado': 0.0}
+        for f in lst:
+            r['litros'] += f['quantidade']
+            r['total'] += f['valor']
+            if f['situacao'] in r:
+                r[f['situacao']] += f['valor']
+        return r
+
+    for g in grupos:
+        g['resumo'] = _resumo(g['fretes'])
+
+    def _br(d):
+        try:
+            return datetime.strptime(d, '%Y-%m-%d').strftime('%d/%m/%Y')
+        except Exception:
+            return d
+
+    return render_template(
+        'fretes/relatorio.html',
+        grupos=grupos,
+        resumo=_resumo(fretes),
+        periodo_ini=_br(data_inicio),
+        periodo_fim=_br(data_fim),
+        gerado_em=agora_brasilia(),
+        hoje=hoje,
+    )

@@ -567,7 +567,10 @@
         <a href="{{ url_for('pedidos.importar_lista') }}" class="btn btn-blue">
           <i class="bi bi-box-arrow-in-down"></i> Importar pedido
         </a>
-        <button id="emit-selected-btn" class="btn btn-emit ta-spacer">
+        <button type="button" id="btn-relatorio" class="btn btn-emit ta-spacer" title="Relatório dos fretes na tela, para salvar em PDF e mandar ao cliente">
+          <i class="bi bi-file-earmark-pdf"></i> Relatório
+        </button>
+        <button id="emit-selected-btn" class="btn btn-emit">
           <i class="bi bi-receipt"></i> Emitir selecionados
         </button>
         <button id="quitar-selected-btn" class="btn btn-quit">
@@ -1546,6 +1549,23 @@ document.addEventListener('DOMContentLoaded', function () {
     } else if (noResults) {
       noResults.style.display = 'none';
     }
+  }
+
+  /* Relatório: leva exatamente as linhas visíveis (filtros da tela + chips + busca) */
+  var btnRel = document.getElementById('btn-relatorio');
+  if (btnRel) {
+    btnRel.addEventListener('click', function () {
+      var ids = [];
+      document.querySelectorAll('.lf2 tr.row-frete').forEach(function (tr) {
+        if (tr.style.display !== 'none') ids.push(tr.id.replace('frete-row-', ''));
+      });
+      if (!ids.length) { alert('Nenhum frete na tela para o relatório.'); return; }
+      var q = new URLSearchParams();
+      q.set('ids', ids.join(','));
+      q.set('data_inicio', (document.getElementById('frtDtInicio') || {}).value || '');
+      q.set('data_fim', (document.getElementById('frtDtFim') || {}).value || '');
+      window.open('{{ url_for('fretes.relatorio') }}?' + q.toString(), '_blank');
+    });
   }
 
   /* rodar uma vez no load */
