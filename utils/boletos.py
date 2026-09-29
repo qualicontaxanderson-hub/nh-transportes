@@ -843,7 +843,7 @@ def update_billet_expire(credentials, charge_id, new_date):
         return False, "Exception ao atualizar vencimento"
 
 
-def _persist_cancel_to_db(charge_id, provider_resp):
+def _persist_cancel_to_db(charge_id, provider_resp, liberar_fretes=True):
     """
     Tenta persistir no banco o resultado do cancelamento para auditoria.
     Além de atualizar a tabela cobrancas com status = 'cancelado' e provider response,
@@ -870,26 +870,46 @@ def _persist_cancel_to_db(charge_id, provider_resp):
             conn.commit()
             logger.info("_persist_cancel_to_db: cobrancas atualizada para charge_id=%s", charge_id)
 
-            # Tentar descobrir frete_id associado e limpar flag boleto_emitido
-            try:
-                cur.execute("SELECT frete_id FROM cobrancas WHERE charge_id = %s LIMIT 1", (str(charge_id),))
-                row = cur.fetchone()
-                frete_id = None
-                if row:
-                    # row pode ser tuple ou dict conforme driver
-                    if isinstance(row, (list, tuple)):
-                        frete_id = row[0]
-                    elif isinstance(row, dict):
-                        frete_id = row.get("frete_id")
-                if frete_id:
-                    try:
-                        cur.execute("UPDATE fretes SET boleto_emitido = FALSE WHERE id = %s", (int(frete_id),))
-                        conn.commit()
-                        logger.info("_persist_cancel_to_db: limpei fretes.boleto_emitido para frete_id=%s (charge=%s)", frete_id, charge_id)
-                    except Exception:
-                        logger.exception("_persist_cancel_to_db: falha ao limpar fretes.boleto_emitido para frete_id=%s", frete_id)
-            except Exception:
-                logger.exception("_persist_cancel_to_db: erro ao consultar frete_id associado")
+            # Liberar os fretes para nova emissão (limpar fretes.boleto_emitido).
+            # Boleto de um frete tem cobrancas.frete_id; boleto agrupado não tem —
+            # os fretes ficam em cobrancas_freites. Antes só o primeiro caso era
+            # liberado e o agrupado ficava travado em "já com boleto emitido".
+            # Só libera frete sem OUTRA cobrança ativa (pendente/pago).
+            if liberar_fretes:
+                try:
+                    cur.execute("""
+                        SELECT cb.frete_id FROM cobrancas cb
+                        WHERE cb.charge_id = %s AND cb.frete_id IS NOT NULL
+                        UNION
+                        SELECT cf.frete_id FROM cobrancas_freites cf
+                        JOIN cobrancas cb ON cb.id = cf.cobranca_id
+                        WHERE cb.charge_id = %s
+                    """, (str(charge_id), str(charge_id)))
+                    frete_ids = []
+                    for row in cur.fetchall() or []:
+                        fid = row[0] if isinstance(row, (list, tuple)) else row.get("frete_id")
+                        if fid:
+                            frete_ids.append(int(fid))
+                    for fid in frete_ids:
+                        try:
+                            cur.execute("""
+                                UPDATE fretes f SET f.boleto_emitido = FALSE
+                                WHERE f.id = %s
+                                  AND NOT EXISTS (SELECT 1 FROM cobrancas cb
+                                                  WHERE cb.frete_id = f.id
+                                                    AND (cb.status IS NULL OR cb.status <> 'cancelado'))
+                                  AND NOT EXISTS (SELECT 1 FROM cobrancas_freites cf
+                                                  JOIN cobrancas cb ON cb.id = cf.cobranca_id
+                                                  WHERE cf.frete_id = f.id
+                                                    AND (cb.status IS NULL OR cb.status <> 'cancelado'))
+                            """, (fid,))
+                            conn.commit()
+                        except Exception:
+                            logger.exception("_persist_cancel_to_db: falha ao limpar fretes.boleto_emitido para frete_id=%s", fid)
+                    if frete_ids:
+                        logger.info("_persist_cancel_to_db: fretes liberados p/ nova emissão %s (charge=%s)", frete_ids, charge_id)
+                except Exception:
+                    logger.exception("_persist_cancel_to_db: erro ao consultar fretes da cobrança")
 
             try:
                 cur.close()
@@ -912,9 +932,11 @@ def _persist_cancel_to_db(charge_id, provider_resp):
         logger.exception("Erro genérico em _persist_cancel_to_db")
 
 
-def cancel_charge(credentials, charge_id):
+def cancel_charge(credentials, charge_id, liberar_fretes=True):
     """
     Tenta cancelar uma charge no provedor.
+    liberar_fretes=False: não libera os fretes para nova emissão — usado quando
+    o cancelamento é parte de uma baixa de pagamento (a cobrança vira 'pago').
     Retorna (True, resp_json_or_text) se conseguiu, (False, resp_or_text) se não.
     Estratégia:
       - tenta via SDK (se disponível)
@@ -954,7 +976,7 @@ def cancel_charge(credentials, charge_id):
                         # Persistir tentativa caso seja dict de sucesso
                         try:
                             if isinstance(r, dict) and (r.get("code") == 200 or r.get("status") in ("canceled", "cancelled", "cancelado")):
-                                _persist_cancel_to_db(cid_int, r)
+                                _persist_cancel_to_db(cid_int, r, liberar_fretes)
                         except Exception:
                             logger.debug("persist SDK cancel falhou")
                         return True, r
@@ -1027,7 +1049,7 @@ def cancel_charge(credentials, charge_id):
                     j = {"http_status": resp.status_code, "text": resp.text}
                 # persistir no DB (melhora auditabilidade)
                 try:
-                    _persist_cancel_to_db(cid_int, j)
+                    _persist_cancel_to_db(cid_int, j, liberar_fretes)
                 except Exception:
                     logger.debug("persist cancel response failed")
                 return True, j
@@ -1049,7 +1071,7 @@ def cancel_charge(credentials, charge_id):
                         except Exception:
                             j2 = {"http_status": resp2.status_code, "text": resp2.text}
                         try:
-                            _persist_cancel_to_db(cid_int, j2)
+                            _persist_cancel_to_db(cid_int, j2, liberar_fretes)
                         except Exception:
                             logger.debug("persist cancel response failed")
                         return True, j2
@@ -1064,7 +1086,7 @@ def cancel_charge(credentials, charge_id):
                                 except Exception:
                                     j3 = {"http_status": resp3.status_code, "text": resp3.text}
                                 try:
-                                    _persist_cancel_to_db(cid_int, j3)
+                                    _persist_cancel_to_db(cid_int, j3, liberar_fretes)
                                 except Exception:
                                     logger.debug("persist cancel response failed")
                                 return True, j3
@@ -1104,7 +1126,7 @@ def cancel_charge(credentials, charge_id):
                 except Exception:
                     j2 = {"http_status": resp2.status_code, "text": resp2.text}
                 try:
-                    _persist_cancel_to_db(cid_int, j2)
+                    _persist_cancel_to_db(cid_int, j2, liberar_fretes)
                 except Exception:
                     logger.debug("persist cancel response failed")
                 return True, j2

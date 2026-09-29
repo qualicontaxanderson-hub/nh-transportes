@@ -1171,7 +1171,7 @@ def registrar_pagamento_manual():
         if cancelar_efi and cobr.get('charge_id'):
             try:
                 credentials = _get_efi_credentials()
-                ok_efi, resp_efi = cancel_charge(credentials, cobr['charge_id'])
+                ok_efi, resp_efi = cancel_charge(credentials, cobr['charge_id'], liberar_fretes=False)
                 if ok_efi:
                     cancelou_efi = True
                 else:
@@ -1465,7 +1465,7 @@ def bulk_registrar_pagamento():
                 # se falhar, a baixa acontece assim mesmo e a falha e listada).
                 if cancelar_efi and row.get('charge_id') and credentials_efi:
                     try:
-                        ok_efi, resp_efi = cancel_charge(credentials_efi, row['charge_id'])
+                        ok_efi, resp_efi = cancel_charge(credentials_efi, row['charge_id'], liberar_fretes=False)
                         if not ok_efi:
                             efi_falhas.append({"cobranca_id": cid,
                                                "erro": str(resp_efi)[:150]})
