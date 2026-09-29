@@ -1057,13 +1057,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Selection helpers
   const selectAll = qs('#select-all');
+  // Só vale o que está na tela: linha escondida pelos filtros (status/produto/busca)
+  // não entra — senão "Não faturado" + selecionar todos levava fretes já pagos junto.
+  function rowVisivel(ch){
+    const tr = ch.closest('tr');
+    return !tr || tr.style.display !== 'none';
+  }
   function getSelectedIds(){
-    return qsa('input.frete-select:checked').map(i => parseInt(i.value));
+    return qsa('input.frete-select:checked').filter(rowVisivel).map(i => parseInt(i.value));
   }
   if (selectAll){
     selectAll.addEventListener('change', function () {
       const checked = !!this.checked;
-      qsa('input.frete-select').forEach(ch => ch.checked = checked);
+      qsa('input.frete-select').forEach(ch => ch.checked = checked && rowVisivel(ch));
     });
   }
 
