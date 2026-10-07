@@ -84,40 +84,74 @@ def _load_form_data(conn):
     return empresas, contas_por_grupo
 
 
+def _cnpj_brasilapi(cnpj_digits):
+    url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj_digits}"
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = _json.loads(resp.read().decode('utf-8'))
+    if not isinstance(data, dict):
+        raise ValueError('resposta invalida')
+    return {
+        'razao_social': str(data.get('razao_social') or ''),
+        'nome_fantasia': str(data.get('nome_fantasia') or ''),
+        'telefone': str(data.get('ddd_telefone_1') or ''),
+        'email': str(data.get('email') or ''),
+        'cep': str(data.get('cep') or ''),
+        'endereco': str(data.get('logradouro') or ''),
+        'numero': str(data.get('numero') or ''),
+        'complemento': str(data.get('complemento') or ''),
+        'bairro': str(data.get('bairro') or ''),
+        'municipio': str(data.get('municipio') or ''),
+        'uf': str(data.get('uf') or ''),
+    }
+
+
+def _cnpj_publica_cnpjws(cnpj_digits):
+    """Fonte reserva: publica.cnpj.ws (usada quando a BrasilAPI falha)."""
+    url = f"https://publica.cnpj.ws/cnpj/{cnpj_digits}"
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = _json.loads(resp.read().decode('utf-8'))
+    if not isinstance(data, dict):
+        raise ValueError('resposta invalida')
+    est = data.get('estabelecimento') or {}
+    cidade = est.get('cidade') or {}
+    estado = est.get('estado') or {}
+    logradouro = ' '.join(x for x in [est.get('tipo_logradouro'), est.get('logradouro')] if x)
+    return {
+        'razao_social': str(data.get('razao_social') or ''),
+        'nome_fantasia': str(est.get('nome_fantasia') or ''),
+        'telefone': str(est.get('ddd1') or '') + str(est.get('telefone1') or ''),
+        'email': str(est.get('email') or ''),
+        'cep': str(est.get('cep') or ''),
+        'endereco': logradouro,
+        'numero': str(est.get('numero') or ''),
+        'complemento': str(est.get('complemento') or ''),
+        'bairro': str(est.get('bairro') or ''),
+        'municipio': str(cidade.get('nome') or '').upper(),
+        'uf': str(estado.get('sigla') or ''),
+    }
+
+
 @bp.route('/api/cnpj/<cnpj>')
 @login_required
 def api_cnpj_lookup(cnpj):
-    """Consulta dados de CNPJ na BrasilAPI e retorna JSON com dados da empresa."""
+    """Consulta dados de CNPJ na BrasilAPI (reserva: publica.cnpj.ws) e retorna JSON."""
     cnpj_digits = re.sub(r'\D', '', cnpj)
     if len(cnpj_digits) != 14:
         return jsonify({'erro': 'CNPJ inválido'}), 400
-    try:
-        url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj_digits}"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = _json.loads(resp.read().decode('utf-8'))
-        if not isinstance(data, dict):
-            return jsonify({'erro': 'Resposta inválida da Receita Federal'}), 502
-        result = {
-            'razao_social': str(data.get('razao_social') or ''),
-            'nome_fantasia': str(data.get('nome_fantasia') or ''),
-            'telefone': str(data.get('ddd_telefone_1') or ''),
-            'email': str(data.get('email') or ''),
-            'cep': str(data.get('cep') or ''),
-            'endereco': str(data.get('logradouro') or ''),
-            'numero': str(data.get('numero') or ''),
-            'complemento': str(data.get('complemento') or ''),
-            'bairro': str(data.get('bairro') or ''),
-            'municipio': str(data.get('municipio') or ''),
-            'uf': str(data.get('uf') or ''),
-        }
-        return jsonify(result)
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return jsonify({'erro': 'CNPJ não encontrado'}), 404
-        return jsonify({'erro': 'Erro ao consultar Receita Federal'}), 502
-    except Exception:
-        return jsonify({'erro': 'Erro ao consultar Receita Federal'}), 502
+    nao_encontrado = False
+    for fonte in (_cnpj_brasilapi, _cnpj_publica_cnpjws):
+        try:
+            return jsonify(fonte(cnpj_digits))
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                nao_encontrado = True
+        except Exception:
+            pass
+    if nao_encontrado:
+        return jsonify({'erro': 'CNPJ não encontrado'}), 404
+    return jsonify({'erro': 'Erro ao consultar Receita Federal'}), 502
 
 
 def _movimento_fornecedores(cursor):
