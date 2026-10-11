@@ -1819,7 +1819,8 @@ function cfdToggle(el) {
 // Dentro do card: clica num pagamento, depois na nota que ele paga; o par vai
 // pra bandeja. "Salvar tudo" manda os pares de uma vez pro vincular_lote (que
 // reconfere tudo e grava tudo ou nada). Só monta o que o card já mostra.
-var parCard = null, parSel = null, parPares = [];
+// parSel: pagamentos marcados (um ou vários) -- a nota consome deles em ordem
+var parCard = null, parSel = [], parPares = [];
 var PAR_MAX = 40;   // o mesmo teto do vincular_lote
 
 function parItens(card, tipo) {
@@ -1866,7 +1867,7 @@ function parSair() {
     var t = parCard.querySelector('.par-bt'); if (t) t.classList.remove('on');
     parCard.classList.remove('par-modo');
   }
-  parCard = null; parSel = null; parPares = [];
+  parCard = null; parSel = []; parPares = [];
   document.getElementById('par-band').hidden = true;
   document.getElementById('par-msg').textContent = '';
   document.body.classList.remove('par-on');
@@ -1876,12 +1877,13 @@ function parSair() {
 function parPinta() {
   if (!parCard) return;
   var pgs = parItens(parCard, 'pg'), nfs = parItens(parCard, 'nf');
-  var sel = pgs.filter(function (p) { return p.id === parSel; })[0];
-  var livreSel = sel ? parResta(sel, 'tx') : 0;
+  var sels = pgs.filter(function (p) { return parSel.indexOf(p.id) >= 0; });
+  var sel = sels.length > 0;
+  var livreSel = sels.reduce(function (a, p) { return a + parResta(p, 'tx'); }, 0);
   var cheio = parPares.length >= PAR_MAX;
   var hPg = pgs.map(function (p) {
     var r = parResta(p, 'tx'), u = r <= 0.004;
-    return '<div class="par-it' + (u ? ' usado' : '') + (p.id === parSel ? ' sel' : '') +
+    return '<div class="par-it' + (u ? ' usado' : '') + (parSel.indexOf(p.id) >= 0 ? ' sel' : '') +
       '" onclick="parClPg(' + p.id + ')"><span class="par-it__ic par-it__ic--pg">' +
       '<i class="bi bi-cash-coin"></i></span><div class="par-it__t"><b>' + p.dt + ' · ' +
       parEsc(p.rot) + '</b><span>' + parEsc(p.det) + '</span></div>' +
@@ -1914,9 +1916,12 @@ function parPinta() {
   box.querySelectorAll('.par-lista').forEach(function (l, i) { l.scrollTop = rol[i] || 0; });
   parCard.querySelector('.par-dica').textContent = cheio
     ? 'Limite de ' + PAR_MAX + ' pares por vez — salve para continuar.'
-    : sel ? 'Agora clique na nota que o pagamento de ' + cfdMoeda(sel.val) +
-            ' paga (livre ' + cfdMoeda(livreSel) + ').'
-          : 'Clique num pagamento, depois na nota que ele paga.';
+    : sels.length > 1
+      ? sels.length + ' pagamentos marcados, livre somado ' + cfdMoeda(livreSel) +
+        '. Clique nas notas que eles pagam (usa do mais antigo pro mais novo).'
+    : sel ? 'Agora clique na nota que o pagamento de ' + cfdMoeda(sels[0].val) +
+            ' paga (livre ' + cfdMoeda(livreSel) + '). Para somar outro pagamento, marque-o também.'
+          : 'Marque um ou mais pagamentos, depois clique nas notas que eles pagam.';
 
   var tot = parPares.reduce(function (a, p) { return a + p.v; }, 0);
   document.getElementById('par-tit').innerHTML = parPares.length
@@ -1938,23 +1943,29 @@ function parPinta() {
 function parClPg(id) {
   var p = parItens(parCard, 'pg').filter(function (x) { return x.id === id; })[0];
   if (!p || parResta(p, 'tx') <= 0.004) return;
-  parSel = (parSel === id) ? null : id;
+  var i = parSel.indexOf(id);
+  if (i >= 0) parSel.splice(i, 1); else parSel.push(id);
   document.getElementById('par-msg').textContent = '';
   parPinta();
 }
 function parClNf(id) {
-  if (!parSel) { parCard.querySelector('.par-dica').textContent = 'Primeiro escolha o pagamento.'; return; }
-  if (parPares.length >= PAR_MAX) return;
-  var p = parItens(parCard, 'pg').filter(function (x) { return x.id === parSel; })[0];
+  if (!parSel.length) { parCard.querySelector('.par-dica').textContent = 'Primeiro marque o pagamento.'; return; }
   var n = parItens(parCard, 'nf').filter(function (x) { return x.id === id; })[0];
-  var v = Math.min(parResta(p, 'tx'), parResta(n, 'doc'));
-  if (v <= 0.004) return;
-  // mesmo par de novo soma no que já está na bandeja (o banco guarda 1 por par)
-  var ja = parPares.filter(function (x) { return x.tx === p.id && x.doc === n.id; })[0];
-  if (ja) ja.v = Math.round((ja.v + v) * 100) / 100;
-  else parPares.push({ tx: p.id, doc: n.id, v: Math.round(v * 100) / 100,
-                       pgDt: p.dt, pgVal: p.val, nfRot: n.rot });
-  if (parResta(p, 'tx') <= 0.004) parSel = null;   // pagamento acabou: solta
+  // os marcados, na ordem da lista (por data): a nota consome do mais antigo
+  var marc = parItens(parCard, 'pg').filter(function (x) { return parSel.indexOf(x.id) >= 0; });
+  marc.forEach(function (p) {
+    if (parPares.length >= PAR_MAX) return;
+    var v = Math.min(parResta(p, 'tx'), parResta(n, 'doc'));
+    if (v <= 0.004) return;
+    // mesmo par de novo soma no que já está na bandeja (o banco guarda 1 por par)
+    var ja = parPares.filter(function (x) { return x.tx === p.id && x.doc === n.id; })[0];
+    if (ja) ja.v = Math.round((ja.v + v) * 100) / 100;
+    else parPares.push({ tx: p.id, doc: n.id, v: Math.round(v * 100) / 100,
+                         pgDt: p.dt, pgVal: p.val, nfRot: n.rot });
+  });
+  // pagamento que acabou sai da marcação
+  parSel = marc.filter(function (p) { return parResta(p, 'tx') > 0.004; })
+               .map(function (p) { return p.id; });
   parPinta();
 }
 function parMuda(i, inp) {
@@ -1971,7 +1982,7 @@ function parMuda(i, inp) {
   parPinta();
 }
 function parTira(i) { parPares.splice(i, 1); parPinta(); }
-function parLimpar() { parPares = []; parSel = null; parPinta(); }
+function parLimpar() { parPares = []; parSel = []; parPinta(); }
 
 function parSalvar(btn) {
   if (!parPares.length) return;
