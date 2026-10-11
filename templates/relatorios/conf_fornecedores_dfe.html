@@ -257,6 +257,54 @@
   #cfd .corte b{ color:var(--ink); }
   #cfd .corte__j{ display:block; margin-top:.25rem; }
   #cfd .corte__erro{ display:block; margin-top:.25rem; color:var(--danger); font-weight:600; }
+  /* Parear em lote: pagamento -> nota, varios pares, grava tudo junto */
+  #cfd .par-bar{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
+    padding:.5rem .8rem; background:#f6f9fc; border-bottom:1px solid var(--line);
+    font-size:12px; color:var(--muted); }
+  #cfd .par-bt{ display:inline-flex; align-items:center; gap:.3rem; cursor:pointer;
+    border:1px solid var(--blue); background:#fff; color:var(--blue-deep); border-radius:8px;
+    padding:.3rem .65rem; font-size:12px; font-weight:700; }
+  #cfd .par-bt.on{ background:var(--blue-deep); color:#fff; }
+  #cfd .par-cols{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+    border-bottom:1px solid var(--line-2); }
+  #cfd .par-col + .par-col{ border-left:1px solid var(--line); }
+  #cfd .par-col__h{ font-size:10.5px; font-weight:800; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--muted); padding:.4rem .8rem; background:#fafbfd;
+    border-bottom:1px solid var(--line); }
+  #cfd .par-it{ display:flex; gap:.5rem; align-items:center; padding:.45rem .8rem;
+    border-bottom:1px solid #f1f4f8; cursor:pointer; font-size:12.5px; }
+  #cfd .par-it:hover{ background:#f6f9fc; }
+  #cfd .par-it.sel{ background:#dbe9f8; box-shadow:inset 3px 0 0 var(--blue); }
+  #cfd .par-it.sug{ background:#f2faf4; box-shadow:inset 3px 0 0 #17963C; }
+  #cfd .par-it.usado{ opacity:.4; cursor:default; }
+  #cfd .par-it__t{ flex:1; min-width:0; }
+  #cfd .par-it__t b{ display:block; }
+  #cfd .par-it__t span{ display:block; color:var(--muted); font-size:11px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #cfd .par-it__v{ text-align:right; font-weight:800; font-variant-numeric:tabular-nums;
+    white-space:nowrap; }
+  #cfd .par-it__v small{ display:block; font-weight:600; font-size:10.5px; color:var(--muted); }
+  #cfd .par-tag{ font-size:10px; font-weight:800; padding:0 .35rem; border-radius:99px;
+    background:#e6f4ea; color:#17963C; margin-left:.3rem; }
+  #cfd .par-band{ position:fixed; left:0; right:0; bottom:0; z-index:1040; background:#fff;
+    border-top:2px solid var(--blue); box-shadow:0 -6px 22px rgba(20,35,60,.14); }
+  #cfd .par-band__in{ max-width:1180px; margin:0 auto; padding:.55rem 16px; }
+  #cfd .par-band__top{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+  #cfd .par-band__tit{ flex:1; min-width:180px; font-weight:800; font-size:13px; }
+  #cfd .par-band__tit small{ display:block; font-weight:600; color:var(--muted); font-size:11.5px; }
+  #cfd .par-band button{ border:1px solid var(--line-2); background:#fff; border-radius:8px;
+    padding:.35rem .75rem; font-size:12.5px; font-weight:700; cursor:pointer; }
+  #cfd .par-band .par-salvar{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #cfd .par-band .par-salvar:disabled{ opacity:.45; cursor:default; }
+  #cfd .par-pares{ max-height:30vh; overflow:auto; margin-top:.35rem; }
+  #cfd .par-par{ display:flex; gap:.5rem; align-items:center; font-size:12.5px; padding:.25rem 0;
+    border-top:1px dashed var(--line-2); flex-wrap:wrap; }
+  #cfd .par-par__d{ flex:1; min-width:200px; }
+  #cfd .par-par input{ width:110px; text-align:right; font-weight:700; padding:.2rem .4rem;
+    border:1px solid var(--line-2); border-radius:6px; }
+  #cfd .par-band .par-x{ border:0; background:none; color:var(--danger, #a32d2d);
+    font-weight:800; font-size:1rem; padding:0 .3rem; }
+  body.par-on{ padding-bottom:40vh; }
   #cfd .chev{ transition:transform .2s; }
   #cfd .forn.aberto .chev{ transform:rotate(180deg); }
 </style>
@@ -809,7 +857,17 @@
                                 or (l.tipo == 'pagamento' and livre_pg <= 0.005)
                                 or (l.tipo == 'devolucao' and l.abatida_de)
                            else '0' }}"
-             {% if l.tipo == 'nota' %}id="doc-{{ l.id }}"{% endif %}>
+             {% if l.tipo == 'nota' %}id="doc-{{ l.id }}"{% endif %}
+             {#- Parear em lote: o que pode entrar e quanto (o servidor reconfere) #}
+             {%- if l.tipo == 'pagamento' and livre_pg > 0.005 and not l.devolucao %}
+             data-par="pg" data-id="{{ l.id }}" data-max="{{ '%.2f' % livre_pg }}"
+             {%- elif l.tipo == 'nota' and vtot < l.valor - 0.005 %}
+             data-par="nf" data-id="{{ l.id }}" data-max="{{ '%.2f' % (l.valor - vtot) }}"
+             {%- endif %}
+             {%- if l.tipo in ('pagamento', 'nota') %}
+             data-dt="{{ l.data.strftime('%d/%m') }}" data-rot="{{ l.rotulo }}"
+             data-det="{{ l.detalhe or '' }}" data-val="{{ '%.2f' % l.valor }}"
+             {%- endif %}>
           <span class="lin__ico">
             <i class="bi {{ 'bi-cash-coin' if l.tipo == 'pagamento' else ('bi-arrow-counterclockwise' if l.tipo == 'devolucao' else 'bi-receipt') }}"></i></span>
           <div class="lin__t">
@@ -928,6 +986,17 @@
    Dois modos, mesmo componente:
    - pagamento -> notas: 1 Empresa · 2 Notas · 3 Confirmar
    - nota -> pagamentos: 1 Pagamentos · 2 Confirmar #}
+{# Bandeja do Parear em lote (fica no rodapé enquanto o modo está ligado) #}
+<div class="par-band" id="par-band" hidden><div class="par-band__in">
+  <div class="par-band__top">
+    <div class="par-band__tit" id="par-tit"></div>
+    <button type="button" onclick="parLimpar()">Limpar</button>
+    <button type="button" onclick="parSair()">Fechar</button>
+    <button type="button" class="par-salvar" id="par-salvar" onclick="parSalvar(this)" disabled>Salvar tudo</button>
+  </div>
+  <div class="par-pares" id="par-pares"></div>
+  <div id="par-msg" style="color:#17963C;font-weight:700;font-size:12.5px"></div>
+</div></div>
 <div class="escuro" id="cfv-escuro" onclick="cfvFechar()"></div>
 <div class="gav" id="cfv-gav" role="dialog" aria-label="Vincular">
   <div class="gav__pega"></div>
@@ -1176,17 +1245,18 @@ function cfdConc(m) {
   if (eN) eN.textContent = nN;
   if (eS) eS.textContent = nS;
   cfdConc(cfdMem('cfd-conc') || 'nao');
-  // volta pro ponto onde a pessoa estava trabalhando (vinculo recarrega)
-  var y = cfdMem('cfd-scroll');
-  if (y !== null && y !== undefined) {
-    cfdMem('cfd-scroll', null);
-    window.scrollTo(0, parseInt(y, 10) || 0);
-  }
+  // o scroll volta mais abaixo, DEPOIS de reabrir os cards (ver Parear em lote)
 })();
 
 // Recarrega SEM perder o lugar: guarda o scroll antes.
 function cfdReload() {
   cfdMem('cfd-scroll', String(window.scrollY || 0));
+  // ...e os cards abertos: sem isso o card fecha e a pessoa perde o lugar
+  var abertos = [];
+  document.querySelectorAll('#cfd .forn.aberto').forEach(function (c) {
+    if (c.id) abertos.push(c.id);
+  });
+  cfdMem('cfd-abertos', abertos.join(','));
   window.location.reload();
 }
 
@@ -1734,6 +1804,220 @@ function cfdToggle(el) {
   corpo.style.display = aberto ? 'none' : 'block';
   card.classList.toggle('aberto', !aberto);
 }
+
+// ---------- Parear em lote ----------
+// Dentro do card: clica num pagamento, depois na nota que ele paga; o par vai
+// pra bandeja. "Salvar tudo" manda os pares de uma vez pro vincular_lote (que
+// reconfere tudo e grava tudo ou nada). Só monta o que o card já mostra.
+var parCard = null, parSel = null, parPares = [];
+var PAR_MAX = 40;   // o mesmo teto do vincular_lote
+
+function parItens(card, tipo) {
+  return Array.prototype.map.call(
+    card.querySelectorAll('.lin[data-par="' + tipo + '"]'), function (el) {
+      return { id: parseInt(el.dataset.id, 10), max: parseFloat(el.dataset.max),
+               val: parseFloat(el.dataset.val), dt: el.dataset.dt,
+               rot: el.dataset.rot, det: el.dataset.det };
+    });
+}
+function parUsado(campo, id) {
+  return parPares.reduce(function (a, p) { return a + (p[campo] === id ? p.v : 0); }, 0);
+}
+function parResta(it, campo) {
+  return Math.round((it.max - parUsado(campo, it.id)) * 100) / 100;
+}
+function parEsc(s) {
+  return String(s || '').replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+  });
+}
+
+function parToggle(btn) {
+  var card = btn.closest('.forn');
+  if (parCard === card) { parSair(); return; }
+  if (parCard && parPares.length &&
+      !confirm('Há pares não salvos em outro fornecedor. Descartar?')) return;
+  parSair();
+  parCard = card;
+  btn.classList.add('on');
+  var box = document.createElement('div');
+  box.className = 'par-box';
+  card.querySelector('.par-bar').insertAdjacentElement('afterend', box);
+  document.getElementById('par-band').hidden = false;
+  document.body.classList.add('par-on');
+  cfdMem('cfd-parear', card.id);
+  parPinta();
+}
+function parSair() {
+  if (parCard) {
+    var b = parCard.querySelector('.par-box'); if (b) b.remove();
+    var t = parCard.querySelector('.par-bt'); if (t) t.classList.remove('on');
+  }
+  parCard = null; parSel = null; parPares = [];
+  document.getElementById('par-band').hidden = true;
+  document.getElementById('par-msg').textContent = '';
+  document.body.classList.remove('par-on');
+  cfdMem('cfd-parear', null);
+}
+
+function parPinta() {
+  if (!parCard) return;
+  var pgs = parItens(parCard, 'pg'), nfs = parItens(parCard, 'nf');
+  var sel = pgs.filter(function (p) { return p.id === parSel; })[0];
+  var livreSel = sel ? parResta(sel, 'tx') : 0;
+  var cheio = parPares.length >= PAR_MAX;
+  var hPg = pgs.map(function (p) {
+    var r = parResta(p, 'tx'), u = r <= 0.004;
+    return '<div class="par-it' + (u ? ' usado' : '') + (p.id === parSel ? ' sel' : '') +
+      '" onclick="parClPg(' + p.id + ')"><div class="par-it__t"><b>' + p.dt + ' · ' +
+      parEsc(p.rot) + '</b><span>' + parEsc(p.det) + '</span></div>' +
+      '<div class="par-it__v">+' + cfdMoeda(p.val) + '<small>' +
+      (u ? 'todo usado' : 'livre ' + cfdMoeda(r)) + '</small></div></div>';
+  }).join('') || '<div class="par-it usado">nenhum pagamento com saldo livre</div>';
+  var hNf = nfs.map(function (n) {
+    var r = parResta(n, 'doc'), u = r <= 0.004;
+    var sug = sel && !u && Math.abs(r - livreSel) < 0.005;
+    return '<div class="par-it' + (u ? ' usado' : '') + (sug ? ' sug' : '') +
+      '" onclick="parClNf(' + n.id + ')"><div class="par-it__t"><b>' + n.dt + ' · ' +
+      parEsc(n.rot) + (sug ? '<span class="par-tag">valor exato</span>' : '') +
+      '</b><span>' + parEsc(n.det) + '</span></div>' +
+      '<div class="par-it__v" style="color:#a32d2d">−' + cfdMoeda(n.val) + '<small>' +
+      (u ? 'quitada' : 'falta ' + cfdMoeda(r)) + '</small></div></div>';
+  }).join('') || '<div class="par-it usado">nenhuma nota em aberto</div>';
+  parCard.querySelector('.par-box').innerHTML =
+    '<div class="par-cols"><div class="par-col"><div class="par-col__h">Pagamentos com saldo livre</div>' +
+    hPg + '</div><div class="par-col"><div class="par-col__h">Notas em aberto</div>' + hNf + '</div></div>';
+  parCard.querySelector('.par-dica').textContent = cheio
+    ? 'Limite de ' + PAR_MAX + ' pares por vez — salve para continuar.'
+    : sel ? 'Agora clique na nota que o pagamento de ' + cfdMoeda(sel.val) +
+            ' paga (livre ' + cfdMoeda(livreSel) + ').'
+          : 'Clique num pagamento, depois na nota que ele paga.';
+
+  var tot = parPares.reduce(function (a, p) { return a + p.v; }, 0);
+  document.getElementById('par-tit').innerHTML = parPares.length
+    ? parPares.length + ' par(es) na bandeja<small>total ' + cfdMoeda(tot) + ' · ainda não gravado</small>'
+    : 'Bandeja vazia<small>nenhum par ainda</small>';
+  var bs = document.getElementById('par-salvar');
+  bs.disabled = !parPares.length;
+  bs.textContent = parPares.length ? 'Salvar tudo (' + parPares.length + ')' : 'Salvar tudo';
+  document.getElementById('par-pares').innerHTML = parPares.map(function (p, i) {
+    return '<div class="par-par"><div class="par-par__d">Pagamento ' + p.pgDt + ' (' +
+      cfdMoeda(p.pgVal) + ') → ' + parEsc(p.nfRot) + '</div>' +
+      '<input inputmode="decimal" value="' + p.v.toFixed(2).replace('.', ',') +
+      '" onchange="parMuda(' + i + ', this)">' +
+      '<button type="button" class="par-x" title="tirar da bandeja" onclick="parTira(' + i +
+      ')">×</button></div>';
+  }).join('');
+}
+
+function parClPg(id) {
+  var p = parItens(parCard, 'pg').filter(function (x) { return x.id === id; })[0];
+  if (!p || parResta(p, 'tx') <= 0.004) return;
+  parSel = (parSel === id) ? null : id;
+  document.getElementById('par-msg').textContent = '';
+  parPinta();
+}
+function parClNf(id) {
+  if (!parSel) { parCard.querySelector('.par-dica').textContent = 'Primeiro escolha o pagamento.'; return; }
+  if (parPares.length >= PAR_MAX) return;
+  var p = parItens(parCard, 'pg').filter(function (x) { return x.id === parSel; })[0];
+  var n = parItens(parCard, 'nf').filter(function (x) { return x.id === id; })[0];
+  var v = Math.min(parResta(p, 'tx'), parResta(n, 'doc'));
+  if (v <= 0.004) return;
+  // mesmo par de novo soma no que já está na bandeja (o banco guarda 1 por par)
+  var ja = parPares.filter(function (x) { return x.tx === p.id && x.doc === n.id; })[0];
+  if (ja) ja.v = Math.round((ja.v + v) * 100) / 100;
+  else parPares.push({ tx: p.id, doc: n.id, v: Math.round(v * 100) / 100,
+                       pgDt: p.dt, pgVal: p.val, nfRot: n.rot });
+  if (parResta(p, 'tx') <= 0.004) parSel = null;   // pagamento acabou: solta
+  parPinta();
+}
+function parMuda(i, inp) {
+  var par = parPares[i], antes = par.v;
+  par.v = 0;
+  var p = parItens(parCard, 'pg').filter(function (x) { return x.id === par.tx; })[0];
+  var n = parItens(parCard, 'nf').filter(function (x) { return x.id === par.doc; })[0];
+  var teto = Math.min(parResta(p, 'tx'), parResta(n, 'doc'));
+  var v = parseFloat(String(inp.value).replace(/\./g, '').replace(',', '.')) || 0;
+  if (v <= 0 || v > teto + 0.005) {
+    alert('O valor tem de ficar entre R$ 0,01 e ' + cfdMoeda(teto) + '.');
+    par.v = antes;
+  } else par.v = Math.round(v * 100) / 100;
+  parPinta();
+}
+function parTira(i) { parPares.splice(i, 1); parPinta(); }
+function parLimpar() { parPares = []; parSel = null; parPinta(); }
+
+function parSalvar(btn) {
+  if (!parPares.length) return;
+  var itens = parPares.map(function (p) {
+    return { doc_id: p.doc, transacao_id: p.tx, valor: p.v };
+  });
+  btn.disabled = true; btn.textContent = 'gravando…';
+  fetch('{{ url_for("conf_fornecedores_dfe.vincular_lote") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ itens: itens })
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  .then(function (res) {
+    if (!res.ok || !res.j.ok) {
+      btn.disabled = false; btn.textContent = 'Salvar tudo (' + parPares.length + ')';
+      alert((res.j && res.j.erro) || 'não consegui vincular — nada foi gravado');
+      return;
+    }
+    // Gravou: recarrega pros saldos e selos, voltando com o card aberto e
+    // o modo Parear ligado no mesmo lugar.
+    parPares = [];
+    cfdMem('cfd-par-ok', String(res.j.gravados || itens.length));
+    cfdReload();
+  })
+  .catch(function (e) {
+    btn.disabled = false; btn.textContent = 'Salvar tudo (' + parPares.length + ')';
+    alert('Erro de rede — nada foi gravado: ' + e);
+  });
+}
+
+// Botão Parear só em card que tem pagamento livre E nota em aberto.
+(function () {
+  document.querySelectorAll('#cfd .forn').forEach(function (card) {
+    var corpo = card.querySelector('.forn__corpo');
+    if (!corpo || !card.querySelector('.lin[data-par="pg"]') ||
+        !card.querySelector('.lin[data-par="nf"]')) return;
+    var bar = document.createElement('div');
+    bar.className = 'par-bar';
+    bar.innerHTML = '<button type="button" class="par-bt" onclick="parToggle(this)">' +
+      '<i class="bi bi-arrow-left-right"></i> Parear</button>' +
+      '<span class="par-dica">pagamento → nota, vários de uma vez</span>';
+    corpo.insertBefore(bar, corpo.firstChild);
+  });
+  // Volta como estava antes do recarregar: cards abertos e modo Parear.
+  var abertos = cfdMem('cfd-abertos');
+  if (abertos !== null) {
+    cfdMem('cfd-abertos', null);
+    abertos.split(',').forEach(function (id) {
+      var c = id && document.getElementById(id);
+      if (c && !c.classList.contains('aberto')) cfdToggle(c.querySelector('.forn__head'));
+    });
+  }
+  var pc = cfdMem('cfd-parear');
+  var card = pc && document.getElementById(pc);
+  var bt = card && card.querySelector('.par-bt');
+  if (bt && card.classList.contains('aberto')) {
+    parToggle(bt);
+    var ok = cfdMem('cfd-par-ok');
+    if (ok) document.getElementById('par-msg').textContent =
+      '✓ ' + ok + ' vínculo(s) gravados. Pode seguir pareando.';
+  } else cfdMem('cfd-parear', null);
+  cfdMem('cfd-par-ok', null);
+  // volta pro ponto onde a pessoa estava trabalhando (vinculo recarrega);
+  // só agora, com os cards já reabertos, a altura da página bate com a de antes
+  var y = cfdMem('cfd-scroll');
+  if (y !== null && y !== undefined) {
+    cfdMem('cfd-scroll', null);
+    window.scrollTo(0, parseInt(y, 10) || 0);
+  }
+})();
 
 // "OK" da compra: grava na hora e ajusta o contador do fornecedor, sem
 // recarregar — quem está conferindo nota a nota não pode perder a posição da
