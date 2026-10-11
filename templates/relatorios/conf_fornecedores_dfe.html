@@ -265,12 +265,18 @@
     border:1px solid var(--blue); background:#fff; color:var(--blue-deep); border-radius:8px;
     padding:.3rem .65rem; font-size:12px; font-weight:700; }
   #cfd .par-bt.on{ background:var(--blue-deep); color:#fff; }
-  #cfd .par-cols{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  /* Parear ligado: o card ocupa a linha inteira e só o Parear fica no corpo */
+  #cfd .forn.par-modo{ grid-column:1 / -1; border-color:var(--blue);
+    box-shadow:0 0 0 2px rgba(29,99,165,.18), var(--shadow); }
+  #cfd .forn.par-modo .forn__corpo > :not(.par-bar):not(.par-box){ display:none !important; }
+  #cfd .par-cols{ display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
     border-bottom:1px solid var(--line-2); }
+  #cfd .par-lista{ max-height:52vh; overflow-y:auto; }
+  #cfd .par-col__h b{ color:var(--ink); }
   #cfd .par-col + .par-col{ border-left:1px solid var(--line); }
   #cfd .par-col__h{ font-size:10.5px; font-weight:800; text-transform:uppercase;
-    letter-spacing:.06em; color:var(--muted); padding:.4rem .8rem; background:#fafbfd;
-    border-bottom:1px solid var(--line); }
+    letter-spacing:.06em; color:var(--muted); padding:.45rem .8rem; background:#fafbfd;
+    border-bottom:1px solid var(--line); display:flex; justify-content:space-between; }
   #cfd .par-it{ display:flex; gap:.5rem; align-items:center; padding:.45rem .8rem;
     border-bottom:1px solid #f1f4f8; cursor:pointer; font-size:12.5px; }
   #cfd .par-it:hover{ background:#f6f9fc; }
@@ -282,13 +288,17 @@
   #cfd .par-it__t span{ display:block; color:var(--muted); font-size:11px;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #cfd .par-it__v{ text-align:right; font-weight:800; font-variant-numeric:tabular-nums;
-    white-space:nowrap; }
+    white-space:nowrap; min-width:118px; }
+  #cfd .par-it__ic{ width:28px; height:28px; border-radius:8px; flex:0 0 auto;
+    display:grid; place-items:center; font-size:.85rem; }
+  #cfd .par-it__ic--pg{ background:var(--ok-bg); color:var(--ok); }
+  #cfd .par-it__ic--nf{ background:#e8eef6; color:var(--blue-deep); }
   #cfd .par-it__v small{ display:block; font-weight:600; font-size:10.5px; color:var(--muted); }
   #cfd .par-tag{ font-size:10px; font-weight:800; padding:0 .35rem; border-radius:99px;
     background:#e6f4ea; color:#17963C; margin-left:.3rem; }
   #cfd .par-band{ position:fixed; left:0; right:0; bottom:0; z-index:1040; background:#fff;
     border-top:2px solid var(--blue); box-shadow:0 -6px 22px rgba(20,35,60,.14); }
-  #cfd .par-band__in{ max-width:1180px; margin:0 auto; padding:.55rem 16px; }
+  #cfd .par-band__in{ padding:.55rem 16px; }
   #cfd .par-band__top{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
   #cfd .par-band__tit{ flex:1; min-width:180px; font-weight:800; font-size:13px; }
   #cfd .par-band__tit small{ display:block; font-weight:600; color:var(--muted); font-size:11.5px; }
@@ -1840,6 +1850,7 @@ function parToggle(btn) {
   parSair();
   parCard = card;
   btn.classList.add('on');
+  card.classList.add('par-modo');
   var box = document.createElement('div');
   box.className = 'par-box';
   card.querySelector('.par-bar').insertAdjacentElement('afterend', box);
@@ -1847,11 +1858,13 @@ function parToggle(btn) {
   document.body.classList.add('par-on');
   cfdMem('cfd-parear', card.id);
   parPinta();
+  card.scrollIntoView({ block: 'start' });
 }
 function parSair() {
   if (parCard) {
     var b = parCard.querySelector('.par-box'); if (b) b.remove();
     var t = parCard.querySelector('.par-bt'); if (t) t.classList.remove('on');
+    parCard.classList.remove('par-modo');
   }
   parCard = null; parSel = null; parPares = [];
   document.getElementById('par-band').hidden = true;
@@ -1869,7 +1882,8 @@ function parPinta() {
   var hPg = pgs.map(function (p) {
     var r = parResta(p, 'tx'), u = r <= 0.004;
     return '<div class="par-it' + (u ? ' usado' : '') + (p.id === parSel ? ' sel' : '') +
-      '" onclick="parClPg(' + p.id + ')"><div class="par-it__t"><b>' + p.dt + ' · ' +
+      '" onclick="parClPg(' + p.id + ')"><span class="par-it__ic par-it__ic--pg">' +
+      '<i class="bi bi-cash-coin"></i></span><div class="par-it__t"><b>' + p.dt + ' · ' +
       parEsc(p.rot) + '</b><span>' + parEsc(p.det) + '</span></div>' +
       '<div class="par-it__v">+' + cfdMoeda(p.val) + '<small>' +
       (u ? 'todo usado' : 'livre ' + cfdMoeda(r)) + '</small></div></div>';
@@ -1878,15 +1892,26 @@ function parPinta() {
     var r = parResta(n, 'doc'), u = r <= 0.004;
     var sug = sel && !u && Math.abs(r - livreSel) < 0.005;
     return '<div class="par-it' + (u ? ' usado' : '') + (sug ? ' sug' : '') +
-      '" onclick="parClNf(' + n.id + ')"><div class="par-it__t"><b>' + n.dt + ' · ' +
+      '" onclick="parClNf(' + n.id + ')"><span class="par-it__ic par-it__ic--nf">' +
+      '<i class="bi bi-receipt"></i></span><div class="par-it__t"><b>' + n.dt + ' · ' +
       parEsc(n.rot) + (sug ? '<span class="par-tag">valor exato</span>' : '') +
       '</b><span>' + parEsc(n.det) + '</span></div>' +
       '<div class="par-it__v" style="color:#a32d2d">−' + cfdMoeda(n.val) + '<small>' +
       (u ? 'quitada' : 'falta ' + cfdMoeda(r)) + '</small></div></div>';
   }).join('') || '<div class="par-it usado">nenhuma nota em aberto</div>';
-  parCard.querySelector('.par-box').innerHTML =
-    '<div class="par-cols"><div class="par-col"><div class="par-col__h">Pagamentos com saldo livre</div>' +
-    hPg + '</div><div class="par-col"><div class="par-col__h">Notas em aberto</div>' + hNf + '</div></div>';
+  var nPg = pgs.filter(function (p) { return parResta(p, 'tx') > 0.004; }).length;
+  var nNf = nfs.filter(function (n) { return parResta(n, 'doc') > 0.004; }).length;
+  var box = parCard.querySelector('.par-box');
+  var rol = Array.prototype.map.call(box.querySelectorAll('.par-lista'),
+                                     function (l) { return l.scrollTop; });
+  box.innerHTML =
+    '<div class="par-cols"><div class="par-col"><div class="par-col__h">' +
+    '<span>Pagamentos com saldo livre</span><b>' + nPg + '</b></div>' +
+    '<div class="par-lista">' + hPg + '</div></div>' +
+    '<div class="par-col"><div class="par-col__h"><span>Notas em aberto</span><b>' + nNf +
+    '</b></div><div class="par-lista">' + hNf + '</div></div></div>';
+  // repintar não pode jogar a lista pro topo a cada clique
+  box.querySelectorAll('.par-lista').forEach(function (l, i) { l.scrollTop = rol[i] || 0; });
   parCard.querySelector('.par-dica').textContent = cheio
     ? 'Limite de ' + PAR_MAX + ' pares por vez — salve para continuar.'
     : sel ? 'Agora clique na nota que o pagamento de ' + cfdMoeda(sel.val) +
