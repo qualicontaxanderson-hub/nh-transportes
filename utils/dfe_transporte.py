@@ -61,13 +61,15 @@ def extrair_placa_motorista(xml):
     if 'MOTORISTA' in obs:
         motorista = _nome(obs['MOTORISTA'])
 
-    livre = ' '.join(t for _, t in _RE_LIVRE.findall(xml))
-    if not placa:
-        m = _RE_PLACA_TXT.search(livre)
-        if m:
-            placa = m.group(1).upper() + m.group(2).upper()
-    if not motorista:
-        m = _RE_MOT_TXT.search(livre)
-        if m:
-            motorista = _nome(m.group(1))
+    # bloco por bloco: juntar os textos emenda o fim de um no começo do outro
+    # e o nome sai dobrado ("FULANO FULANO", visto na Tabocão)
+    for _, livre in _RE_LIVRE.findall(xml):
+        if not placa:
+            m = _RE_PLACA_TXT.search(livre)
+            if m:
+                placa = m.group(1).upper() + m.group(2).upper()
+        if not motorista:
+            m = _RE_MOT_TXT.search(livre)
+            if m:
+                motorista = _nome(m.group(1))
     return placa, motorista

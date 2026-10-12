@@ -29,6 +29,10 @@ CASOS = [
      '<infCpl>Veículo: TFO3I53_01 / Motorista:WELINGTON BATISTA    Ponto de Venda</infCpl>'
      '<obsCont xCampo="PLACA"><xTexto>TFO3I53_01</xTexto></obsCont>',
      ('TFO3I53', 'WELINGTON BATISTA')),
+    ('Tabocão: nome no fim do infAdProd e de novo no começo do infCpl não dobra',
+     '<det><infAdProd>Placa(s) = GO TFO-3I53 GO RDT-7H76 - Nome Motorista= WELINGTON BRAZ BATISTA</infAdProd></det>'
+     '<infCpl>WELINGTON BRAZ BATISTA - Produto</infCpl>',
+     ('TFO3I53', 'WELINGTON BRAZ BATISTA')),
     ('veicTransp estruturado',
      '<transp><veicTransp><placa>RXP0I78</placa><UF>GO</UF></veicTransp></transp>',
      ('RXP0I78', None)),
