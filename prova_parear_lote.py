@@ -61,7 +61,7 @@ def prova(msg, cond):
 
 print('1) a tela')
 prova('abre (HTTP %s)' % r.status_code, r.status_code == 200)
-prova('tem a bandeja', 'id="par-band"' in html)
+prova('tem a tela própria do Parear', 'id="pr"' in html and 'id="pr-cdif"' in html)
 prova('tem o botão Parear e o Salvar tudo',
       'parToggle(this)' in html and 'parSalvar(this)' in html)
 
@@ -130,7 +130,36 @@ prova('%d notas fora do Parear, todas já sem falta' % len(fora_nf), not abertas
 cur.close()
 conn.close()
 
-print('4) o Salvar tudo fala a língua do vincular_lote')
+print('4) produto / qtd / preço unitário de cada nota batem com dfe_itens')
+import json, html as _h
+it_tela = {}
+for attrs in re.findall(r'<div class="lin lin--nf"(.*?)>', html, re.S):
+    m = re.search(r'data-par="nf" data-id="(\d+)"', attrs)
+    j = re.search(r"data-itens='(.*?)'", attrs, re.S)
+    if m and j:
+        it_tela[int(m.group(1))] = json.loads(_h.unescape(j.group(1)))
+prova('toda nota do Parear traz os itens (%d de %d)' % (len(it_tela), len(nf)),
+      set(it_tela) >= set(nf))
+conn = get_db_connection()
+cur = conn.cursor(dictionary=True)
+erros_it = []
+if it_tela:
+    fmt = ','.join(['%s'] * len(it_tela))
+    cur.execute("SELECT documento_id, COUNT(*) n, SUM(quantidade) q, "
+                "       SUM(quantidade * valor_unitario) t "
+                "  FROM dfe_itens WHERE documento_id IN (" + fmt + ") "
+                " GROUP BY documento_id", list(it_tela))
+    for x in cur.fetchall():
+        tl = it_tela[x['documento_id']]
+        q = sum(i['q'] for i in tl); t = sum(i['q'] * i['vu'] for i in tl)
+        if len(tl) != x['n'] or abs(q - float(x['q'])) > 0.001 or abs(t - float(x['t'])) > 0.05:
+            erros_it.append((x['documento_id'], len(tl), x['n'], q, float(x['q'])))
+cur.close(); conn.close()
+prova('quantidade e qtd×preço de cada nota = banco', not erros_it)
+for e in erros_it[:5]:
+    print('        doc %s: itens %s x %s, qtd %.3f x %.3f' % e)
+
+print('5) o Salvar tudo fala a língua do vincular_lote')
 prova('manda {doc_id, transacao_id, valor} pro mesmo endpoint',
       "doc_id: p.doc, transacao_id: p.tx, valor: p.v" in html
       and html.count('/relatorios/conf_fornecedores_dfe/vincular_lote') >= 2)
