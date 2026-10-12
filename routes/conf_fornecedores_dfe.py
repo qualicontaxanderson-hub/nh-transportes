@@ -1648,6 +1648,10 @@ def notas_candidatas(tx_id):
     }, notas=notas)
 
 
+# Até quanto de sobra de pagamento o Parear pode jogar na última nota.
+SOBRA_MAX = 1.00
+
+
 @bp.route('/conf_fornecedores_dfe/vincular_lote', methods=['POST'])
 @login_required
 @admin_required
@@ -1662,7 +1666,8 @@ def vincular_lote():
     try:
         itens = [{'doc_id': int(i.get('doc_id')),
                   'transacao_id': int(i.get('transacao_id')),
-                  'valor': round(float(i.get('valor')), 2)} for i in itens]
+                  'valor': round(float(i.get('valor')), 2),
+                  'absorve': bool(i.get('absorve'))} for i in itens]
     except (TypeError, ValueError):
         return jsonify(ok=False, erro='dados inválidos'), 400
     if any(i['valor'] <= 0 for i in itens):
@@ -1714,7 +1719,11 @@ def vincular_lote():
                      - extra_doc[it['doc_id']])
             livre = (float(pg['valor']) - float(pg['outros'])
                      - extra_tx[it['transacao_id']])
-            if it['valor'] > falta + 0.005:
+            # "absorve": a sobrinha do pagamento (centavos de arredondamento)
+            # vai pra nota, que fica paga um pouco a mais -- só com o pedido
+            # explícito da tela e nunca mais que SOBRA_MAX.
+            folga = SOBRA_MAX if it['absorve'] else 0.005
+            if it['valor'] > falta + folga:
                 cur.close()
                 return jsonify(ok=False, erro='a NF %s só tem R$ %.2f em aberto'
                                % (nota['numero'], max(falta, 0))), 400

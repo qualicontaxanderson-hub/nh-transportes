@@ -293,6 +293,10 @@
   #cfd .pr-cx--dif.ok{ background:#e6f4ea; border-color:#bfe3c9; }
   #cfd .pr-cx--dif.sobra{ background:#eaf1f9; border-color:#c7d9ee; }
   #cfd .pr-cx--dif.falta{ background:#fdf0d6; border-color:#f0dcae; }
+  #cfd .pr-abs{ display:flex; gap:.4rem; align-items:center; margin-top:.3rem; cursor:pointer;
+    font-size:12px; font-weight:700; color:var(--blue-deep); }
+  #cfd .pr-abs[hidden]{ display:none; }
+  #cfd .pr-abs input{ width:16px; height:16px; }
   #cfd .pr__par{ border:0; border-radius:10px; background:var(--blue); color:#fff; font-weight:800;
     padding:0 1.2rem; cursor:pointer; font-size:13.5px; min-height:50px; }
   #cfd .pr__par:disabled{ opacity:.4; cursor:default; }
@@ -1053,7 +1057,9 @@
     <div class="pr-cx pr-cx--nf"><small>Notas marcadas (o que falta)</small><b id="pr-cnf"></b>
       <span id="pr-cnfn"></span></div>
     <div class="pr-cx pr-cx--dif" id="pr-cdif"><small>Diferença</small><b id="pr-cdv"></b>
-      <span id="pr-cdt"></span></div>
+      <span id="pr-cdt"></span>
+      <label class="pr-abs" id="pr-abs" hidden><input type="checkbox" id="pr-abs-ck">
+        <span id="pr-abs-t"></span></label></div>
     <button type="button" class="pr__par" id="pr-par" onclick="parParear()" disabled>Parear marcados →</button>
   </div>
   <div class="pr__msg" id="par-msg"></div>
@@ -1892,6 +1898,7 @@ function cfdToggle(el) {
 // grava tudo ou nada). Só monta o que o card já mostra.
 var parCard = null, parMPg = {}, parMNf = {}, parPares = [];
 var PAR_MAX = 40;   // o mesmo teto do vincular_lote
+var PAR_SOBRA = 1.00;   // o mesmo SOBRA_MAX do vincular_lote
 
 function parItens(card, tipo) {
   return Array.prototype.map.call(
@@ -2009,6 +2016,13 @@ function parPinta() {
     box.className += ' falta'; dv.textContent = 'Faltam ' + cfdMoeda(-d);
     dt.textContent = 'a última nota fica parcial, com essa falta';
   }
+  // sobra pequena (centavos): oferece jogar na última nota e fechar tudo
+  var abs = document.getElementById('pr-abs'), ck = document.getElementById('pr-abs-ck');
+  var podeAbs = np && nn && d > 0.004 && d <= PAR_SOBRA + 0.0001;
+  if (podeAbs !== !abs.hidden) ck.checked = false;
+  abs.hidden = !podeAbs;
+  if (podeAbs) document.getElementById('pr-abs-t').textContent =
+    'conciliar assim mesmo: os ' + cfdMoeda(d) + ' vão para a última nota';
   var cheio = parPares.length >= PAR_MAX;
   var bp = document.getElementById('pr-par');
   bp.disabled = !(np && nn) || cheio;
@@ -2027,7 +2041,8 @@ function parPinta() {
     var falta = n ? parResta(n, 'doc') : 0;
     var tot = g.ls.reduce(function (a, x) { return a + x.p.v; }, 0);
     return '<div class="pr-grp"><div class="pr-grp__h">' + parEsc(g.rot) +
-      (falta <= 0.004 ? '<span class="s pr-s--ok">quitada</span>'
+      (falta < -0.004 ? '<span class="s pr-s--ok">quitada +' + cfdMoeda(-falta) + ' de sobra</span>'
+       : falta <= 0.004 ? '<span class="s pr-s--ok">quitada</span>'
                       : '<span class="s pr-s--pa">falta ' + cfdMoeda(falta) + '</span>') + '</div>' +
       g.ls.map(function (x) {
         return '<div class="pr-grp__l"><span>pag. ' + x.p.pgDt + ' (' + cfdMoeda(x.p.pgVal) +
@@ -2067,6 +2082,21 @@ function parParear() {
     if (parResta(p, 'tx') <= 0.004) i++;
     if (parResta(n, 'doc') <= 0.004) j++;
   }
+  // "conciliar assim mesmo": a sobrinha de cada pagamento marcado vai pra
+  // última nota marcada (o servidor aceita até PAR_SOBRA a mais, com o aviso)
+  var ck = document.getElementById('pr-abs-ck');
+  if (ck.checked && !document.getElementById('pr-abs').hidden && ns.length) {
+    var ult = ns[ns.length - 1];
+    ps.forEach(function (p) {
+      var r = parResta(p, 'tx');
+      if (r <= 0.004 || r > PAR_SOBRA + 0.0001) return;
+      var ja = parPares.filter(function (x) { return x.tx === p.id && x.doc === ult.id; })[0];
+      if (ja) { ja.v = Math.round((ja.v + r) * 100) / 100; ja.abs = true; }
+      else parPares.push({ tx: p.id, doc: ult.id, v: r, pgDt: p.dt, pgVal: p.val,
+                           nfRot: ult.rot, abs: true });
+    });
+  }
+  ck.checked = false;
   parMPg = {}; parMNf = {};
   parPinta();
 }
@@ -2076,7 +2106,7 @@ function parLimpar() { parPares = []; parMPg = {}; parMNf = {}; parPinta(); }
 function parSalvar(btn) {
   if (!parPares.length) return;
   var itens = parPares.map(function (p) {
-    return { doc_id: p.doc, transacao_id: p.tx, valor: p.v };
+    return { doc_id: p.doc, transacao_id: p.tx, valor: p.v, absorve: !!p.abs };
   });
   btn.disabled = true; btn.textContent = 'gravando…';
   fetch('{{ url_for("conf_fornecedores_dfe.vincular_lote") }}', {
