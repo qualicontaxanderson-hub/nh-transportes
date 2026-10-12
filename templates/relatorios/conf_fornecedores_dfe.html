@@ -257,64 +257,106 @@
   #cfd .corte b{ color:var(--ink); }
   #cfd .corte__j{ display:block; margin-top:.25rem; }
   #cfd .corte__erro{ display:block; margin-top:.25rem; color:var(--danger); font-weight:600; }
-  /* Parear em lote: pagamento -> nota, varios pares, grava tudo junto */
+  /* Parear: tela própria por cima de tudo, uma empresa só. Marca pagamentos
+     e notas, confere a conta e pareia; "Salvar tudo" grava o lote. */
   #cfd .par-bar{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
     padding:.5rem .8rem; background:#f6f9fc; border-bottom:1px solid var(--line);
     font-size:12px; color:var(--muted); }
   #cfd .par-bt{ display:inline-flex; align-items:center; gap:.3rem; cursor:pointer;
     border:1px solid var(--blue); background:#fff; color:var(--blue-deep); border-radius:8px;
     padding:.3rem .65rem; font-size:12px; font-weight:700; }
-  #cfd .par-bt.on{ background:var(--blue-deep); color:#fff; }
-  /* Parear ligado: o card ocupa a linha inteira e só o Parear fica no corpo */
-  #cfd .forn.par-modo{ grid-column:1 / -1; border-color:var(--blue);
-    box-shadow:0 0 0 2px rgba(29,99,165,.18), var(--shadow); }
-  #cfd .forn.par-modo .forn__corpo > :not(.par-bar):not(.par-box){ display:none !important; }
-  #cfd .par-cols{ display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
-    border-bottom:1px solid var(--line-2); }
-  #cfd .par-lista{ max-height:52vh; overflow-y:auto; }
-  #cfd .par-col__h b{ color:var(--ink); }
-  #cfd .par-col + .par-col{ border-left:1px solid var(--line); }
-  #cfd .par-col__h{ font-size:10.5px; font-weight:800; text-transform:uppercase;
-    letter-spacing:.06em; color:var(--muted); padding:.45rem .8rem; background:#fafbfd;
-    border-bottom:1px solid var(--line); display:flex; justify-content:space-between; }
-  #cfd .par-it{ display:flex; gap:.5rem; align-items:center; padding:.45rem .8rem;
-    border-bottom:1px solid #f1f4f8; cursor:pointer; font-size:12.5px; }
-  #cfd .par-it:hover{ background:#f6f9fc; }
-  #cfd .par-it.sel{ background:#dbe9f8; box-shadow:inset 3px 0 0 var(--blue); }
-  #cfd .par-it.sug{ background:#f2faf4; box-shadow:inset 3px 0 0 #17963C; }
-  #cfd .par-it.usado{ opacity:.4; cursor:default; }
-  #cfd .par-it__t{ flex:1; min-width:0; }
-  #cfd .par-it__t b{ display:block; }
-  #cfd .par-it__t span{ display:block; color:var(--muted); font-size:11px;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  #cfd .par-it__v{ text-align:right; font-weight:800; font-variant-numeric:tabular-nums;
-    white-space:nowrap; min-width:118px; }
-  #cfd .par-it__ic{ width:28px; height:28px; border-radius:8px; flex:0 0 auto;
-    display:grid; place-items:center; font-size:.85rem; }
-  #cfd .par-it__ic--pg{ background:var(--ok-bg); color:var(--ok); }
-  #cfd .par-it__ic--nf{ background:#e8eef6; color:var(--blue-deep); }
-  #cfd .par-it__v small{ display:block; font-weight:600; font-size:10.5px; color:var(--muted); }
-  #cfd .par-tag{ font-size:10px; font-weight:800; padding:0 .35rem; border-radius:99px;
-    background:#e6f4ea; color:#17963C; margin-left:.3rem; }
-  #cfd .par-band{ position:fixed; left:0; right:0; bottom:0; z-index:1040; background:#fff;
-    border-top:2px solid var(--blue); box-shadow:0 -6px 22px rgba(20,35,60,.14); }
-  #cfd .par-band__in{ padding:.55rem 16px; }
-  #cfd .par-band__top{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
-  #cfd .par-band__tit{ flex:1; min-width:180px; font-weight:800; font-size:13px; }
-  #cfd .par-band__tit small{ display:block; font-weight:600; color:var(--muted); font-size:11.5px; }
-  #cfd .par-band button{ border:1px solid var(--line-2); background:#fff; border-radius:8px;
-    padding:.35rem .75rem; font-size:12.5px; font-weight:700; cursor:pointer; }
-  #cfd .par-band .par-salvar{ background:var(--blue); border-color:var(--blue); color:#fff; }
-  #cfd .par-band .par-salvar:disabled{ opacity:.45; cursor:default; }
-  #cfd .par-pares{ max-height:30vh; overflow:auto; margin-top:.35rem; }
-  #cfd .par-par{ display:flex; gap:.5rem; align-items:center; font-size:12.5px; padding:.25rem 0;
-    border-top:1px dashed var(--line-2); flex-wrap:wrap; }
-  #cfd .par-par__d{ flex:1; min-width:200px; }
-  #cfd .par-par input{ width:110px; text-align:right; font-weight:700; padding:.2rem .4rem;
-    border:1px solid var(--line-2); border-radius:6px; }
-  #cfd .par-band .par-x{ border:0; background:none; color:var(--danger, #a32d2d);
-    font-weight:800; font-size:1rem; padding:0 .3rem; }
-  body.par-on{ padding-bottom:40vh; }
+  #cfd .par-bt:hover{ background:#eaf1f9; }
+  body.par-on{ overflow:hidden; }
+  #cfd .pr{ position:fixed; inset:0; z-index:1060; display:flex; flex-direction:column;
+    background:#eef2f7; font-size:13px; }
+  #cfd .pr[hidden]{ display:none; }
+  #cfd .pr__topo{ background:linear-gradient(90deg,#0C4C86,#1D63A5); color:#fff;
+    padding:.65rem 16px; display:flex; align-items:center; gap:.8rem; flex-wrap:wrap; }
+  #cfd .pr__t{ flex:1; min-width:200px; }
+  #cfd .pr__t small{ display:block; opacity:.8; font-size:11.5px; }
+  #cfd .pr__t b{ font-size:15px; }
+  #cfd .pr__s{ text-align:right; font-weight:800; font-size:15px; font-variant-numeric:tabular-nums; }
+  #cfd .pr__s small{ display:block; font-weight:600; font-size:10.5px; opacity:.8;
+    letter-spacing:.06em; text-transform:uppercase; }
+  #cfd .pr__x{ border:1px solid rgba(255,255,255,.5); background:transparent; color:#fff;
+    border-radius:8px; padding:.35rem .7rem; font-weight:700; cursor:pointer; font-size:12.5px; }
+  #cfd .pr__calc{ display:grid; grid-template-columns:1fr 1fr 1.3fr auto; gap:.6rem;
+    padding:.6rem 16px; background:#fff; border-bottom:1px solid var(--line-2); }
+  @media (max-width:900px){ #cfd .pr__calc{ grid-template-columns:1fr 1fr; } }
+  #cfd .pr-cx{ border:1px solid var(--line-2); border-radius:10px; padding:.4rem .7rem; }
+  #cfd .pr-cx small{ display:block; font-size:10.5px; font-weight:800; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--muted); }
+  #cfd .pr-cx b{ font-size:17px; font-variant-numeric:tabular-nums; }
+  #cfd .pr-cx span{ font-size:11.5px; color:var(--muted); }
+  #cfd .pr-cx--pg b{ color:#17963C; } #cfd .pr-cx--nf b{ color:#a32d2d; }
+  #cfd .pr-cx--dif b{ font-size:15px; }
+  #cfd .pr-cx--dif.ok{ background:#e6f4ea; border-color:#bfe3c9; }
+  #cfd .pr-cx--dif.sobra{ background:#eaf1f9; border-color:#c7d9ee; }
+  #cfd .pr-cx--dif.falta{ background:#fdf0d6; border-color:#f0dcae; }
+  #cfd .pr__par{ border:0; border-radius:10px; background:var(--blue); color:#fff; font-weight:800;
+    padding:0 1.2rem; cursor:pointer; font-size:13.5px; min-height:50px; }
+  #cfd .pr__par:disabled{ opacity:.4; cursor:default; }
+  #cfd .pr__msg{ padding:.4rem 16px; background:#e6f4ea; color:#17963C; font-weight:700;
+    font-size:12.5px; border-bottom:1px solid #bfe3c9; }
+  #cfd .pr__msg:empty{ display:none; }
+  #cfd .pr__corpo{ flex:1; min-height:0; display:grid; grid-template-columns:1fr 1.35fr 360px; }
+  @media (max-width:1100px){
+    #cfd .pr__corpo{ grid-template-columns:1fr 1fr; overflow-y:auto; }
+    #cfd .pr-band{ grid-column:1 / -1; }
+    #cfd .pr-lista{ max-height:60vh; }
+  }
+  @media (max-width:700px){ #cfd .pr__corpo{ grid-template-columns:1fr; } }
+  #cfd .pr-col{ display:flex; flex-direction:column; min-height:0; background:#fff;
+    border-right:1px solid var(--line-2); }
+  #cfd .pr-col__h{ padding:.5rem .8rem; font-size:10.5px; font-weight:800; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--muted); background:#fafbfd; border-bottom:1px solid var(--line);
+    display:flex; gap:.5rem; align-items:center; }
+  #cfd .pr-col__h .q{ margin-left:auto; color:var(--ink); }
+  #cfd .pr-lista{ flex:1; overflow-y:auto; }
+  #cfd .pr-it{ display:flex; gap:.6rem; align-items:flex-start; padding:.55rem .8rem;
+    border-bottom:1px solid #f1f4f8; cursor:pointer; }
+  #cfd .pr-it:hover{ background:#f6f9fc; }
+  #cfd .pr-it.on{ background:#dbe9f8; box-shadow:inset 3px 0 0 var(--blue); }
+  #cfd .pr-it.usado{ opacity:.38; cursor:default; }
+  #cfd .pr-ck{ width:18px; height:18px; border:2px solid #9aa7b5; border-radius:5px; flex:0 0 auto;
+    margin-top:2px; display:grid; place-items:center; color:#fff; font-size:12px; font-weight:900; }
+  #cfd .pr-it.on .pr-ck{ background:var(--blue); border-color:var(--blue); }
+  #cfd .pr-it__t{ flex:1; min-width:0; }
+  #cfd .pr-it__t b{ display:block; }
+  #cfd .pr-it__t .d{ display:block; color:var(--muted); font-size:11.5px; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; }
+  #cfd .pr-it__v{ text-align:right; font-weight:800; white-space:nowrap;
+    font-variant-numeric:tabular-nums; }
+  #cfd .pr-it__v small{ display:block; font-weight:600; font-size:11px; color:var(--muted); }
+  #cfd .pr-prod{ display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:.1rem .9rem;
+    margin-top:.25rem; font-size:11.5px; color:#3a4655; font-variant-numeric:tabular-nums; }
+  #cfd .pr-prod span:nth-child(3n+1){ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #cfd .pr-prod span:not(:nth-child(3n+1)){ text-align:right; }
+  #cfd .pr-band{ display:flex; flex-direction:column; min-height:0; background:#fbfcfe; }
+  #cfd .pr-band__lista{ flex:1; overflow-y:auto; padding:.4rem .8rem; }
+  #cfd .pr-grp{ background:#fff; border:1px solid var(--line-2); border-radius:10px;
+    margin-bottom:.5rem; overflow:hidden; }
+  #cfd .pr-grp__h{ display:flex; gap:.4rem; align-items:center; padding:.4rem .6rem;
+    background:#f6f9fc; border-bottom:1px solid var(--line); font-weight:800; font-size:12.5px; }
+  #cfd .pr-grp__h .s{ margin-left:auto; font-size:10.5px; padding:.05rem .45rem; border-radius:99px; }
+  #cfd .pr-s--ok{ background:#e6f4ea; color:#17963C; }
+  #cfd .pr-s--pa{ background:#fdf0d6; color:#8a5a00; }
+  #cfd .pr-grp__l{ display:flex; gap:.4rem; align-items:center; padding:.3rem .6rem; font-size:12px;
+    border-bottom:1px dashed var(--line); font-variant-numeric:tabular-nums; }
+  #cfd .pr-grp__l span{ flex:1; color:#3a4655; }
+  #cfd .pr-grp__l button{ border:0; background:none; color:#a32d2d; font-weight:800;
+    cursor:pointer; padding:0 .2rem; }
+  #cfd .pr-grp__t{ display:flex; padding:.3rem .6rem; font-size:12px; font-weight:800;
+    font-variant-numeric:tabular-nums; }
+  #cfd .pr-grp__t span{ flex:1; }
+  #cfd .pr-band__p{ padding:.6rem .8rem; border-top:1px solid var(--line-2); background:#fff;
+    display:flex; gap:.5rem; }
+  #cfd .pr-band__p button{ border:1px solid var(--line-2); background:#fff; border-radius:8px;
+    padding:.5rem .8rem; font-weight:700; cursor:pointer; }
+  #cfd .pr-band__p .sv{ flex:1; background:#17963C; border-color:#17963C; color:#fff; }
+  #cfd .pr-band__p .sv:disabled{ opacity:.4; cursor:default; }
+  #cfd .pr-vz{ color:var(--muted); padding:1.2rem .4rem; text-align:center; font-size:12px;
+    line-height:1.5; }
   #cfd .chev{ transition:transform .2s; }
   #cfd .forn.aberto .chev{ transform:rotate(180deg); }
 </style>
@@ -877,6 +919,7 @@
              {%- if l.tipo in ('pagamento', 'nota') %}
              data-dt="{{ l.data.strftime('%d/%m') }}" data-rot="{{ l.rotulo }}"
              data-det="{{ l.detalhe or '' }}" data-val="{{ '%.2f' % l.valor }}"
+             {%- if l.tipo == 'nota' %} data-itens='{{ itens_nota.get(l.id, []) | tojson }}'{% endif %}
              {%- endif %}>
           <span class="lin__ico">
             <i class="bi {{ 'bi-cash-coin' if l.tipo == 'pagamento' else ('bi-arrow-counterclockwise' if l.tipo == 'devolucao' else 'bi-receipt') }}"></i></span>
@@ -996,17 +1039,43 @@
    Dois modos, mesmo componente:
    - pagamento -> notas: 1 Empresa · 2 Notas · 3 Confirmar
    - nota -> pagamentos: 1 Pagamentos · 2 Confirmar #}
-{# Bandeja do Parear em lote (fica no rodapé enquanto o modo está ligado) #}
-<div class="par-band" id="par-band" hidden><div class="par-band__in">
-  <div class="par-band__top">
-    <div class="par-band__tit" id="par-tit"></div>
-    <button type="button" onclick="parLimpar()">Limpar</button>
-    <button type="button" onclick="parSair()">Fechar</button>
-    <button type="button" class="par-salvar" id="par-salvar" onclick="parSalvar(this)" disabled>Salvar tudo</button>
+{# Parear: tela própria (abre por cima da lista, uma empresa por vez) #}
+<div class="pr" id="pr" hidden role="dialog" aria-label="Parear pagamento e nota">
+  <div class="pr__topo">
+    <div class="pr__t"><small>Parear pagamento × nota</small>
+      <b id="pr-nome"></b><small id="pr-cnpj"></small></div>
+    <div class="pr__s" id="pr-saldo"></div>
+    <button type="button" class="pr__x" onclick="parSair()">✕ Fechar</button>
   </div>
-  <div class="par-pares" id="par-pares"></div>
-  <div id="par-msg" style="color:#17963C;font-weight:700;font-size:12.5px"></div>
-</div></div>
+  <div class="pr__calc">
+    <div class="pr-cx pr-cx--pg"><small>Pagamentos marcados</small><b id="pr-cpg"></b>
+      <span id="pr-cpgn"></span></div>
+    <div class="pr-cx pr-cx--nf"><small>Notas marcadas (o que falta)</small><b id="pr-cnf"></b>
+      <span id="pr-cnfn"></span></div>
+    <div class="pr-cx pr-cx--dif" id="pr-cdif"><small>Diferença</small><b id="pr-cdv"></b>
+      <span id="pr-cdt"></span></div>
+    <button type="button" class="pr__par" id="pr-par" onclick="parParear()" disabled>Parear marcados →</button>
+  </div>
+  <div class="pr__msg" id="par-msg"></div>
+  <div class="pr__corpo">
+    <div class="pr-col">
+      <div class="pr-col__h">Pagamentos com saldo livre <span class="q" id="pr-qpg"></span></div>
+      <div class="pr-lista" id="pr-lpg"></div>
+    </div>
+    <div class="pr-col">
+      <div class="pr-col__h">Notas em aberto <span class="q" id="pr-qnf"></span></div>
+      <div class="pr-lista" id="pr-lnf"></div>
+    </div>
+    <div class="pr-band">
+      <div class="pr-col__h">Prontos para salvar <span class="q" id="pr-qb"></span></div>
+      <div class="pr-band__lista" id="pr-lb"></div>
+      <div class="pr-band__p">
+        <button type="button" onclick="parLimpar()">Limpar</button>
+        <button type="button" class="sv" id="par-salvar" onclick="parSalvar(this)" disabled>Salvar tudo</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="escuro" id="cfv-escuro" onclick="cfvFechar()"></div>
 <div class="gav" id="cfv-gav" role="dialog" aria-label="Vincular">
   <div class="gav__pega"></div>
@@ -1815,20 +1884,23 @@ function cfdToggle(el) {
   card.classList.toggle('aberto', !aberto);
 }
 
-// ---------- Parear em lote ----------
-// Dentro do card: clica num pagamento, depois na nota que ele paga; o par vai
-// pra bandeja. "Salvar tudo" manda os pares de uma vez pro vincular_lote (que
-// reconfere tudo e grava tudo ou nada). Só monta o que o card já mostra.
-// parSel: pagamentos marcados (um ou vários) -- a nota consome deles em ordem
-var parCard = null, parSel = [], parPares = [];
+// ---------- Parear (tela própria) ----------
+// Abre por cima da lista, só com a empresa do card. Marca pagamentos e notas,
+// a calculadora mostra a diferença, "Parear marcados" distribui (pagamento
+// mais antigo paga a nota mais antiga) e manda pra coluna "Prontos para
+// salvar". "Salvar tudo" grava o lote no vincular_lote (que reconfere tudo e
+// grava tudo ou nada). Só monta o que o card já mostra.
+var parCard = null, parMPg = {}, parMNf = {}, parPares = [];
 var PAR_MAX = 40;   // o mesmo teto do vincular_lote
 
 function parItens(card, tipo) {
   return Array.prototype.map.call(
     card.querySelectorAll('.lin[data-par="' + tipo + '"]'), function (el) {
+      var itens = [];
+      try { itens = JSON.parse(el.dataset.itens || '[]'); } catch (e) { /* sem itens */ }
       return { id: parseInt(el.dataset.id, 10), max: parseFloat(el.dataset.max),
                val: parseFloat(el.dataset.val), dt: el.dataset.dt,
-               rot: el.dataset.rot, det: el.dataset.det };
+               rot: el.dataset.rot, det: el.dataset.det, itens: itens };
     });
 }
 function parUsado(campo, id) {
@@ -1842,34 +1914,32 @@ function parEsc(s) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
   });
 }
+function parNum(v, casas) {
+  return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: casas,
+                                             maximumFractionDigits: casas });
+}
 
 function parToggle(btn) {
   var card = btn.closest('.forn');
-  if (parCard === card) { parSair(); return; }
-  if (parCard && parPares.length &&
-      !confirm('Há pares não salvos em outro fornecedor. Descartar?')) return;
-  parSair();
-  parCard = card;
-  btn.classList.add('on');
-  card.classList.add('par-modo');
-  var box = document.createElement('div');
-  box.className = 'par-box';
-  card.querySelector('.par-bar').insertAdjacentElement('afterend', box);
-  document.getElementById('par-band').hidden = false;
+  parCard = card; parMPg = {}; parMNf = {}; parPares = [];
+  var nome = card.querySelector('.forn__nome'), cnpj = card.querySelector('.forn__cnpj');
+  var selo = card.querySelector('.selo');
+  document.getElementById('pr-nome').textContent = nome ? nome.textContent.trim() : '';
+  document.getElementById('pr-cnpj').textContent = cnpj ? cnpj.textContent.trim() : '';
+  document.getElementById('pr-saldo').innerHTML = selo
+    ? parEsc(selo.querySelector('.v').textContent.trim()) + '<small>' +
+      parEsc(selo.querySelector('.r').textContent.trim()) + '</small>' : '';
+  document.getElementById('par-msg').textContent = '';
+  document.getElementById('pr').hidden = false;
   document.body.classList.add('par-on');
   cfdMem('cfd-parear', card.id);
   parPinta();
-  card.scrollIntoView({ block: 'start' });
 }
 function parSair() {
-  if (parCard) {
-    var b = parCard.querySelector('.par-box'); if (b) b.remove();
-    var t = parCard.querySelector('.par-bt'); if (t) t.classList.remove('on');
-    parCard.classList.remove('par-modo');
-  }
-  parCard = null; parSel = []; parPares = [];
-  document.getElementById('par-band').hidden = true;
-  document.getElementById('par-msg').textContent = '';
+  if (parPares.length &&
+      !confirm('Há ' + parPares.length + ' vínculo(s) não salvos. Fechar e descartar?')) return;
+  parCard = null; parMPg = {}; parMNf = {}; parPares = [];
+  document.getElementById('pr').hidden = true;
   document.body.classList.remove('par-on');
   cfdMem('cfd-parear', null);
 }
@@ -1877,112 +1947,131 @@ function parSair() {
 function parPinta() {
   if (!parCard) return;
   var pgs = parItens(parCard, 'pg'), nfs = parItens(parCard, 'nf');
-  var sels = pgs.filter(function (p) { return parSel.indexOf(p.id) >= 0; });
-  var sel = sels.length > 0;
-  var livreSel = sels.reduce(function (a, p) { return a + parResta(p, 'tx'); }, 0);
-  var cheio = parPares.length >= PAR_MAX;
+  var sp = 0, np = 0, sn = 0, nn = 0;
   var hPg = pgs.map(function (p) {
     var r = parResta(p, 'tx'), u = r <= 0.004;
-    return '<div class="par-it' + (u ? ' usado' : '') + (parSel.indexOf(p.id) >= 0 ? ' sel' : '') +
-      '" onclick="parClPg(' + p.id + ')"><span class="par-it__ic par-it__ic--pg">' +
-      '<i class="bi bi-cash-coin"></i></span><div class="par-it__t"><b>' + p.dt + ' · ' +
-      parEsc(p.rot) + '</b><span>' + parEsc(p.det) + '</span></div>' +
-      '<div class="par-it__v">+' + cfdMoeda(p.val) + '<small>' +
+    if (u) delete parMPg[p.id];
+    var on = !!parMPg[p.id];
+    if (on) { sp += r; np++; }
+    return '<div class="pr-it' + (u ? ' usado' : '') + (on ? ' on' : '') +
+      '" onclick="parMarca(\'pg\',' + p.id + ')"><span class="pr-ck">' + (on ? '✓' : '') +
+      '</span><div class="pr-it__t"><b>' + p.dt + ' · ' + parEsc(p.rot) + '</b>' +
+      '<span class="d">' + parEsc(p.det) + '</span></div>' +
+      '<div class="pr-it__v" style="color:#17963C">+' + cfdMoeda(p.val) + '<small>' +
       (u ? 'todo usado' : 'livre ' + cfdMoeda(r)) + '</small></div></div>';
-  }).join('') || '<div class="par-it usado">nenhum pagamento com saldo livre</div>';
+  }).join('') || '<div class="pr-vz">nenhum pagamento com saldo livre</div>';
   var hNf = nfs.map(function (n) {
     var r = parResta(n, 'doc'), u = r <= 0.004;
-    var sug = sel && !u && Math.abs(r - livreSel) < 0.005;
-    return '<div class="par-it' + (u ? ' usado' : '') + (sug ? ' sug' : '') +
-      '" onclick="parClNf(' + n.id + ')"><span class="par-it__ic par-it__ic--nf">' +
-      '<i class="bi bi-receipt"></i></span><div class="par-it__t"><b>' + n.dt + ' · ' +
-      parEsc(n.rot) + (sug ? '<span class="par-tag">valor exato</span>' : '') +
-      '</b><span>' + parEsc(n.det) + '</span></div>' +
-      '<div class="par-it__v" style="color:#a32d2d">−' + cfdMoeda(n.val) + '<small>' +
-      (u ? 'quitada' : 'falta ' + cfdMoeda(r)) + '</small></div></div>';
-  }).join('') || '<div class="par-it usado">nenhuma nota em aberto</div>';
-  var nPg = pgs.filter(function (p) { return parResta(p, 'tx') > 0.004; }).length;
-  var nNf = nfs.filter(function (n) { return parResta(n, 'doc') > 0.004; }).length;
-  var box = parCard.querySelector('.par-box');
-  var rol = Array.prototype.map.call(box.querySelectorAll('.par-lista'),
-                                     function (l) { return l.scrollTop; });
-  box.innerHTML =
-    '<div class="par-cols"><div class="par-col"><div class="par-col__h">' +
-    '<span>Pagamentos com saldo livre</span><b>' + nPg + '</b></div>' +
-    '<div class="par-lista">' + hPg + '</div></div>' +
-    '<div class="par-col"><div class="par-col__h"><span>Notas em aberto</span><b>' + nNf +
-    '</b></div><div class="par-lista">' + hNf + '</div></div></div>';
-  // repintar não pode jogar a lista pro topo a cada clique
-  box.querySelectorAll('.par-lista').forEach(function (l, i) { l.scrollTop = rol[i] || 0; });
-  parCard.querySelector('.par-dica').textContent = cheio
-    ? 'Limite de ' + PAR_MAX + ' pares por vez — salve para continuar.'
-    : sels.length > 1
-      ? sels.length + ' pagamentos marcados, livre somado ' + cfdMoeda(livreSel) +
-        '. Clique nas notas que eles pagam (usa do mais antigo pro mais novo).'
-    : sel ? 'Agora clique na nota que o pagamento de ' + cfdMoeda(sels[0].val) +
-            ' paga (livre ' + cfdMoeda(livreSel) + '). Para somar outro pagamento, marque-o também.'
-          : 'Marque um ou mais pagamentos, depois clique nas notas que eles pagam.';
+    if (u) delete parMNf[n.id];
+    var on = !!parMNf[n.id];
+    if (on) { sn += r; nn++; }
+    var prod = n.itens.map(function (i) {
+      return '<span>' + parEsc(i.p) + '</span><span>' + parNum(i.q, 0) + ' ' + parEsc(i.un) +
+        '</span><span>R$ ' + parNum(i.vu, 4) + (i.un ? '/' + parEsc(i.un) : '') + '</span>';
+    }).join('');
+    return '<div class="pr-it' + (u ? ' usado' : '') + (on ? ' on' : '') +
+      '" onclick="parMarca(\'nf\',' + n.id + ')"><span class="pr-ck">' + (on ? '✓' : '') +
+      '</span><div class="pr-it__t"><b>' + n.dt + ' · ' + parEsc(n.rot) +
+      ' <span style="font-weight:400;color:var(--muted)">' + parEsc(n.det) + '</span></b>' +
+      (prod ? '<div class="pr-prod">' + prod + '</div>' : '') + '</div>' +
+      '<div class="pr-it__v" style="color:#a32d2d">−' + cfdMoeda(n.val) + '<small>' +
+      (u ? 'quitada' : (r < n.val - 0.004 ? 'falta ' : 'em aberto ') + cfdMoeda(r)) +
+      '</small></div></div>';
+  }).join('') || '<div class="pr-vz">nenhuma nota em aberto</div>';
 
-  var tot = parPares.reduce(function (a, p) { return a + p.v; }, 0);
-  document.getElementById('par-tit').innerHTML = parPares.length
-    ? parPares.length + ' par(es) na bandeja<small>total ' + cfdMoeda(tot) + ' · ainda não gravado</small>'
-    : 'Bandeja vazia<small>nenhum par ainda</small>';
+  var listas = ['pr-lpg', 'pr-lnf'].map(function (id) { return document.getElementById(id); });
+  var rol = listas.map(function (l) { return l.scrollTop; });
+  listas[0].innerHTML = hPg; listas[1].innerHTML = hNf;
+  // repintar não pode jogar a lista pro topo a cada clique
+  listas.forEach(function (l, i) { l.scrollTop = rol[i]; });
+  document.getElementById('pr-qpg').textContent =
+    pgs.filter(function (p) { return parResta(p, 'tx') > 0.004; }).length;
+  document.getElementById('pr-qnf').textContent =
+    nfs.filter(function (n) { return parResta(n, 'doc') > 0.004; }).length;
+
+  // calculadora
+  sp = Math.round(sp * 100) / 100; sn = Math.round(sn * 100) / 100;
+  document.getElementById('pr-cpg').textContent = cfdMoeda(sp);
+  document.getElementById('pr-cpgn').textContent = np ? np + ' pagamento(s)' : 'nenhum';
+  document.getElementById('pr-cnf').textContent = cfdMoeda(sn);
+  document.getElementById('pr-cnfn').textContent = nn ? nn + ' nota(s)' : 'nenhuma';
+  var box = document.getElementById('pr-cdif'), d = Math.round((sp - sn) * 100) / 100;
+  var dv = document.getElementById('pr-cdv'), dt = document.getElementById('pr-cdt');
+  box.className = 'pr-cx pr-cx--dif';
+  if (!np || !nn) { dv.textContent = '—'; dt.textContent = 'marque pagamentos e notas'; }
+  else if (Math.abs(d) < 0.005) {
+    box.className += ' ok'; dv.textContent = 'Bate exato ✓';
+    dt.textContent = 'os pagamentos quitam as notas, sem sobra';
+  } else if (d > 0) {
+    box.className += ' sobra'; dv.textContent = 'Sobram ' + cfdMoeda(d);
+    dt.textContent = 'notas quitadas; o resto fica livre no último pagamento';
+  } else {
+    box.className += ' falta'; dv.textContent = 'Faltam ' + cfdMoeda(-d);
+    dt.textContent = 'a última nota fica parcial, com essa falta';
+  }
+  var cheio = parPares.length >= PAR_MAX;
+  var bp = document.getElementById('pr-par');
+  bp.disabled = !(np && nn) || cheio;
+  bp.textContent = cheio ? 'Limite de ' + PAR_MAX + ' — salve' : 'Parear marcados →';
+
+  // prontos para salvar, agrupados por nota
+  var grupos = [];
+  parPares.forEach(function (p, i) {
+    var g = grupos.filter(function (x) { return x.doc === p.doc; })[0];
+    if (!g) { g = { doc: p.doc, rot: p.nfRot, ls: [] }; grupos.push(g); }
+    g.ls.push({ p: p, i: i });
+  });
+  document.getElementById('pr-qb').textContent = parPares.length ? parPares.length + ' vínculo(s)' : '';
+  document.getElementById('pr-lb').innerHTML = grupos.length ? grupos.map(function (g) {
+    var n = nfs.filter(function (x) { return x.id === g.doc; })[0];
+    var falta = n ? parResta(n, 'doc') : 0;
+    var tot = g.ls.reduce(function (a, x) { return a + x.p.v; }, 0);
+    return '<div class="pr-grp"><div class="pr-grp__h">' + parEsc(g.rot) +
+      (falta <= 0.004 ? '<span class="s pr-s--ok">quitada</span>'
+                      : '<span class="s pr-s--pa">falta ' + cfdMoeda(falta) + '</span>') + '</div>' +
+      g.ls.map(function (x) {
+        return '<div class="pr-grp__l"><span>pag. ' + x.p.pgDt + ' (' + cfdMoeda(x.p.pgVal) +
+          ')</span>' + cfdMoeda(x.p.v) + '<button type="button" title="tirar este vínculo" ' +
+          'onclick="parTira(' + x.i + ')">×</button></div>';
+      }).join('') +
+      '<div class="pr-grp__t"><span>total</span>' + cfdMoeda(tot) + '</div></div>';
+  }).join('') : '<div class="pr-vz">Marque pagamentos e notas, confira a diferença e clique em ' +
+    '<b>Parear marcados</b>.<br>Os vínculos aparecem aqui, agrupados por nota.</div>';
   var bs = document.getElementById('par-salvar');
   bs.disabled = !parPares.length;
   bs.textContent = parPares.length ? 'Salvar tudo (' + parPares.length + ')' : 'Salvar tudo';
-  document.getElementById('par-pares').innerHTML = parPares.map(function (p, i) {
-    return '<div class="par-par"><div class="par-par__d">Pagamento ' + p.pgDt + ' (' +
-      cfdMoeda(p.pgVal) + ') → ' + parEsc(p.nfRot) + '</div>' +
-      '<input inputmode="decimal" value="' + p.v.toFixed(2).replace('.', ',') +
-      '" onchange="parMuda(' + i + ', this)">' +
-      '<button type="button" class="par-x" title="tirar da bandeja" onclick="parTira(' + i +
-      ')">×</button></div>';
-  }).join('');
 }
 
-function parClPg(id) {
-  var p = parItens(parCard, 'pg').filter(function (x) { return x.id === id; })[0];
-  if (!p || parResta(p, 'tx') <= 0.004) return;
-  var i = parSel.indexOf(id);
-  if (i >= 0) parSel.splice(i, 1); else parSel.push(id);
+function parMarca(tipo, id) {
+  var it = parItens(parCard, tipo).filter(function (x) { return x.id === id; })[0];
+  if (!it || parResta(it, tipo === 'pg' ? 'tx' : 'doc') <= 0.004) return;
+  var m = tipo === 'pg' ? parMPg : parMNf;
+  if (m[id]) delete m[id]; else m[id] = 1;
   document.getElementById('par-msg').textContent = '';
   parPinta();
 }
-function parClNf(id) {
-  if (!parSel.length) { parCard.querySelector('.par-dica').textContent = 'Primeiro marque o pagamento.'; return; }
-  var n = parItens(parCard, 'nf').filter(function (x) { return x.id === id; })[0];
-  // os marcados, na ordem da lista (por data): a nota consome do mais antigo
-  var marc = parItens(parCard, 'pg').filter(function (x) { return parSel.indexOf(x.id) >= 0; });
-  marc.forEach(function (p) {
-    if (parPares.length >= PAR_MAX) return;
-    var v = Math.min(parResta(p, 'tx'), parResta(n, 'doc'));
-    if (v <= 0.004) return;
-    // mesmo par de novo soma no que já está na bandeja (o banco guarda 1 por par)
-    var ja = parPares.filter(function (x) { return x.tx === p.id && x.doc === n.id; })[0];
-    if (ja) ja.v = Math.round((ja.v + v) * 100) / 100;
-    else parPares.push({ tx: p.id, doc: n.id, v: Math.round(v * 100) / 100,
-                         pgDt: p.dt, pgVal: p.val, nfRot: n.rot });
-  });
-  // pagamento que acabou sai da marcação
-  parSel = marc.filter(function (p) { return parResta(p, 'tx') > 0.004; })
-               .map(function (p) { return p.id; });
-  parPinta();
-}
-function parMuda(i, inp) {
-  var par = parPares[i], antes = par.v;
-  par.v = 0;
-  var p = parItens(parCard, 'pg').filter(function (x) { return x.id === par.tx; })[0];
-  var n = parItens(parCard, 'nf').filter(function (x) { return x.id === par.doc; })[0];
-  var teto = Math.min(parResta(p, 'tx'), parResta(n, 'doc'));
-  var v = parseFloat(String(inp.value).replace(/\./g, '').replace(',', '.')) || 0;
-  if (v <= 0 || v > teto + 0.005) {
-    alert('O valor tem de ficar entre R$ 0,01 e ' + cfdMoeda(teto) + '.');
-    par.v = antes;
-  } else par.v = Math.round(v * 100) / 100;
+function parParear() {
+  // as listas já vêm por data: pagamento mais antigo paga a nota mais antiga
+  var ps = parItens(parCard, 'pg').filter(function (p) { return parMPg[p.id]; });
+  var ns = parItens(parCard, 'nf').filter(function (n) { return parMNf[n.id]; });
+  var i = 0, j = 0;
+  while (i < ps.length && j < ns.length && parPares.length < PAR_MAX) {
+    var p = ps[i], n = ns[j];
+    var v = Math.round(Math.min(parResta(p, 'tx'), parResta(n, 'doc')) * 100) / 100;
+    if (v > 0.004) {
+      // mesmo par de novo soma no que já está (o banco guarda 1 por par)
+      var ja = parPares.filter(function (x) { return x.tx === p.id && x.doc === n.id; })[0];
+      if (ja) ja.v = Math.round((ja.v + v) * 100) / 100;
+      else parPares.push({ tx: p.id, doc: n.id, v: v, pgDt: p.dt, pgVal: p.val, nfRot: n.rot });
+    }
+    if (parResta(p, 'tx') <= 0.004) i++;
+    if (parResta(n, 'doc') <= 0.004) j++;
+  }
+  parMPg = {}; parMNf = {};
   parPinta();
 }
 function parTira(i) { parPares.splice(i, 1); parPinta(); }
-function parLimpar() { parPares = []; parSel = []; parPinta(); }
+function parLimpar() { parPares = []; parMPg = {}; parMNf = {}; parPinta(); }
 
 function parSalvar(btn) {
   if (!parPares.length) return;
@@ -2002,8 +2091,7 @@ function parSalvar(btn) {
       alert((res.j && res.j.erro) || 'não consegui vincular — nada foi gravado');
       return;
     }
-    // Gravou: recarrega pros saldos e selos, voltando com o card aberto e
-    // o modo Parear ligado no mesmo lugar.
+    // Gravou: recarrega pros saldos e selos e volta direto pra esta tela.
     parPares = [];
     cfdMem('cfd-par-ok', String(res.j.gravados || itens.length));
     cfdReload();
@@ -2024,10 +2112,10 @@ function parSalvar(btn) {
     bar.className = 'par-bar';
     bar.innerHTML = '<button type="button" class="par-bt" onclick="parToggle(this)">' +
       '<i class="bi bi-arrow-left-right"></i> Parear</button>' +
-      '<span class="par-dica">pagamento → nota, vários de uma vez</span>';
+      '<span>abre a tela de parear pagamentos × notas desta empresa</span>';
     corpo.insertBefore(bar, corpo.firstChild);
   });
-  // Volta como estava antes do recarregar: cards abertos e modo Parear.
+  // Volta como estava antes do recarregar: cards abertos e a tela do Parear.
   var abertos = cfdMem('cfd-abertos');
   if (abertos !== null) {
     cfdMem('cfd-abertos', null);
@@ -2039,13 +2127,13 @@ function parSalvar(btn) {
   var pc = cfdMem('cfd-parear');
   var card = pc && document.getElementById(pc);
   var bt = card && card.querySelector('.par-bt');
-  if (bt && card.classList.contains('aberto')) {
+  var ok = cfdMem('cfd-par-ok');
+  cfdMem('cfd-par-ok', null);
+  if (bt) {
     parToggle(bt);
-    var ok = cfdMem('cfd-par-ok');
     if (ok) document.getElementById('par-msg').textContent =
       '✓ ' + ok + ' vínculo(s) gravados. Pode seguir pareando.';
   } else cfdMem('cfd-parear', null);
-  cfdMem('cfd-par-ok', null);
   // volta pro ponto onde a pessoa estava trabalhando (vinculo recarrega);
   // só agora, com os cards já reabertos, a altura da página bate com a de antes
   var y = cfdMem('cfd-scroll');
