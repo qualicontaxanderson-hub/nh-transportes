@@ -37,6 +37,34 @@ if 'efipay' not in sys.modules:
 from app import create_app
 from utils.db import get_db_connection
 
+# Prova NÃO mexe no schema de produção: em vez de criar as colunas e ler
+# placa/motorista do banco, lê direto do XML do Dropbox local -- o mesmo que o
+# backfill vai gravar.
+import routes.conf_fornecedores_dfe as _rota
+from utils.dfe_transporte import extrair_placa_motorista as _ler
+_DROP = os.path.join(os.path.expanduser('~'), 'Dropbox')
+TRANSP = {}
+
+
+def _transp_do_xml(conn, doc_ids):
+    if not doc_ids:
+        return {}
+    c = conn.cursor()
+    c.execute("SELECT id, xml_caminho FROM dfe_documentos WHERE id IN ("
+              + ",".join(["%s"] * len(doc_ids)) + ")", list(doc_ids))
+    for i, cam in c.fetchall():
+        f = os.path.join(_DROP, (cam or '').lstrip('/').replace('/', os.sep))
+        if cam and os.path.exists(f):
+            pm = _ler(open(f, 'rb').read())
+            if pm[0] or pm[1]:
+                TRANSP[i] = pm
+    c.close()
+    return dict(TRANSP)
+
+
+_rota._garante_colunas_transporte = lambda conn: None
+_rota._transporte_das_notas = _transp_do_xml
+
 app = create_app()
 app.config['WTF_CSRF_ENABLED'] = False
 app.config['LOGIN_DISABLED'] = True
@@ -159,11 +187,32 @@ prova('quantidade e qtd×preço de cada nota = banco', not erros_it)
 for e in erros_it[:5]:
     print('        doc %s: itens %s x %s, qtd %.3f x %.3f' % e)
 
-print('5) o Salvar tudo fala a língua do vincular_lote')
+print('5) placa e motorista chegam na tela')
+ok_tr = True
+for attrs in re.findall(r'<div class="lin lin--nf"(.*?)>', html, re.S):
+    m = re.search(r'data-par="nf" data-id="(\d+)"', attrs)
+    if not m:
+        continue
+    i = int(m.group(1))
+    pl = re.search(r'data-placa="(.*?)"', attrs)
+    mo = re.search(r'data-mot="(.*?)"', attrs)
+    tela = (pl.group(1) if pl else None, _h.unescape(mo.group(1)) if mo else None)
+    esperado = tuple(x or '' for x in TRANSP[i]) if i in TRANSP else (None, None)
+    if i in TRANSP:
+        tela = tuple(x or '' for x in tela)
+    if tela != esperado:
+        ok_tr = False
+        print('        doc %s: tela %s x XML %s' % (i, tela, esperado))
+com = sum(1 for i in nf if i in TRANSP)
+prova('placa/motorista das %d notas do Parear = XML (%d trazem dado)' % (len(nf), com), ok_tr)
+
+print('6) o Salvar tudo fala a língua do vincular_lote')
 prova('manda {doc_id, transacao_id, valor} pro mesmo endpoint',
-      "doc_id: p.doc, transacao_id: p.tx, valor: p.v" in html
+      "doc_id: p.doc, transacao_id: p.tx, valor: p.v, absorve: !!p.abs" in html
       and html.count('/relatorios/conf_fornecedores_dfe/vincular_lote') >= 2)
 prova('respeita o teto de 40 pares do servidor', 'PAR_MAX = 40' in html)
+prova('sobra absorvida no máximo R$ 1,00, igual ao servidor',
+      'PAR_SOBRA = 1.00' in html and _rota.SOBRA_MAX == 1.00)
 
 print('\nRESULTADO: ' + ('TUDO OK' if ok else 'HÁ FALHA'))
 sys.exit(0 if ok else 1)
