@@ -51,6 +51,7 @@ import pymysql
 import consulta_sefaz as cs
 from integrations.dropbox_dfe import montar_caminho, upload_xml
 from integrations.dfe_classificacao import aplicar_regras
+from utils.dfe_transporte import extrair_placa_motorista
 
 # Retencao placeholder do XML (definitiva sera decidida depois).
 DIAS_RETENCAO = 90
@@ -641,6 +642,15 @@ SQL_RESUMO_UPSERT = (
 
 SQL_DOC_ID = "SELECT id FROM dfe_documentos WHERE chave = %s"
 
+# Placa e motorista lidos do XML (utils/dfe_transporte). COALESCE: recapturar
+# uma nota sem o dado não apaga o que já estava lá.
+SQL_TRANSP_UPDATE = (
+    "UPDATE dfe_documentos "
+    "   SET transp_placa = COALESCE(%s, transp_placa), "
+    "       transp_motorista = COALESCE(%s, transp_motorista) "
+    " WHERE id = %s"
+)
+
 SQL_DUP_UPSERT = (
     "INSERT INTO dfe_duplicatas (documento_id, n_dup, vencimento, valor) "
     "VALUES (%s,%s,%s,%s) "
@@ -785,6 +795,15 @@ def gravar_nota(conn, cur, cliente_id, cnpj_cert, nota, xml_bytes, nsu, schema,
     documento_id = row["id"] if row else None
     if not documento_id:
         raise RuntimeError("nao recuperou documento_id apos upsert")
+
+    # Placa/motorista do texto do XML (só pra mostrar no Parear). Nunca derruba
+    # a captura: coluna ainda não criada ou XML esquisito = segue sem.
+    try:
+        placa, motorista = extrair_placa_motorista(xml_bytes)
+        if placa or motorista:
+            cur.execute(SQL_TRANSP_UPDATE, (placa, motorista, documento_id))
+    except Exception as e:
+        print("  [aviso] placa/motorista nao gravados (doc %s): %s" % (documento_id, e))
 
     n_itens = 0
     for it in nota["itens"]:

@@ -336,6 +336,10 @@
     margin-top:.25rem; font-size:11.5px; color:#3a4655; font-variant-numeric:tabular-nums; }
   #cfd .pr-prod span:nth-child(3n+1){ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #cfd .pr-prod span:not(:nth-child(3n+1)){ text-align:right; }
+  #cfd .pr-trp{ display:flex; gap:1rem; flex-wrap:wrap; margin-top:.2rem; font-size:11.5px;
+    color:#3a4655; }
+  #cfd .pr-trp i{ font-style:normal; color:var(--muted); }
+  #cfd .pr-trp em{ font-style:normal; color:#b0b8c3; }
   #cfd .pr-band{ display:flex; flex-direction:column; min-height:0; background:#fbfcfe; }
   #cfd .pr-band__lista{ flex:1; overflow-y:auto; padding:.4rem .8rem; }
   #cfd .pr-grp{ background:#fff; border:1px solid var(--line-2); border-radius:10px;
@@ -923,7 +927,9 @@
              {%- if l.tipo in ('pagamento', 'nota') %}
              data-dt="{{ l.data.strftime('%d/%m') }}" data-rot="{{ l.rotulo }}"
              data-det="{{ l.detalhe or '' }}" data-val="{{ '%.2f' % l.valor }}"
-             {%- if l.tipo == 'nota' %} data-itens='{{ itens_nota.get(l.id, []) | tojson }}'{% endif %}
+             {%- if l.tipo == 'nota' %} data-itens='{{ itens_nota.get(l.id, []) | tojson }}'
+             {%- set _tr = transp_nota.get(l.id) %}{% if _tr %} data-placa="{{ _tr[0] or '' }}"
+             data-mot="{{ _tr[1] or '' }}"{% endif %}{% endif %}
              {%- endif %}>
           <span class="lin__ico">
             <i class="bi {{ 'bi-cash-coin' if l.tipo == 'pagamento' else ('bi-arrow-counterclockwise' if l.tipo == 'devolucao' else 'bi-receipt') }}"></i></span>
@@ -1907,7 +1913,8 @@ function parItens(card, tipo) {
       try { itens = JSON.parse(el.dataset.itens || '[]'); } catch (e) { /* sem itens */ }
       return { id: parseInt(el.dataset.id, 10), max: parseFloat(el.dataset.max),
                val: parseFloat(el.dataset.val), dt: el.dataset.dt,
-               rot: el.dataset.rot, det: el.dataset.det, itens: itens };
+               rot: el.dataset.rot, det: el.dataset.det, itens: itens,
+               placa: el.dataset.placa || '', mot: el.dataset.mot || '' };
     });
 }
 function parUsado(campo, id) {
@@ -1980,7 +1987,11 @@ function parPinta() {
       '" onclick="parMarca(\'nf\',' + n.id + ')"><span class="pr-ck">' + (on ? '✓' : '') +
       '</span><div class="pr-it__t"><b>' + n.dt + ' · ' + parEsc(n.rot) +
       ' <span style="font-weight:400;color:var(--muted)">' + parEsc(n.det) + '</span></b>' +
-      (prod ? '<div class="pr-prod">' + prod + '</div>' : '') + '</div>' +
+      (prod ? '<div class="pr-prod">' + prod + '</div>' : '') +
+      '<div class="pr-trp"><span><i>Placa</i> ' +
+      (n.placa ? parEsc(n.placa.slice(0, 3) + '-' + n.placa.slice(3)) : '<em>não veio na nota</em>') +
+      '</span><span><i>Motorista</i> ' +
+      (n.mot ? parEsc(n.mot) : '<em>não veio na nota</em>') + '</span></div></div>' +
       '<div class="pr-it__v" style="color:#a32d2d">−' + cfdMoeda(n.val) + '<small>' +
       (u ? 'quitada' : (r < n.val - 0.004 ? 'falta ' : 'em aberto ') + cfdMoeda(r)) +
       '</small></div></div>';

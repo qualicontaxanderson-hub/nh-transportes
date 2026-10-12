@@ -260,6 +260,36 @@ def _garante_coluna_manual(conn):
     cur.close()
 
 
+def _garante_colunas_transporte(conn):
+    """Cria dfe_documentos.transp_placa / transp_motorista se faltarem. Só
+    adiciona, NULL por padrão. Quem preenche: a captura (processa_dfe) nas
+    notas novas e scripts/backfill_placa_motorista.py nas antigas."""
+    cur = conn.cursor()
+    cur.execute("""SELECT column_name FROM information_schema.columns
+                    WHERE table_schema = DATABASE()
+                      AND table_name = 'dfe_documentos'
+                      AND column_name IN ('transp_placa', 'transp_motorista')""")
+    tem = {r[0].lower() for r in cur.fetchall()}
+    if 'transp_placa' not in tem:
+        cur.execute("ALTER TABLE dfe_documentos ADD COLUMN transp_placa VARCHAR(8) NULL")
+    if 'transp_motorista' not in tem:
+        cur.execute("ALTER TABLE dfe_documentos ADD COLUMN transp_motorista VARCHAR(60) NULL")
+    conn.commit()
+    cur.close()
+
+
+def _transporte_das_notas(conn, doc_ids):
+    """{doc_id: (placa, motorista)} -- só pra mostrar no Parear."""
+    if not doc_ids:
+        return {}
+    cur = conn.cursor()
+    cur.execute("SELECT id, transp_placa, transp_motorista FROM dfe_documentos "
+                " WHERE id IN (" + ",".join(["%s"] * len(doc_ids)) + ")", list(doc_ids))
+    out = {r[0]: (r[1], r[2]) for r in cur.fetchall() if r[1] or r[2]}
+    cur.close()
+    return out
+
+
 def _garante_coluna_pago_antes(conn):
     """Cria as colunas do "antes do corte" se faltarem. So adiciona.
 
@@ -1448,6 +1478,8 @@ def conf_fornecedores_dfe():
             pagamentos += _pagamentos_vinculados_fora(conn, doc_ids, data_ini, data_fim)
         vinc_pag = _vinculos_por_pagamento(conn, [p['id'] for p in pagamentos])
         itens_nota = _itens_das_notas(conn, doc_ids)
+        _garante_colunas_transporte(conn)
+        transp_nota = _transporte_das_notas(conn, doc_ids)
     finally:
         conn.close()
 
@@ -1485,7 +1517,7 @@ def conf_fornecedores_dfe():
         data_inicio=data_ini, data_fim=data_fim,
         cliente_ids=empresa_ids, fornecedor_ids=fornecedor_ids,
         corte=DATA_CORTE_DFE, puxou_pro_corte=puxou_pro_corte, janela=janela,
-        vinc_pag=vinc_pag, itens_nota=itens_nota,
+        vinc_pag=vinc_pag, itens_nota=itens_nota, transp_nota=transp_nota,
         pre_corte_ini=pre_corte_ini, vinculo_pronto=vinculo_pronto,
     )
 
