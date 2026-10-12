@@ -956,6 +956,32 @@ def _vinculos(conn, doc_ids):
     return dict(por_doc), usado
 
 
+def _itens_das_notas(conn, doc_ids):
+    """Produto, quantidade e preço unitário de cada nota -- só pra mostrar no
+    Parear (quem paga o quê). Nome do produto classificado; sem
+    classificação, o texto cru do XML."""
+    if not doc_ids:
+        return {}
+    cur = conn.cursor(dictionary=True)
+    cur.execute(
+        "SELECT i.documento_id, COALESCE(p.nome, i.produto_xml) AS produto, "
+        "       i.quantidade, i.unidade, i.valor_unitario "
+        "  FROM dfe_itens i "
+        "  LEFT JOIN produto p "
+        "         ON p.id = COALESCE(i.classificado_produto_id, i.produto_id) "
+        " WHERE i.documento_id IN (" + ",".join(["%s"] * len(doc_ids)) + ") "
+        " ORDER BY i.documento_id, i.valor_total DESC", list(doc_ids))
+    out = defaultdict(list)
+    for r in cur.fetchall():
+        out[r['documento_id']].append({
+            'p': (r['produto'] or '')[:40],
+            'q': float(r['quantidade'] or 0),
+            'un': (r['unidade'] or '')[:6],
+            'vu': float(r['valor_unitario'] or 0)})
+    cur.close()
+    return dict(out)
+
+
 def _vinculos_por_pagamento(conn, tx_ids):
     """transacao_id -> vinculos [{id, valor, numero, serie}] (linha do extrato)."""
     if not tx_ids:
@@ -1421,6 +1447,7 @@ def conf_fornecedores_dfe():
             # conta assim mesmo — é o que fecha o caso "paguei antes do corte".
             pagamentos += _pagamentos_vinculados_fora(conn, doc_ids, data_ini, data_fim)
         vinc_pag = _vinculos_por_pagamento(conn, [p['id'] for p in pagamentos])
+        itens_nota = _itens_das_notas(conn, doc_ids)
     finally:
         conn.close()
 
@@ -1458,7 +1485,7 @@ def conf_fornecedores_dfe():
         data_inicio=data_ini, data_fim=data_fim,
         cliente_ids=empresa_ids, fornecedor_ids=fornecedor_ids,
         corte=DATA_CORTE_DFE, puxou_pro_corte=puxou_pro_corte, janela=janela,
-        vinc_pag=vinc_pag,
+        vinc_pag=vinc_pag, itens_nota=itens_nota,
         pre_corte_ini=pre_corte_ini, vinculo_pronto=vinculo_pronto,
     )
 
