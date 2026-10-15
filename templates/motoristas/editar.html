@@ -121,6 +121,20 @@ body > .container-fluid:has(#mfi){
         </div>
 
         </div>
+<div class="sec"><div class="sec__t"><i class="bi bi-calendar-x"></i>Desligamento</div>
+        <div class="row">
+          <div class="col-md-4 mb-2">
+            <label class="form-label">Data de saída</label>
+            <input type="date" name="data_saida" class="form-control form-control-sm"
+                   value="{{ motorista.data_saida.strftime('%Y-%m-%d') if motorista.data_saida else '' }}">
+          </div>
+          <div class="col-md-8 mb-2">
+            <div class="form-text mt-md-4">Em branco = continua trabalhando. Com data, ele
+              sai da folha a partir do mês seguinte. Nada do que já foi lançado é apagado.</div>
+          </div>
+        </div>
+
+        </div>
       <div class="rodape">
         <a class="bt-ca" href="{{ url_for('motoristas.lista') }}">Cancelar</a>
         <button type="submit" class="bt-ok">

@@ -402,8 +402,11 @@ def get_funcionarios(cliente_id):
                 'motorista' as tipo
             FROM motoristas m
             WHERE m.paga_comissao = 1
+              -- mesma regra dos funcionarios: quem saiu ANTES do mes nao
+              -- entra na folha dele; no mes da saida ainda aparece
+              AND (%s IS NULL OR m.data_saida IS NULL OR m.data_saida >= %s)
             ORDER BY m.nome
-        """)
+        """, (ini, ini))
         motoristas = cursor.fetchall()
         
         # Combine both lists

@@ -208,6 +208,8 @@ body > .container-fluid:has(#mot){
             {%- if m.parado %} <span class="selo selo--par"
               title="{{ ('sem frete há %d dias' % m.dias_parado) if m.dias_parado else 'nunca rodou' }}">parado</span>{% endif -%}
             {%- if m.paga_comissao %} <span class="selo selo--com">comissão</span>{% endif -%}
+            {%- if m.data_saida %} <span class="selo selo--par"
+              title="não aparece na folha a partir do mês seguinte">saiu em {{ m.data_saida.strftime('%d/%m/%Y') }}</span>{% endif -%}
           </div>
           <div class="m__d">
             {% if m.cpf %}<span><span class="k">CPF</span> <b>{{ m.cpf }}</b></span>{% endif %}

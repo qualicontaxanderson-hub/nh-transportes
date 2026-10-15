@@ -176,7 +176,8 @@ def editar(id):
 
             cursor.execute("""
                 UPDATE motoristas SET nome=%s, cpf=%s, cnh=%s, telefone=%s,
-                    observacoes=%s, paga_comissao=%s, veiculo_id=%s
+                    observacoes=%s, paga_comissao=%s, veiculo_id=%s,
+                    data_saida=%s
                 WHERE id=%s
             """, (
                 request.form.get('nome'),
@@ -186,6 +187,7 @@ def editar(id):
                 request.form.get('observacoes'),
                 paga_comissao,
                 veiculo_id,
+                request.form.get('data_saida') or None,
                 id
             ))
             conn.commit()
