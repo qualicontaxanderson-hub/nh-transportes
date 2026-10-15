@@ -208,7 +208,8 @@ function checkAndLoadFuncionarios() {
     
     // Convert MM/YYYY to MM-YYYY for URL (replace / with -)
     const mesForUrl = mes.replace('/', '-');
-    
+    const mesSel = mes;
+
     // Fetch commission data, loans data, and funcionarios in sequence
     Promise.all([
         fetch(`/lancamentos-funcionarios/get-comissoes/${clienteId}/${mesForUrl}`)
@@ -221,7 +222,6 @@ function checkAndLoadFuncionarios() {
                 return data;
             }),
         // o mes vai junto: quem saiu antes dele nao entra na folha
-        const mesSel = (document.getElementById('mes') || {}).value || '';
         fetch(`/lancamentos-funcionarios/get-funcionarios/${clienteId}`
               + (mesSel ? `?mes=${encodeURIComponent(mesSel)}` : ''))
             .then(r => {
