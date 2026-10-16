@@ -194,6 +194,8 @@ body > .container-fluid:has(#pfn){
   #pfn .ef--daqui .ef__n{ color:var(--blue-deep); }
   #pfn .ef__v{ font-size:.79rem; font-weight:800; white-space:nowrap;
     font-variant-numeric:tabular-nums; }
+  #pfn .ef__v small{ display:block; text-align:right; font-size:.68rem;
+    font-weight:600; color:var(--muted); }
   #pfn .emis__r{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
     margin-top:.55rem; padding-top:.5rem; border-top:1px solid #dbe6f1; }
   #pfn .emis__venc{ font-size:.75rem; font-weight:700; color:var(--muted);
@@ -754,7 +756,8 @@ body > .container-fluid:has(#pfn){
                 {{ fmtl.format(f.litros).replace(',', '.') }} L
                 {%- if f.fornecedor %} · {{ f.fornecedor }}{% endif %}
                 {%- if f.motorista %} · {{ f.motorista }}{% endif %}</small></span>
-            <span class="ef__v">{{ f.valor | formatar_moeda }}</span>
+            <span class="ef__v">{{ f.valor | formatar_moeda }}
+              {%- if f.preco_por_litro %}<small>R$ {{ '%.3f' | format(f.preco_por_litro) | replace('.', ',') }}/L</small>{% endif %}</span>
           </label>
           {% endfor %}
           <div class="emis__r">

@@ -891,7 +891,7 @@ def _a_cobrar(cur, desde):
     juntos. Aqui ela e SO LEITURA — o botao de emitir e da Fase 2.
     """
     cur.execute("""
-        SELECT f.id, f.data_frete, f.valor_total_frete,
+        SELECT f.id, f.data_frete, f.valor_total_frete, f.preco_por_litro,
                COALESCE(f.quantidade_manual, q.valor) AS litros,
                cl.id AS cid, cl.razao_social AS cliente,
                pr.nome AS produto, v.placa,
@@ -922,6 +922,9 @@ def _a_cobrar(cur, desde):
                                  'placas': []}
         fr['litros'] = _f(fr['litros'])
         fr['valor'] = _f(fr['valor_total_frete'])
+        # Valor unitario do frete (R$/L): o gravado no frete; sem ele, valor/litros.
+        fr['preco_por_litro'] = _f(fr['preco_por_litro']) or (
+            fr['valor'] / fr['litros'] if fr['litros'] else 0.0)
         fr['semana'] = _semana(fr['data_frete'], curta=True)
         c['fretes'].append(fr)
         c['litros'] += fr['litros']
