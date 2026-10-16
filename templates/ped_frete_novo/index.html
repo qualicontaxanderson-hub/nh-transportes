@@ -445,6 +445,8 @@ body > .container-fluid:has(#pfn){
   #pfn .fr:last-child{ border-bottom:0; }
   #pfn .fr__n{ flex:1; min-width:0; }
   #pfn .fr__v{ font-weight:800; font-variant-numeric:tabular-nums; }
+  #pfn .fr__v small{ display:block; text-align:right; font-size:.68rem;
+    font-weight:600; color:var(--muted); }
   #pfn .fr__f{ color:var(--muted); font-size:.71rem; }
 
   #pfn .cli{ border:1px solid var(--borda); border-radius:11px;
@@ -1103,7 +1105,8 @@ body > .container-fluid:has(#pfn){
                   {% if f.estado == 'pago' %}<span class="selo selo--pago">pago</span>
                   {% elif f.estado == 'emitido' %}<span class="selo selo--emitido">emitido</span>
                   {% endif %}
-                  <span class="fr__v">{{ f.valor | formatar_moeda }}</span>
+                  <span class="fr__v">{{ f.valor | formatar_moeda }}
+                    {%- if f.preco_por_litro %}<small>R$ {{ '%.3f' | format(f.preco_por_litro) | replace('.', ',') }}/L</small>{% endif %}</span>
                 {% endif %}
               </div>
               {% if not v.fechada %}
