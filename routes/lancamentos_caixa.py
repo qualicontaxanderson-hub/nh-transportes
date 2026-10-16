@@ -505,6 +505,22 @@ def get_funcionarios_por_cliente(cliente_id):
         elif 'clienteid' in columns:
             cliente_column = 'clienteid'
         
+        # Data do fechamento: quem saiu antes dela nao aparece (aparece ate o
+        # proprio dia da saida, mesma regra do ponto e do troco pix). Quem ja
+        # tem valor neste fechamento ("incluir") fica, senao editar um caixa
+        # antigo apagaria o lancamento ao salvar o modal.
+        filtro_saida, params_saida = '', ()
+        data_ref = (request.args.get('data') or '').strip()
+        if data_ref and 'data_saida' in columns:
+            incluir = [int(i) for i in (request.args.get('incluir') or '').split(',')
+                       if i.strip().isdigit()]
+            filtro_saida = " AND (f.data_saida IS NULL OR f.data_saida >= %s"
+            params_saida = (data_ref,)
+            if incluir:
+                filtro_saida += " OR f.id IN (%s)" % ','.join(['%s'] * len(incluir))
+                params_saida += tuple(incluir)
+            filtro_saida += ")"
+
         if not cliente_column:
             print(f"[AVISO] Coluna de cliente não encontrada. Retornando todos os funcionários ativos.")
             # Se não há coluna de cliente, retornar todos os funcionários ativos
@@ -515,10 +531,10 @@ def get_funcionarios_por_cliente(cliente_id):
                     f.cargo,
                     f.cpf
                 FROM funcionarios f
-                WHERE f.ativo = 1
+                WHERE f.ativo = 1""" + filtro_saida + """
                 ORDER BY f.nome
             """
-            cursor.execute(query)
+            cursor.execute(query, params_saida)
         else:
             print(f"[DEBUG] Usando coluna: {cliente_column}")
             # Buscar funcionários ativos vinculados ao cliente
@@ -530,11 +546,11 @@ def get_funcionarios_por_cliente(cliente_id):
                     f.cpf
                 FROM funcionarios f
                 WHERE f.{cliente_column} = %s 
-                  AND f.ativo = 1
+                  AND f.ativo = 1""" + filtro_saida + """
                 ORDER BY f.nome
             """
             print(f"[DEBUG] Executando query com cliente_id: {cliente_id}")
-            cursor.execute(query, (cliente_id,))
+            cursor.execute(query, (cliente_id,) + params_saida)
         
         funcionarios = cursor.fetchall()
         print(f"[DEBUG] Encontrados {len(funcionarios)} funcionários")

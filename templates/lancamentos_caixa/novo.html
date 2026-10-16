@@ -486,11 +486,16 @@ function loadVendasDia() {
 // ===== FUNÇÕES PARA SOBRAS/PERDAS/VALES =====
 
 // Carregar funcionários do cliente
-async function carregarFuncionarios(clienteId) {
+async function carregarFuncionarios(clienteId, incluirIds) {
     if (!clienteId) return [];
     
     try {
-        const response = await fetch(`{{ url_for('lancamentos_caixa.get_funcionarios_por_cliente', cliente_id=0) }}`.replace('/0', `/${clienteId}`));
+        // A data do fechamento tira da lista quem ja tinha saido nesse dia.
+        const params = new URLSearchParams();
+        const dataFech = document.getElementById('data').value;
+        if (dataFech) params.set('data', dataFech);
+        if (incluirIds && incluirIds.length) params.set('incluir', incluirIds.join(','));
+        const response = await fetch(`{{ url_for('lancamentos_caixa.get_funcionarios_por_cliente', cliente_id=0) }}`.replace('/0', `/${clienteId}`) + '?' + params.toString());
         const funcionarios = await response.json();
         funcionariosCache = funcionarios;
         return funcionarios;
@@ -522,8 +527,11 @@ async function abrirModalFuncionarios(tipo) {
     }
     document.getElementById('modal-title').textContent = titulo;
     
-    // Carregar funcionários
-    const funcionarios = await carregarFuncionarios(clienteId);
+    // Carregar funcionários (quem ja tem valor neste fechamento vem junto)
+    const jaLancados = (tipo === 'sobras' ? dadosSobras
+                      : tipo === 'perdas' ? dadosPerdas : dadosVales)
+                      .map(d => d.funcionario_id);
+    const funcionarios = await carregarFuncionarios(clienteId, jaLancados);
     
     if (funcionarios.length === 0) {
         document.getElementById('funcionarios-lista').innerHTML = 
