@@ -491,6 +491,42 @@ def _get_empresas(conn):
     return rows
 
 
+def _filtro_com_venda(conn, data_inicio, data_fim, empresa_ids):
+    """Quem merece pilula no filtro: so empresa e bandeira com venda de cartao.
+
+    Empresa: qualquer venda de cartao, em qualquer data -- a lista nao pode
+    mudar a cada mes. Bandeira: venda no periodo, das empresas escolhidas --
+    pilula de cartao que nao vendeu nada ali so leva a uma tela vazia.
+    """
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT DISTINCT lc.cliente_id "
+            "  FROM lancamentos_caixa_comprovacao lcc "
+            "  JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id "
+            " WHERE lcc.bandeira_cartao_id IS NOT NULL")
+        empresas = {int(r['cliente_id']) for r in cur.fetchall() if r['cliente_id']}
+        where = ["lcc.bandeira_cartao_id IS NOT NULL"]
+        params = []
+        if data_inicio and data_fim:
+            where.append("lc.data BETWEEN %s AND %s")
+            params += [data_inicio, data_fim]
+        if empresa_ids:
+            where.append("lc.cliente_id IN (%s)" % ','.join(['%s'] * len(empresa_ids)))
+            params += list(empresa_ids)
+        cur.execute(
+            "SELECT DISTINCT lcc.bandeira_cartao_id AS bid "
+            "  FROM lancamentos_caixa_comprovacao lcc "
+            "  JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id "
+            " WHERE " + ' AND '.join(where), params)
+        bandeiras = {int(r['bid']) for r in cur.fetchall()}
+    except Exception:
+        return None, None
+    finally:
+        cur.close()
+    return empresas, bandeiras
+
+
 def _get_bandeiras(conn):
     """Retorna todas as bandeiras de cartão ativas com a lista de vínculos (0, 1 ou 2)."""
     cur = conn.cursor(dictionary=True)
@@ -1232,6 +1268,17 @@ def conf_cartoes():
             _ai.year if _ai else None,
             _af.year if _af else None)
         meses = _meses_com_cartao(conn)
+        # As pilulas do filtro mostram so quem tem venda de cartao. As listas
+        # completas (empresas, bandeiras) seguem para Vinculacoes e contas
+        # contabeis, que sao cadastro e nao filtro. O que ja esta marcado
+        # fica sempre, senao nao teria como desmarcar.
+        _emp_ok, _band_ok = _filtro_com_venda(conn, data_inicio, data_fim, empresa_ids)
+        empresas_filtro = empresas if _emp_ok is None else [
+            e for e in empresas
+            if e['id'] in _emp_ok or str(e['id']) in empresa_ids]
+        bandeiras_filtro = bandeiras if _band_ok is None else [
+            b for b in bandeiras
+            if b['id'] in _band_ok or str(b['id']) in bandeira_ids]
         plano_contas = _get_plano_contas(conn)
         config_contabil = _get_config_contabil(conn)
         # Serialise config_contabil to a JSON-safe dict keyed by "bandId_cliId"
@@ -1321,6 +1368,8 @@ def conf_cartoes():
         'relatorios/conf_cartoes.html',
         empresas=empresas,
         bandeiras=bandeiras,
+        empresas_filtro=empresas_filtro,
+        bandeiras_filtro=bandeiras_filtro,
         formas_cartao=formas_cartao,
         feriados=feriados, band=band, tipo=tipo,
         qs_base=qs_base, qs_limpo=qs_limpo, meses=meses,

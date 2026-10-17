@@ -392,7 +392,7 @@ body > .container-fluid:has(#ccz){
       <div class="chips">
         <button type="button" class="todos {{ 'on' if not empresa_ids }}"
                 onclick="ccLimpaGrupo(this)">Todas</button>
-        {% for emp in empresas %}
+        {% for emp in empresas_filtro %}
         <label class="{{ 'on' if emp.id|string in empresa_ids }}">
           <input type="checkbox" name="empresa_ids[]" value="{{ emp.id }}"
                  {{ 'checked' if emp.id|string in empresa_ids }}
@@ -407,7 +407,7 @@ body > .container-fluid:has(#ccz){
       <div class="chips">
         <button type="button" class="todos {{ 'on' if not bandeira_ids }}"
                 onclick="ccLimpaGrupo(this)">Todos</button>
-        {% for b in bandeiras %}
+        {% for b in bandeiras_filtro %}
         {% set cor = '#1D63A5' if b.tipo|upper == 'DEBITO' else '#6f42c1' %}
         <label class="{{ 'on' if b.id|string in bandeira_ids }}" style="--c:{{ cor }}">
           <input type="checkbox" name="bandeira_ids[]" value="{{ b.id }}"
@@ -1233,17 +1233,29 @@ Ele entra só nesta conferência; '
   // continua mandando empresa_ids[] e bandeira_ids[] como sempre mandou --,
   // e o JS so cuida do que a tela mostra: acender a pilula clicada e a de
   // "Todas/Todos", que nao e um valor e sim a ausencia de escolha.
+  // Clicou, apurou: igual a regua de meses e ao tipo. Antes a pilula so
+  // acendia e esperava o "Apurar", e parecia travada. O card escolhido
+  // (?band=) cai junto -- ele pode nem existir no filtro novo.
+  function ccAplica(el) {
+    var f = el.closest('form');
+    var band = f.querySelector('input[name=band]');
+    if (band) band.remove();
+    f.submit();
+  }
   window.ccMarca = function (inp) {
     inp.parentNode.classList.toggle('on', inp.checked);
     ccAtualizaTodos(inp.closest('.chips'));
+    ccAplica(inp);
   };
   window.ccLimpaGrupo = function (btn) {
     var chips = btn.closest('.chips');
+    var algum = chips.querySelector('input[type=checkbox]:checked');
     chips.querySelectorAll('input[type=checkbox]').forEach(function (i) {
       i.checked = false;
       i.parentNode.classList.remove('on');
     });
     ccAtualizaTodos(chips);
+    if (algum) ccAplica(btn);
   };
   function ccAtualizaTodos(chips) {
     if (!chips) return;
