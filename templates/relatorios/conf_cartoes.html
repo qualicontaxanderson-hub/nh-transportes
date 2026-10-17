@@ -1197,9 +1197,7 @@ body > .container-fluid:has(#ccz){
     if (add) {
       var valor = add.dataset.valor, data = add.dataset.data;
       if (!confirm('Lançar ajuste de R$ ' + valor + ' em ' + data + ' para '
-                   + add.dataset.nome + '?
-
-Ele entra só nesta conferência; '
+                   + add.dataset.nome + '?\n\nEle entra só nesta conferência; '
                    + 'o fechamento de caixa não é alterado.')) return;
       add.disabled = true;
       try {
