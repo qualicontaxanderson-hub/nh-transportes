@@ -184,6 +184,16 @@ def index():
                 n.get('card_credenciadora'), n.get('card_autorizacao'),
                 n.get('tef_terminal'), n.get('cliente_doc'))
 
+        # O cupom de cartao no arquivo da operadora (utils/cartao_cupom): pago,
+        # a receber, ou nao achado. So leitura -- se falhar, a tela segue sem.
+        try:
+            from utils import cartao_cupom
+            _sit = cartao_cupom.situacao_dos_cupons(conn, notas)
+        except Exception:
+            _sit = {}
+        for n in notas:
+            n['operadora'] = _sit.get(n['id'])
+
         # ---------- Itens das notas exibidas (1 query, sem N+1) — p/ cards mobile ----------
         itens_por_venda = {}
         ids = [n['id'] for n in notas]

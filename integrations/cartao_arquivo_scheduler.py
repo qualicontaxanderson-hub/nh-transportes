@@ -42,6 +42,18 @@ def _job(app):
                 logger.warning("[cartao_arq] %s: %s", nome, erro)
             else:
                 logger.info("[cartao_arq] %s (%s): %s lotes, %s vendas", nome, op, nl, nv)
+        # Casa a venda da operadora com o cupom fiscal (utils/cartao_cupom).
+        # O cupom chega o dia inteiro e o arquivo da operadora pode vir antes
+        # ou depois dele: refaz a janela dos ultimos 45 dias a cada rodada.
+        try:
+            from datetime import date, timedelta
+            from utils import cartao_cupom
+            hoje = date.today()
+            n = cartao_cupom.refazer(conn, hoje - timedelta(days=45), hoje)
+            if feitos:
+                logger.info("[cartao_arq] cupons casados: %s", n)
+        except Exception:
+            logger.exception("[cartao_arq] falha casando venda x cupom.")
     except Exception:
         logger.exception("[cartao_arq] falha no job.")
     finally:

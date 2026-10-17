@@ -1513,11 +1513,20 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
     saida = {}
     cur = conn.cursor(dictionary=True)
 
-    def item(dt, pago, prev, vendido, taxa, liquido, desc):
+    def item(dt, pago, prev, vendido, taxa, liquido, desc, ref=None):
         dt = dt if isinstance(dt, datetime) else datetime.combine(dt, datetime.min.time())
         return {'dt': dt, 'venda': dt.date(), 'pago': pago, 'prev': prev,
                 'vendido': round(vendido, 2), 'taxa': round(taxa, 2),
-                'liquido': round(liquido, 2), 'desc': desc}
+                'liquido': round(liquido, 2), 'desc': desc, 'ref': ref, 'cupom': None}
+
+    # o cupom (NFC-e) de cada venda, casado em utils/cartao_cupom; "sem
+    # cupom" so a partir de quando ha cupom no sistema
+    try:
+        from utils import cartao_cupom
+        cur.execute("SELECT MIN(dh_emissao) AS m FROM vendas_xml")
+        cupom_desde = (cur.fetchone() or {}).get('m')
+    except Exception:
+        cartao_cupom, cupom_desde = None, None
 
     try:
         for b in bandeiras:
@@ -1530,7 +1539,7 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
             abat_dia = defaultdict(float)
             if op == 'X7':
                 cur.execute("""
-                    SELECT dt_operacao, bruto, desconto_lote, taxa_pct, cliente, nfe,
+                    SELECT id, dt_operacao, bruto, desconto_lote, taxa_pct, cliente, nfe,
                            cod_transacao, dt_liquidacao AS pago, dt_previsao AS prev
                       FROM cartao_arquivo_vendas
                      WHERE operadora='X7' AND dt_operacao >= %s AND dt_operacao < %s
@@ -1541,7 +1550,7 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
                     desc = ' · '.join(x for x in (
                         r['cliente'], ('NF-e %s' % r['nfe']) if r['nfe'] else '',
                         ('desconto %s' % _fmt_br(r['desconto_lote'])) if r['desconto_lote'] else '') if x)
-                    itens.append(item(r['dt_operacao'], r['pago'], r['prev'], vd, tx, vd - tx, desc))
+                    itens.append(item(r['dt_operacao'], r['pago'], r['prev'], vd, tx, vd - tx, desc, r['id']))
                 dias = sorted({i['pago'] for i in itens if i['pago']})
                 if dias:
                     ph = ','.join(['%s'] * len(dias))
@@ -1597,7 +1606,7 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
                         pago_do_dia[d] = max(p['d'] for p in ps)
                         total_dia[pago_do_dia[d]] = total_dia.get(pago_do_dia[d], 0.0) + v
                 cur.execute("""
-                    SELECT dt_abastecimento, cupom, frentista, produto, litros,
+                    SELECT id, dt_abastecimento, cupom, frentista, produto, litros,
                            bruto - desconto AS venda, taxa, repasse
                       FROM cartao_baratao_cupons
                      WHERE dt_abastecimento >= %s AND dt_abastecimento < %s
@@ -1609,13 +1618,13 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
                         r['frentista'], 'cupom %s' % r['cupom'][-8:]) if x)
                     itens.append(item(r['dt_abastecimento'], pago_do_dia.get(d),
                                       d + timedelta(days=2), float(r['venda'] or 0),
-                                      float(r['taxa'] or 0), float(r['repasse'] or 0), desc))
+                                      float(r['taxa'] or 0), float(r['repasse'] or 0), desc, r['id']))
             else:
                 sb, sf = _sipag_da_bandeira(b.get('nome'), b.get('tipo'))
                 if not sb or not sf:
                     continue
                 cur.execute("""
-                    SELECT dt_transacao, bruto, desconto_pago, liquido_pago, desconto_venda,
+                    SELECT id, dt_transacao, bruto, desconto_pago, liquido_pago, desconto_venda,
                            liquido_venda, tipo_cartao, cartao, autorizacao,
                            dt_pagamento AS pago, dt_prevista AS prev
                       FROM cartao_sipag_transacoes
@@ -1632,7 +1641,7 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
                         ('final %s' % r['cartao'][-4:]) if r['cartao'] else '',
                         ('aut. %s' % r['autorizacao']) if r['autorizacao'] else '') if x)
                     itens.append(item(r['dt_transacao'], pago, r['prev'], float(r['bruto'] or 0),
-                                      float(tx or 0), float(lq or 0), desc))
+                                      float(tx or 0), float(lq or 0), desc, r['id']))
                 dias = sorted({i['pago'] for i in itens if i['pago']})
                 if dias:
                     ph = ','.join(['%s'] * len(dias))
@@ -1645,6 +1654,16 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
                     for r in cur.fetchall():
                         total_dia[r['d']] = float(r['l'] or 0)
                         abat_dia[r['d']] = -float(r['ab'] or 0)
+
+            if cartao_cupom and itens:
+                try:
+                    cps = cartao_cupom.cupons_das_vendas(conn, op, [i['ref'] for i in itens if i['ref']])
+                except Exception:
+                    cps = {}
+                for it in itens:
+                    it['cupom'] = cps.get(it['ref'])
+                    it['sem_cupom'] = (not it['cupom'] and cupom_desde is not None
+                                       and it['dt'] >= cupom_desde)
 
             # o extrato de cada dia de pagamento (pode ser depois do periodo)
             dias_pag = sorted({i['pago'] for i in itens if i['pago']})
@@ -1711,6 +1730,8 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
                 'a_receber': sorted(a_receber, key=lambda i: i['dt']),
                 'por_venda': dict(por_venda),
                 'n_vendas': len(itens),
+                'n_com_cupom': sum(1 for i in itens if i.get('cupom')),
+                'n_sem_cupom': sum(1 for i in itens if i.get('sem_cupom')),
                 'vendido': round(vendido, 2),
                 'vendido_pago': round(vendido_pago, 2),
                 'taxa': round(taxa, 2),

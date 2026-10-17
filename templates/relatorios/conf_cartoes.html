@@ -874,7 +874,9 @@ body > .container-fluid:has(#ccz){
       <i class="bi bi-calculator"></i>
       {{ op.n_vendas }} venda{{ 's' if op.n_vendas != 1 }}: {{ op.vendido | fmtmoney }} vendido =
       {{ op.liquido | fmtmoney }} já pago + {{ op.taxa | fmtmoney }} de taxa
-      {%- if op.total_receber %} + {{ op.total_receber | fmtmoney }} a receber{% endif %}</div>
+      {%- if op.total_receber %} + {{ op.total_receber | fmtmoney }} a receber{% endif %}
+      {%- if op.n_com_cupom or op.n_sem_cupom %} · <b>{{ op.n_com_cupom }}</b> com cupom fiscal
+      {%- if op.n_sem_cupom %}, <span class="neg">{{ op.n_sem_cupom }} sem cupom</span>{% endif %}{% endif %}</div>
     {% if op.abatimentos|abs > 0.005 %}
     <div class="alerta alerta--pos" style="margin:.5rem .8rem 0">
       <i class="bi bi-info-circle-fill"></i>
@@ -914,6 +916,9 @@ body > .container-fluid:has(#ccz){
               <table class="vendas"><tbody>
                 {% for i in p.itens %}
                 <tr><td>{{ i.dt.strftime('%d/%m %H:%M') }}</td><td class="sub">{{ i.desc }}</td>
+                  <td>{% if i.cupom %}<a href="{{ url_for('vendas.detalhe', venda_id=i.cupom.id) }}" target="_blank"
+                       title="cupom emitido {{ i.cupom.dh_emissao.strftime('%d/%m %H:%M') }} · {{ i.cupom.valor_total | fmtmoney }}">NFC-e {{ i.cupom.numero }}/{{ i.cupom.serie }}</a>
+                    {%- elif i.sem_cupom %}<span class="neg" title="nenhum cupom fiscal casou com esta venda">sem cupom</span>{% endif %}</td>
                   <td class="n">{{ i.vendido | fmtmoney }}</td>
                   <td class="n sub">− {{ i.taxa | fmtmoney }}</td>
                   <td class="n"><b>{{ i.liquido | fmtmoney }}</b></td></tr>
@@ -938,7 +943,9 @@ body > .container-fluid:has(#ccz){
           {% for a in op.a_receber %}
           <tr>
             <td class="e" data-r="Venda de">{{ a.dt.strftime('%d/%m/%Y %H:%M') }}</td>
-            <td class="e sub" data-r="Detalhe">{{ a.desc }}</td>
+            <td class="e sub" data-r="Detalhe">{{ a.desc }}
+              {%- if a.cupom %} · <a href="{{ url_for('vendas.detalhe', venda_id=a.cupom.id) }}" target="_blank">NFC-e {{ a.cupom.numero }}/{{ a.cupom.serie }}</a>
+              {%- elif a.sem_cupom %} · <span class="neg">sem cupom</span>{% endif %}</td>
             <td class="forte" data-r="Valor">{{ a.vendido | fmtmoney }}</td>
             <td class="e sub" data-r="Previsto para">{% if a.prev %}{{ a.prev.strftime('%d/%m/%Y') }}{% else %}—{% endif %}</td>
           </tr>

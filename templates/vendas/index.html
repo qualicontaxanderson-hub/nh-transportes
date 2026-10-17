@@ -178,6 +178,12 @@
   #vendas .lin--canc .c-hora, #vendas .lin--canc .c-oque{ color:#9aa4b2; }
   #vendas .lin--canc .c-valor{ color:#9aa4b2; text-decoration:line-through; }
   #vendas .selo--canc{ background:var(--ign-bg); color:var(--ign); }
+  /* o cupom de cartao no arquivo da operadora (Conferencia de Cartoes) */
+  #vendas .op{ display:block; font-size:.6rem; font-weight:800; margin-top:.12rem;
+    white-space:nowrap; }
+  #vendas .op--ok{ color:#146c43; }
+  #vendas .op--esp{ color:#8a6d1a; }
+  #vendas .op--neg{ color:#b42318; }
 
   /* ── WEB (>=992px): teto de largura e colunas de tabela ──────────── */
   @media (min-width:992px){
@@ -308,6 +314,7 @@
         {%- if cancelada %}<span class="selo selo--canc">Cancelada</span>
         {%- else %}{% set c = cor_receb.get(n.recebimento, '#64748b') %}
         <span class="selo" style="color:{{ c }};background:{{ c }}22">{{ n.recebimento }}</span>
+        {%- if n.operadora %}<span class="op op--{{ n.operadora.cls }}" title="{{ n.operadora.title }}">{{ n.operadora.txt }}</span>{% endif %}
         {%- endif %}
       </span>
       <span class="c-oque">{% if itens %}{{ itens[0].produto_xml or '—' }}{% if itens[0].unidade == 'L' %} · {{ '%.2f'|format(itens[0].quantidade or 0)|replace('.', ',') }} L{% endif %}{% if itens|length > 1 %} · +{{ itens|length - 1 }}{% endif %}{% endif %}{% if n.cliente_nome %}<span class="cli"> · {{ n.cliente_nome }}</span>{% endif %}</span>
