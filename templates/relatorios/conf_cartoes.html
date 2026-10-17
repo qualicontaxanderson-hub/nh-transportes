@@ -456,8 +456,8 @@ body > .container-fluid:has(#ccz){
   {% set _arq = report | selectattr('arquivo') | list %}
   {% if not _arq %}
   <div class="nada">
-    Nenhuma bandeira com arquivo da operadora neste filtro. Hoje só a
-    <b>X7 BANK</b> manda arquivo — SIPAG e Baratão entram em seguida.
+    Nenhuma bandeira com arquivo da operadora neste filtro. Hoje mandam
+    arquivo a <b>X7 BANK</b> e o <b>BARATÃO</b> — a SIPAG entra em seguida.
   </div>
   {% endif %}
   {% for card in _arq %}
@@ -499,18 +499,25 @@ body > .container-fluid:has(#ccz){
           {{ aq.dias_ok }} de {{ aq.por_dia|length }} dias batem</b></div>
       </div>
       {% if aq.bruto %}
+      {#- O contrato do Baratão vem do módulo (a bandeira dele não tem taxa
+          cadastrada, e cadastrar mexeria na aba Caixa); o da X7, da bandeira. -#}
+      {% set tc = aq.taxa_contrato if aq.taxa_contrato is defined else card.taxa_contratada %}
       {% set taxa_ok = aq.taxa_esperada is not none and (aq.taxas - aq.taxa_esperada)|abs < 0.05 %}
       <div class="alerta {{ 'alerta--ok' if taxa_ok else 'alerta--neg' }}" style="margin:.5rem .8rem 0">
         <i class="bi {{ 'bi-check-circle-fill' if taxa_ok else 'bi-exclamation-triangle-fill' }}"></i>
         {% if aq.taxa_esperada is none %}
         sem taxa de contrato cadastrada para conferir os {{ aq.taxas | fmtmoney }} cobrados
         {% elif taxa_ok %}
-        a {{ aq.nome }} cobrou os {{ '%.2f'|format(card.taxa_contratada) }}% combinados sobre
+        a {{ aq.nome }} cobrou os {{ '%.2f'|format(tc) }}% combinados sobre
         (bruto − desconto): {{ aq.taxas | fmtmoney }}
         {% else %}
-        a {{ aq.nome }} cobrou {{ aq.taxas | fmtmoney }}; pelo contrato seriam
-        {{ aq.taxa_esperada | fmtmoney }}
-        {% endif %}</div>
+        a {{ aq.nome }} cobrou {{ aq.taxas | fmtmoney }}; pelos {{ '%.2f'|format(tc) }}%
+        do contrato seriam {{ aq.taxa_esperada | fmtmoney }}
+        {%- if aq.taxa_cupons_fora %} — {{ aq.taxa_cupons_fora }} cupo{{ 'ns' if aq.taxa_cupons_fora != 1 else 'm' }}
+        fora dos {{ '%.2f'|format(tc) }}%{% endif %}
+        {% endif %}
+        {%- if aq.taxa_desde is defined and aq.taxa_desde %}
+        <span class="sub">(taxa cobrada desde {{ aq.taxa_desde.strftime('%d/%m/%Y') }})</span>{% endif %}</div>
       {% endif %}
       {% if aq.descontos %}
       <div class="alerta alerta--pos" style="margin:.5rem .8rem 0">
@@ -522,11 +529,14 @@ body > .container-fluid:has(#ccz){
       <div class="alerta {{ 'alerta--ok' if not aq.dias_problema else 'alerta--neg' }}" style="margin:.5rem .8rem 0">
         <i class="bi {{ 'bi-check-circle-fill' if not aq.dias_problema else 'bi-exclamation-triangle-fill' }}"></i>
         {% if not aq.dias_problema %}
-        todo dia de liquidação do arquivo bateu com o extrato: {{ aq.liquido | fmtmoney }}
+        todo {{ aq.txt_dia }} do arquivo bateu com o extrato: {{ aq.liquido | fmtmoney }}
         {% else %}
         {{ aq.dias_problema|length }} dia{{ 's' if aq.dias_problema|length != 1 }} em que o
         pago pela operadora não bate com o extrato — na tabela abaixo
-        {% endif %}</div>
+        {% endif %}
+        {%- if aq.centavos_n %}
+        <span class="sub">· {{ aq.centavos_n }} dia{{ 's' if aq.centavos_n != 1 }} pago{{ 's' if aq.centavos_n != 1 }}
+          com centavos de arredondamento ({{ aq.centavos_total | fmtmoney }} no total)</span>{% endif %}</div>
       {% endif %}
       {% if aq.caixa %}
       <div class="alerta {{ 'alerta--ok' if not aq.caixa_problema else 'alerta--neg' }}" style="margin:.5rem .8rem">
@@ -542,7 +552,7 @@ body > .container-fluid:has(#ccz){
       {% if aq.dias_problema %}
       <div class="tab">
         <table>
-          <thead><tr><th class="e">Liquidação</th><th>Bruto</th><th>Descontos</th><th>Taxa</th>
+          <thead><tr><th class="e">{{ aq.rotulo_dia }}</th><th>Bruto</th><th>Descontos</th><th>Taxa</th>
             <th>Líquido {{ aq.nome }}</th><th>Extrato</th><th>Diferença</th><th class="e">Situação</th></tr></thead>
           <tbody>
             {% for d in aq.dias_problema %}
@@ -554,7 +564,7 @@ body > .container-fluid:has(#ccz){
               <td class="forte">{{ d.extrato | fmtmoney }}</td>
               <td>{{ d.dif | fmtmoney }}</td>
               <td class="e">{% if d.status == 'sem_credito' %}crédito não está no extrato (já importou o OFX do dia?)
-                {% elif d.status == 'sem_lote' %}crédito no extrato sem lote no arquivo
+                {% elif d.status == 'sem_lote' %}crédito no extrato sem {{ 'abastecimento' if aq.operadora == 'BARATAO' else 'lote' }} no arquivo
                 {% else %}valor diferente{% endif %}</td>
             </tr>
             {% endfor %}
@@ -587,6 +597,25 @@ body > .container-fluid:has(#ccz){
         {% for l in aq.a_receber %}{{ l.liquido | fmtmoney }} previsto para
           {{ l.dt_previsao.strftime('%d/%m') }}{{ ', ' if not loop.last }}{% endfor %}</div>
       {% endif %}
+      {#- O relatório do Baratão: o arquivo traz o frentista e o produto de
+          cada abastecimento, e isso não existe em lugar nenhum do caixa. -#}
+      {% for titulo, linhas in [('Frentista', aq.frentistas), ('Produto', aq.produtos)]
+            if aq.frentistas is defined and linhas %}
+      <div class="tab">
+        <table>
+          <thead><tr><th class="e">{{ titulo }}</th><th>Cupons</th><th>Litros</th>
+            <th>Bruto</th><th>Rebate</th><th>Taxa</th></tr></thead>
+          <tbody>
+            {% for f in linhas %}
+            <tr><td class="e">{{ f.nome }}</td><td>{{ f.cupons }}</td>
+              <td>{{ '{:,.0f}'.format(f.litros).replace(',', '.') }}</td>
+              <td class="forte">{{ f.bruto | fmtmoney }}</td>
+              <td>{{ f.rebate | fmtmoney }}</td><td>{{ f.taxa | fmtmoney }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endfor %}
     </div>
   </div>
   {% endfor %}

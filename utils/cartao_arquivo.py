@@ -13,20 +13,31 @@ manda para /BANCOS/OFX/NOVO no Dropbox (a mesma dos OFX -- o importador de
 extrato so le .ofx e nao enxerga este); o agendador abaixo le, grava e move
 para /BANCOS/OFX/IMPORTADOS. Sem botao de proposito.
 
-Hoje so a X7 BANK. SIPAG e Baratao entram quando houver um arquivo de cada.
+Hoje: X7 BANK (nome "X7...") e Baratao (nome "Baratao..."). SIPAG entra
+quando houver um arquivo de exemplo.
 
 O "xls" da X7 e HTML com cara de planilha: um bloco por dia de previsao
 (o lote: bruto, descontos, taxas, liquido) e as vendas do lote logo abaixo,
 cada uma com a Dt. Liquidacao -- o dia em que o lote caiu no banco. Em
 17/10/2026, 36 de 37 dias de liquidacao bateram no centavo com o extrato.
+
+O do Baratao e CSV (;) com um abastecimento por linha -- cupom, frentista,
+produto, litros, rebate, taxa, repasse --, e SEM data de pagamento. O
+Baratao paga um PIX por dia de abastecimento, a soma do repasse do dia, uns
+2 dias uteis depois (204 de 230 dias casam no centavo; o resto difere por
+centavos de arredondamento). A conferencia acha o PIX de cada dia.
 """
 import hashlib
+import csv
 import html as _html
+import io
 import logging
 import os
 import re
+import unicodedata
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+from itertools import combinations
 
 from utils.db import get_db_connection
 
@@ -35,22 +46,32 @@ _log = logging.getLogger(__name__)
 #: Prefixo do nome do arquivo -> operadora. O nome e a unica coisa que o
 #: Miguel controla, entao e por ele que se decide quem le o arquivo.
 OPERADORAS = {
-    'X7': {'nome': 'X7 BANK', 'bandeira_like': 'X7%', 'tipo': 'CREDITO'},
+    'X7': {'nome': 'X7 BANK', 'bandeira_like': 'X7%', 'tipo': 'CREDITO',
+           'extensoes': ('.xls', '.xlsx', '.html', '.htm')},
+    # A taxa do Baratao mora aqui, e nao na bandeira: preencher a bandeira
+    # mudaria tambem a conferencia pelo caixa. Os 2% comecaram em fev/2026 --
+    # a conferencia so cobra a taxa a partir do primeiro cupom que a teve.
+    'BARATAO': {'nome': 'BARATÃO', 'bandeira_like': 'BARAT%', 'tipo': 'CREDITO',
+                'extensoes': ('.csv',), 'taxa': 2.0},
 }
 
-EXTENSOES = ('.xls', '.xlsx', '.html', '.htm')
+EXTENSOES = tuple(sorted({e for o in OPERADORAS.values() for e in o['extensoes']}))
 
 _TOL = 0.02
 
 
 # ── leitura ───────────────────────────────────────────────────────────────────
 
+def _sem_acento(s):
+    return ''.join(c for c in unicodedata.normalize('NFKD', s or '')
+                   if not unicodedata.combining(c))
+
+
 def operadora_do_nome(nome):
-    n = (nome or '').strip().upper()
-    if not n.lower().endswith(EXTENSOES):
-        return None
-    for prefixo in OPERADORAS:
-        if n.startswith(prefixo):
+    """'X7 17-10.xls' -> 'X7'; 'Baratão 17-10.csv' -> 'BARATAO'."""
+    n = _sem_acento(nome).strip().upper()
+    for prefixo, o in OPERADORAS.items():
+        if n.startswith(prefixo) and n.lower().endswith(o['extensoes']):
             return prefixo
     return None
 
@@ -182,7 +203,60 @@ def ler_x7(conteudo):
     return lotes, vendas
 
 
-LEITORES = {'X7': ler_x7}
+def ler_baratao(conteudo):
+    """Os cupons do CSV do Baratao, TODAS as colunas -- frentista, produto,
+    litros e rebate nao entram na conferencia, mas ficam para relatorio."""
+    if isinstance(conteudo, bytes):
+        try:
+            texto = conteudo.decode('utf-8-sig')
+        except UnicodeDecodeError:
+            texto = conteudo.decode('cp1252')
+    else:
+        texto = conteudo
+    leitor = csv.DictReader(io.StringIO(texto), delimiter=';')
+    campos = set(leitor.fieldnames or [])
+    faltam = {'Cupom', 'Data do Abastecimento', 'Valor Bruto',
+              'Taxa Baratao', 'Valor Repasse Total'} - campos
+    if faltam:
+        raise ValueError('nao parece o CSV do Baratao: faltam as colunas %s'
+                         % ', '.join(sorted(faltam)))
+
+    cupons = []
+    for row in leitor:
+        def n(k):
+            v = (row.get(k) or '').strip()
+            return 0.0 if v.upper() == 'N/A' else _num(v)
+        cupom = (row.get('Cupom') or '').strip()
+        if not cupom:
+            continue
+        cd = (row.get('Cupom Desconto') or '').strip()
+        cupons.append({
+            'cupom': cupom,
+            'dt_abastecimento': datetime.strptime(
+                row['Data do Abastecimento'].strip()[:16], '%d/%m/%Y %H:%M'),
+            'produto': (row.get('Produto') or '').strip(),
+            'regiao': (row.get('Regiao') or '').strip(),
+            'posto': (row.get('Posto') or '').strip(),
+            'frentista': (row.get('Frentista') or '').strip(),
+            'litros': n('Litros'),
+            'valor_litro_dia': n('Valor Litro/Dia'),
+            'desconto_lt': n('Valor Desconto/Lt'),
+            'rebate_lt': n('Valor Rebate/Lt'),
+            'valor_lt_total': n('Valor/Lt Total'),
+            'valor_rebate': n('Valor Rebate'),
+            'cupom_desconto': None if cd.upper() in ('', 'N/A') else cd,
+            'dif_atacado': n('Diferenca Valor Atacado'),
+            'bruto': n('Valor Bruto'),
+            'taxa': n('Taxa Baratao'),
+            'desconto': n('Valor Desconto'),
+            'repasse': n('Valor Repasse Total'),
+        })
+    if not cupons:
+        raise ValueError('CSV do Baratao sem nenhum cupom')
+    return cupons
+
+
+LEITORES = {'X7': ler_x7, 'BARATAO': ler_baratao}
 
 
 # ── gravacao ──────────────────────────────────────────────────────────────────
@@ -231,6 +305,32 @@ def ensure_tables(conn):
             atualizado_em   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             UNIQUE KEY uk_venda (operadora, cod_transacao, parcela),
             KEY ix_op (operadora, dt_operacao)
+        )""")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS cartao_baratao_cupons (
+            id               INT AUTO_INCREMENT PRIMARY KEY,
+            cupom            VARCHAR(40)  NOT NULL,
+            dt_abastecimento DATETIME     NOT NULL,
+            produto          VARCHAR(60)  NULL,
+            regiao           VARCHAR(20)  NULL,
+            posto            VARCHAR(120) NULL,
+            frentista        VARCHAR(120) NULL,
+            litros           DECIMAL(12,3) NOT NULL DEFAULT 0,
+            valor_litro_dia  DECIMAL(10,4) NOT NULL DEFAULT 0,
+            desconto_lt      DECIMAL(10,4) NOT NULL DEFAULT 0,
+            rebate_lt        DECIMAL(10,4) NOT NULL DEFAULT 0,
+            valor_lt_total   DECIMAL(10,4) NOT NULL DEFAULT 0,
+            valor_rebate     DECIMAL(12,2) NOT NULL DEFAULT 0,
+            cupom_desconto   VARCHAR(60)  NULL,
+            dif_atacado      DECIMAL(12,2) NOT NULL DEFAULT 0,
+            bruto            DECIMAL(12,2) NOT NULL DEFAULT 0,
+            taxa             DECIMAL(12,2) NOT NULL DEFAULT 0,
+            desconto         DECIMAL(12,2) NOT NULL DEFAULT 0,
+            repasse          DECIMAL(12,2) NOT NULL DEFAULT 0,
+            arquivo          VARCHAR(200) NULL,
+            atualizado_em    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_cupom (cupom),
+            KEY ix_dt (dt_abastecimento)
         )""")
     cur.execute("""
         CREATE TABLE IF NOT EXISTS cartao_arquivo_importacoes (
@@ -291,6 +391,26 @@ def gravar(conn, operadora, arquivo, lotes, vendas):
     cur.close()
 
 
+_COLS_BARATAO = ('cupom', 'dt_abastecimento', 'produto', 'regiao', 'posto',
+                 'frentista', 'litros', 'valor_litro_dia', 'desconto_lt',
+                 'rebate_lt', 'valor_lt_total', 'valor_rebate', 'cupom_desconto',
+                 'dif_atacado', 'bruto', 'taxa', 'desconto', 'repasse')
+
+
+def gravar_baratao(conn, arquivo, cupons):
+    """Por cima, pelo numero do cupom: o CSV vem acumulado desde jan/2026."""
+    cols = _COLS_BARATAO + ('arquivo',)
+    sql = ('INSERT INTO cartao_baratao_cupons (%s) VALUES (%s) '
+           'ON DUPLICATE KEY UPDATE %s' % (
+               ', '.join(cols), ', '.join(['%s'] * len(cols)),
+               ', '.join('%s=VALUES(%s)' % (c, c) for c in cols if c != 'cupom')))
+    cur = conn.cursor()
+    cur.executemany(sql, [tuple(c[k] for k in _COLS_BARATAO) + (arquivo[:200],)
+                          for c in cupons])
+    conn.commit()
+    cur.close()
+
+
 def _registrar(conn, operadora, arquivo, tamanho, lotes=0, vendas=0, erro=None):
     cur = conn.cursor()
     cur.execute("""INSERT INTO cartao_arquivo_importacoes
@@ -309,8 +429,12 @@ def importar(conn, nome, conteudo):
         raise ValueError('nome nao comeca com uma operadora conhecida: %s' % nome)
     ensure_tables(conn)
     try:
-        lotes, vendas = LEITORES[operadora](conteudo)
-        gravar(conn, operadora, nome, lotes, vendas)
+        if operadora == 'BARATAO':
+            lotes, vendas = [], LEITORES[operadora](conteudo)
+            gravar_baratao(conn, nome, vendas)
+        else:
+            lotes, vendas = LEITORES[operadora](conteudo)
+            gravar(conn, operadora, nome, lotes, vendas)
     except Exception as exc:
         conn.rollback()
         _registrar(conn, operadora, nome, len(conteudo), erro=str(exc))
@@ -372,7 +496,7 @@ def operadora_da_bandeira(conn, bandeira_id):
         cur.close()
     if not b:
         return None
-    nome = (b['nome'] or '').strip().upper()
+    nome = _sem_acento(b['nome']).strip().upper()
     for prefixo, o in OPERADORAS.items():
         if nome.startswith(o['bandeira_like'].rstrip('%')) and \
                 (b['tipo'] or '').upper() == o['tipo']:
@@ -393,6 +517,8 @@ def conferencia(conn, operadora, bandeira_id, forma_ids, data_inicio, data_fim,
         ensure_tables(conn)
     except Exception:
         return None
+    if operadora == 'BARATAO':
+        return conferencia_baratao(conn, bandeira_id, forma_ids, data_inicio, data_fim)
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute("""
@@ -494,6 +620,7 @@ def conferencia(conn, operadora, bandeira_id, forma_ids, data_inicio, data_fim,
         taxa_esperada = round((bruto - desc) * float(taxa_contratada) / 100, 2)
     return {
         'operadora': operadora, 'nome': OPERADORAS[operadora]['nome'],
+        'rotulo_dia': 'Liquidação', 'txt_dia': 'dia de liquidação',
         'por_dia': por_dia, 'caixa': caixa, 'a_receber': a_receber,
         'bruto': bruto, 'descontos': desc, 'taxas': taxas,
         'liquido': sum(x['liquido'] for x in lot),
@@ -505,5 +632,217 @@ def conferencia(conn, operadora, bandeira_id, forma_ids, data_inicio, data_fim,
         'caixa_arquivo': sum(x['arquivo'] for x in caixa),
         'caixa_lancado': sum(x['caixa'] for x in caixa),
         'caixa_problema': [x for x in caixa if not x['ok']],
+        'ultima': ultima, 'ultima_venda': ultima_venda,
+    }
+
+
+# ── Baratao ───────────────────────────────────────────────────────────────────
+
+#: Arredondamento: o PIX do dia sai ate uns centavos diferente da soma dos
+#: cupons (13/03/2026: 7.023,81 nos cupons, 7.023,71 no PIX). Ate isto e o
+#: mesmo pagamento; acima, e outro.
+_TOL_CENTAVOS = 0.15
+#: Quantos dias depois do abastecimento o PIX ainda pode chegar.
+_JANELA_PIX = 10
+
+
+def _casar_pix(dias, pix):
+    """Acha o PIX de cada dia de abastecimento. dias: {data: repasse};
+    pix: [{'id','d','v'}] em ordem. Devolve {data: [pix...]}, marcando 'u'.
+
+    Tres passadas, da mais certa para a menos: valor exato, valor com
+    centavos de arredondamento, e o dia pago em 2 a 4 PIX."""
+    for p in pix:
+        p['u'] = False
+    casados = {}
+
+    def candidatos(d):
+        return [p for p in pix
+                if not p['u'] and 0 <= (p['d'] - d).days <= _JANELA_PIX]
+
+    for tol in (_TOL, _TOL_CENTAVOS):
+        for d in sorted(dias):
+            if d in casados:
+                continue
+            cs = [p for p in candidatos(d) if abs(p['v'] - dias[d]) < tol]
+            if cs:
+                p = min(cs, key=lambda x: (x['d'], abs(x['v'] - dias[d])))
+                p['u'] = True
+                casados[d] = [p]
+    for d in sorted(dias):
+        if d in casados:
+            continue
+        cs = candidatos(d)[:12]
+        for k in (2, 3, 4):
+            achou = next((c for c in combinations(cs, k)
+                          if abs(sum(p['v'] for p in c) - dias[d]) < _TOL * k), None)
+            if achou:
+                for p in achou:
+                    p['u'] = True
+                casados[d] = list(achou)
+                break
+    return casados
+
+
+def conferencia_baratao(conn, bandeira_id, forma_ids, data_inicio, data_fim):
+    """A conferencia do Baratao no periodo, pelo DIA DE ABASTECIMENTO.
+
+    Mesmo formato da X7 (o template e um so), mais o relatorio por frentista
+    e por produto -- e por isso que o cupom inteiro e guardado."""
+    ini = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+    fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
+    # Dias de antes do periodo entram so para casar: um PIX do dia 2 pode
+    # ser do abastecimento do dia 30 do mes anterior.
+    ini_ext = ini - timedelta(days=_JANELA_PIX)
+    fim_ext = fim + timedelta(days=_JANELA_PIX)
+    taxa_pct = OPERADORAS['BARATAO']['taxa']
+
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""
+            SELECT DATE(dt_abastecimento) AS d, COUNT(*) AS n,
+                   SUM(bruto) AS bruto, SUM(desconto) AS descontos,
+                   SUM(taxa) AS taxas, SUM(repasse) AS liquido
+              FROM cartao_baratao_cupons
+             WHERE dt_abastecimento >= %s AND dt_abastecimento < %s
+             GROUP BY DATE(dt_abastecimento)""",
+            (ini_ext, fim + timedelta(days=1)))
+        dias = {r['d']: r for r in cur.fetchall()}
+
+        pix, ultimo_pix = [], None
+        if forma_ids:
+            ph = ','.join(['%s'] * len(forma_ids))
+            cur.execute(f"""
+                SELECT id, data_transacao AS d, valor AS v
+                  FROM bank_transactions
+                 WHERE tipo='CREDIT' AND forma_recebimento_id IN ({ph})
+                   AND data_transacao BETWEEN %s AND %s
+                 ORDER BY data_transacao, id""",
+                list(forma_ids) + [ini_ext, fim_ext])
+            pix = [{'id': r['id'], 'd': r['d'], 'v': round(float(r['v']), 2)}
+                   for r in cur.fetchall()]
+            cur.execute(f"""
+                SELECT MAX(data_transacao) AS m FROM bank_transactions
+                 WHERE tipo='CREDIT' AND forma_recebimento_id IN ({ph})""",
+                list(forma_ids))
+            ultimo_pix = (cur.fetchone() or {}).get('m')
+
+        # A taxa so vale a partir do primeiro cupom que a teve (fev/2026).
+        cur.execute("SELECT MIN(dt_abastecimento) AS m FROM cartao_baratao_cupons "
+                    "WHERE taxa > 0")
+        taxa_desde = (cur.fetchone() or {}).get('m')
+        cur.execute("""
+            SELECT COALESCE(SUM(bruto - desconto), 0) AS base, COUNT(*) AS n,
+                   COALESCE(SUM(ROUND((bruto - desconto) * %s / 100, 2)), 0) AS esperada,
+                   COALESCE(SUM(ABS(taxa - ROUND((bruto - desconto) * %s / 100, 2)) > 0.01), 0) AS fora
+              FROM cartao_baratao_cupons
+             WHERE dt_abastecimento >= %s AND dt_abastecimento < %s
+               AND dt_abastecimento >= %s""",
+            (taxa_pct, taxa_pct, ini, fim + timedelta(days=1),
+             taxa_desde or datetime(2100, 1, 1)))
+        tx = cur.fetchone()
+
+        cur.execute("""
+            SELECT lc.data AS d, COUNT(*) AS n, SUM(lcc.valor) AS v
+              FROM lancamentos_caixa_comprovacao lcc
+              JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+             WHERE lcc.bandeira_cartao_id=%s AND lc.data BETWEEN %s AND %s
+             GROUP BY lc.data""", (bandeira_id, data_inicio, data_fim))
+        caixa_dia = {r['d']: r for r in cur.fetchall()}
+
+        rel = {}
+        for chave, campo in (('frentistas', 'frentista'), ('produtos', 'produto')):
+            cur.execute(f"""
+                SELECT COALESCE(NULLIF({campo}, ''), '-') AS nome, COUNT(*) AS cupons,
+                       SUM(litros) AS litros, SUM(bruto) AS bruto,
+                       SUM(valor_rebate) AS rebate, SUM(taxa) AS taxa
+                  FROM cartao_baratao_cupons
+                 WHERE dt_abastecimento >= %s AND dt_abastecimento < %s
+                 GROUP BY nome ORDER BY bruto DESC""",
+                (ini, fim + timedelta(days=1)))
+            rel[chave] = cur.fetchall()
+
+        cur.execute("""
+            SELECT arquivo, importado_em, lotes, vendas, erro
+              FROM cartao_arquivo_importacoes
+             WHERE operadora='BARATAO' ORDER BY id DESC LIMIT 1""")
+        ultima = cur.fetchone()
+        cur.execute("SELECT MAX(dt_abastecimento) AS m FROM cartao_baratao_cupons")
+        ultima_venda = (cur.fetchone() or {}).get('m')
+    finally:
+        cur.close()
+
+    if not dias and not ultima:
+        return None
+
+    casados = _casar_pix({d: round(float(r['liquido']), 2) for d, r in dias.items()}, pix)
+
+    por_dia, a_receber = [], []
+    for d in sorted(x for x in dias if ini <= x <= fim):
+        r = dias[d]
+        liq = round(float(r['liquido']), 2)
+        ps = casados.get(d, [])
+        ext = round(sum(p['v'] for p in ps), 2)
+        if ps:
+            st = 'ok' if abs(ext - liq) < _TOL * len(ps) else 'centavos'
+        elif not ultimo_pix or ultimo_pix < d + timedelta(days=4):
+            # O extrato ainda nao chegou ate onde esse PIX cairia.
+            a_receber.append({'liquido': liq, 'dt_previsao': d + timedelta(days=2)})
+            continue
+        else:
+            st = 'sem_credito'
+        por_dia.append({
+            'data': d, 'qtd': int(r['n']), 'bruto': float(r['bruto']),
+            'descontos': float(r['descontos']), 'taxas': float(r['taxas']),
+            'liquido': liq, 'extrato': ext, 'dif': round(ext - liq, 2),
+            'status': st, 'pix': [p['d'] for p in ps],
+        })
+    for p in pix:
+        if not p['u'] and ini <= p['d'] <= fim:
+            por_dia.append({
+                'data': p['d'], 'qtd': 0, 'bruto': 0.0, 'descontos': 0.0,
+                'taxas': 0.0, 'liquido': 0.0, 'extrato': p['v'], 'dif': p['v'],
+                'status': 'sem_lote', 'pix': [p['d']],
+            })
+    por_dia.sort(key=lambda x: x['data'])
+
+    caixa = []
+    for d in sorted(set(x for x in dias if ini <= x <= fim) | set(caixa_dia)):
+        a = float(dias[d]['bruto']) - float(dias[d]['descontos']) if d in dias else 0.0
+        c = float(caixa_dia[d]['v']) if d in caixa_dia else 0.0
+        caixa.append({
+            'data': d, 'arquivo': a, 'n_arquivo': int(dias[d]['n']) if d in dias else 0,
+            'caixa': c, 'n_caixa': int(caixa_dia[d]['n']) if d in caixa_dia else 0,
+            'dif': round(c - a, 2), 'ok': abs(c - a) < _TOL,
+        })
+
+    lot = [x for x in por_dia if x['qtd']]
+    no_periodo = [r for d, r in dias.items() if ini <= d <= fim]
+    base_taxa = float(tx['base'] or 0)
+    centavos = [x for x in por_dia if x['status'] == 'centavos']
+    return {
+        'operadora': 'BARATAO', 'nome': OPERADORAS['BARATAO']['nome'],
+        'rotulo_dia': 'Abastecimento', 'txt_dia': 'dia de abastecimento',
+        'por_dia': por_dia, 'caixa': caixa, 'a_receber': a_receber,
+        'bruto': sum(float(r['bruto']) for r in no_periodo),
+        'descontos': sum(float(r['descontos']) for r in no_periodo),
+        'taxas': sum(float(r['taxas']) for r in no_periodo),
+        'liquido': sum(x['liquido'] for x in lot),
+        'extrato': sum(x['extrato'] for x in por_dia),
+        'taxa_pct': (sum(float(r['taxas']) for r in no_periodo) / base_taxa * 100)
+                    if base_taxa else None,
+        # Cupom a cupom, como o Baratao arredonda -- a conta no total daria
+        # R$ 1,64 de "diferenca" que nao existe em jan-out/2026.
+        'taxa_esperada': float(tx['esperada']) if base_taxa else None,
+        'taxa_contrato': taxa_pct, 'taxa_cupons_fora': int(tx['fora'] or 0),
+        'taxa_desde': taxa_desde,
+        'dias_ok': sum(1 for x in por_dia if x['status'] in ('ok', 'centavos')),
+        'dias_problema': [x for x in por_dia if x['status'] not in ('ok', 'centavos')],
+        'centavos_n': len(centavos),
+        'centavos_total': round(sum(x['dif'] for x in centavos), 2),
+        'caixa_arquivo': sum(x['arquivo'] for x in caixa),
+        'caixa_lancado': sum(x['caixa'] for x in caixa),
+        'caixa_problema': [x for x in caixa if not x['ok']],
+        'frentistas': rel['frentistas'], 'produtos': rel['produtos'],
         'ultima': ultima, 'ultima_venda': ultima_venda,
     }
