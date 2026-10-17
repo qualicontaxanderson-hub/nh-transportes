@@ -64,6 +64,9 @@ OPERADORAS = {
     'SIPAG': {'nome': 'SIPAG', 'extensoes': ('.csv',),
               'prefixos': ('VENDAS_REALIZADAS', 'RELATORIO_VENDAS_RECEBIDAS'),
               'bandeiras': ('VISA', 'MASTERCARD', 'ELO', 'AMEX', 'CABAL')},
+    # O extrato PIX do banco (utils/pix_extrato) vem pelo mesmo caminho, mas
+    # nao e operadora de cartao: nao tem bandeira nem entra na Conferencia.
+    'PIX': {'nome': 'PIX', 'extensoes': ('.xlsx',), 'so_arquivo': True},
 }
 
 EXTENSOES = tuple(sorted({e for o in OPERADORAS.values() for e in o['extensoes']}))
@@ -449,6 +452,11 @@ def importar(conn, nome, conteudo):
             tipo, vendas = ler_sipag(conteudo, nome)
             lotes = []
             gravar_sipag(conn, tipo, nome, vendas)
+        elif operadora == 'PIX':
+            from utils import pix_extrato
+            cab, vendas = pix_extrato.ler_sicoob(conteudo)
+            lotes = []
+            pix_extrato.gravar(conn, nome, cab, vendas)
         else:
             lotes, vendas = LEITORES[operadora](conteudo)
             gravar(conn, operadora, nome, lotes, vendas)
@@ -539,6 +547,8 @@ def operadora_da_bandeira(conn, bandeira_id):
         return None
     nome = _sem_acento(b['nome']).strip().upper()
     for prefixo, o in OPERADORAS.items():
+        if o.get('so_arquivo'):
+            continue
         if 'bandeiras' in o:
             if nome.startswith(o['bandeiras']):
                 return prefixo
@@ -1325,6 +1335,8 @@ def conferencia_sipag(conn, bandeira_id, forma_ids, data_inicio, data_fim):
 def _operadora_de(nome, tipo):
     nome = _sem_acento(nome).strip().upper()
     for prefixo, o in OPERADORAS.items():
+        if o.get('so_arquivo'):
+            continue
         if 'bandeiras' in o:
             if nome.startswith(o['bandeiras']):
                 return prefixo

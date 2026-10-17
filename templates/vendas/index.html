@@ -178,6 +178,14 @@
   #vendas .lin--canc .c-hora, #vendas .lin--canc .c-oque{ color:#9aa4b2; }
   #vendas .lin--canc .c-valor{ color:#9aa4b2; text-decoration:line-through; }
   #vendas .selo--canc{ background:var(--ign-bg); color:var(--ign); }
+  #vendas details.pixsc{ background:#fff7ed; border:1px solid #fed7aa; border-radius:12px;
+    margin:.2rem 0 .7rem; padding:.5rem .8rem; }
+  #vendas details.pixsc > summary{ cursor:pointer; font-size:.8rem; font-weight:800; color:#9a3412; }
+  #vendas .pixsc__l{ margin-top:.4rem; display:grid; gap:.15rem; }
+  #vendas .pixsc__l > div{ display:grid; grid-template-columns:92px 1fr auto; gap:.6rem;
+    font-size:.76rem; padding:.2rem 0; border-top:1px dashed #fed7aa; }
+  #vendas .pixsc__l .nm{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #vendas .pixsc__l i{ color:var(--muted); font-style:normal; font-size:.68rem; }
   /* o cupom de cartao no arquivo da operadora (Conferencia de Cartoes) */
   #vendas .op{ display:block; font-size:.6rem; font-weight:800; margin-top:.12rem;
     white-space:nowrap; }
@@ -278,6 +286,24 @@
     <div class="n n--tick"><div class="r">Ticket médio</div>
       <div class="v">{{ (totais.ticket or 0) | formatar_moeda }}</div></div>
   </div>
+
+  {#- O PIX que caiu no banco e nao casou com cupom nenhum (extrato PIX do
+      banco x cupom, utils/cartao_cupom): cliente a prazo pagando conta, venda
+      sem nota, ou cupom lancado com outro valor. -#}
+  {% if pix_sem_cupom %}
+  <details class="pixsc">
+    <summary><i class="bi bi-exclamation-triangle-fill"></i>
+      {{ pix_sem_cupom|length }} PIX caíram no banco sem cupom neste período ·
+      {{ pix_sem_cupom | sum(attribute='valor') | formatar_moeda }}</summary>
+    <div class="pixsc__l">
+      {% for p in pix_sem_cupom %}
+      <div><span>{{ p.dt.strftime('%d/%m %H:%M') }}</span>
+        <span class="nm">{{ p.pagador }} <i>{{ p.banco|title }} · {{ 'chave' if 'chave' in (p.historico or '') else 'copia e cola' }}</i></span>
+        <b>{{ p.valor | formatar_moeda }}</b></div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
 
   {# =================== LISTA (agrupada por dia) =================== #}
   <div class="lst">

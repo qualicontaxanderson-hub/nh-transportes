@@ -14,7 +14,7 @@ get_db_connection() + cursor(dictionary=True), SQL 100% parametrizado (%s).
 NAO altera nada existente; NAO toca no robo (vendas_api) nem nas tabelas.
 """
 import math
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from urllib.parse import urlencode
 
 from flask import Blueprint, render_template, request, abort, jsonify
@@ -193,6 +193,16 @@ def index():
             _sit = {}
         for n in notas:
             n['operadora'] = _sit.get(n['id'])
+        # PIX que caiu no banco sem cupom -- so com o periodo escolhido (ate
+        # 31 dias): sem data, a lista nao tem fim
+        pix_sem_cupom = []
+        try:
+            if f['data_ini'] and f['data_fim'] and (
+                    datetime.strptime(f['data_fim'], '%Y-%m-%d')
+                    - datetime.strptime(f['data_ini'], '%Y-%m-%d')).days <= 31:
+                pix_sem_cupom = cartao_cupom.pix_sem_cupom(conn, f['data_ini'], f['data_fim'])
+        except Exception:
+            pix_sem_cupom = []
 
         # ---------- Itens das notas exibidas (1 query, sem N+1) — p/ cards mobile ----------
         itens_por_venda = {}
@@ -306,6 +316,7 @@ def index():
             por_pagina=POR_PAGINA,
             paginas=_janela_paginas(pagina, total_paginas),
             qs_filtros=qs_filtros,
+            pix_sem_cupom=pix_sem_cupom,
         )
     finally:
         cur.close()
