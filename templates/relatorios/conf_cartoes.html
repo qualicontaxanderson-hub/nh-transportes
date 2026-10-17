@@ -107,6 +107,15 @@ body > .container-fluid:has(#ccz){
   #ccz .conf{ border-top:1px solid var(--linha); background:#fbfcfe; }
   #ccz details.rel > summary{ cursor:pointer; font-size:.74rem; font-weight:800;
     color:var(--blue-deep); padding:.35rem 0; }
+  /* as vendas de cada pagamento, uma a uma (aba Operadora) */
+  #ccz tr.itens > td{ padding:0 .6rem .45rem !important; background:#fbfcfe; }
+  #ccz tr.itens details > summary{ cursor:pointer; font-size:.7rem; font-weight:800;
+    color:var(--blue-deep); padding:.2rem 0; list-style:none; }
+  #ccz tr.itens details > summary::before{ content:'▸ '; }
+  #ccz tr.itens details[open] > summary::before{ content:'▾ '; }
+  #ccz table.vendas{ width:100%; font-size:.72rem; margin:.15rem 0 .2rem; }
+  #ccz table.vendas td{ padding:.18rem .35rem; border-top:1px dashed var(--linha); }
+  #ccz table.vendas td.n{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
   #ccz .conf__t{ display:flex; gap:.5rem; align-items:center; padding:.6rem .8rem;
     font-size:.7rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em;
     color:var(--blue-deep); }
@@ -861,6 +870,11 @@ body > .container-fluid:has(#ccz){
       <div class="r"><div class="r__r">A receber</div>
         <div class="r__v">{{ op.total_receber | fmtmoney }}</div></div>
     </div>
+    <div class="alerta" style="margin:.5rem .8rem 0">
+      <i class="bi bi-calculator"></i>
+      {{ op.n_vendas }} venda{{ 's' if op.n_vendas != 1 }}: {{ op.vendido | fmtmoney }} vendido =
+      {{ op.liquido | fmtmoney }} já pago + {{ op.taxa | fmtmoney }} de taxa
+      {%- if op.total_receber %} + {{ op.total_receber | fmtmoney }} a receber{% endif %}</div>
     {% if op.abatimentos|abs > 0.005 %}
     <div class="alerta alerta--pos" style="margin:.5rem .8rem 0">
       <i class="bi bi-info-circle-fill"></i>
@@ -894,6 +908,19 @@ body > .container-fluid:has(#ccz){
               {%- elif not p.n_creditos %}<span class="neg">não caiu no extrato</span>
               {%- else %}<span class="neg">{{ p.dif | fmtmoney }} de diferença</span>{% endif %}</td>
           </tr>
+          {% if p.itens %}
+          <tr class="itens"><td colspan="7">
+            <details><summary>ver {{ 'a venda' if p.n == 1 else 'as %d vendas'|format(p.n) }}</summary>
+              <table class="vendas"><tbody>
+                {% for i in p.itens %}
+                <tr><td>{{ i.dt.strftime('%d/%m %H:%M') }}</td><td class="sub">{{ i.desc }}</td>
+                  <td class="n">{{ i.vendido | fmtmoney }}</td>
+                  <td class="n sub">− {{ i.taxa | fmtmoney }}</td>
+                  <td class="n"><b>{{ i.liquido | fmtmoney }}</b></td></tr>
+                {% endfor %}
+              </tbody></table>
+            </details></td></tr>
+          {% endif %}
           {% endfor %}
         </tbody>
         <tfoot><tr><td class="e" colspan="2"><b>Total pago</b></td>
@@ -906,16 +933,19 @@ body > .container-fluid:has(#ccz){
     {% if op.a_receber %}
     <div class="tab">
       <table>
-        <thead><tr><th class="e">A receber — venda de</th><th>Valor</th><th class="e">Previsto para</th></tr></thead>
+        <thead><tr><th class="e">A receber — venda de</th><th class="e">Detalhe</th><th>Valor</th><th class="e">Previsto para</th></tr></thead>
         <tbody>
           {% for a in op.a_receber %}
           <tr>
-            <td class="e">{{ a.data_venda.strftime('%d/%m/%Y') }}{% if a.n > 1 %} <span class="sub">({{ a.n }})</span>{% endif %}</td>
-            <td class="forte">{{ a.valor | fmtmoney }}</td>
-            <td class="e sub">{% if a.previsto %}{{ a.previsto.strftime('%d/%m/%Y') }}{% else %}—{% endif %}</td>
+            <td class="e" data-r="Venda de">{{ a.dt.strftime('%d/%m/%Y %H:%M') }}</td>
+            <td class="e sub" data-r="Detalhe">{{ a.desc }}</td>
+            <td class="forte" data-r="Valor">{{ a.vendido | fmtmoney }}</td>
+            <td class="e sub" data-r="Previsto para">{% if a.prev %}{{ a.prev.strftime('%d/%m/%Y') }}{% else %}—{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
+        <tfoot><tr><td class="e" colspan="2"><b>Total a receber</b></td>
+          <td><b>{{ op.total_receber | fmtmoney }}</b></td><td></td></tr></tfoot>
       </table>
     </div>
     {% endif %}
