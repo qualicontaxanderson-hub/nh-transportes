@@ -1484,3 +1484,194 @@ def ciclos_operadora(conn, bandeiras, vinculos_map, data_inicio, data_fim):
     finally:
         cur.close()
     return saida_band, desde, ciclos
+
+
+def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data_fim):
+    """A aba Operadora, uma linha por PAGAMENTO: {bandeira_id: {...}}.
+
+    O Excel diz o que foi pago, quando e quanto; o extrato so confirma. Por
+    isso a taxa e a do arquivo (vendido - liquido pago), e so do que FOI pago
+    -- venda que ainda nao foi paga nao e taxa, e vai para "a receber". Com o
+    extrato fica o check: o liquido do dia caiu?
+
+        pagamentos: [{data, vendas (datas), vendido, taxa, abatimentos,
+                      liquido, extrato, n_creditos, ok}]
+        a_receber:  [{data_venda, valor, previsto, pago_em}]
+    """
+    ini = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+    fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
+    fim1 = fim + timedelta(days=1)
+    saida = {}
+    cur = conn.cursor(dictionary=True)
+    try:
+        for b in bandeiras:
+            op = _operadora_de(b.get('nome'), b.get('tipo'))
+            if not op:
+                continue
+            pag = defaultdict(lambda: {'vendas': set(), 'vendido': 0.0, 'taxa': 0.0,
+                                       'abatimentos': 0.0, 'liquido': 0.0, 'n': 0})
+            receber = defaultdict(lambda: {'valor': 0.0, 'n': 0})
+
+            def guarda(venda_d, pago, prev, vendido, taxa, liquido):
+                if pago and ini <= pago <= fim:
+                    p = pag[pago]
+                    p['vendas'].add(venda_d)
+                    p['vendido'] += vendido
+                    p['taxa'] += taxa
+                    p['liquido'] += liquido
+                    p['n'] += 1
+                elif ini <= venda_d <= fim:
+                    r = receber[(venda_d, pago, prev)]
+                    r['valor'] += vendido
+                    r['n'] += 1
+
+            if op == 'X7':
+                # a taxa e o liquido da X7 sao do lote; a venda, uma a uma
+                cur.execute("""
+                    SELECT DATE(dt_operacao) AS v, bruto - desconto_lote AS vendido,
+                           liquido_est, dt_liquidacao AS pago, dt_previsao AS prev
+                      FROM cartao_arquivo_vendas
+                     WHERE operadora='X7'
+                       AND (dt_liquidacao BETWEEN %s AND %s
+                            OR (dt_operacao >= %s AND dt_operacao < %s))""",
+                    (ini, fim, ini, fim1))
+                for r in cur.fetchall():
+                    guarda(r['v'], r['pago'], r['prev'], float(r['vendido'] or 0), 0.0, 0.0)
+                cur.execute("""
+                    SELECT dt_liquidacao AS d, SUM(liquido) AS liq, SUM(taxas) AS tx
+                      FROM cartao_arquivo_lotes
+                     WHERE operadora='X7' AND dt_liquidacao BETWEEN %s AND %s
+                     GROUP BY dt_liquidacao""", (ini, fim))
+                for r in cur.fetchall():
+                    if r['d'] in pag:
+                        pag[r['d']]['liquido'] = float(r['liq'] or 0)
+                        pag[r['d']]['taxa'] = float(r['tx'] or 0)
+            elif op == 'BARATAO':
+                janela = timedelta(days=_JANELA_PIX * 2)
+                cur.execute("""
+                    SELECT DATE(dt_abastecimento) AS d, SUM(bruto - desconto) AS venda,
+                           SUM(taxa) AS taxa, SUM(repasse) AS repasse
+                      FROM cartao_baratao_cupons
+                     WHERE dt_abastecimento >= %s AND dt_abastecimento < %s
+                     GROUP BY DATE(dt_abastecimento)""", (ini - janela, fim1))
+                dias = {r['d']: r for r in cur.fetchall()}
+                pix = []
+                fs = vinculos_map.get(b['id'], [])
+                if fs:
+                    ph = ','.join(['%s'] * len(fs))
+                    cur.execute(f"""
+                        SELECT id, data_transacao AS d, valor AS v FROM bank_transactions
+                         WHERE tipo='CREDIT' AND forma_recebimento_id IN ({ph})
+                           AND data_transacao BETWEEN %s AND %s
+                         ORDER BY data_transacao, id""",
+                        list(fs) + [ini - janela, fim + timedelta(days=_JANELA_PIX)])
+                    pix = [{'id': r['id'], 'd': r['d'], 'v': round(float(r['v']), 2)}
+                           for r in cur.fetchall()]
+                casados = _casar_pix({d: round(float(r['repasse']), 2)
+                                      for d, r in dias.items()}, pix)
+                for d, r in dias.items():
+                    ps = casados.get(d)
+                    guarda(d, max(p['d'] for p in ps) if ps else None,
+                           d + timedelta(days=2), float(r['venda'] or 0),
+                           float(r['taxa'] or 0), float(r['repasse'] or 0))
+            else:
+                sb, sf = _sipag_da_bandeira(b.get('nome'), b.get('tipo'))
+                if not sb or not sf:
+                    continue
+                d0 = desde.get(b['id'])
+                cur.execute("""
+                    SELECT DATE(dt_transacao) AS v, bruto, desconto_pago, liquido_pago,
+                           desconto_venda, dt_pagamento AS pago, dt_prevista AS prev
+                      FROM cartao_sipag_transacoes
+                     WHERE bandeira=%s AND forma=%s AND nsu <> '0'
+                       AND (dt_pagamento BETWEEN %s AND %s
+                            OR (dt_transacao >= %s AND dt_transacao < %s))""",
+                    (sb, sf, ini, fim, ini, fim1))
+                for r in cur.fetchall():
+                    if d0 and r['pago'] and r['pago'] < d0:
+                        continue
+                    guarda(r['v'], r['pago'], r['prev'], float(r['bruto'] or 0),
+                           float(r['desconto_pago'] or 0), float(r['liquido_pago'] or 0))
+                cur.execute("""
+                    SELECT dt_pagamento AS d, SUM(liquido_pago) AS v
+                      FROM cartao_sipag_transacoes
+                     WHERE bandeira=%s AND forma=%s AND nsu = '0'
+                       AND dt_pagamento BETWEEN %s AND %s
+                     GROUP BY dt_pagamento""", (sb, sf, ini, fim))
+                for r in cur.fetchall():
+                    p = pag[r['d']]
+                    p['abatimentos'] += -float(r['v'] or 0)
+                    p['liquido'] += float(r['v'] or 0)
+
+            extrato = {}
+            fs = vinculos_map.get(b['id'], [])
+            if fs:
+                ph = ','.join(['%s'] * len(fs))
+                cur.execute(f"""
+                    SELECT data_transacao AS d, SUM(valor) AS v, COUNT(*) AS n
+                      FROM bank_transactions
+                     WHERE tipo='CREDIT' AND forma_recebimento_id IN ({ph})
+                       AND data_transacao BETWEEN %s AND %s
+                     GROUP BY data_transacao""", list(fs) + [ini, fim])
+                extrato = {r['d']: (float(r['v'] or 0), int(r['n'])) for r in cur.fetchall()}
+                cur.execute(f"""
+                    SELECT MAX(data_transacao) AS m FROM bank_transactions
+                     WHERE account_id IN (SELECT DISTINCT account_id FROM bank_transactions
+                                           WHERE forma_recebimento_id IN ({ph}))""", list(fs))
+                ult_extrato = (cur.fetchone() or {}).get('m')
+            else:
+                ult_extrato = None
+
+            linhas = []
+            for d in sorted(pag):
+                p = pag[d]
+                ext, n = extrato.get(d, (0.0, 0))
+                if not n and ult_extrato and d > ult_extrato:
+                    st = 'aguardando'          # o OFX desse dia ainda nao veio
+                elif n and abs(ext - p['liquido']) < _TOL_CENTAVOS:
+                    st = 'ok'
+                else:
+                    st = 'diverge'
+                linhas.append({
+                    'data': d, 'vendas': sorted(p['vendas']), 'n': p['n'],
+                    'vendido': round(p['vendido'], 2), 'taxa': round(p['taxa'], 2),
+                    'abatimentos': round(p['abatimentos'], 2),
+                    'liquido': round(p['liquido'], 2), 'extrato': round(ext, 2),
+                    'n_creditos': n, 'dif': round(ext - p['liquido'], 2), 'status': st,
+                })
+            # Credito no extrato num dia em que o arquivo nao diz que pagou
+            d0 = desde.get(b['id'])
+            for d, (ext, n) in sorted(extrato.items()):
+                if d not in pag and not (d0 and d < d0):
+                    linhas.append({'data': d, 'vendas': [], 'n': 0, 'vendido': 0.0,
+                                   'taxa': 0.0, 'abatimentos': 0.0, 'liquido': 0.0,
+                                   'extrato': round(ext, 2), 'n_creditos': n,
+                                   'dif': round(ext, 2), 'status': 'sem_pagamento'})
+            linhas.sort(key=lambda x: x['data'])
+            a_receber = sorted(
+                ({'data_venda': k[0], 'pago_em': k[1], 'previsto': k[2],
+                  'valor': round(v['valor'], 2), 'n': v['n']} for k, v in receber.items()),
+                key=lambda x: x['data_venda'])
+            pagos = [x for x in linhas if x['n']]
+            vendido = sum(x['vendido'] for x in pagos)
+            taxa = sum(x['taxa'] for x in pagos)
+            saida[b['id']] = {
+                'operadora': OPERADORAS[op]['nome'],
+                'pagamentos': linhas,
+                'a_receber': a_receber,
+                'vendido_pago': vendido,
+                'taxa': taxa,
+                'taxa_pct': (taxa / vendido * 100) if vendido else None,
+                'abatimentos': sum(x['abatimentos'] for x in pagos),
+                'liquido': sum(x['liquido'] for x in pagos),
+                'extrato': sum(x['extrato'] for x in linhas),
+                'total_receber': sum(x['valor'] for x in a_receber),
+                'n_ok': sum(1 for x in linhas if x['status'] == 'ok'),
+                'n_aguardando': sum(1 for x in linhas if x['status'] == 'aguardando'),
+                'n_problema': sum(1 for x in linhas if x['status'] in ('diverge', 'sem_pagamento')),
+                'contrato': (float(b['taxa_contratada']) if b.get('taxa_contratada') is not None
+                             else OPERADORAS[op].get('taxa')),
+            }
+    finally:
+        cur.close()
+    return saida

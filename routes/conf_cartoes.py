@@ -1398,6 +1398,14 @@ def conf_cartoes():
             if fonte != 'operadora':
                 _conferencia(conn, data_inicio, data_fim, empresa_ids, report,
                              vinculos_map, ajustes, feriados_set)
+            else:
+                # O quadro de cada bandeira: uma linha por pagamento, com a
+                # taxa do que foi pago e o que falta receber a parte.
+                _op = cartao_arquivo.pagamentos_operadora(
+                    conn, bandeiras_filtered, vinculos_map, _desde,
+                    data_inicio, data_fim)
+                for _c in report:
+                    _c['op'] = _op.get(_c['bandeira_id'])
             # Os ajustes de cada bandeira vao para a tela, para ficarem
             # visiveis e apagaveis -- ajuste escondido e pior do que ajuste.
             _aj_por_band = defaultdict(list)

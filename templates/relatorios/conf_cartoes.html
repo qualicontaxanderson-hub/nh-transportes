@@ -826,6 +826,97 @@ body > .container-fluid:has(#ccz){
   {#- Um quadro por bandeira, cada linha um ciclo: a venda de um dia e o
       recebimento que a liquidou. Com um card escolhido, só o dele aparece. -#}
   {% for card in (([sel] if sel else report)) %}
+  {#- Aba Operadora: uma linha por PAGAMENTO. O Excel diz o que foi pago,
+      quando e quanto; o extrato só confirma. A taxa é a do que FOI pago —
+      venda que ainda não foi paga não é taxa, fica em "A receber". -#}
+  {% if fonte == 'operadora' and card.op %}
+  {% set op = card.op %}
+  {% set cor = '#1D63A5' if card.tipo_cartao == 'DEBITO' else '#6f42c1' %}
+  <div class="cx" id="band-{{ card.bandeira_id }}" style="--c:{{ cor }}">
+    <div class="ph">
+      <span class="ph__i"><i class="bi bi-credit-card"></i></span>
+      <div>
+        <div class="ph__n">{{ card.bandeira_nome }}
+          <span class="selo">{{ card.tipo_cartao }}</span></div>
+        <div class="ph__c">pelo arquivo da <b>{{ op.operadora }}</b>
+          {%- if card.forma_recebimento_nome %} · entra pela conta <b>{{ card.forma_recebimento_nome }}</b>{% endif %}</div>
+      </div>
+      <div class="ph__v">
+        <div class="ph__l {{ 'zero' if not op.n_problema else 'neg' }}">{{ op.n_ok }} de {{ op.pagamentos|length - op.n_aguardando }}</div>
+        <div class="ph__r">pagamentos conferidos</div>
+      </div>
+    </div>
+
+    <div class="resumo">
+      <div class="r"><div class="r__r">Vendido e pago</div>
+        <div class="r__v">{{ op.vendido_pago | fmtmoney }}</div></div>
+      <div class="r"><div class="r__r">Taxa{% if op.contrato %} · contrato {{ '%.2f'|format(op.contrato) }}%{% endif %}</div>
+        <div class="r__v {{ 'pos' if op.contrato and op.taxa_pct is not none and (op.taxa_pct - op.contrato)|abs < 0.05 else '' }}">{{ op.taxa | fmtmoney }}
+          {%- if op.taxa_pct is not none %} · {{ '%.2f'|format(op.taxa_pct) }}%{% endif %}</div></div>
+      <div class="r"><div class="r__r">Pago pela operadora</div>
+        <div class="r__v">{{ op.liquido | fmtmoney }}</div></div>
+      <div class="r"><div class="r__r">A receber</div>
+        <div class="r__v">{{ op.total_receber | fmtmoney }}</div></div>
+    </div>
+    {% if op.abatimentos|abs > 0.005 %}
+    <div class="alerta alerta--pos" style="margin:.5rem .8rem 0">
+      <i class="bi bi-info-circle-fill"></i>
+      {{ op.abatimentos | fmtmoney }} de abatimentos descontados nos pagamentos (não é taxa da venda)</div>
+    {% endif %}
+
+    {% if op.pagamentos %}
+    <div class="tab">
+      <table>
+        <thead><tr><th class="e">Pago em</th><th class="e">Vendas de</th><th>Vendido</th>
+          <th>Taxa</th><th>Operadora pagou</th><th>Extrato</th><th class="e"></th></tr></thead>
+        <tbody>
+          {% for p in op.pagamentos %}
+          <tr class="{{ 'fora' if p.status in ('diverge', 'sem_pagamento') }}">
+            <td class="e" data-r="Pago em">{{ p.data.strftime('%d/%m') }}
+              <span class="dia-semana">{{ ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'][p.data.weekday()] }}</span></td>
+            <td class="e sub" data-r="Vendas de">
+              {%- if p.vendas %}{% for v in p.vendas %}{{ v.strftime('%d/%m') }}{{ ', ' if not loop.last }}{% endfor %}
+              {%- if p.n > 1 %} <span class="sub">({{ p.n }})</span>{% endif %}
+              {%- else %}—{% endif %}</td>
+            <td data-r="Vendido">{{ p.vendido | fmtmoney if p.n else '—' }}</td>
+            <td data-r="Taxa">{% if p.n %}{{ p.taxa | fmtmoney }}{% if p.vendido %} <span class="sub">{{ '%.2f'|format(p.taxa / p.vendido * 100) }}%</span>{% endif %}{% else %}—{% endif %}</td>
+            <td class="forte" data-r="Operadora pagou">{{ p.liquido | fmtmoney if p.n else '—' }}</td>
+            <td class="forte" data-r="Extrato">{% if p.n_creditos %}{{ p.extrato | fmtmoney }}{% if p.n_creditos > 1 %} <span class="sub">({{ p.n_creditos }})</span>{% endif %}{% else %}—{% endif %}</td>
+            <td class="e" data-r="">
+              {%- if p.status == 'ok' %}<i class="bi bi-check-circle-fill" style="color:#146c43" title="caiu no extrato"></i>
+              {%- elif p.status == 'aguardando' %}<span class="sub">extrato ainda não importado</span>
+              {%- elif p.status == 'sem_pagamento' %}<span class="neg">crédito sem pagamento no arquivo</span>
+              {%- elif not p.n_creditos %}<span class="neg">não caiu no extrato</span>
+              {%- else %}<span class="neg">{{ p.dif | fmtmoney }} de diferença</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot><tr><td class="e" colspan="2"><b>Total</b></td>
+          <td><b>{{ op.vendido_pago | fmtmoney }}</b></td><td><b>{{ op.taxa | fmtmoney }}</b></td>
+          <td><b>{{ op.liquido | fmtmoney }}</b></td><td><b>{{ op.extrato | fmtmoney }}</b></td><td></td></tr></tfoot>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if op.a_receber %}
+    <div class="tab">
+      <table>
+        <thead><tr><th class="e">A receber — venda de</th><th>Valor</th><th class="e">Previsto para</th></tr></thead>
+        <tbody>
+          {% for a in op.a_receber %}
+          <tr>
+            <td class="e">{{ a.data_venda.strftime('%d/%m/%Y') }}{% if a.n > 1 %} <span class="sub">({{ a.n }})</span>{% endif %}</td>
+            <td class="forte">{{ a.valor | fmtmoney }}</td>
+            <td class="e sub">{% if a.pago_em %}pago em {{ a.pago_em.strftime('%d/%m') }}, depois do período
+              {% elif a.previsto %}{{ a.previsto.strftime('%d/%m/%Y') }}{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+  {% else %}
   {% set cor = '#1D63A5' if card.tipo_cartao == 'DEBITO' else '#6f42c1' %}
   <div class="cx" id="band-{{ card.bandeira_id }}" style="--c:{{ cor }}">
     <div class="ph">
@@ -1009,21 +1100,22 @@ body > .container-fluid:has(#ccz){
       </table>
     </div>
   </div>
+  {% endif %}{#- fonte operadora -#}
   {% endfor %}
 
   <div class="rod">
     {% if fonte == 'operadora' %}
-    <b>Dt. venda</b> é a data da venda no arquivo da operadora, e
-    <b>Dt. recebimento</b> é o dia em que a operadora diz que pagou — nada é
-    contado pelo prazo. <b>Recebimento</b> é o que caiu no extrato nesse dia:
-    se ele bate, o pagamento está provado. Venda ainda não paga aparece no dia
-    previsto, em <b>ainda não caiu</b>.
+    Tudo aqui vem do arquivo da operadora, e nada é contado pelo prazo.
+    Cada linha é um dia em que a operadora <b>pagou</b>: as vendas que ela
+    pagou, o <b>vendido</b>, a <b>taxa</b> que descontou e o que ela diz que
+    pagou. O <b>extrato</b> só confirma: ✓ quando o valor caiu no banco
+    naquele dia. A taxa é só do que já foi pago; o que ainda não foi pago
+    fica em <b>A receber</b>, com a data prevista, e nunca vira taxa.
     {% else %}
     <b>Dt. venda</b> é a data do fechamento de caixa. <b>Dt. recebimento</b> é a
     data esperada da liquidação, contada no prazo em dias úteis da bandeira —
     ela pula fim de semana e feriado nacional, e por isso a linha verde não é
     atraso: é dia em que o banco não operou.
-    {% endif %}
     <b>Diferença</b> é a venda do ciclo menos o recebimento: positiva é taxa
     cobrada, negativa é operadora que pagou a mais.
     <b>Dif. acumulada</b> é o saldo dessas diferenças ao longo dos ciclos, e
@@ -1042,6 +1134,7 @@ body > .container-fluid:has(#ccz){
     subtração. Quando aparece <b>caiu sem venda</b>, é crédito que entrou num
     dia sem venda daquele cartão no caixa: ou a venda não foi lançada, ou o
     crédito é de antes do período. É ele que faz a taxa ficar negativa.
+    {% endif %}
   </div>
 
   {% endif %}
