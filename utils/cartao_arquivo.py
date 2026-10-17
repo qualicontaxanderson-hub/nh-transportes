@@ -53,7 +53,12 @@ OPERADORAS = {
     # mudaria tambem a conferencia pelo caixa. Os 2% comecaram em fev/2026 --
     # a conferencia so cobra a taxa a partir do primeiro cupom que a teve.
     'BARATAO': {'nome': 'BARATÃO', 'bandeira_like': 'BARAT%', 'tipo': 'CREDITO',
-                'extensoes': ('.csv',), 'taxa': 2.0},
+                'extensoes': ('.csv',), 'taxa': 2.0,
+                # O cupom do caixa sai pelo preco da BOMBA e o Baratao paga pelo
+                # do app: o caixa fica de 0% a ~9% acima, todo dia (jan-out/2026:
+                # 200 de 229 dias). Fora desta faixa e venda faltando, sobrando
+                # ou lancada em outro dia.
+                'cupom_acima': (-0.5, 10.0)},
     # A SIPAG atende varias bandeiras do cadastro; o nome do arquivo e o que o
     # portal gera, e os dois relatorios sao lidos (um audita o outro).
     'SIPAG': {'nome': 'SIPAG', 'extensoes': ('.csv',),
@@ -498,6 +503,30 @@ def processar_dropbox():
 
 # ── a conferencia ─────────────────────────────────────────────────────────────
 
+def _ate_onde(conn, forma_ids):
+    """(ultimo caixa fechado, ultimo extrato importado das formas).
+
+    Venda depois do ultimo caixa fechado e pagamento depois do ultimo extrato
+    importado nao sao divergencia: o outro lado ainda nao chegou. Sem este
+    corte, todo dia de hoje e de ontem viraria "venda sem lancamento"."""
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT MAX(lc.data) AS m FROM lancamentos_caixa_comprovacao lcc "
+                    "JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id "
+                    "WHERE lcc.bandeira_cartao_id IS NOT NULL")
+        cx = (cur.fetchone() or {}).get('m')
+        ex = None
+        if forma_ids:
+            ph = ','.join(['%s'] * len(forma_ids))
+            cur.execute(f"SELECT MAX(data_transacao) AS m FROM bank_transactions bt "
+                        f"WHERE bt.account_id IN (SELECT DISTINCT account_id FROM bank_transactions "
+                        f"WHERE forma_recebimento_id IN ({ph}))", list(forma_ids))
+            ex = (cur.fetchone() or {}).get('m')
+    finally:
+        cur.close()
+    return cx, ex
+
+
 def operadora_da_bandeira(conn, bandeira_id):
     """Qual operadora (prefixo) tem arquivo para esta bandeira, ou None."""
     cur = conn.cursor(dictionary=True)
@@ -597,8 +626,11 @@ def conferencia(conn, operadora, bandeira_id, forma_ids, data_inicio, data_fim,
     if not lotes and not arq_dia and not ultima:
         return None
 
+    ult_caixa, ult_extrato = _ate_onde(conn, forma_ids)
     por_dia = []
     for d in sorted(set(lotes) | set(extrato)):
+        if ult_extrato and d > ult_extrato and d not in extrato:
+            continue
         l = lotes.get(d)
         e = extrato.get(d)
         liq = float(l['liquido']) if l else 0.0
@@ -620,6 +652,8 @@ def conferencia(conn, operadora, bandeira_id, forma_ids, data_inicio, data_fim,
 
     caixa = []
     for d in sorted(set(arq_dia) | set(caixa_dia)):
+        if ult_caixa and d > ult_caixa:
+            continue
         a = float(arq_dia[d]['bruto']) if d in arq_dia else 0.0
         c = float(caixa_dia[d]['v']) if d in caixa_dia else 0.0
         caixa.append({
@@ -823,14 +857,20 @@ def conferencia_baratao(conn, bandeira_id, forma_ids, data_inicio, data_fim):
             })
     por_dia.sort(key=lambda x: x['data'])
 
+    lo, hi = OPERADORAS['BARATAO']['cupom_acima']
+    ult_caixa, _ = _ate_onde(conn, [])
     caixa = []
     for d in sorted(set(x for x in dias if ini <= x <= fim) | set(caixa_dia)):
+        if ult_caixa and d > ult_caixa:
+            continue
         a = float(dias[d]['bruto']) - float(dias[d]['descontos']) if d in dias else 0.0
         c = float(caixa_dia[d]['v']) if d in caixa_dia else 0.0
+        pct = ((c / a - 1) * 100) if a and c else None
         caixa.append({
             'data': d, 'arquivo': a, 'n_arquivo': int(dias[d]['n']) if d in dias else 0,
             'caixa': c, 'n_caixa': int(caixa_dia[d]['n']) if d in caixa_dia else 0,
-            'dif': round(c - a, 2), 'ok': abs(c - a) < _TOL,
+            'dif': round(c - a, 2), 'pct': pct,
+            'ok': pct is not None and lo <= pct <= hi,
         })
 
     lot = [x for x in por_dia if x['qtd']]
@@ -861,6 +901,11 @@ def conferencia_baratao(conn, bandeira_id, forma_ids, data_inicio, data_fim):
         'caixa_lancado': sum(x['caixa'] for x in caixa),
         'caixa_problema': [x for x in caixa if not x['ok']],
         'frentistas': rel['frentistas'], 'produtos': rel['produtos'],
+        'cupom_faixa': (lo, hi),
+        'cupom_acima': sum(x['dif'] for x in caixa if x['ok']),
+        'cupom_acima_pct': (sum(x['dif'] for x in caixa if x['ok'])
+                            / sum(x['arquivo'] for x in caixa if x['ok']) * 100)
+                           if any(x['ok'] for x in caixa) else None,
         'ultima': ultima, 'ultima_venda': ultima_venda,
     }
 
@@ -1117,10 +1162,7 @@ def conferencia_sipag(conn, bandeira_id, forma_ids, data_inicio, data_fim):
         # pelo menos metade do que caiu no banco. Antes disso (jul/2026, ate
         # ~14/07) o arquivo so tem venda de teste de R$ 0,10, e o credito do
         # extrato e da maquininha antiga -- nao e problema da SIPAG.
-        sipag_desde = next((d for d, v in pagos_todos
-                            if extrato_todo.get(d) and v >= 0.5 * extrato_todo[d]), None)
-        if sipag_desde is None and pagos_todos:
-            sipag_desde = pagos_todos[-1][0]
+        sipag_desde = _sipag_desde(cur, sb, sf, forma_ids)
         extrato = {d: v for d, v in extrato_todo.items()
                    if data_inicio <= d.isoformat() <= data_fim}
 
@@ -1190,9 +1232,12 @@ def conferencia_sipag(conn, bandeira_id, forma_ids, data_inicio, data_fim):
     fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
     pago_ate = cob.get('z')
 
+    ult_caixa, ult_extrato = _ate_onde(conn, forma_ids)
     por_dia = []
     for d in sorted(set(pagos) | set(extrato)):
         if sipag_desde and d < sipag_desde:
+            continue
+        if ult_extrato and d > ult_extrato and d not in extrato:
             continue
         p = pagos.get(d)
         liq = float(p['liquido']) if p else 0.0
@@ -1230,6 +1275,8 @@ def conferencia_sipag(conn, bandeira_id, forma_ids, data_inicio, data_fim):
     for d in sorted(set(arq_dia) | set(caixa_dia)):
         if not real_desde or d < real_desde:
             continue
+        if ult_caixa and d > ult_caixa:
+            continue
         a = float(arq_dia[d]['bruto']) if d in arq_dia else 0.0
         c = float(caixa_dia[d]['v']) if d in caixa_dia else 0.0
         caixa.append({
@@ -1264,3 +1311,131 @@ def conferencia_sipag(conn, bandeira_id, forma_ids, data_inicio, data_fim):
         'bandeira_arquivo': '%s %s' % (sb, sf.lower()),
         'desde': sipag_desde,
     }
+
+
+# ── a venda da operadora, no formato do motor da Conferencia ──────────────────
+#
+# A aba "Operadora" e a MESMA tela da aba "Caixa" -- mesmos cards, mesmos
+# ciclos, mesma conferencia por valor --, so que a venda sai do arquivo da
+# operadora. Por isso aqui so se entrega a venda no formato que o motor
+# (routes/conf_cartoes._build_report) ja le; o resto e dele.
+
+def _operadora_de(nome, tipo):
+    nome = _sem_acento(nome).strip().upper()
+    for prefixo, o in OPERADORAS.items():
+        if 'bandeiras' in o:
+            if nome.startswith(o['bandeiras']):
+                return prefixo
+        elif nome.startswith(o['bandeira_like'].rstrip('%')) and \
+                (tipo or '').upper() == o['tipo']:
+            return prefixo
+    return None
+
+
+def _sipag_desde(cur, sb, sf, forma_ids):
+    """O primeiro dia em que a SIPAG pagou ao menos metade do que caiu no
+    banco para a bandeira. Antes disso (jul/2026, ate ~14/07) o arquivo so tem
+    venda de teste e o credito do extrato e da maquininha antiga."""
+    cur.execute("""
+        SELECT dt_pagamento AS d, SUM(liquido_pago) AS v
+          FROM cartao_sipag_transacoes
+         WHERE bandeira=%s AND forma=%s AND dt_pagamento IS NOT NULL
+         GROUP BY dt_pagamento ORDER BY dt_pagamento""", (sb, sf))
+    pagos = [(r['d'], float(r['v'] or 0)) for r in cur.fetchall()]
+    if not pagos:
+        return None
+    extrato = {}
+    if forma_ids:
+        ph = ','.join(['%s'] * len(forma_ids))
+        cur.execute(f"""
+            SELECT data_transacao AS d, SUM(valor) AS v
+              FROM bank_transactions
+             WHERE tipo='CREDIT' AND forma_recebimento_id IN ({ph})
+               AND data_transacao BETWEEN %s AND %s
+             GROUP BY data_transacao""",
+            list(forma_ids) + [pagos[0][0], pagos[-1][0]])
+        extrato = {r['d']: float(r['v'] or 0) for r in cur.fetchall()}
+    return next((d for d, v in pagos if extrato.get(d) and v >= 0.5 * extrato[d]),
+                pagos[-1][0])
+
+
+def vendas_operadora(conn, bandeiras, vinculos_map, data_inicio, data_fim):
+    """(bandeiras, desde, linhas_por_dia, vendas_uma_a_uma) para o motor.
+
+    - bandeiras: so as que tem operadora com arquivo; copia de cada uma, sem
+      o saldo anterior (ele e acerto do CAIXA) e com a taxa do contrato da
+      operadora quando a bandeira nao tem (Baratao: 2%).
+    - desde: {bandeira_id: data} a partir de quando o arquivo cobre a
+      bandeira; o credito do extrato de antes nao e desta operadora.
+    - linhas_por_dia: [{data_venda, bandeira_id, bandeira_nome, tipo_cartao,
+      total_venda}], como o _fetch_vendas.
+    - vendas_uma_a_uma: {bandeira_id: [{data, valor}]}, para a conferencia
+      casada por valor.
+    """
+    ensure_tables(conn)
+    ensure_tables_sipag(conn)
+    fim = (datetime.strptime(data_fim, '%Y-%m-%d') + timedelta(days=1)).date()
+    saida_band, desde, linhas = [], {}, []
+    uma_a_uma = defaultdict(list)
+    cur = conn.cursor(dictionary=True)
+    try:
+        for b in bandeiras:
+            op = _operadora_de(b.get('nome'), b.get('tipo'))
+            if not op:
+                continue
+            if op == 'X7':
+                cur.execute("""
+                    SELECT dt_operacao AS t, bruto - desconto_lote AS v
+                      FROM cartao_arquivo_vendas
+                     WHERE operadora='X7' AND dt_operacao >= %s AND dt_operacao < %s""",
+                    (data_inicio, fim))
+                vendas = cur.fetchall()
+                cur.execute("SELECT MIN(DATE(dt_operacao)) AS d FROM cartao_arquivo_vendas "
+                            "WHERE operadora='X7'")
+                d0 = (cur.fetchone() or {}).get('d')
+            elif op == 'BARATAO':
+                cur.execute("""
+                    SELECT dt_abastecimento AS t, bruto - desconto AS v
+                      FROM cartao_baratao_cupons
+                     WHERE dt_abastecimento >= %s AND dt_abastecimento < %s""",
+                    (data_inicio, fim))
+                vendas = cur.fetchall()
+                cur.execute("SELECT MIN(DATE(dt_abastecimento)) AS d FROM cartao_baratao_cupons")
+                d0 = (cur.fetchone() or {}).get('d')
+            else:
+                sb, sf = _sipag_da_bandeira(b.get('nome'), b.get('tipo'))
+                if not sb or not sf:
+                    continue
+                cur.execute("""
+                    SELECT dt_transacao AS t, bruto AS v
+                      FROM cartao_sipag_transacoes
+                     WHERE bandeira=%s AND forma=%s AND nsu <> '0'
+                       AND arq_realizadas IS NOT NULL
+                       AND dt_transacao >= %s AND dt_transacao < %s""",
+                    (sb, sf, data_inicio, fim))
+                vendas = cur.fetchall()
+                d0 = _sipag_desde(cur, sb, sf, vinculos_map.get(b['id'], []))
+            if d0 is None and not vendas:
+                continue
+            copia = dict(b)
+            copia['saldo_anterior'] = 0.0
+            copia['saldo_anterior_data'] = None
+            if copia.get('taxa_contratada') is None and OPERADORAS[op].get('taxa'):
+                copia['taxa_contratada'] = OPERADORAS[op]['taxa']
+            saida_band.append(copia)
+            if d0:
+                desde[b['id']] = d0
+            por_dia = defaultdict(float)
+            for v in vendas:
+                d = v['t'].date() if hasattr(v['t'], 'date') else v['t']
+                valor = float(v['v'] or 0)
+                por_dia[d] += valor
+                uma_a_uma[b['id']].append({'data': d, 'valor': valor})
+            for d, total in sorted(por_dia.items()):
+                linhas.append({'data_venda': d, 'bandeira_id': b['id'],
+                               'bandeira_nome': b.get('nome'),
+                               'tipo_cartao': b.get('tipo'),
+                               'total_venda': round(total, 2)})
+    finally:
+        cur.close()
+    return saida_band, desde, linhas, uma_a_uma

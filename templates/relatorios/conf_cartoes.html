@@ -105,6 +105,8 @@ body > .container-fluid:has(#ccz){
 
   /* A conferência da taxa, dentro do quadro da bandeira. */
   #ccz .conf{ border-top:1px solid var(--linha); background:#fbfcfe; }
+  #ccz details.rel > summary{ cursor:pointer; font-size:.74rem; font-weight:800;
+    color:var(--blue-deep); padding:.35rem 0; }
   #ccz .conf__t{ display:flex; gap:.5rem; align-items:center; padding:.6rem .8rem;
     font-size:.7rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em;
     color:var(--blue-deep); }
@@ -441,18 +443,22 @@ body > .container-fluid:has(#ccz){
   </div>
   {% endif %}
 
-  {#- Duas conferências, uma de cada vez: misturar no mesmo card punha duas
-      "taxas" diferentes uma embaixo da outra. A do Caixa é a de sempre; a do
-      Arquivo parte do que a operadora mandou (utils/cartao_arquivo). -#}
+  {#- Três leituras, uma de cada vez — misturar no mesmo card punha duas
+      "taxas" diferentes uma embaixo da outra:
+        Caixa      a de sempre: venda do fechamento de caixa × extrato;
+        Operadora  a MESMA tela, com a venda do arquivo da operadora;
+        Auditoria  operadora × caixa: o que o caixa lançou diferente. -#}
   <div class="tipos">
     <b><i class="bi bi-diagram-3"></i> Conferir por</b>
-    <a class="{{ 'on' if fonte != 'arquivo' }}" href="?{{ qs_fonte }}">Caixa</a>
-    <a class="{{ 'on' if fonte == 'arquivo' }}" href="?{{ qs_fonte }}{{ '&' if qs_fonte }}fonte=arquivo">Arquivo da operadora</a>
-    <span class="obs">{% if fonte == 'arquivo' %}a venda vem do arquivo da operadora, não do caixa
+    <a class="{{ 'on' if not fonte }}" href="?{{ qs_fonte }}">Caixa</a>
+    <a class="{{ 'on' if fonte == 'operadora' }}" href="?{{ qs_fonte }}{{ '&' if qs_fonte }}fonte=operadora">Operadora</a>
+    <a class="{{ 'on' if fonte == 'auditoria' }}" href="?{{ qs_fonte }}{{ '&' if qs_fonte }}fonte=auditoria">Auditoria (operadora × caixa)</a>
+    <span class="obs">{% if fonte == 'operadora' %}a venda vem do arquivo da operadora (X7, Baratão, SIPAG)
+      {% elif fonte == 'auditoria' %}onde o caixa lançou diferente do que a operadora registrou
       {% else %}a venda vem do fechamento de caixa{% endif %}</span>
   </div>
 
-  {% if fonte == 'arquivo' %}
+  {% if fonte == 'auditoria' %}
   {% set _arq = report | selectattr('arquivo') | list %}
   {% if not _arq %}
   <div class="nada">
@@ -462,167 +468,123 @@ body > .container-fluid:has(#ccz){
   </div>
   {% endif %}
   {% for card in _arq %}
+  {% set aq = card.arquivo %}
   {% set cor = '#1D63A5' if card.tipo_cartao == 'DEBITO' else '#6f42c1' %}
-  <div class="cx" id="arq-{{ card.bandeira_id }}" style="--c:{{ cor }}">
+  {% set n_cx = aq.caixa_problema|length %}
+  <div class="cx" id="aud-{{ card.bandeira_id }}" style="--c:{{ cor }}">
     <div class="ph">
-      <span class="ph__i"><i class="bi bi-file-earmark-spreadsheet"></i></span>
+      <span class="ph__i"><i class="bi bi-clipboard-check"></i></span>
       <div>
         <div class="ph__n">{{ card.bandeira_nome }}
           <span class="selo">{{ card.tipo_cartao }}</span></div>
-        <div class="ph__c">{% if card.forma_recebimento_nome %}
-          entra pela conta <b>{{ card.forma_recebimento_nome }}</b>
-          {% else %}sem forma de recebimento ligada{% endif %}</div>
+        <div class="ph__c">operadora <b>{{ aq.nome }}</b>
+          {%- if aq.ultima %} · último arquivo {{ aq.ultima.importado_em.strftime('%d/%m %H:%M') }}{% endif %}
+          {%- if aq.ultima_venda %} · venda até {{ aq.ultima_venda.strftime('%d/%m') }}{% endif %}
+          {%- if aq.desde is defined and aq.desde %} · desde {{ aq.desde.strftime('%d/%m/%Y') }}{% endif %}</div>
+      </div>
+      <div class="ph__v">
+        <div class="ph__l {{ 'zero' if not n_cx else 'neg' }}">{{ n_cx }}</div>
+        <div class="ph__r">dia{{ 's' if n_cx != 1 }} para conferir</div>
       </div>
     </div>
-    {#- A conferência PARALELA, pelo arquivo da operadora (utils/cartao_arquivo).
-        O arquivo diz quanto vendeu, quanto cobrou e em que dia pagou; aqui se
-        confere o dia pago contra o extrato e a venda contra o caixa. Nada do
-        que está acima depende dela. -#}
-    {% set aq = card.arquivo %}
-    <div class="conf" style="border-top:0">
-      <div class="conf__t"><i class="bi bi-file-earmark-spreadsheet"></i>
-        Pelo arquivo da {{ aq.nome }}{% if aq.bandeira_arquivo is defined %} ({{ aq.bandeira_arquivo }}){% endif %}
-        — o que a operadora diz × extrato × caixa
-        <span class="dir">{% if aq.ultima %}último arquivo
-          {{ aq.ultima.arquivo }} · {{ aq.ultima.importado_em.strftime('%d/%m %H:%M') }}
-          {%- if aq.ultima_venda %} · venda até {{ aq.ultima_venda.strftime('%d/%m') }}{% endif %}
-          {%- if aq.desde is defined and aq.desde %} · na {{ aq.nome }} desde {{ aq.desde.strftime('%d/%m/%Y') }}{% endif %}
-          {% else %}nenhum arquivo lido ainda{% endif %}</span></div>
-      {% if aq.ultima and aq.ultima.erro %}
-      <div class="alerta alerta--neg" style="margin:0 .8rem .5rem">
-        <i class="bi bi-exclamation-triangle-fill"></i>
-        o último arquivo ({{ aq.ultima.arquivo }}) não foi lido: {{ aq.ultima.erro }}</div>
-      {% endif %}
-      <div class="conf__g">
-        <div><span>Venda (bruto − desconto)</span><b>{{ (aq.bruto - aq.descontos) | fmtmoney }}</b></div>
-        {% if aq.abatimentos is defined %}
-        <div><span>Abatimentos no pagamento</span><b>{{ aq.abatimentos | fmtmoney }}</b></div>
-        {% else %}
-        <div><span>Desconto ao cliente</span><b>{{ aq.descontos | fmtmoney }}</b></div>
-        {% endif %}
-        <div><span>Taxa cobrada</span><b>{{ aq.taxas | fmtmoney }}
-          {%- if aq.taxa_pct is not none %} · {{ '%.2f'|format(aq.taxa_pct) }}%{% endif %}</b></div>
-        <div><span>Líquido × extrato</span><b class="{{ 'pos' if not aq.dias_problema else 'neg' }}">
-          {{ aq.dias_ok }} de {{ aq.por_dia|length }} dias batem</b></div>
-      </div>
-      {% if aq.bruto %}
-      {#- O contrato do Baratão vem do módulo (a bandeira dele não tem taxa
-          cadastrada, e cadastrar mexeria na aba Caixa); o da X7, da bandeira. -#}
-      {% set tc = aq.taxa_contrato if aq.taxa_contrato is defined else card.taxa_contratada %}
-      {% set taxa_ok = aq.taxa_esperada is not none and (aq.taxas - aq.taxa_esperada)|abs < 0.05 %}
-      {% set sem_contrato = aq.taxa_esperada is none %}
-      <div class="alerta {{ 'alerta--pos' if sem_contrato else ('alerta--ok' if taxa_ok else 'alerta--neg') }}" style="margin:.5rem .8rem 0">
-        <i class="bi {{ 'bi-info-circle-fill' if sem_contrato else ('bi-check-circle-fill' if taxa_ok else 'bi-exclamation-triangle-fill') }}"></i>
-        {% if sem_contrato and aq.mdr is defined %}
-        a {{ aq.nome }} reteve {{ aq.taxas | fmtmoney }}
-        {%- if aq.taxa_pct is not none %} ({{ '%.2f'|format(aq.taxa_pct) }}% do bruto){% endif %}:
-        taxa da venda {{ aq.mdr | fmtmoney }}{% if aq.antecipacao|abs > 0.005 %} +
-        antecipação {{ aq.antecipacao | fmtmoney }}{% endif %}
-        {% elif sem_contrato %}
-        sem taxa de contrato cadastrada para conferir os {{ aq.taxas | fmtmoney }} cobrados
-        {% elif taxa_ok %}
-        a {{ aq.nome }} cobrou os {{ '%.2f'|format(tc) }}% combinados sobre
-        (bruto − desconto): {{ aq.taxas | fmtmoney }}
-        {% else %}
-        a {{ aq.nome }} cobrou {{ aq.taxas | fmtmoney }}; pelos {{ '%.2f'|format(tc) }}%
-        do contrato seriam {{ aq.taxa_esperada | fmtmoney }}
-        {%- if aq.taxa_cupons_fora %} — {{ aq.taxa_cupons_fora }} cupo{{ 'ns' if aq.taxa_cupons_fora != 1 else 'm' }}
-        fora dos {{ '%.2f'|format(tc) }}%{% endif %}
-        {% endif %}
-        {%- if aq.taxa_desde is defined and aq.taxa_desde %}
-        <span class="sub">(taxa cobrada desde {{ aq.taxa_desde.strftime('%d/%m/%Y') }})</span>{% endif %}</div>
-      {% endif %}
-      {% if aq.descontos %}
-      <div class="alerta alerta--pos" style="margin:.5rem .8rem 0">
-        <i class="bi bi-info-circle-fill"></i>
-        {{ aq.descontos | fmtmoney }} de desconto dado ao cliente do Cartão Frota — não é
-        custo do cartão: o caixa lança o valor já com desconto, e a taxa incide sobre ele</div>
-      {% endif %}
-      {% if aq.por_dia %}
-      <div class="alerta {{ 'alerta--ok' if not aq.dias_problema else 'alerta--neg' }}" style="margin:.5rem .8rem 0">
-        <i class="bi {{ 'bi-check-circle-fill' if not aq.dias_problema else 'bi-exclamation-triangle-fill' }}"></i>
-        {% if not aq.dias_problema %}
-        todo {{ aq.txt_dia }} do arquivo bateu com o extrato: {{ aq.liquido | fmtmoney }}
-        {% else %}
-        {{ aq.dias_problema|length }} dia{{ 's' if aq.dias_problema|length != 1 }} em que o
-        pago pela operadora não bate com o extrato — na tabela abaixo
-        {% endif %}
-        {%- if aq.centavos_n %}
-        <span class="sub">· {{ aq.centavos_n }} dia{{ 's' if aq.centavos_n != 1 }} pago{{ 's' if aq.centavos_n != 1 }}
-          com centavos de arredondamento ({{ aq.centavos_total | fmtmoney }} no total)</span>{% endif %}</div>
-      {% endif %}
-      {% if aq.atrasadas is defined and aq.atrasadas %}
-      <div class="alerta alerta--neg" style="margin:.5rem .8rem 0">
-        <i class="bi bi-exclamation-triangle-fill"></i>
-        venda com pagamento previsto que não aparece no relatório de recebidas:
-        {% for a in aq.atrasadas %}{{ a.n }} de {{ a.bruto | fmtmoney }} previsto{{ 's' if a.n != 1 }}
-          para {{ a.dt_prevista.strftime('%d/%m') }}{{ ', ' if not loop.last }}{% endfor %}</div>
-      {% endif %}
-      {% if aq.caixa %}
-      <div class="alerta {{ 'alerta--ok' if not aq.caixa_problema else 'alerta--neg' }}" style="margin:.5rem .8rem">
-        <i class="bi {{ 'bi-check-circle-fill' if not aq.caixa_problema else 'bi-exclamation-triangle-fill' }}"></i>
-        {% if not aq.caixa_problema %}
-        o caixa lançou exatamente o que o arquivo diz: {{ aq.caixa_arquivo | fmtmoney }}
-        {% else %}
-        o caixa lançou {{ aq.caixa_lancado | fmtmoney }} e o arquivo diz
-        {{ aq.caixa_arquivo | fmtmoney }} — {{ aq.caixa_problema|length }}
-        dia{{ 's' if aq.caixa_problema|length != 1 }} com lançamento diferente
-        {% endif %}</div>
-      {% endif %}
-      {% if aq.dias_problema %}
-      <div class="tab">
-        <table>
-          <thead><tr><th class="e">{{ aq.rotulo_dia }}</th><th>Bruto</th>
-            <th>{{ aq.rotulo_descontos if aq.rotulo_descontos is defined else 'Descontos' }}</th><th>Taxa</th>
-            <th>Líquido {{ aq.nome }}</th><th>Extrato</th><th>Diferença</th><th class="e">Situação</th></tr></thead>
-          <tbody>
-            {% for d in aq.dias_problema %}
-            <tr class="fora">
-              <td class="e">{{ d.data.strftime('%d/%m/%Y') }}</td>
-              <td>{{ d.bruto | fmtmoney }}</td><td>{{ d.descontos | fmtmoney }}</td>
-              <td>{{ d.taxas | fmtmoney }}</td>
-              <td class="forte">{{ d.liquido | fmtmoney }}</td>
-              <td class="forte">{{ d.extrato | fmtmoney }}</td>
-              <td>{{ d.dif | fmtmoney }}</td>
-              <td class="e">{% if d.status == 'sem_credito' %}crédito não está no extrato (já importou o OFX do dia?)
-                {% elif d.status == 'sem_lote' %}crédito no extrato sem {{ 'abastecimento' if aq.operadora == 'BARATAO' else 'lote' }} no arquivo
-                {% else %}valor diferente{% endif %}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% endif %}
-      {% if aq.caixa_problema %}
-      <div class="tab">
-        <table>
-          <thead><tr><th class="e">Dia da venda</th><th>Arquivo {{ aq.nome }} (− desconto)</th>
-            <th>Lançado no caixa</th><th>Diferença</th></tr></thead>
-          <tbody>
-            {% for d in aq.caixa_problema %}
-            <tr class="fora">
-              <td class="e">{{ d.data.strftime('%d/%m/%Y') }}</td>
-              <td class="forte">{{ d.arquivo | fmtmoney }} <span class="sub">({{ d.n_arquivo }})</span></td>
-              <td class="forte">{{ d.caixa | fmtmoney }} <span class="sub">({{ d.n_caixa }})</span></td>
-              <td>{{ d.dif | fmtmoney }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% endif %}
-      {% if aq.a_receber %}
-      <div class="alerta alerta--pos" style="margin:0 .8rem .6rem">
-        <i class="bi bi-hourglass-split"></i>
-        a receber da {{ aq.nome }}:
-        {% for l in aq.a_receber %}{{ l.liquido | fmtmoney }} previsto para
-          {{ l.dt_previsao.strftime('%d/%m') }}{{ ', ' if not loop.last }}{% endfor %}</div>
-      {% endif %}
-      {#- O relatório do Baratão: o arquivo traz o frentista e o produto de
-          cada abastecimento, e isso não existe em lugar nenhum do caixa. -#}
-      {% for titulo, linhas in [('Frentista', aq.frentistas), ('Produto', aq.produtos)]
-            if aq.frentistas is defined and linhas %}
-      <div class="tab">
+
+    {% if aq.ultima and aq.ultima.erro %}
+    <div class="alerta alerta--neg" style="margin:.6rem .8rem 0">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      o último arquivo ({{ aq.ultima.arquivo }}) não foi lido: {{ aq.ultima.erro }}</div>
+    {% endif %}
+
+    <div class="resumo">
+      <div class="r"><div class="r__r">Lançado no caixa</div>
+        <div class="r__v">{{ aq.caixa_lancado | fmtmoney }}</div></div>
+      <div class="r"><div class="r__r">Registrado na operadora</div>
+        <div class="r__v">{{ aq.caixa_arquivo | fmtmoney }}</div></div>
+      <div class="r"><div class="r__r">Caixa − operadora</div>
+        <div class="r__v {{ 'zero' if (aq.caixa_lancado - aq.caixa_arquivo)|abs < 0.01 else 'neg' }}">{{ (aq.caixa_lancado - aq.caixa_arquivo) | fmtmoney }}</div></div>
+      <div class="r"><div class="r__r">Pago × extrato</div>
+        <div class="r__v {{ 'pos' if not aq.dias_problema else 'neg' }}">{{ aq.dias_ok }} de {{ aq.por_dia|length }} dias</div></div>
+    </div>
+
+    {#- O que se sabe de cada operadora e explica uma diferença que NÃO é erro. -#}
+    {% if aq.cupom_faixa is defined and aq.cupom_acima_pct is not none %}
+    <div class="alerta alerta--pos" style="margin:.6rem .8rem 0">
+      <i class="bi bi-info-circle-fill"></i>
+      o cupom do caixa sai pelo preço da bomba e o Baratão paga pelo do app: nos dias
+      normais o caixa fica {{ '%.1f'|format(aq.cupom_acima_pct) }}% acima
+      ({{ aq.cupom_acima | fmtmoney }}). Abaixo, só os dias em que o caixa ficou abaixo
+      do Baratão ou mais de {{ '%.0f'|format(aq.cupom_faixa[1]) }}% acima.</div>
+    {% elif aq.descontos and aq.abatimentos is not defined %}
+    <div class="alerta alerta--pos" style="margin:.6rem .8rem 0">
+      <i class="bi bi-info-circle-fill"></i>
+      {{ aq.descontos | fmtmoney }} de desconto dado ao cliente do Cartão Frota — o caixa
+      já lança o valor com desconto, e é com ele que se compara.</div>
+    {% endif %}
+    {% if aq.atrasadas is defined and aq.atrasadas %}
+    <div class="alerta alerta--neg" style="margin:.6rem .8rem 0">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      venda com pagamento previsto que não aparece no relatório de recebidas:
+      {% for a in aq.atrasadas %}{{ a.n }} de {{ a.bruto | fmtmoney }} para
+        {{ a.dt_prevista.strftime('%d/%m') }}{{ ', ' if not loop.last }}{% endfor %}</div>
+    {% endif %}
+
+    {% if aq.caixa_problema %}
+    <div class="tab">
+      <table>
+        <thead><tr><th class="e">Dia da venda</th><th>Operadora</th><th>Caixa</th>
+          <th>Diferença</th>{% if aq.cupom_faixa is defined %}<th>Cupom acima</th>{% endif %}
+          <th class="e">O que parece</th></tr></thead>
+        <tbody>
+          {% for d in aq.caixa_problema %}
+          <tr class="fora">
+            <td class="e" data-r="Dia">{{ d.data.strftime('%d/%m/%Y') }}</td>
+            <td data-r="Operadora">{{ d.arquivo | fmtmoney }} <span class="sub">({{ d.n_arquivo }})</span></td>
+            <td data-r="Caixa">{{ d.caixa | fmtmoney }} <span class="sub">({{ d.n_caixa }})</span></td>
+            <td data-r="Diferença" class="forte {{ 'neg' if d.dif < 0 else 'pos' }}">{{ d.dif | fmtmoney }}</td>
+            {% if aq.cupom_faixa is defined %}<td data-r="Cupom acima">{% if d.pct is not none %}{{ '%.1f'|format(d.pct) }}%{% else %}—{% endif %}</td>{% endif %}
+            <td class="e sub" data-r="O que parece">
+              {%- if not d.n_caixa %}venda sem lançamento no caixa
+              {%- elif not d.n_arquivo %}lançado no caixa sem venda na operadora
+              {%- elif (d.dif|abs) >= 100 and ((d.dif|abs) % 100) < 0.01 %}diferença redonda — digitação?
+              {%- elif d.dif < 0 %}caixa lançou a menos
+              {%- else %}caixa lançou a mais{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% elif aq.caixa %}
+    <div class="alerta alerta--ok" style="margin:.6rem .8rem">
+      <i class="bi bi-check-circle-fill"></i>
+      o caixa lançou o que a operadora registrou em todos os dias do período</div>
+    {% endif %}
+
+    {% if aq.dias_problema %}
+    <div class="tab">
+      <table>
+        <thead><tr><th class="e">{{ aq.rotulo_dia }}</th><th>Pago pela operadora</th>
+          <th>Extrato</th><th>Diferença</th><th class="e">Situação</th></tr></thead>
+        <tbody>
+          {% for d in aq.dias_problema %}
+          <tr class="fora">
+            <td class="e">{{ d.data.strftime('%d/%m/%Y') }}</td>
+            <td>{{ d.liquido | fmtmoney }}</td>
+            <td>{{ d.extrato | fmtmoney }}</td>
+            <td class="forte">{{ d.dif | fmtmoney }}</td>
+            <td class="e sub">{% if d.status == 'sem_credito' %}não está no extrato — já importou o OFX do dia?
+              {% elif d.status == 'sem_lote' %}crédito no extrato sem pagamento no arquivo
+              {% else %}valor diferente{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if aq.frentistas is defined and (aq.frentistas or aq.produtos) %}
+    <details class="rel" style="margin:.2rem .8rem .7rem">
+      <summary>Relatório do Baratão por frentista e por produto</summary>
+      {% for titulo, linhas in [('Frentista', aq.frentistas), ('Produto', aq.produtos)] if linhas %}
+      <div class="tab" style="margin-top:.4rem">
         <table>
           <thead><tr><th class="e">{{ titulo }}</th><th>Cupons</th><th>Litros</th>
             <th>Bruto</th><th>Rebate</th><th>Taxa</th></tr></thead>
@@ -637,10 +599,21 @@ body > .container-fluid:has(#ccz){
         </table>
       </div>
       {% endfor %}
-    </div>
+    </details>
+    {% endif %}
   </div>
   {% endfor %}
   {% else %}
+
+  {% if fonte == 'operadora' %}
+  <div class="aviso" style="margin-bottom:.7rem">
+    <i class="bi bi-info-circle-fill"></i>
+    <div>Mesma conferência da aba Caixa, mas a venda vem do arquivo da operadora —
+      a taxa é a que ela cobrou de verdade. Só aparecem as bandeiras que mandam
+      arquivo, a partir de quando cada uma passou a mandar; o filtro de empresa
+      não vale aqui, porque o arquivo não diz a empresa.</div>
+  </div>
+  {% endif %}
 
   {% if not report %}
   <div class="nada">
@@ -950,14 +923,15 @@ body > .container-fluid:has(#ccz){
               <td class="e">{{ o.data.strftime('%d/%m/%Y') }}</td>
               <td class="forte">{{ o.valor | fmtmoney }}</td>
               <td class="e">venda de <b>{{ o.venda_esperada | fmtmoney }}</b>
-                {%- if o.data_venda %} em {{ o.data_venda.strftime('%d/%m') }}{% endif %} —
+                {%- if o.data_venda %} em {{ o.data_venda.strftime('%d/%m') }}{% endif %}
+                {%- if fonte != 'operadora' %} —
                 <button type="button" class="bt-mini btn-ajuste-add"
                         data-band="{{ card.bandeira_id }}"
                         data-valor="{{ '%.2f'|format(o.venda_esperada) }}"
                         data-data="{{ (o.data_venda or o.data).isoformat() }}"
                         data-nome="{{ card.bandeira_nome }}"
                         title="Lançar como ajuste da conferência (não mexe no caixa)">
-                  <i class="bi bi-plus-lg"></i> lançar ajuste</button></td></tr>
+                  <i class="bi bi-plus-lg"></i> lançar ajuste</button>{% endif %}</td></tr>
             {% endfor %}
             {% for v in cf.vendas_orfas %}
             <tr><td class="e">Venda sem crédito</td>
