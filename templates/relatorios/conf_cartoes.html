@@ -457,7 +457,8 @@ body > .container-fluid:has(#ccz){
   {% if not _arq %}
   <div class="nada">
     Nenhuma bandeira com arquivo da operadora neste filtro. Hoje mandam
-    arquivo a <b>X7 BANK</b> e o <b>BARATÃO</b> — a SIPAG entra em seguida.
+    arquivo a <b>X7 BANK</b>, o <b>BARATÃO</b> e a <b>SIPAG</b> (Visa, Mastercard,
+    Elo, Amex e Cabal).
   </div>
   {% endif %}
   {% for card in _arq %}
@@ -480,10 +481,12 @@ body > .container-fluid:has(#ccz){
     {% set aq = card.arquivo %}
     <div class="conf" style="border-top:0">
       <div class="conf__t"><i class="bi bi-file-earmark-spreadsheet"></i>
-        Pelo arquivo da {{ aq.nome }} — o que a operadora diz × extrato × caixa
+        Pelo arquivo da {{ aq.nome }}{% if aq.bandeira_arquivo is defined %} ({{ aq.bandeira_arquivo }}){% endif %}
+        — o que a operadora diz × extrato × caixa
         <span class="dir">{% if aq.ultima %}último arquivo
           {{ aq.ultima.arquivo }} · {{ aq.ultima.importado_em.strftime('%d/%m %H:%M') }}
           {%- if aq.ultima_venda %} · venda até {{ aq.ultima_venda.strftime('%d/%m') }}{% endif %}
+          {%- if aq.desde is defined and aq.desde %} · na {{ aq.nome }} desde {{ aq.desde.strftime('%d/%m/%Y') }}{% endif %}
           {% else %}nenhum arquivo lido ainda{% endif %}</span></div>
       {% if aq.ultima and aq.ultima.erro %}
       <div class="alerta alerta--neg" style="margin:0 .8rem .5rem">
@@ -492,7 +495,11 @@ body > .container-fluid:has(#ccz){
       {% endif %}
       <div class="conf__g">
         <div><span>Venda (bruto − desconto)</span><b>{{ (aq.bruto - aq.descontos) | fmtmoney }}</b></div>
+        {% if aq.abatimentos is defined %}
+        <div><span>Abatimentos no pagamento</span><b>{{ aq.abatimentos | fmtmoney }}</b></div>
+        {% else %}
         <div><span>Desconto ao cliente</span><b>{{ aq.descontos | fmtmoney }}</b></div>
+        {% endif %}
         <div><span>Taxa cobrada</span><b>{{ aq.taxas | fmtmoney }}
           {%- if aq.taxa_pct is not none %} · {{ '%.2f'|format(aq.taxa_pct) }}%{% endif %}</b></div>
         <div><span>Líquido × extrato</span><b class="{{ 'pos' if not aq.dias_problema else 'neg' }}">
@@ -503,9 +510,15 @@ body > .container-fluid:has(#ccz){
           cadastrada, e cadastrar mexeria na aba Caixa); o da X7, da bandeira. -#}
       {% set tc = aq.taxa_contrato if aq.taxa_contrato is defined else card.taxa_contratada %}
       {% set taxa_ok = aq.taxa_esperada is not none and (aq.taxas - aq.taxa_esperada)|abs < 0.05 %}
-      <div class="alerta {{ 'alerta--ok' if taxa_ok else 'alerta--neg' }}" style="margin:.5rem .8rem 0">
-        <i class="bi {{ 'bi-check-circle-fill' if taxa_ok else 'bi-exclamation-triangle-fill' }}"></i>
-        {% if aq.taxa_esperada is none %}
+      {% set sem_contrato = aq.taxa_esperada is none %}
+      <div class="alerta {{ 'alerta--pos' if sem_contrato else ('alerta--ok' if taxa_ok else 'alerta--neg') }}" style="margin:.5rem .8rem 0">
+        <i class="bi {{ 'bi-info-circle-fill' if sem_contrato else ('bi-check-circle-fill' if taxa_ok else 'bi-exclamation-triangle-fill') }}"></i>
+        {% if sem_contrato and aq.mdr is defined %}
+        a {{ aq.nome }} reteve {{ aq.taxas | fmtmoney }}
+        {%- if aq.taxa_pct is not none %} ({{ '%.2f'|format(aq.taxa_pct) }}% do bruto){% endif %}:
+        taxa da venda {{ aq.mdr | fmtmoney }}{% if aq.antecipacao|abs > 0.005 %} +
+        antecipação {{ aq.antecipacao | fmtmoney }}{% endif %}
+        {% elif sem_contrato %}
         sem taxa de contrato cadastrada para conferir os {{ aq.taxas | fmtmoney }} cobrados
         {% elif taxa_ok %}
         a {{ aq.nome }} cobrou os {{ '%.2f'|format(tc) }}% combinados sobre
@@ -538,6 +551,13 @@ body > .container-fluid:has(#ccz){
         <span class="sub">· {{ aq.centavos_n }} dia{{ 's' if aq.centavos_n != 1 }} pago{{ 's' if aq.centavos_n != 1 }}
           com centavos de arredondamento ({{ aq.centavos_total | fmtmoney }} no total)</span>{% endif %}</div>
       {% endif %}
+      {% if aq.atrasadas is defined and aq.atrasadas %}
+      <div class="alerta alerta--neg" style="margin:.5rem .8rem 0">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        venda com pagamento previsto que não aparece no relatório de recebidas:
+        {% for a in aq.atrasadas %}{{ a.n }} de {{ a.bruto | fmtmoney }} previsto{{ 's' if a.n != 1 }}
+          para {{ a.dt_prevista.strftime('%d/%m') }}{{ ', ' if not loop.last }}{% endfor %}</div>
+      {% endif %}
       {% if aq.caixa %}
       <div class="alerta {{ 'alerta--ok' if not aq.caixa_problema else 'alerta--neg' }}" style="margin:.5rem .8rem">
         <i class="bi {{ 'bi-check-circle-fill' if not aq.caixa_problema else 'bi-exclamation-triangle-fill' }}"></i>
@@ -552,7 +572,8 @@ body > .container-fluid:has(#ccz){
       {% if aq.dias_problema %}
       <div class="tab">
         <table>
-          <thead><tr><th class="e">{{ aq.rotulo_dia }}</th><th>Bruto</th><th>Descontos</th><th>Taxa</th>
+          <thead><tr><th class="e">{{ aq.rotulo_dia }}</th><th>Bruto</th>
+            <th>{{ aq.rotulo_descontos if aq.rotulo_descontos is defined else 'Descontos' }}</th><th>Taxa</th>
             <th>Líquido {{ aq.nome }}</th><th>Extrato</th><th>Diferença</th><th class="e">Situação</th></tr></thead>
           <tbody>
             {% for d in aq.dias_problema %}

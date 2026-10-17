@@ -13,8 +13,9 @@ manda para /BANCOS/OFX/NOVO no Dropbox (a mesma dos OFX -- o importador de
 extrato so le .ofx e nao enxerga este); o agendador abaixo le, grava e move
 para /BANCOS/OFX/IMPORTADOS. Sem botao de proposito.
 
-Hoje: X7 BANK (nome "X7...") e Baratao (nome "Baratao..."). SIPAG entra
-quando houver um arquivo de exemplo.
+Hoje: X7 BANK (nome "X7..."), Baratao (nome "Baratao...") e SIPAG (os dois
+relatorios com o nome que o portal da: "vendas_realizadas_relatorio_detalhado_"
+e "relatorio_vendas_recebidas_detalhadas_" -- ver a secao SIPAG no fim).
 
 O "xls" da X7 e HTML com cara de planilha: um bloco por dia de previsao
 (o lote: bruto, descontos, taxas, liquido) e as vendas do lote logo abaixo,
@@ -53,6 +54,11 @@ OPERADORAS = {
     # a conferencia so cobra a taxa a partir do primeiro cupom que a teve.
     'BARATAO': {'nome': 'BARATÃO', 'bandeira_like': 'BARAT%', 'tipo': 'CREDITO',
                 'extensoes': ('.csv',), 'taxa': 2.0},
+    # A SIPAG atende varias bandeiras do cadastro; o nome do arquivo e o que o
+    # portal gera, e os dois relatorios sao lidos (um audita o outro).
+    'SIPAG': {'nome': 'SIPAG', 'extensoes': ('.csv',),
+              'prefixos': ('VENDAS_REALIZADAS', 'RELATORIO_VENDAS_RECEBIDAS'),
+              'bandeiras': ('VISA', 'MASTERCARD', 'ELO', 'AMEX', 'CABAL')},
 }
 
 EXTENSOES = tuple(sorted({e for o in OPERADORAS.values() for e in o['extensoes']}))
@@ -71,7 +77,8 @@ def operadora_do_nome(nome):
     """'X7 17-10.xls' -> 'X7'; 'Baratão 17-10.csv' -> 'BARATAO'."""
     n = _sem_acento(nome).strip().upper()
     for prefixo, o in OPERADORAS.items():
-        if n.startswith(prefixo) and n.lower().endswith(o['extensoes']):
+        if n.startswith(o.get('prefixos', (prefixo,))) and \
+                n.lower().endswith(o['extensoes']):
             return prefixo
     return None
 
@@ -432,6 +439,11 @@ def importar(conn, nome, conteudo):
         if operadora == 'BARATAO':
             lotes, vendas = [], LEITORES[operadora](conteudo)
             gravar_baratao(conn, nome, vendas)
+        elif operadora == 'SIPAG':
+            ensure_tables_sipag(conn)
+            tipo, vendas = ler_sipag(conteudo, nome)
+            lotes = []
+            gravar_sipag(conn, tipo, nome, vendas)
         else:
             lotes, vendas = LEITORES[operadora](conteudo)
             gravar(conn, operadora, nome, lotes, vendas)
@@ -498,7 +510,10 @@ def operadora_da_bandeira(conn, bandeira_id):
         return None
     nome = _sem_acento(b['nome']).strip().upper()
     for prefixo, o in OPERADORAS.items():
-        if nome.startswith(o['bandeira_like'].rstrip('%')) and \
+        if 'bandeiras' in o:
+            if nome.startswith(o['bandeiras']):
+                return prefixo
+        elif nome.startswith(o['bandeira_like'].rstrip('%')) and \
                 (b['tipo'] or '').upper() == o['tipo']:
             return prefixo
     return None
@@ -519,6 +534,8 @@ def conferencia(conn, operadora, bandeira_id, forma_ids, data_inicio, data_fim,
         return None
     if operadora == 'BARATAO':
         return conferencia_baratao(conn, bandeira_id, forma_ids, data_inicio, data_fim)
+    if operadora == 'SIPAG':
+        return conferencia_sipag(conn, bandeira_id, forma_ids, data_inicio, data_fim)
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute("""
@@ -845,4 +862,405 @@ def conferencia_baratao(conn, bandeira_id, forma_ids, data_inicio, data_fim):
         'caixa_problema': [x for x in caixa if not x['ok']],
         'frentistas': rel['frentistas'], 'produtos': rel['produtos'],
         'ultima': ultima, 'ultima_venda': ultima_venda,
+    }
+
+
+# ── SIPAG ─────────────────────────────────────────────────────────────────────
+#
+# Dois relatorios, de proposito -- um audita o outro:
+#   vendas_realizadas_relatorio_detalhado_<data>.csv   tudo o que foi vendido,
+#       com a data PREVISTA de liquidacao e o desconto da venda (so o MDR:
+#       ~0,3% no credito);
+#   relatorio_vendas_recebidas_detalhadas_<data>.csv   o que a SIPAG PAGOU, com a
+#       data do pagamento, a conta e o desconto final (credito a vista ja com a
+#       antecipacao: ~2,1%).
+# Os dois casam pelo No da transacao. Linhas com No da transacao 0 sao
+# abatimentos do pagamento (-6,20, -1,92...): nao sao venda, mas sairam do
+# que caiu no banco. Em 17/10/2026, 390 de 408 dias x bandeira x debito/credito
+# bateram no centavo com o extrato (o resto: extrato ainda nao importado e o
+# comeco do arquivo).
+
+_SIPAG_BANDEIRA = {'VISA': 'Visa', 'MASTERCARD': 'Mastercard', 'ELO': 'Elo',
+                   'AMEX': 'Amex', 'CABAL': 'Cabal'}
+_SIPAG_TIPO = {'DEBITO': 'Débito', 'CREDITO': 'Crédito'}
+
+
+def _num_sipag(s):
+    """'R$ 1.018,34' -> 1018.34; '-R$ 6,20' -> -6.2."""
+    s = (s or '').replace('R$', '').replace('\xa0', '').replace(' ', '')
+    neg = s.startswith('-')
+    s = s.lstrip('-')
+    if not s:
+        return 0.0
+    v = float(s.replace('.', '').replace(',', '.'))
+    return -v if neg else v
+
+
+def ler_sipag(conteudo, nome):
+    """As transacoes de um dos dois relatorios. Devolve (tipo, linhas)."""
+    tipo = 'recebidas' if 'RECEBIDAS' in _sem_acento(nome).upper() else 'realizadas'
+    if isinstance(conteudo, bytes):
+        try:
+            texto = conteudo.decode('utf-8-sig')
+        except UnicodeDecodeError:
+            texto = conteudo.decode('cp1252')
+    else:
+        texto = conteudo
+    linhas = texto.splitlines()
+    try:
+        i = next(k for k, l in enumerate(linhas) if l.startswith('Nº do estabelecimento'))
+    except StopIteration:
+        raise ValueError('nao parece um relatorio da SIPAG: sem a linha de cabecalho')
+    leitor = csv.DictReader(io.StringIO('\n'.join(linhas[i:])), delimiter=';')
+    if tipo == 'recebidas' and 'Data do pagamento' not in (leitor.fieldnames or []):
+        raise ValueError('relatorio de vendas recebidas sem a coluna "Data do pagamento"')
+
+    def d(s, fmt='%d/%m/%Y'):
+        s = (s or '').strip()
+        return None if s in ('', '-') else datetime.strptime(s[:len(fmt) + 2], fmt)
+
+    saida, vistos = [], defaultdict(int)
+    for r in leitor:
+        nsu = (r.get('Nº da transação') or '').strip()
+        if not nsu or (r.get('Nº do estabelecimento') or '').startswith('Total'):
+            continue
+        dt = d(r.get('Data da transação'), '%d/%m/%Y %H:%M:%S')
+        x = {
+            'nsu': nsu,
+            'estabelecimento': (r.get('Nº do estabelecimento') or '').strip(),
+            'dt_transacao': dt,
+            'id_venda': (r.get('ID Venda') or '').strip(),
+            'bandeira': (r.get('Bandeira') or '').strip(),
+            'forma': (r.get('Forma de Pagamento') or '').strip(),
+            'plano': (r.get('Plano de venda') or '').strip(),
+            'parcela': (r.get('Parcela') or '').strip(),
+            'total_parcelas': (r.get('Total de parcela') or '').strip(),
+            'autorizacao': (r.get('Número da autorização') or '').strip(),
+            'tipo_cartao': (r.get('Tipo cartão') or '').strip(),
+            'cartao': (r.get('Número do cartão') or '').strip(),
+            'terminal': (r.get('Número do terminal') or '').strip(),
+            'captura': (r.get('Tipo captura') or '').strip(),
+            'ind_cd': (r.get('Indicador Crédito/Débito') or '').strip(),
+            'ind_cancel': (r.get('Indicador de cancelamento da venda') or '').strip(),
+            'resumo': (r.get('Nº resumo da venda') or '').strip(),
+            'dt_prevista': (d(r.get('Data prevista de liquidação')) or None),
+            'seu_numero': (r.get('Seu número') or '').strip(),
+            'ordem_pagamento': (r.get('Nº ordem de pagamento') or '').strip(),
+            'status': (r.get('Status') or '').strip(),
+            'bruto': _num_sipag(r.get('Valor parcela bruto')),
+            'desconto': _num_sipag(r.get('Desconto parcela')),
+            'liquido': _num_sipag(r.get('Valor parcela liquido')),
+            'total_plano': _num_sipag(r.get('Total plano de venda')),
+        }
+        if x['dt_prevista']:
+            x['dt_prevista'] = x['dt_prevista'].date()
+        if tipo == 'recebidas':
+            pg = d(r.get('Data do pagamento'))
+            x.update({'dt_pagamento': pg.date() if pg else None,
+                      'banco': (r.get('Nº do banco') or '').strip(),
+                      'agencia': (r.get('Nº da agência') or '').strip(),
+                      'conta': (r.get('Nº da conta') or '').strip()})
+        if nsu == '0':
+            # Abatimento: nao tem numero. Linhas iguais no mesmo arquivo sao
+            # abatimentos diferentes (02/10/2026: quatro de -6,20), entao a
+            # ordem de aparicao entra na chave.
+            base = '|'.join(str(x.get(k)) for k in (
+                'dt_transacao', 'bandeira', 'forma', 'bruto', 'dt_pagamento'))
+            vistos[base] += 1
+            x['chave'] = 'AJ-' + hashlib.sha1(
+                ('%s|%d' % (base, vistos[base])).encode('utf-8')).hexdigest()[:37]
+        else:
+            x['chave'] = '%s/%s' % (nsu, x['parcela'])
+        saida.append(x)
+    if not saida:
+        raise ValueError('relatorio da SIPAG sem nenhuma transacao')
+    return tipo, saida
+
+
+_COLS_SIPAG = ('chave', 'nsu', 'estabelecimento', 'dt_transacao', 'id_venda',
+               'bandeira', 'forma', 'plano', 'parcela', 'total_parcelas',
+               'autorizacao', 'tipo_cartao', 'cartao', 'terminal', 'captura',
+               'ind_cd', 'ind_cancel', 'resumo', 'dt_prevista', 'seu_numero',
+               'ordem_pagamento', 'status', 'bruto', 'total_plano')
+
+
+def ensure_tables_sipag(conn):
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS cartao_sipag_transacoes (
+            id               INT AUTO_INCREMENT PRIMARY KEY,
+            chave            VARCHAR(60)  NOT NULL,
+            nsu              VARCHAR(30)  NOT NULL,
+            estabelecimento  VARCHAR(40)  NULL,
+            dt_transacao     DATETIME     NULL,
+            id_venda         VARCHAR(60)  NULL,
+            bandeira         VARCHAR(30)  NULL,
+            forma            VARCHAR(20)  NULL,
+            plano            VARCHAR(30)  NULL,
+            parcela          VARCHAR(10)  NULL,
+            total_parcelas   VARCHAR(10)  NULL,
+            autorizacao      VARCHAR(20)  NULL,
+            tipo_cartao      VARCHAR(60)  NULL,
+            cartao           VARCHAR(30)  NULL,
+            terminal         VARCHAR(20)  NULL,
+            captura          VARCHAR(20)  NULL,
+            ind_cd           VARCHAR(5)   NULL,
+            ind_cancel       VARCHAR(10)  NULL,
+            resumo           VARCHAR(30)  NULL,
+            dt_prevista      DATE         NULL,
+            seu_numero       VARCHAR(30)  NULL,
+            ordem_pagamento  VARCHAR(30)  NULL,
+            status           VARCHAR(60)  NULL,
+            bruto            DECIMAL(12,2) NOT NULL DEFAULT 0,
+            total_plano      DECIMAL(12,2) NOT NULL DEFAULT 0,
+            desconto_venda   DECIMAL(12,2) NULL,
+            liquido_venda    DECIMAL(12,2) NULL,
+            dt_pagamento     DATE         NULL,
+            banco            VARCHAR(10)  NULL,
+            agencia          VARCHAR(10)  NULL,
+            conta            VARCHAR(20)  NULL,
+            status_pagamento VARCHAR(60)  NULL,
+            desconto_pago    DECIMAL(12,2) NULL,
+            liquido_pago     DECIMAL(12,2) NULL,
+            arq_realizadas   VARCHAR(200) NULL,
+            arq_recebidas    VARCHAR(200) NULL,
+            atualizado_em    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_chave (chave),
+            KEY ix_tr (dt_transacao),
+            KEY ix_pg (dt_pagamento),
+            KEY ix_band (bandeira, forma)
+        )""")
+    conn.commit()
+    cur.close()
+
+
+def gravar_sipag(conn, tipo, arquivo, linhas):
+    """Cada relatorio grava a sua parte da mesma linha: o de realizadas, o
+    desconto e o liquido da VENDA; o de recebidas, o do PAGAMENTO."""
+    if tipo == 'realizadas':
+        extra = ('desconto_venda', 'liquido_venda', 'arq_realizadas')
+        vals = lambda x: (x['desconto'], x['liquido'], arquivo[:200])
+    else:
+        extra = ('dt_pagamento', 'banco', 'agencia', 'conta', 'status_pagamento',
+                 'desconto_pago', 'liquido_pago', 'arq_recebidas')
+        vals = lambda x: (x['dt_pagamento'], x['banco'], x['agencia'], x['conta'],
+                          x['status'], x['desconto'], x['liquido'], arquivo[:200])
+    cols = _COLS_SIPAG + extra
+    # O status do relatorio de recebidas ("Pagamento Realizado") vai so para
+    # status_pagamento; o "status" da linha e o da venda.
+    atualiza = [c for c in cols if c != 'chave' and not (tipo == 'recebidas' and c == 'status')]
+    sql = ('INSERT INTO cartao_sipag_transacoes (%s) VALUES (%s) '
+           'ON DUPLICATE KEY UPDATE %s' % (
+               ', '.join(cols), ', '.join(['%s'] * len(cols)),
+               ', '.join('%s=VALUES(%s)' % (c, c) for c in atualiza)))
+    cur = conn.cursor()
+    cur.executemany(sql, [tuple(x[k] for k in _COLS_SIPAG) + vals(x) for x in linhas])
+    conn.commit()
+    cur.close()
+
+
+def _sipag_da_bandeira(nome, tipo):
+    """(bandeira, forma) como a SIPAG escreve, para a bandeira do cadastro."""
+    n = _sem_acento(nome).strip().upper()
+    for pref, b in _SIPAG_BANDEIRA.items():
+        if n.startswith(pref):
+            return b, _SIPAG_TIPO.get((tipo or '').upper())
+    return None, None
+
+
+def conferencia_sipag(conn, bandeira_id, forma_ids, data_inicio, data_fim):
+    """A conferencia da SIPAG para UMA bandeira (ex.: VISA debito), pelo dia
+    de PAGAMENTO -- e assim que o extrato credita: uma linha por dia, por
+    bandeira, por debito/credito."""
+    ensure_tables_sipag(conn)
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT nome, tipo FROM bandeiras_cartao WHERE id=%s", (bandeira_id,))
+        b = cur.fetchone() or {}
+        sb, sf = _sipag_da_bandeira(b.get('nome'), b.get('tipo'))
+        if not sb or not sf:
+            return None
+        flt = "bandeira=%s AND forma=%s"
+        cur.execute(f"""
+            SELECT dt_pagamento AS d, SUM(nsu <> '0') AS qtd,
+                   SUM(CASE WHEN nsu <> '0' THEN bruto ELSE 0 END) AS bruto,
+                   SUM(COALESCE(desconto_pago, 0)) AS taxas,
+                   SUM(CASE WHEN nsu <> '0' THEN COALESCE(desconto_venda, 0) ELSE 0 END) AS mdr,
+                   SUM(CASE WHEN nsu = '0' THEN liquido_pago ELSE 0 END) AS abatimentos,
+                   SUM(liquido_pago) AS liquido
+              FROM cartao_sipag_transacoes
+             WHERE {flt} AND dt_pagamento BETWEEN %s AND %s
+             GROUP BY dt_pagamento""", (sb, sf, data_inicio, data_fim))
+        pagos = {r['d']: r for r in cur.fetchall()}
+        cur.execute("SELECT MAX(dt_pagamento) AS z "
+                    "FROM cartao_sipag_transacoes WHERE dt_pagamento IS NOT NULL")
+        cob = cur.fetchone() or {}
+        cur.execute(f"""
+            SELECT dt_pagamento AS d, SUM(liquido_pago) AS v
+              FROM cartao_sipag_transacoes
+             WHERE {flt} AND dt_pagamento IS NOT NULL
+             GROUP BY dt_pagamento ORDER BY dt_pagamento""", (sb, sf))
+        pagos_todos = [(r['d'], float(r['v'] or 0)) for r in cur.fetchall()]
+
+        extrato, extrato_todo = {}, {}
+        if forma_ids and pagos_todos:
+            ph = ','.join(['%s'] * len(forma_ids))
+            cur.execute(f"""
+                SELECT data_transacao AS d, SUM(valor) AS v
+                  FROM bank_transactions
+                 WHERE tipo='CREDIT' AND forma_recebimento_id IN ({ph})
+                   AND data_transacao BETWEEN %s AND %s
+                 GROUP BY data_transacao""",
+                list(forma_ids) + [pagos_todos[0][0], max(data_fim, pagos_todos[-1][0].isoformat())])
+            extrato_todo = {r['d']: float(r['v']) for r in cur.fetchall()}
+        # Quando a SIPAG assumiu esta bandeira: o primeiro dia em que ela pagou
+        # pelo menos metade do que caiu no banco. Antes disso (jul/2026, ate
+        # ~14/07) o arquivo so tem venda de teste de R$ 0,10, e o credito do
+        # extrato e da maquininha antiga -- nao e problema da SIPAG.
+        sipag_desde = next((d for d, v in pagos_todos
+                            if extrato_todo.get(d) and v >= 0.5 * extrato_todo[d]), None)
+        if sipag_desde is None and pagos_todos:
+            sipag_desde = pagos_todos[-1][0]
+        extrato = {d: v for d, v in extrato_todo.items()
+                   if data_inicio <= d.isoformat() <= data_fim}
+
+        # Venda que ja devia ter sido paga e nao aparece no relatorio de
+        # recebidas: a previsao passou e o relatorio ja cobre aquele dia.
+        cur.execute(f"""
+            SELECT dt_prevista, COUNT(*) AS n, SUM(bruto) AS bruto,
+                   SUM(liquido_venda) AS liquido
+              FROM cartao_sipag_transacoes
+             WHERE {flt} AND nsu <> '0' AND dt_pagamento IS NULL
+               AND dt_prevista IS NOT NULL
+             GROUP BY dt_prevista ORDER BY dt_prevista""", (sb, sf))
+        nao_pagas = cur.fetchall()
+
+        cur.execute(f"""
+            SELECT DATE(dt_transacao) AS d, COUNT(*) AS n, SUM(bruto) AS bruto
+              FROM cartao_sipag_transacoes
+             WHERE {flt} AND nsu <> '0' AND arq_realizadas IS NOT NULL
+               AND dt_transacao >= %s AND dt_transacao < %s
+             GROUP BY DATE(dt_transacao)""",
+            (sb, sf, data_inicio,
+             (datetime.strptime(data_fim, '%Y-%m-%d') + timedelta(days=1)).date()))
+        arq_dia = {r['d']: r for r in cur.fetchall()}
+        # O mesmo corte do lado da venda: o primeiro dia em que o arquivo
+        # tem ao menos metade do que o caixa lancou para a bandeira. O credito
+        # parcelado do comeco de julho tem venda de teste paga em agosto, e
+        # contar a partir dela poria a maquininha antiga na conta da SIPAG.
+        cur.execute(f"""
+            SELECT DATE(dt_transacao) AS d, SUM(bruto) AS v
+              FROM cartao_sipag_transacoes
+             WHERE {flt} AND nsu <> '0' AND arq_realizadas IS NOT NULL
+             GROUP BY DATE(dt_transacao) ORDER BY d""", (sb, sf))
+        venda_todo = [(r['d'], float(r['v'] or 0)) for r in cur.fetchall()]
+        cur.execute("""
+            SELECT lc.data AS d, SUM(lcc.valor) AS v
+              FROM lancamentos_caixa_comprovacao lcc
+              JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+             WHERE lcc.bandeira_cartao_id=%s AND lc.data >= %s
+             GROUP BY lc.data""", (bandeira_id, venda_todo[0][0] if venda_todo else date(2100, 1, 1)))
+        caixa_todo = {r['d']: float(r['v'] or 0) for r in cur.fetchall()}
+        real_desde = next((d for d, v in venda_todo
+                           if caixa_todo.get(d) and v >= 0.5 * caixa_todo[d]), None)
+
+        cur.execute("""
+            SELECT lc.data AS d, COUNT(*) AS n, SUM(lcc.valor) AS v
+              FROM lancamentos_caixa_comprovacao lcc
+              JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+             WHERE lcc.bandeira_cartao_id=%s AND lc.data BETWEEN %s AND %s
+             GROUP BY lc.data""", (bandeira_id, data_inicio, data_fim))
+        caixa_dia = {r['d']: r for r in cur.fetchall()}
+
+        cur.execute("""
+            SELECT arquivo, importado_em, lotes, vendas, erro
+              FROM cartao_arquivo_importacoes
+             WHERE operadora='SIPAG' ORDER BY id DESC LIMIT 1""")
+        ultima = cur.fetchone()
+        cur.execute(f"SELECT MAX(dt_transacao) AS m FROM cartao_sipag_transacoes "
+                    f"WHERE {flt} AND nsu <> '0'", (sb, sf))
+        ultima_venda = (cur.fetchone() or {}).get('m')
+    finally:
+        cur.close()
+
+    if not pagos and not arq_dia and not ultima:
+        return None
+
+    ini = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+    fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
+    pago_ate = cob.get('z')
+
+    por_dia = []
+    for d in sorted(set(pagos) | set(extrato)):
+        if sipag_desde and d < sipag_desde:
+            continue
+        p = pagos.get(d)
+        liq = float(p['liquido']) if p else 0.0
+        ext = extrato.get(d, 0.0)
+        if p and d in extrato:
+            st = 'ok' if abs(ext - liq) < _TOL else 'diverge'
+        elif p:
+            st = 'sem_credito'
+        else:
+            # Credito no extrato num dia que o relatorio de recebidas nao
+            # cobre nao e problema: o arquivo e que nao chega la.
+            if not sipag_desde or not (sipag_desde < d <= pago_ate):
+                continue
+            st = 'sem_lote'
+        por_dia.append({
+            'data': d, 'qtd': int(p['qtd']) if p else 0,
+            'bruto': float(p['bruto']) if p else 0.0,
+            'descontos': -float(p['abatimentos']) if p else 0.0,
+            'taxas': float(p['taxas']) if p else 0.0,
+            'liquido': liq, 'extrato': ext, 'dif': round(ext - liq, 2),
+            'status': st,
+        })
+
+    a_receber, atrasadas = [], []
+    for r in nao_pagas:
+        if sipag_desde and r['dt_prevista'] < sipag_desde:
+            continue
+        if pago_ate and r['dt_prevista'] <= pago_ate:
+            atrasadas.append(r)
+        elif ini <= r['dt_prevista'] or r['dt_prevista'] > (pago_ate or fim):
+            a_receber.append({'liquido': float(r['liquido'] or 0),
+                              'dt_previsao': r['dt_prevista']})
+
+    caixa = []
+    for d in sorted(set(arq_dia) | set(caixa_dia)):
+        if not real_desde or d < real_desde:
+            continue
+        a = float(arq_dia[d]['bruto']) if d in arq_dia else 0.0
+        c = float(caixa_dia[d]['v']) if d in caixa_dia else 0.0
+        caixa.append({
+            'data': d, 'arquivo': a, 'n_arquivo': int(arq_dia[d]['n']) if d in arq_dia else 0,
+            'caixa': c, 'n_caixa': int(caixa_dia[d]['n']) if d in caixa_dia else 0,
+            'dif': round(c - a, 2), 'ok': abs(c - a) < _TOL,
+        })
+
+    lot = [x for x in por_dia if x['qtd'] or x['descontos']]
+    bruto = sum(x['bruto'] for x in lot)
+    taxas = sum(x['taxas'] for x in lot)
+    mdr = sum(float(p['mdr'] or 0) for p in pagos.values())
+    return {
+        'operadora': 'SIPAG', 'nome': 'SIPAG',
+        'rotulo_dia': 'Pagamento', 'txt_dia': 'dia de pagamento',
+        'rotulo_descontos': 'Abatimentos',
+        'por_dia': por_dia, 'caixa': caixa, 'a_receber': a_receber,
+        'atrasadas': atrasadas,
+        'bruto': bruto, 'descontos': 0.0, 'taxas': taxas,
+        'abatimentos': sum(x['descontos'] for x in lot),
+        'mdr': mdr, 'antecipacao': round(taxas - mdr, 2),
+        'liquido': sum(x['liquido'] for x in lot),
+        'extrato': sum(x['extrato'] for x in por_dia),
+        'taxa_pct': (taxas / bruto * 100) if bruto else None,
+        'taxa_esperada': None,
+        'dias_ok': sum(1 for x in por_dia if x['status'] == 'ok'),
+        'dias_problema': [x for x in por_dia if x['status'] != 'ok'],
+        'caixa_arquivo': sum(x['arquivo'] for x in caixa),
+        'caixa_lancado': sum(x['caixa'] for x in caixa),
+        'caixa_problema': [x for x in caixa if not x['ok']],
+        'ultima': ultima, 'ultima_venda': ultima_venda,
+        'bandeira_arquivo': '%s %s' % (sb, sf.lower()),
+        'desde': sipag_desde,
     }
