@@ -371,6 +371,7 @@ body > .container-fluid:has(#ccz){
         barra de rolagem é o que fazia esta faixa parecer rascunho. -#}
     {% if band %}<input type="hidden" name="band" value="{{ band }}">{% endif %}
     {% if tipo %}<input type="hidden" name="tipo" value="{{ tipo }}">{% endif %}
+    {% if fonte %}<input type="hidden" name="fonte" value="{{ fonte }}">{% endif %}
 
     <div class="linha1">
       <label class="campo"><span>De</span>
@@ -439,6 +440,157 @@ body > .container-fluid:has(#ccz){
       use as datas acima</span>
   </div>
   {% endif %}
+
+  {#- Duas conferências, uma de cada vez: misturar no mesmo card punha duas
+      "taxas" diferentes uma embaixo da outra. A do Caixa é a de sempre; a do
+      Arquivo parte do que a operadora mandou (utils/cartao_arquivo). -#}
+  <div class="tipos">
+    <b><i class="bi bi-diagram-3"></i> Conferir por</b>
+    <a class="{{ 'on' if fonte != 'arquivo' }}" href="?{{ qs_fonte }}">Caixa</a>
+    <a class="{{ 'on' if fonte == 'arquivo' }}" href="?{{ qs_fonte }}{{ '&' if qs_fonte }}fonte=arquivo">Arquivo da operadora</a>
+    <span class="obs">{% if fonte == 'arquivo' %}a venda vem do arquivo da operadora, não do caixa
+      {% else %}a venda vem do fechamento de caixa{% endif %}</span>
+  </div>
+
+  {% if fonte == 'arquivo' %}
+  {% set _arq = report | selectattr('arquivo') | list %}
+  {% if not _arq %}
+  <div class="nada">
+    Nenhuma bandeira com arquivo da operadora neste filtro. Hoje só a
+    <b>X7 BANK</b> manda arquivo — SIPAG e Baratão entram em seguida.
+  </div>
+  {% endif %}
+  {% for card in _arq %}
+  {% set cor = '#1D63A5' if card.tipo_cartao == 'DEBITO' else '#6f42c1' %}
+  <div class="cx" id="arq-{{ card.bandeira_id }}" style="--c:{{ cor }}">
+    <div class="ph">
+      <span class="ph__i"><i class="bi bi-file-earmark-spreadsheet"></i></span>
+      <div>
+        <div class="ph__n">{{ card.bandeira_nome }}
+          <span class="selo">{{ card.tipo_cartao }}</span></div>
+        <div class="ph__c">{% if card.forma_recebimento_nome %}
+          entra pela conta <b>{{ card.forma_recebimento_nome }}</b>
+          {% else %}sem forma de recebimento ligada{% endif %}</div>
+      </div>
+    </div>
+    {#- A conferência PARALELA, pelo arquivo da operadora (utils/cartao_arquivo).
+        O arquivo diz quanto vendeu, quanto cobrou e em que dia pagou; aqui se
+        confere o dia pago contra o extrato e a venda contra o caixa. Nada do
+        que está acima depende dela. -#}
+    {% set aq = card.arquivo %}
+    <div class="conf" style="border-top:0">
+      <div class="conf__t"><i class="bi bi-file-earmark-spreadsheet"></i>
+        Pelo arquivo da {{ aq.nome }} — o que a operadora diz × extrato × caixa
+        <span class="dir">{% if aq.ultima %}último arquivo
+          {{ aq.ultima.arquivo }} · {{ aq.ultima.importado_em.strftime('%d/%m %H:%M') }}
+          {%- if aq.ultima_venda %} · venda até {{ aq.ultima_venda.strftime('%d/%m') }}{% endif %}
+          {% else %}nenhum arquivo lido ainda{% endif %}</span></div>
+      {% if aq.ultima and aq.ultima.erro %}
+      <div class="alerta alerta--neg" style="margin:0 .8rem .5rem">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        o último arquivo ({{ aq.ultima.arquivo }}) não foi lido: {{ aq.ultima.erro }}</div>
+      {% endif %}
+      <div class="conf__g">
+        <div><span>Venda (bruto − desconto)</span><b>{{ (aq.bruto - aq.descontos) | fmtmoney }}</b></div>
+        <div><span>Desconto ao cliente</span><b>{{ aq.descontos | fmtmoney }}</b></div>
+        <div><span>Taxa cobrada</span><b>{{ aq.taxas | fmtmoney }}
+          {%- if aq.taxa_pct is not none %} · {{ '%.2f'|format(aq.taxa_pct) }}%{% endif %}</b></div>
+        <div><span>Líquido × extrato</span><b class="{{ 'pos' if not aq.dias_problema else 'neg' }}">
+          {{ aq.dias_ok }} de {{ aq.por_dia|length }} dias batem</b></div>
+      </div>
+      {% if aq.bruto %}
+      {% set taxa_ok = aq.taxa_esperada is not none and (aq.taxas - aq.taxa_esperada)|abs < 0.05 %}
+      <div class="alerta {{ 'alerta--ok' if taxa_ok else 'alerta--neg' }}" style="margin:.5rem .8rem 0">
+        <i class="bi {{ 'bi-check-circle-fill' if taxa_ok else 'bi-exclamation-triangle-fill' }}"></i>
+        {% if aq.taxa_esperada is none %}
+        sem taxa de contrato cadastrada para conferir os {{ aq.taxas | fmtmoney }} cobrados
+        {% elif taxa_ok %}
+        a {{ aq.nome }} cobrou os {{ '%.2f'|format(card.taxa_contratada) }}% combinados sobre
+        (bruto − desconto): {{ aq.taxas | fmtmoney }}
+        {% else %}
+        a {{ aq.nome }} cobrou {{ aq.taxas | fmtmoney }}; pelo contrato seriam
+        {{ aq.taxa_esperada | fmtmoney }}
+        {% endif %}</div>
+      {% endif %}
+      {% if aq.descontos %}
+      <div class="alerta alerta--pos" style="margin:.5rem .8rem 0">
+        <i class="bi bi-info-circle-fill"></i>
+        {{ aq.descontos | fmtmoney }} de desconto dado ao cliente do Cartão Frota — não é
+        custo do cartão: o caixa lança o valor já com desconto, e a taxa incide sobre ele</div>
+      {% endif %}
+      {% if aq.por_dia %}
+      <div class="alerta {{ 'alerta--ok' if not aq.dias_problema else 'alerta--neg' }}" style="margin:.5rem .8rem 0">
+        <i class="bi {{ 'bi-check-circle-fill' if not aq.dias_problema else 'bi-exclamation-triangle-fill' }}"></i>
+        {% if not aq.dias_problema %}
+        todo dia de liquidação do arquivo bateu com o extrato: {{ aq.liquido | fmtmoney }}
+        {% else %}
+        {{ aq.dias_problema|length }} dia{{ 's' if aq.dias_problema|length != 1 }} em que o
+        pago pela operadora não bate com o extrato — na tabela abaixo
+        {% endif %}</div>
+      {% endif %}
+      {% if aq.caixa %}
+      <div class="alerta {{ 'alerta--ok' if not aq.caixa_problema else 'alerta--neg' }}" style="margin:.5rem .8rem">
+        <i class="bi {{ 'bi-check-circle-fill' if not aq.caixa_problema else 'bi-exclamation-triangle-fill' }}"></i>
+        {% if not aq.caixa_problema %}
+        o caixa lançou exatamente o que o arquivo diz: {{ aq.caixa_arquivo | fmtmoney }}
+        {% else %}
+        o caixa lançou {{ aq.caixa_lancado | fmtmoney }} e o arquivo diz
+        {{ aq.caixa_arquivo | fmtmoney }} — {{ aq.caixa_problema|length }}
+        dia{{ 's' if aq.caixa_problema|length != 1 }} com lançamento diferente
+        {% endif %}</div>
+      {% endif %}
+      {% if aq.dias_problema %}
+      <div class="tab">
+        <table>
+          <thead><tr><th class="e">Liquidação</th><th>Bruto</th><th>Descontos</th><th>Taxa</th>
+            <th>Líquido {{ aq.nome }}</th><th>Extrato</th><th>Diferença</th><th class="e">Situação</th></tr></thead>
+          <tbody>
+            {% for d in aq.dias_problema %}
+            <tr class="fora">
+              <td class="e">{{ d.data.strftime('%d/%m/%Y') }}</td>
+              <td>{{ d.bruto | fmtmoney }}</td><td>{{ d.descontos | fmtmoney }}</td>
+              <td>{{ d.taxas | fmtmoney }}</td>
+              <td class="forte">{{ d.liquido | fmtmoney }}</td>
+              <td class="forte">{{ d.extrato | fmtmoney }}</td>
+              <td>{{ d.dif | fmtmoney }}</td>
+              <td class="e">{% if d.status == 'sem_credito' %}crédito não está no extrato (já importou o OFX do dia?)
+                {% elif d.status == 'sem_lote' %}crédito no extrato sem lote no arquivo
+                {% else %}valor diferente{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+      {% if aq.caixa_problema %}
+      <div class="tab">
+        <table>
+          <thead><tr><th class="e">Dia da venda</th><th>Arquivo {{ aq.nome }} (− desconto)</th>
+            <th>Lançado no caixa</th><th>Diferença</th></tr></thead>
+          <tbody>
+            {% for d in aq.caixa_problema %}
+            <tr class="fora">
+              <td class="e">{{ d.data.strftime('%d/%m/%Y') }}</td>
+              <td class="forte">{{ d.arquivo | fmtmoney }} <span class="sub">({{ d.n_arquivo }})</span></td>
+              <td class="forte">{{ d.caixa | fmtmoney }} <span class="sub">({{ d.n_caixa }})</span></td>
+              <td>{{ d.dif | fmtmoney }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+      {% if aq.a_receber %}
+      <div class="alerta alerta--pos" style="margin:0 .8rem .6rem">
+        <i class="bi bi-hourglass-split"></i>
+        a receber da {{ aq.nome }}:
+        {% for l in aq.a_receber %}{{ l.liquido | fmtmoney }} previsto para
+          {{ l.dt_previsao.strftime('%d/%m') }}{{ ', ' if not loop.last }}{% endfor %}</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
 
   {% if not report %}
   <div class="nada">
@@ -861,6 +1013,7 @@ body > .container-fluid:has(#ccz){
   </div>
 
   {% endif %}
+  {% endif %}{#- fonte -#}
 
 </div>
 

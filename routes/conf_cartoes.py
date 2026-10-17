@@ -28,6 +28,7 @@ from routes.auth import admin_required
 from utils.db import get_db_connection
 from urllib.parse import urlencode
 from utils import feriados as feriados_br
+from utils import cartao_arquivo
 
 import logging
 _logger = logging.getLogger(__name__)
@@ -1240,6 +1241,10 @@ def conf_cartoes():
     tipo = (args.get('tipo') or '').strip().upper()
     if tipo not in ('DEBITO', 'CREDITO'):
         tipo = ''
+    # Qual conferencia: a do caixa (de sempre) ou a do arquivo da operadora.
+    fonte = 'arquivo' if (args.get('fonte') or '').strip() == 'arquivo' else ''
+    qs_fonte = urlencode(
+        [(k, v) for k, v in args.items(multi=True) if k not in ('band', 'fonte')])
     qs_base = urlencode(
         [(k, v) for k, v in args.items(multi=True) if k != 'band'])
     # A regua de meses e as pilulas de tipo trocam o periodo/tipo e NAO podem
@@ -1353,6 +1358,22 @@ def conf_cartoes():
                 _aj_por_band[int(a['bandeira_id'])].append(a)
             for _c in report:
                 _c['ajustes'] = _aj_por_band.get(_c['bandeira_id'], [])
+            # A conferencia PARALELA, pelo arquivo da operadora (hoje so X7).
+            # Nao mexe em nada do que esta acima: e um quadro a mais no card,
+            # com as mesmas entradas do extrato (as formas vinculadas).
+            for _c in report:
+                _c['arquivo'] = None
+                if fonte != 'arquivo':
+                    continue
+                try:
+                    _op = cartao_arquivo.operadora_da_bandeira(conn, _c['bandeira_id'])
+                    if _op:
+                        _c['arquivo'] = cartao_arquivo.conferencia(
+                            conn, _op, _c['bandeira_id'],
+                            vinculos_map.get(_c['bandeira_id'], []),
+                            data_inicio, data_fim, _c.get('taxa_contratada'))
+                except Exception:
+                    _logger.exception("conf_cartoes: conferencia pelo arquivo falhou")
             if tipo:
                 report = [c for c in report if (c['tipo_cartao'] or '').upper() == tipo]
                 grand_total_venda = sum(c['total_venda'] for c in report)
@@ -1371,7 +1392,7 @@ def conf_cartoes():
         empresas_filtro=empresas_filtro,
         bandeiras_filtro=bandeiras_filtro,
         formas_cartao=formas_cartao,
-        feriados=feriados, band=band, tipo=tipo,
+        feriados=feriados, band=band, tipo=tipo, fonte=fonte, qs_fonte=qs_fonte,
         qs_base=qs_base, qs_limpo=qs_limpo, meses=meses,
         grand_a_receber=grand_a_receber, grand_sem_venda=grand_sem_venda,
         report=report,

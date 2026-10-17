@@ -526,6 +526,14 @@ def create_app():
     except Exception:
         app.logger.warning("[efi_sched] nao foi possivel iniciar o scheduler.", exc_info=True)
 
+    # Leitura dos arquivos das operadoras de cartao (X7) que o NH-Robo deixa
+    # no Dropbox. Falha aqui NAO derruba o app.
+    try:
+        from integrations.cartao_arquivo_scheduler import iniciar_scheduler as iniciar_cartao
+        iniciar_cartao(app)
+    except Exception:
+        app.logger.warning("[cartao_arq] nao foi possivel iniciar o scheduler.", exc_info=True)
+
     return app
 
 
