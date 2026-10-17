@@ -608,10 +608,10 @@ body > .container-fluid:has(#ccz){
   {% if fonte == 'operadora' %}
   <div class="aviso" style="margin-bottom:.7rem">
     <i class="bi bi-info-circle-fill"></i>
-    <div>Mesma conferência da aba Caixa, mas a venda vem do arquivo da operadora —
-      a taxa é a que ela cobrou de verdade. Só aparecem as bandeiras que mandam
-      arquivo, a partir de quando cada uma passou a mandar; o filtro de empresa
-      não vale aqui, porque o arquivo não diz a empresa.</div>
+    <div>Venda do período segundo o arquivo da operadora (o mesmo do Excel
+      filtrado pelo mês), quando ela pagou e se caiu no extrato. A taxa é só do
+      que já foi pago; o que falta receber fica à parte. O filtro de empresa não
+      vale aqui, porque o arquivo não diz a empresa.</div>
   </div>
   {% endif %}
 
@@ -684,7 +684,10 @@ body > .container-fluid:has(#ccz){
         <div><dt>Taxa retida</dt><dd class="neg">{{ grand_total_diferenca | fmtmoney }}</dd></div>
         {#- Direta aqui também: vendido menos recebido, sobre o vendido. -#}
         <div><dt>Taxa do período</dt>
-          <dd>{% if grand_total_venda %}{{ "%.2f"|format((grand_total_venda - grand_total_recebimento) / grand_total_venda * 100) }}%{% else %}—{% endif %}</dd></div>
+          {#- Na aba Operadora a taxa e so do que ja foi pago: o que falta
+              receber nao entra na conta. -#}
+          {% set _base_tx = (grand_total_venda - grand_a_receber) if fonte == 'operadora' else grand_total_venda %}
+          <dd>{% if _base_tx %}{{ "%.2f"|format(((grand_total_diferenca if fonte == 'operadora' else (grand_total_venda - grand_total_recebimento)) / _base_tx) * 100) }}%{% else %}—{% endif %}</dd></div>
         <div><dt>Ainda não caiu</dt>
           <dd class="{{ 'ambar' if a_receber > 0.005 }}">{{ a_receber | fmtmoney }}</dd></div>
         {%- if grand_sem_venda > 0.005 %}
@@ -848,12 +851,12 @@ body > .container-fluid:has(#ccz){
     </div>
 
     <div class="resumo">
-      <div class="r"><div class="r__r">Vendido e pago</div>
-        <div class="r__v">{{ op.vendido_pago | fmtmoney }}</div></div>
+      <div class="r"><div class="r__r">Vendido no período</div>
+        <div class="r__v">{{ op.vendido | fmtmoney }}</div></div>
       <div class="r"><div class="r__r">Taxa{% if op.contrato %} · contrato {{ '%.2f'|format(op.contrato) }}%{% endif %}</div>
         <div class="r__v {{ 'pos' if op.contrato and op.taxa_pct is not none and (op.taxa_pct - op.contrato)|abs < 0.05 else '' }}">{{ op.taxa | fmtmoney }}
           {%- if op.taxa_pct is not none %} · {{ '%.2f'|format(op.taxa_pct) }}%{% endif %}</div></div>
-      <div class="r"><div class="r__r">Pago pela operadora</div>
+      <div class="r"><div class="r__r">Já pago pela operadora</div>
         <div class="r__v">{{ op.liquido | fmtmoney }}</div></div>
       <div class="r"><div class="r__r">A receber</div>
         <div class="r__v">{{ op.total_receber | fmtmoney }}</div></div>
@@ -868,7 +871,7 @@ body > .container-fluid:has(#ccz){
     <div class="tab">
       <table>
         <thead><tr><th class="e">Pago em</th><th class="e">Vendas de</th><th>Vendido</th>
-          <th>Taxa</th><th>Operadora pagou</th><th>Extrato</th><th class="e"></th></tr></thead>
+          <th>Taxa</th><th>Operadora pagou</th><th>Extrato do dia</th><th class="e"></th></tr></thead>
         <tbody>
           {% for p in op.pagamentos %}
           <tr class="{{ 'fora' if p.status in ('diverge', 'sem_pagamento') }}">
@@ -881,7 +884,9 @@ body > .container-fluid:has(#ccz){
             <td data-r="Vendido">{{ p.vendido | fmtmoney if p.n else '—' }}</td>
             <td data-r="Taxa">{% if p.n %}{{ p.taxa | fmtmoney }}{% if p.vendido %} <span class="sub">{{ '%.2f'|format(p.taxa / p.vendido * 100) }}%</span>{% endif %}{% else %}—{% endif %}</td>
             <td class="forte" data-r="Operadora pagou">{{ p.liquido | fmtmoney if p.n else '—' }}</td>
-            <td class="forte" data-r="Extrato">{% if p.n_creditos %}{{ p.extrato | fmtmoney }}{% if p.n_creditos > 1 %} <span class="sub">({{ p.n_creditos }})</span>{% endif %}{% else %}—{% endif %}</td>
+            <td class="forte" data-r="Extrato do dia">{% if p.n_creditos %}{{ p.extrato | fmtmoney }}{% if p.n_creditos > 1 %} <span class="sub">({{ p.n_creditos }})</span>{% endif %}{% else %}—{% endif %}
+              {%- if p.outras|abs > 0.005 %}<div class="sub">o dia pagou {{ p.total_dia | fmtmoney }}: inclui {{ p.outras | fmtmoney }} de venda de fora do período</div>{% endif %}
+              {%- if p.abatimentos|abs > 0.005 %}<div class="sub">− {{ p.abatimentos | fmtmoney }} de abatimento</div>{% endif %}</td>
             <td class="e" data-r="">
               {%- if p.status == 'ok' %}<i class="bi bi-check-circle-fill" style="color:#146c43" title="caiu no extrato"></i>
               {%- elif p.status == 'aguardando' %}<span class="sub">extrato ainda não importado</span>
@@ -891,9 +896,9 @@ body > .container-fluid:has(#ccz){
           </tr>
           {% endfor %}
         </tbody>
-        <tfoot><tr><td class="e" colspan="2"><b>Total</b></td>
+        <tfoot><tr><td class="e" colspan="2"><b>Total pago</b></td>
           <td><b>{{ op.vendido_pago | fmtmoney }}</b></td><td><b>{{ op.taxa | fmtmoney }}</b></td>
-          <td><b>{{ op.liquido | fmtmoney }}</b></td><td><b>{{ op.extrato | fmtmoney }}</b></td><td></td></tr></tfoot>
+          <td><b>{{ op.liquido | fmtmoney }}</b></td><td></td><td></td></tr></tfoot>
       </table>
     </div>
     {% endif %}
@@ -907,8 +912,7 @@ body > .container-fluid:has(#ccz){
           <tr>
             <td class="e">{{ a.data_venda.strftime('%d/%m/%Y') }}{% if a.n > 1 %} <span class="sub">({{ a.n }})</span>{% endif %}</td>
             <td class="forte">{{ a.valor | fmtmoney }}</td>
-            <td class="e sub">{% if a.pago_em %}pago em {{ a.pago_em.strftime('%d/%m') }}, depois do período
-              {% elif a.previsto %}{{ a.previsto.strftime('%d/%m/%Y') }}{% else %}—{% endif %}</td>
+            <td class="e sub">{% if a.previsto %}{{ a.previsto.strftime('%d/%m/%Y') }}{% else %}—{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -1106,11 +1110,13 @@ body > .container-fluid:has(#ccz){
   <div class="rod">
     {% if fonte == 'operadora' %}
     Tudo aqui vem do arquivo da operadora, e nada é contado pelo prazo.
-    Cada linha é um dia em que a operadora <b>pagou</b>: as vendas que ela
-    pagou, o <b>vendido</b>, a <b>taxa</b> que descontou e o que ela diz que
-    pagou. O <b>extrato</b> só confirma: ✓ quando o valor caiu no banco
-    naquele dia. A taxa é só do que já foi pago; o que ainda não foi pago
-    fica em <b>A receber</b>, com a data prevista, e nunca vira taxa.
+    O período é o da <b>venda</b> — o mesmo do Excel filtrado pelo mês. Cada
+    linha é um dia em que a operadora <b>pagou</b> vendas do período: quais,
+    o <b>vendido</b>, a <b>taxa</b> que descontou e o que pagou — mesmo que o
+    pagamento tenha sido no mês seguinte. O <b>extrato do dia</b> só confirma:
+    ✓ quando o que a operadora pagou naquele dia caiu no banco. A taxa é só do
+    que já foi pago; o que ainda não foi pago fica em <b>A receber</b>, com a
+    data prevista, e nunca vira taxa.
     {% else %}
     <b>Dt. venda</b> é a data do fechamento de caixa. <b>Dt. recebimento</b> é a
     data esperada da liquidação, contada no prazo em dias úteis da bandeira —

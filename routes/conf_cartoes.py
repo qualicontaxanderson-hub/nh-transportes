@@ -1404,8 +1404,35 @@ def conf_cartoes():
                 _op = cartao_arquivo.pagamentos_operadora(
                     conn, bandeiras_filtered, vinculos_map, _desde,
                     data_inicio, data_fim)
+                # Os cards do topo tambem: o motor so montou o esqueleto; os
+                # numeros sao os do arquivo, pela DATA DA VENDA (o mesmo que o
+                # Excel filtrado pelo mes), e a taxa e so do que foi pago.
                 for _c in report:
-                    _c['op'] = _op.get(_c['bandeira_id'])
+                    o = _c['op'] = _op.get(_c['bandeira_id'])
+                    if not o:
+                        continue
+                    _ct = o['contrato']
+                    _c['total_venda'] = o['vendido']
+                    _c['total_recebimento'] = o['liquido']
+                    _c['total_diferenca'] = o['taxa']
+                    _c['taxa'] = _c['taxa_direta'] = o['taxa_pct']
+                    _c['total_a_receber'] = round(o['vendido'] - o['vendido_pago'], 2)
+                    _c['total_sem_venda'] = 0.0
+                    _c['falta_lancamento'] = False
+                    _c['fora_contrato'] = sum(
+                        1 for p in o['pagamentos']
+                        if _ct and p['vendido'] and abs(p['taxa'] / p['vendido'] * 100 - _ct) > 0.15)
+                    _c['linhas'] = [
+                        {'data_venda': _fmt_date(d), 'total_venda': v['vendido'],
+                         'total_recebimento': v['liquido'],
+                         'data_recebimento': _fmt_date(v['pago_em']) if v['pago_em'] else ''}
+                        for d, v in sorted(o['por_venda'].items())]
+                grand_total_venda = sum(c['total_venda'] for c in report)
+                grand_total_recebimento = sum(c['total_recebimento'] for c in report)
+                grand_total_diferenca = sum(c['total_diferenca'] for c in report)
+                grand_saldo = grand_total_recebimento - grand_total_venda
+                grand_a_receber = sum(c['total_a_receber'] for c in report)
+                grand_sem_venda = 0.0
             # Os ajustes de cada bandeira vao para a tela, para ficarem
             # visiveis e apagaveis -- ajuste escondido e pior do que ajuste.
             _aj_por_band = defaultdict(list)

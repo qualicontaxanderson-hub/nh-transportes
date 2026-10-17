@@ -1487,16 +1487,25 @@ def ciclos_operadora(conn, bandeiras, vinculos_map, data_inicio, data_fim):
 
 
 def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data_fim):
-    """A aba Operadora, uma linha por PAGAMENTO: {bandeira_id: {...}}.
+    """A aba Operadora: {bandeira_id: {...}}, pela DATA DA VENDA.
 
-    O Excel diz o que foi pago, quando e quanto; o extrato so confirma. Por
-    isso a taxa e a do arquivo (vendido - liquido pago), e so do que FOI pago
-    -- venda que ainda nao foi paga nao e taxa, e vai para "a receber". Com o
-    extrato fica o check: o liquido do dia caiu?
+    Na ordem que o usuario confere: 1o a venda do periodo (a mesma do Excel
+    filtrado pelo mes), 2o quando a operadora a pagou, 3o o extrato provando
+    que caiu. A taxa e a do arquivo (vendido - liquido) e so do que ja foi
+    pago; o que nao foi pago nao e taxa, vai para "a receber".
 
-        pagamentos: [{data, vendas (datas), vendido, taxa, abatimentos,
-                      liquido, extrato, n_creditos, ok}]
-        a_receber:  [{data_venda, valor, previsto, pago_em}]
+    A primeira versao tomava o periodo pela data do PAGAMENTO: a X7 de
+    ago/2026 dava 2.698,05 -- duas vendas de julho pagas em agosto --, contra
+    2.465,58 vendidos em agosto no Excel.
+
+        pagamentos: [{data, vendas, n, vendido, taxa, liquido, total_dia,
+                      outras, extrato, n_creditos, status}]
+            vendido/taxa/liquido sao das vendas DO PERIODO pagas naquele
+            dia; total_dia e o que a operadora pagou no dia inteiro (com
+            venda de fora do periodo: "outras"), e e ele que se confere com
+            o extrato.
+        a_receber: [{data_venda, valor, n, previsto}]
+        por_venda: {data_venda: {vendido, liquido, pago_em}}
     """
     ini = datetime.strptime(data_inicio, '%Y-%m-%d').date()
     fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
@@ -1508,44 +1517,45 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
             op = _operadora_de(b.get('nome'), b.get('tipo'))
             if not op:
                 continue
-            pag = defaultdict(lambda: {'vendas': set(), 'vendido': 0.0, 'taxa': 0.0,
-                                       'abatimentos': 0.0, 'liquido': 0.0, 'n': 0})
-            receber = defaultdict(lambda: {'valor': 0.0, 'n': 0})
-
-            def guarda(venda_d, pago, prev, vendido, taxa, liquido):
-                if pago and ini <= pago <= fim:
-                    p = pag[pago]
-                    p['vendas'].add(venda_d)
-                    p['vendido'] += vendido
-                    p['taxa'] += taxa
-                    p['liquido'] += liquido
-                    p['n'] += 1
-                elif ini <= venda_d <= fim:
-                    r = receber[(venda_d, pago, prev)]
-                    r['valor'] += vendido
-                    r['n'] += 1
-
+            fs = vinculos_map.get(b['id'], [])
+            vendas = []          # (data_venda, pago_em, previsto, vendido, taxa, liquido)
+            total_dia = {}       # pago_em -> liquido pago no dia inteiro
+            abat_dia = defaultdict(float)
             if op == 'X7':
-                # a taxa e o liquido da X7 sao do lote; a venda, uma a uma
                 cur.execute("""
                     SELECT DATE(dt_operacao) AS v, bruto - desconto_lote AS vendido,
-                           liquido_est, dt_liquidacao AS pago, dt_previsao AS prev
+                           taxa_pct, dt_liquidacao AS pago, dt_previsao AS prev
                       FROM cartao_arquivo_vendas
-                     WHERE operadora='X7'
-                       AND (dt_liquidacao BETWEEN %s AND %s
-                            OR (dt_operacao >= %s AND dt_operacao < %s))""",
-                    (ini, fim, ini, fim1))
+                     WHERE operadora='X7' AND dt_operacao >= %s AND dt_operacao < %s""",
+                    (ini, fim1))
                 for r in cur.fetchall():
-                    guarda(r['v'], r['pago'], r['prev'], float(r['vendido'] or 0), 0.0, 0.0)
-                cur.execute("""
-                    SELECT dt_liquidacao AS d, SUM(liquido) AS liq, SUM(taxas) AS tx
-                      FROM cartao_arquivo_lotes
-                     WHERE operadora='X7' AND dt_liquidacao BETWEEN %s AND %s
-                     GROUP BY dt_liquidacao""", (ini, fim))
-                for r in cur.fetchall():
-                    if r['d'] in pag:
-                        pag[r['d']]['liquido'] = float(r['liq'] or 0)
-                        pag[r['d']]['taxa'] = float(r['tx'] or 0)
+                    vd = float(r['vendido'] or 0)
+                    tx = round(vd * float(r['taxa_pct'] or 0) / 100, 2)
+                    vendas.append((r['v'], r['pago'], r['prev'], vd, tx, vd - tx))
+                dias = sorted({v[1] for v in vendas if v[1]})
+                if dias:
+                    ph = ','.join(['%s'] * len(dias))
+                    cur.execute(f"""
+                        SELECT dt_liquidacao AS d, SUM(liquido) AS l, SUM(taxas) AS t,
+                               SUM(bruto - descontos) AS b
+                          FROM cartao_arquivo_lotes
+                         WHERE operadora='X7' AND dt_liquidacao IN ({ph})
+                         GROUP BY dt_liquidacao""", dias)
+                    lotes = {r['d']: r for r in cur.fetchall()}
+                    total_dia = {d: float(r['l'] or 0) for d, r in lotes.items()}
+                    # A taxa da X7 e do lote: quando o dia so tem venda do
+                    # periodo, vale a do lote (centavo de arredondamento).
+                    por_dia = defaultdict(list)
+                    for i, v in enumerate(vendas):
+                        if v[1]:
+                            por_dia[v[1]].append(i)
+                    for d, idx in por_dia.items():
+                        lt = lotes.get(d)
+                        if lt and abs(sum(vendas[i][3] for i in idx) - float(lt['b'] or 0)) < _TOL:
+                            dif = round(float(lt['t'] or 0) - sum(vendas[i][4] for i in idx), 2)
+                            if abs(dif) > 0.0049:
+                                a, p, pr, vd, tx, lq = vendas[idx[-1]]
+                                vendas[idx[-1]] = (a, p, pr, vd, tx + dif, lq - dif)
             elif op == 'BARATAO':
                 janela = timedelta(days=_JANELA_PIX * 2)
                 cur.execute("""
@@ -1553,10 +1563,10 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
                            SUM(taxa) AS taxa, SUM(repasse) AS repasse
                       FROM cartao_baratao_cupons
                      WHERE dt_abastecimento >= %s AND dt_abastecimento < %s
-                     GROUP BY DATE(dt_abastecimento)""", (ini - janela, fim1))
+                     GROUP BY DATE(dt_abastecimento)""",
+                    (ini - janela, fim1 + timedelta(days=_JANELA_PIX)))
                 dias = {r['d']: r for r in cur.fetchall()}
                 pix = []
-                fs = vinculos_map.get(b['id'], [])
                 if fs:
                     ph = ','.join(['%s'] * len(fs))
                     cur.execute(f"""
@@ -1564,111 +1574,130 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
                          WHERE tipo='CREDIT' AND forma_recebimento_id IN ({ph})
                            AND data_transacao BETWEEN %s AND %s
                          ORDER BY data_transacao, id""",
-                        list(fs) + [ini - janela, fim + timedelta(days=_JANELA_PIX)])
+                        list(fs) + [ini - janela, fim + janela])
                     pix = [{'id': r['id'], 'd': r['d'], 'v': round(float(r['v']), 2)}
                            for r in cur.fetchall()]
                 casados = _casar_pix({d: round(float(r['repasse']), 2)
                                       for d, r in dias.items()}, pix)
                 for d, r in dias.items():
                     ps = casados.get(d)
-                    guarda(d, max(p['d'] for p in ps) if ps else None,
-                           d + timedelta(days=2), float(r['venda'] or 0),
-                           float(r['taxa'] or 0), float(r['repasse'] or 0))
+                    pago = max(p['d'] for p in ps) if ps else None
+                    if pago:
+                        total_dia[pago] = total_dia.get(pago, 0.0) + float(r['repasse'] or 0)
+                    if ini <= d <= fim:
+                        vendas.append((d, pago, d + timedelta(days=2), float(r['venda'] or 0),
+                                       float(r['taxa'] or 0), float(r['repasse'] or 0)))
             else:
                 sb, sf = _sipag_da_bandeira(b.get('nome'), b.get('tipo'))
                 if not sb or not sf:
                     continue
-                d0 = desde.get(b['id'])
                 cur.execute("""
                     SELECT DATE(dt_transacao) AS v, bruto, desconto_pago, liquido_pago,
-                           desconto_venda, dt_pagamento AS pago, dt_prevista AS prev
+                           dt_pagamento AS pago, dt_prevista AS prev
                       FROM cartao_sipag_transacoes
                      WHERE bandeira=%s AND forma=%s AND nsu <> '0'
-                       AND (dt_pagamento BETWEEN %s AND %s
-                            OR (dt_transacao >= %s AND dt_transacao < %s))""",
-                    (sb, sf, ini, fim, ini, fim1))
+                       AND arq_realizadas IS NOT NULL
+                       AND dt_transacao >= %s AND dt_transacao < %s""",
+                    (sb, sf, ini, fim1))
                 for r in cur.fetchall():
-                    if d0 and r['pago'] and r['pago'] < d0:
-                        continue
-                    guarda(r['v'], r['pago'], r['prev'], float(r['bruto'] or 0),
-                           float(r['desconto_pago'] or 0), float(r['liquido_pago'] or 0))
-                cur.execute("""
-                    SELECT dt_pagamento AS d, SUM(liquido_pago) AS v
-                      FROM cartao_sipag_transacoes
-                     WHERE bandeira=%s AND forma=%s AND nsu = '0'
-                       AND dt_pagamento BETWEEN %s AND %s
-                     GROUP BY dt_pagamento""", (sb, sf, ini, fim))
-                for r in cur.fetchall():
-                    p = pag[r['d']]
-                    p['abatimentos'] += -float(r['v'] or 0)
-                    p['liquido'] += float(r['v'] or 0)
+                    vendas.append((r['v'], r['pago'], r['prev'], float(r['bruto'] or 0),
+                                   float(r['desconto_pago'] or 0), float(r['liquido_pago'] or 0)))
+                dias = sorted({v[1] for v in vendas if v[1]})
+                if dias:
+                    ph = ','.join(['%s'] * len(dias))
+                    cur.execute(f"""
+                        SELECT dt_pagamento AS d, SUM(liquido_pago) AS l,
+                               SUM(CASE WHEN nsu = '0' THEN liquido_pago ELSE 0 END) AS ab
+                          FROM cartao_sipag_transacoes
+                         WHERE bandeira=%s AND forma=%s AND dt_pagamento IN ({ph})
+                         GROUP BY dt_pagamento""", [sb, sf] + dias)
+                    for r in cur.fetchall():
+                        total_dia[r['d']] = float(r['l'] or 0)
+                        abat_dia[r['d']] = -float(r['ab'] or 0)
 
-            extrato = {}
-            fs = vinculos_map.get(b['id'], [])
+            # o extrato de cada dia de pagamento (pode ser depois do periodo)
+            dias_pag = sorted({v[1] for v in vendas if v[1]})
+            extrato, ult_extrato = {}, None
             if fs:
                 ph = ','.join(['%s'] * len(fs))
-                cur.execute(f"""
-                    SELECT data_transacao AS d, SUM(valor) AS v, COUNT(*) AS n
-                      FROM bank_transactions
-                     WHERE tipo='CREDIT' AND forma_recebimento_id IN ({ph})
-                       AND data_transacao BETWEEN %s AND %s
-                     GROUP BY data_transacao""", list(fs) + [ini, fim])
-                extrato = {r['d']: (float(r['v'] or 0), int(r['n'])) for r in cur.fetchall()}
+                if dias_pag:
+                    pd = ','.join(['%s'] * len(dias_pag))
+                    cur.execute(f"""
+                        SELECT data_transacao AS d, SUM(valor) AS v, COUNT(*) AS n
+                          FROM bank_transactions
+                         WHERE tipo='CREDIT' AND forma_recebimento_id IN ({ph})
+                           AND data_transacao IN ({pd})
+                         GROUP BY data_transacao""", list(fs) + dias_pag)
+                    extrato = {r['d']: (float(r['v'] or 0), int(r['n'])) for r in cur.fetchall()}
                 cur.execute(f"""
                     SELECT MAX(data_transacao) AS m FROM bank_transactions
                      WHERE account_id IN (SELECT DISTINCT account_id FROM bank_transactions
                                            WHERE forma_recebimento_id IN ({ph}))""", list(fs))
                 ult_extrato = (cur.fetchone() or {}).get('m')
-            else:
-                ult_extrato = None
+
+            pag = defaultdict(lambda: {'vendas': set(), 'n': 0, 'vendido': 0.0,
+                                       'taxa': 0.0, 'liquido': 0.0})
+            receber = defaultdict(lambda: {'valor': 0.0, 'n': 0, 'previsto': None})
+            por_venda = defaultdict(lambda: {'vendido': 0.0, 'liquido': 0.0, 'pago_em': None})
+            for vd, pago, prev, vendido, taxa, liq in vendas:
+                pv = por_venda[vd]
+                pv['vendido'] += vendido
+                if pago:
+                    p = pag[pago]
+                    p['vendas'].add(vd)
+                    p['n'] += 1
+                    p['vendido'] += vendido
+                    p['taxa'] += taxa
+                    p['liquido'] += liq
+                    pv['liquido'] += liq
+                    pv['pago_em'] = max(pv['pago_em'] or pago, pago)
+                else:
+                    r = receber[vd]
+                    r['valor'] += vendido
+                    r['n'] += 1
+                    r['previsto'] = prev
 
             linhas = []
             for d in sorted(pag):
                 p = pag[d]
+                tot = round(total_dia.get(d, p['liquido']), 2)
                 ext, n = extrato.get(d, (0.0, 0))
                 if not n and ult_extrato and d > ult_extrato:
-                    st = 'aguardando'          # o OFX desse dia ainda nao veio
-                elif n and abs(ext - p['liquido']) < _TOL_CENTAVOS:
+                    st = 'aguardando'
+                elif n and abs(ext - tot) < _TOL_CENTAVOS:
                     st = 'ok'
                 else:
                     st = 'diverge'
                 linhas.append({
                     'data': d, 'vendas': sorted(p['vendas']), 'n': p['n'],
                     'vendido': round(p['vendido'], 2), 'taxa': round(p['taxa'], 2),
-                    'abatimentos': round(p['abatimentos'], 2),
-                    'liquido': round(p['liquido'], 2), 'extrato': round(ext, 2),
-                    'n_creditos': n, 'dif': round(ext - p['liquido'], 2), 'status': st,
+                    'liquido': round(p['liquido'], 2), 'total_dia': tot,
+                    'outras': round(tot - p['liquido'] + abat_dia.get(d, 0.0), 2),
+                    'abatimentos': round(abat_dia.get(d, 0.0), 2),
+                    'extrato': round(ext, 2), 'n_creditos': n,
+                    'dif': round(ext - tot, 2), 'status': st,
                 })
-            # Credito no extrato num dia em que o arquivo nao diz que pagou
-            d0 = desde.get(b['id'])
-            for d, (ext, n) in sorted(extrato.items()):
-                if d not in pag and not (d0 and d < d0):
-                    linhas.append({'data': d, 'vendas': [], 'n': 0, 'vendido': 0.0,
-                                   'taxa': 0.0, 'abatimentos': 0.0, 'liquido': 0.0,
-                                   'extrato': round(ext, 2), 'n_creditos': n,
-                                   'dif': round(ext, 2), 'status': 'sem_pagamento'})
-            linhas.sort(key=lambda x: x['data'])
-            a_receber = sorted(
-                ({'data_venda': k[0], 'pago_em': k[1], 'previsto': k[2],
-                  'valor': round(v['valor'], 2), 'n': v['n']} for k, v in receber.items()),
-                key=lambda x: x['data_venda'])
-            pagos = [x for x in linhas if x['n']]
-            vendido = sum(x['vendido'] for x in pagos)
-            taxa = sum(x['taxa'] for x in pagos)
+            a_receber = [{'data_venda': d, 'valor': round(r['valor'], 2), 'n': r['n'],
+                          'previsto': r['previsto'], 'pago_em': None}
+                         for d, r in sorted(receber.items())]
+            vendido = sum(v[3] for v in vendas)
+            vendido_pago = sum(x['vendido'] for x in linhas)
+            taxa = sum(x['taxa'] for x in linhas)
             saida[b['id']] = {
                 'operadora': OPERADORAS[op]['nome'],
                 'pagamentos': linhas,
                 'a_receber': a_receber,
-                'vendido_pago': vendido,
-                'taxa': taxa,
-                'taxa_pct': (taxa / vendido * 100) if vendido else None,
-                'abatimentos': sum(x['abatimentos'] for x in pagos),
-                'liquido': sum(x['liquido'] for x in pagos),
-                'extrato': sum(x['extrato'] for x in linhas),
-                'total_receber': sum(x['valor'] for x in a_receber),
+                'por_venda': dict(por_venda),
+                'vendido': round(vendido, 2),
+                'vendido_pago': round(vendido_pago, 2),
+                'taxa': round(taxa, 2),
+                'taxa_pct': (taxa / vendido_pago * 100) if vendido_pago else None,
+                'abatimentos': round(sum(x['abatimentos'] for x in linhas), 2),
+                'liquido': round(sum(x['liquido'] for x in linhas), 2),
+                'total_receber': round(sum(x['valor'] for x in a_receber), 2),
                 'n_ok': sum(1 for x in linhas if x['status'] == 'ok'),
                 'n_aguardando': sum(1 for x in linhas if x['status'] == 'aguardando'),
-                'n_problema': sum(1 for x in linhas if x['status'] in ('diverge', 'sem_pagamento')),
+                'n_problema': sum(1 for x in linhas if x['status'] == 'diverge'),
                 'contrato': (float(b['taxa_contratada']) if b.get('taxa_contratada') is not None
                              else OPERADORAS[op].get('taxa')),
             }
