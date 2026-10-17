@@ -1315,10 +1315,12 @@ def conferencia_sipag(conn, bandeira_id, forma_ids, data_inicio, data_fim):
 
 # ── a venda da operadora, no formato do motor da Conferencia ──────────────────
 #
-# A aba "Operadora" e a MESMA tela da aba "Caixa" -- mesmos cards, mesmos
-# ciclos, mesma conferencia por valor --, so que a venda sai do arquivo da
-# operadora. Por isso aqui so se entrega a venda no formato que o motor
-# (routes/conf_cartoes._build_report) ja le; o resto e dele.
+# A aba "Operadora" e a MESMA tela da aba "Caixa" -- mesmos cards, mesma
+# tabela de ciclos --, so que a venda E a data em que ela foi paga saem do
+# arquivo da operadora. A primeira versao (c2b6b0c5) mandava so a venda e
+# deixava o motor adivinhar o pagamento pelo prazo da bandeira: na X7, que
+# paga com 0 a 44 dias, sobrava "ainda nao caiu" e "caiu sem venda" que nao
+# existiam. Aqui se entregam os ciclos prontos.
 
 def _operadora_de(nome, tipo):
     nome = _sem_acento(nome).strip().upper()
@@ -1359,63 +1361,115 @@ def _sipag_desde(cur, sb, sf, forma_ids):
                 pagos[-1][0])
 
 
-def vendas_operadora(conn, bandeiras, vinculos_map, data_inicio, data_fim):
-    """(bandeiras, desde, linhas_por_dia, vendas_uma_a_uma) para o motor.
+def ciclos_operadora(conn, bandeiras, vinculos_map, data_inicio, data_fim):
+    """(bandeiras, desde, ciclos) para o motor da Conferencia, na aba Operadora.
 
-    - bandeiras: so as que tem operadora com arquivo; copia de cada uma, sem
-      o saldo anterior (ele e acerto do CAIXA) e com a taxa do contrato da
-      operadora quando a bandeira nao tem (Baratao: 2%).
-    - desde: {bandeira_id: data} a partir de quando o arquivo cobre a
-      bandeira; o credito do extrato de antes nao e desta operadora.
-    - linhas_por_dia: [{data_venda, bandeira_id, bandeira_nome, tipo_cartao,
-      total_venda}], como o _fetch_vendas.
-    - vendas_uma_a_uma: {bandeira_id: [{data, valor}]}, para a conferencia
-      casada por valor.
+    O arquivo diz QUANDO cada venda foi paga -- nao ha o que adivinhar pelo
+    prazo. Cada ciclo e um dia de pagamento com as vendas que ele pagou:
+
+        ciclos = {bandeira_id: {data_pagamento_iso: {data_venda_iso: valor}}}
+
+    - X7: a Dt. Liquidacao de cada venda;
+    - SIPAG: a Data do pagamento do relatorio de recebidas;
+    - Baratao: o dia do PIX que pagou aquele dia de abastecimento (_casar_pix).
+    Venda ainda nao paga entra no dia PREVISTO, e o motor a conta como "ainda
+    nao caiu". Entra o ciclo pago no periodo e a venda do periodo paga depois.
+
+    - bandeiras: so as que tem operadora; copia de cada uma, sem o saldo
+      anterior (acerto do CAIXA) e com o contrato da operadora quando a
+      bandeira nao tem (Baratao: 2%).
+    - desde: {bandeira_id: data}; credito do extrato antes disso nao e desta
+      operadora (SIPAG antes de 15/07/2026: maquininha antiga).
     """
     ensure_tables(conn)
     ensure_tables_sipag(conn)
-    fim = (datetime.strptime(data_fim, '%Y-%m-%d') + timedelta(days=1)).date()
-    saida_band, desde, linhas = [], {}, []
-    uma_a_uma = defaultdict(list)
+    ini = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+    fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
+    fim1 = fim + timedelta(days=1)
+    saida_band, desde, ciclos = [], {}, {}
     cur = conn.cursor(dictionary=True)
+
+    def entra(pago, prev, venda_d):
+        """(data do ciclo, entra?) de uma venda."""
+        if pago:
+            if ini <= pago <= fim:
+                return pago, True
+            return pago, (ini <= venda_d <= fim and pago > fim)
+        return (prev or venda_d), ini <= venda_d <= fim
+
     try:
         for b in bandeiras:
             op = _operadora_de(b.get('nome'), b.get('tipo'))
             if not op:
                 continue
+            c = defaultdict(lambda: defaultdict(float))
+            d0 = None
             if op == 'X7':
                 cur.execute("""
-                    SELECT dt_operacao AS t, bruto - desconto_lote AS v
+                    SELECT DATE(dt_operacao) AS v, bruto - desconto_lote AS valor,
+                           dt_liquidacao AS pago, dt_previsao AS prev
                       FROM cartao_arquivo_vendas
-                     WHERE operadora='X7' AND dt_operacao >= %s AND dt_operacao < %s""",
-                    (data_inicio, fim))
-                vendas = cur.fetchall()
+                     WHERE operadora='X7'
+                       AND (dt_liquidacao BETWEEN %s AND %s
+                            OR (dt_operacao >= %s AND dt_operacao < %s))""",
+                    (ini, fim, ini, fim1))
+                for r in cur.fetchall():
+                    rd, ok = entra(r['pago'], r['prev'], r['v'])
+                    if ok:
+                        c[rd.isoformat()][r['v'].isoformat()] += float(r['valor'] or 0)
                 cur.execute("SELECT MIN(DATE(dt_operacao)) AS d FROM cartao_arquivo_vendas "
                             "WHERE operadora='X7'")
                 d0 = (cur.fetchone() or {}).get('d')
             elif op == 'BARATAO':
+                janela = timedelta(days=_JANELA_PIX * 2)
                 cur.execute("""
-                    SELECT dt_abastecimento AS t, bruto - desconto AS v
+                    SELECT DATE(dt_abastecimento) AS d, SUM(bruto - desconto) AS venda,
+                           SUM(repasse) AS repasse
                       FROM cartao_baratao_cupons
-                     WHERE dt_abastecimento >= %s AND dt_abastecimento < %s""",
-                    (data_inicio, fim))
-                vendas = cur.fetchall()
+                     WHERE dt_abastecimento >= %s AND dt_abastecimento < %s
+                     GROUP BY DATE(dt_abastecimento)""", (ini - janela, fim1))
+                dias = {r['d']: r for r in cur.fetchall()}
+                pix = []
+                fs = vinculos_map.get(b['id'], [])
+                if fs:
+                    ph = ','.join(['%s'] * len(fs))
+                    cur.execute(f"""
+                        SELECT id, data_transacao AS d, valor AS v FROM bank_transactions
+                         WHERE tipo='CREDIT' AND forma_recebimento_id IN ({ph})
+                           AND data_transacao BETWEEN %s AND %s
+                         ORDER BY data_transacao, id""",
+                        list(fs) + [ini - janela, fim + timedelta(days=_JANELA_PIX)])
+                    pix = [{'id': r['id'], 'd': r['d'], 'v': round(float(r['v']), 2)}
+                           for r in cur.fetchall()]
+                casados = _casar_pix({d: round(float(r['repasse']), 2)
+                                      for d, r in dias.items()}, pix)
+                for d, r in dias.items():
+                    ps = casados.get(d)
+                    pago = max(p['d'] for p in ps) if ps else None
+                    rd, ok = entra(pago, d + timedelta(days=2), d)
+                    if ok:
+                        c[rd.isoformat()][d.isoformat()] += float(r['venda'] or 0)
                 cur.execute("SELECT MIN(DATE(dt_abastecimento)) AS d FROM cartao_baratao_cupons")
                 d0 = (cur.fetchone() or {}).get('d')
             else:
                 sb, sf = _sipag_da_bandeira(b.get('nome'), b.get('tipo'))
                 if not sb or not sf:
                     continue
+                d0 = _sipag_desde(cur, sb, sf, vinculos_map.get(b['id'], []))
                 cur.execute("""
-                    SELECT dt_transacao AS t, bruto AS v
+                    SELECT DATE(dt_transacao) AS v, bruto AS valor,
+                           dt_pagamento AS pago, dt_prevista AS prev
                       FROM cartao_sipag_transacoes
                      WHERE bandeira=%s AND forma=%s AND nsu <> '0'
-                       AND arq_realizadas IS NOT NULL
-                       AND dt_transacao >= %s AND dt_transacao < %s""",
-                    (sb, sf, data_inicio, fim))
-                vendas = cur.fetchall()
-                d0 = _sipag_desde(cur, sb, sf, vinculos_map.get(b['id'], []))
-            if d0 is None and not vendas:
+                       AND (dt_pagamento BETWEEN %s AND %s
+                            OR (dt_transacao >= %s AND dt_transacao < %s))""",
+                    (sb, sf, ini, fim, ini, fim1))
+                for r in cur.fetchall():
+                    rd, ok = entra(r['pago'], r['prev'], r['v'])
+                    # antes de a SIPAG assumir, o pagamento e de teste
+                    if ok and not (d0 and rd < d0):
+                        c[rd.isoformat()][r['v'].isoformat()] += float(r['valor'] or 0)
+            if d0 is None and not c:
                 continue
             copia = dict(b)
             copia['saldo_anterior'] = 0.0
@@ -1425,17 +1479,8 @@ def vendas_operadora(conn, bandeiras, vinculos_map, data_inicio, data_fim):
             saida_band.append(copia)
             if d0:
                 desde[b['id']] = d0
-            por_dia = defaultdict(float)
-            for v in vendas:
-                d = v['t'].date() if hasattr(v['t'], 'date') else v['t']
-                valor = float(v['v'] or 0)
-                por_dia[d] += valor
-                uma_a_uma[b['id']].append({'data': d, 'valor': valor})
-            for d, total in sorted(por_dia.items()):
-                linhas.append({'data_venda': d, 'bandeira_id': b['id'],
-                               'bandeira_nome': b.get('nome'),
-                               'tipo_cartao': b.get('tipo'),
-                               'total_venda': round(total, 2)})
+            ciclos[b['id']] = {rd: {sd: round(v, 2) for sd, v in vs.items()}
+                               for rd, vs in c.items()}
     finally:
         cur.close()
-    return saida_band, desde, linhas, uma_a_uma
+    return saida_band, desde, ciclos

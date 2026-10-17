@@ -772,7 +772,7 @@ body > .container-fluid:has(#ccz){
       {% if card.falta_lancamento %}
       <div class="alerta alerta--neg"><i class="bi bi-exclamation-triangle-fill"></i>
         a taxa não vale: {{ card.total_sem_venda | fmtmoney }} caíram sem venda
-        lançada no caixa</div>
+        {{ 'no arquivo da operadora' if fonte == 'operadora' else 'lançada no caixa' }}</div>
       {% elif card.taxa is none %}
       <div class="alerta"><i class="bi bi-hourglass-split"></i>
         nada foi liquidado ainda neste período</div>
@@ -1012,10 +1012,18 @@ body > .container-fluid:has(#ccz){
   {% endfor %}
 
   <div class="rod">
+    {% if fonte == 'operadora' %}
+    <b>Dt. venda</b> é a data da venda no arquivo da operadora, e
+    <b>Dt. recebimento</b> é o dia em que a operadora diz que pagou — nada é
+    contado pelo prazo. <b>Recebimento</b> é o que caiu no extrato nesse dia:
+    se ele bate, o pagamento está provado. Venda ainda não paga aparece no dia
+    previsto, em <b>ainda não caiu</b>.
+    {% else %}
     <b>Dt. venda</b> é a data do fechamento de caixa. <b>Dt. recebimento</b> é a
     data esperada da liquidação, contada no prazo em dias úteis da bandeira —
     ela pula fim de semana e feriado nacional, e por isso a linha verde não é
     atraso: é dia em que o banco não operou.
+    {% endif %}
     <b>Diferença</b> é a venda do ciclo menos o recebimento: positiva é taxa
     cobrada, negativa é operadora que pagou a mais.
     <b>Dif. acumulada</b> é o saldo dessas diferenças ao longo dos ciclos, e

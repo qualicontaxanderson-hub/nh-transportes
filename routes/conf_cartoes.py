@@ -778,7 +778,7 @@ def _conferir_taxa(vendas, recebimentos, taxa, tol=0.02):
 
 
 def _conferencia(conn, data_inicio, data_fim, empresa_ids, report, vinculos_map,
-                 ajustes=None, feriados_set=None, vendas_override=None):
+                 ajustes=None, feriados_set=None):
     """Anexa a cada bandeira a conferência da taxa, casada por VALOR.
 
     Busca o lançamento CRU dos dois lados -- e não a soma do dia, que é o que
@@ -799,25 +799,18 @@ def _conferencia(conn, data_inicio, data_fim, empresa_ids, report, vinculos_map,
             ep = ','.join(['%s'] * len(empresa_ids))
             w_emp = f' AND lc.cliente_id IN ({ep})'
             p_emp = list(empresa_ids)
+        cur.execute(
+            f"""SELECT lcc.bandeira_cartao_id AS bid, lc.data AS d,
+                       lcc.valor AS v
+                  FROM lancamentos_caixa_comprovacao lcc
+                  JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+                 WHERE lcc.bandeira_cartao_id IN ({ph})
+                   AND lc.data BETWEEN %s AND %s{w_emp}""",
+            bids + [data_inicio, data_fim] + p_emp)
         vendas = defaultdict(list)
-        if vendas_override is not None:
-            # Aba Operadora: a venda uma a uma do arquivo, no mesmo periodo.
-            _di, _df = _parse_iso(data_inicio), _parse_iso(data_fim)
-            for bid in bids:
-                vendas[bid] = [v for v in vendas_override.get(bid, [])
-                               if _di <= v['data'] <= _df]
-        else:
-            cur.execute(
-                f"""SELECT lcc.bandeira_cartao_id AS bid, lc.data AS d,
-                           lcc.valor AS v
-                      FROM lancamentos_caixa_comprovacao lcc
-                      JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
-                     WHERE lcc.bandeira_cartao_id IN ({ph})
-                       AND lc.data BETWEEN %s AND %s{w_emp}""",
-                bids + [data_inicio, data_fim] + p_emp)
-            for r in cur.fetchall():
-                vendas[int(r['bid'])].append({'data': _parse_iso(r['d']),
-                                              'valor': float(r['v'] or 0)})
+        for r in cur.fetchall():
+            vendas[int(r['bid'])].append({'data': _parse_iso(r['d']),
+                                          'valor': float(r['v'] or 0)})
         # O ajuste conta como venda tambem aqui: e ele que faz o credito
         # orfao encontrar par.
         for a in (ajustes or []):
@@ -878,7 +871,8 @@ def _conferencia(conn, data_inicio, data_fim, empresa_ids, report, vinculos_map,
         }
 
 
-def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feriados_set=None, data_inicio_obj=None):
+def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feriados_set=None, data_inicio_obj=None,
+                  ciclos_override=None):
     """
     Para cada bandeira vinculada, organiza as vendas em ciclos de liquidação
     (usando prazo_compensacao_dias e dias úteis).
@@ -889,6 +883,11 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
 
     Cada linha representa uma data de venda. Na última linha do ciclo são
     exibidos o recebimento, a Dif. Acumulada e a % de taxa cobrada.
+
+    ciclos_override (aba Operadora): {bandeira_id: {data_pagamento: {data_venda:
+    valor}}} -- os ciclos prontos, com a data em que o arquivo da operadora
+    diz que a venda foi paga. Com ele o prazo nao e usado: nao ha o que
+    adivinhar. Sem ele (aba Caixa), tudo como sempre.
 
     DIF (taxa):  +  = operadora descontou taxa  (venda > recebimento)
                  −  = operadora pagou a mais    (recebimento > venda)
@@ -954,8 +953,18 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
         else:
             saldo_aplicavel = False
 
+        _ov = ciclos_override.get(bid) if ciclos_override is not None else None
+
+        def _venda(rd, sd, _ov=_ov, _bid=bid):
+            if _ov is not None:
+                return _ov.get(rd, {}).get(sd, 0.0)
+            return vendas_idx.get((_bid, sd), 0.0)
+
         # Todas as datas de venda desta bandeira no período
-        sale_dates = sorted(d for (b, d) in vendas_idx if b == bid)
+        if _ov is not None:
+            sale_dates = sorted({sd for c in _ov.values() for sd in c})
+        else:
+            sale_dates = sorted(d for (b, d) in vendas_idx if b == bid)
 
         # Todas as datas de recebimento real no período
         all_receipt_dates = set()
@@ -974,7 +983,10 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
         # que o usuário veja as vendas de sex/sáb anteriores que chegam junto com
         # a primeira segunda-feira do período, permitindo conferência correta.
         cycles = defaultdict(list)
-        for sd in sale_dates:
+        if _ov is not None:
+            for rd, vs in _ov.items():
+                cycles[rd] = sorted(vs)
+        for sd in (sale_dates if _ov is None else []):
             sd_obj = _parse_iso(sd)
             if sd_obj:
                 rd_obj = _data_esperada(sd_obj, prazo, prazo_tipo, feriados_set)
@@ -1028,7 +1040,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                     if _i['bancos'] and _i['bancos'] not in _bancos:
                         _bancos.append(_i['bancos'])
             _banco_txt = ' + '.join(_bancos)
-            cycle_venda = sum(vendas_idx.get((bid, sd), 0.0) for sd in cycle_sale_dates)
+            cycle_venda = sum(_venda(rd, sd) for sd in cycle_sale_dates)
 
             # No 1º ciclo: se o saldo_anterior for aplicável para o período consultado,
             # soma-o às vendas efetivas (pré-período pendentes de liquidação no 1º recebimento).
@@ -1090,7 +1102,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                     total_diferenca += cycle_fee
 
                 for i, sd in enumerate(cycle_sale_dates):
-                    venda = vendas_idx.get((bid, sd), 0.0)
+                    venda = _venda(rd, sd)
                     is_last = (i == num_sale_rows - 1)
 
                     sd_obj = _parse_iso(sd)
@@ -1340,16 +1352,17 @@ def conf_cartoes():
                 (data_inicio_obj - timedelta(days=_MAX_LOOKBACK_DAYS)).isoformat()
                 if data_inicio_obj else data_inicio
             )
-            vendas_override = None
+            ciclos_override = None
             if fonte == 'operadora':
-                # A venda sai do arquivo da operadora; o resto -- extrato,
-                # ciclos, conferencia -- e o mesmo motor da aba Caixa. Sem
-                # ajuste (ele e acerto do caixa) e sem filtro de empresa (o
-                # arquivo nao diz de qual empresa e).
-                (bandeiras_filtered, _desde, vendas_rows,
-                 vendas_override) = cartao_arquivo.vendas_operadora(
-                    conn, bandeiras_filtered, vinculos_map,
-                    data_inicio_extended, data_fim)
+                # A venda E a data do pagamento saem do arquivo da operadora;
+                # o motor so monta a tela e confere com o extrato. Sem ajuste
+                # (acerto do caixa), sem filtro de empresa (o arquivo nao diz a
+                # empresa) e sem a conferencia por valor (ela adivinha o par,
+                # e aqui o par e conhecido).
+                (bandeiras_filtered, _desde,
+                 ciclos_override) = cartao_arquivo.ciclos_operadora(
+                    conn, bandeiras_filtered, vinculos_map, data_inicio, data_fim)
+                vendas_rows = []
                 vinculos_map = defaultdict(list, {
                     b['id']: vinculos_map.get(b['id'], []) for b in bandeiras_filtered})
                 forma_ids = list(set(f for fs in vinculos_map.values() for f in fs))
@@ -1378,14 +1391,13 @@ def conf_cartoes():
              grand_total_diferenca, grand_saldo, grand_a_receber,
              grand_sem_venda) = _build_report(
                 bandeiras_filtered, vinculos_map, vendas_rows, receb_rows,
-                feriados_set, data_inicio_obj)
+                feriados_set, data_inicio_obj, ciclos_override=ciclos_override)
             # O tipo escolhido corta a lista DEPOIS de apurada, e os totais do
             # topo sao refeitos: o card TODAS tem de somar o que esta na tela,
             # e nao o que ficou de fora dela.
-            _conferencia(conn, data_inicio, data_fim,
-                         None if fonte == 'operadora' else empresa_ids, report,
-                         vinculos_map, ajustes, feriados_set,
-                         vendas_override=vendas_override)
+            if fonte != 'operadora':
+                _conferencia(conn, data_inicio, data_fim, empresa_ids, report,
+                             vinculos_map, ajustes, feriados_set)
             # Os ajustes de cada bandeira vao para a tela, para ficarem
             # visiveis e apagaveis -- ajuste escondido e pior do que ajuste.
             _aj_por_band = defaultdict(list)
