@@ -46,6 +46,12 @@
   /* o acrescimo e receita, entao anda junto do verde do valor -- mas em tom
      proprio, porque quem procura "quanto vendi" nao quer somar dois verdes */
   #vendas .n--acr{ background:linear-gradient(135deg,#6E8F3A,#5B7A2C); }
+  #vendas .acr-div{ margin-top:.25rem; border-top:1px solid rgba(255,255,255,.25);
+    padding-top:.2rem; display:grid; grid-template-columns:1fr 1fr; gap:0 .7rem; }
+  #vendas .acr-div div{ display:flex; justify-content:space-between; gap:.3rem;
+    font-size:.68rem; font-variant-numeric:tabular-nums; line-height:1.4; }
+  #vendas .acr-div span{ opacity:.85; font-weight:700; }
+  #vendas .acr-div b{ font-weight:800; }
   #vendas .c-acr{ display:block; font-size:.66rem; font-weight:700;
     color:#5B7A2C; font-variant-numeric:tabular-nums; }
   #vendas .c-dsc{ display:block; font-size:.66rem; font-weight:700;
@@ -277,8 +283,19 @@
     {% if (totais.acrescimo or 0) > 1 or (totais.desconto or 0) > 1 %}
     <div class="n n--acr"><div class="r">Acréscimo · cartão e prazo</div>
       <div class="v">{{ (totais.acrescimo or 0) | formatar_moeda }}</div>
+      {#- o acrescimo aberto pela forma de pagamento da nota (routes/vendas) -#}
+      {%- set pf = totais.por_forma %}
+      <div class="acr-div">
+        {%- for k, rot in [('credito', 'Crédito'), ('prazo', 'Prazo'), ('debito', 'Débito'),
+                           ('misto', 'Misto'), ('outros', 'Outros')] if pf[k].acr|abs > 0.005 %}
+        <div><span>{{ rot }}</span><b>{{ pf[k].acr | formatar_moeda }}</b></div>
+        {%- endfor %}
+      </div>
       {%- if (totais.desconto or 0) > 1 %}
-      <div class="sub">desconto −{{ (totais.desconto or 0) | formatar_moeda }}</div>
+      <div class="sub">desconto −{{ (totais.desconto or 0) | formatar_moeda }}
+        {%- set _ds = [] %}{% for k, rot in [('credito', 'crédito'), ('prazo', 'prazo'), ('debito', 'débito'),
+                           ('misto', 'misto'), ('outros', 'dinheiro e outros')] if pf[k].dsc|abs > 0.005 %}{% if _ds.append(rot ~ ' ' ~ (pf[k].dsc | formatar_moeda)) %}{% endif %}{% endfor %}
+        {%- if _ds %} ({{ _ds | join(' · ') }}){% endif %}</div>
       {%- endif %}</div>
     {% endif %}
     <div class="n n--canc{{ ' tem' if totais.canceladas }}"><div class="r">Canceladas</div>

@@ -14,6 +14,7 @@ get_db_connection() + cursor(dictionary=True), SQL 100% parametrizado (%s).
 NAO altera nada existente; NAO toca no robo (vendas_api) nem nas tabelas.
 """
 import math
+import unicodedata
 from datetime import date, datetime, timedelta
 from urllib.parse import urlencode
 
@@ -24,6 +25,21 @@ from utils.db import get_db_connection
 from utils.pagamentos import classificar_recebimento
 
 vendas_bp = Blueprint('vendas', __name__, url_prefix='/vendas')
+
+
+def _grupo_forma(forma):
+    """'Cartao Credito' / 'Cartão Crédito' -> 'credito'; forma com '+' -> 'misto'."""
+    f = unicodedata.normalize('NFKD', forma or '').encode('ascii', 'ignore').decode()
+    f = f.replace(' ', '').lower()
+    if '+' in f:
+        return 'misto'
+    if f == 'cartaocredito':
+        return 'credito'
+    if f == 'cartaodebito':
+        return 'debito'
+    if f.startswith('creditoloja'):
+        return 'prazo'
+    return 'outros'
 
 # Notas por pagina.
 POR_PAGINA = 100
@@ -146,6 +162,29 @@ def index():
         totais['produtos'] = (float(totais['valor'])
                               - float(totais['acrescimo'])
                               + float(totais['desconto']))
+        # O acrescimo e o desconto divididos pela forma de pagamento da nota.
+        # A forma vem escrita de dois jeitos ("Cartão Crédito" e "Cartao
+        # Credito"), entao junta sem acento; a nota de forma mista
+        # ("Dinheiro+Cartao Credito") nao diz quanto foi em cada uma e fica
+        # em "misto".
+        cur.execute(
+            f"""
+            SELECT v.forma_pagamento AS forma,
+                   COALESCE(SUM(COALESCE(v.vlr_acrescimo, 0)), 0) AS acr,
+                   COALESCE(SUM(COALESCE(v.vlr_desconto, 0)), 0) AS dsc
+            FROM vendas_xml v
+            {where_sql}{' AND ' if where_sql else ' WHERE '}v.situacao <> 'cancelada'
+            GROUP BY v.forma_pagamento
+            """,
+            params,
+        )
+        por_forma = {k: {'acr': 0.0, 'dsc': 0.0}
+                     for k in ('credito', 'prazo', 'debito', 'misto', 'outros')}
+        for r in cur.fetchall():
+            pf = por_forma[_grupo_forma(r['forma'])]
+            pf['acr'] += float(r['acr'] or 0)
+            pf['dsc'] += float(r['dsc'] or 0)
+        totais['por_forma'] = por_forma
         # COUNT vem int, mas SUM(CASE...) vem Decimal — sem o int(),
         # float/Decimal estoura TypeError (500 em producao, 19/08).
         totais['canceladas'] = int(totais['canceladas'])
