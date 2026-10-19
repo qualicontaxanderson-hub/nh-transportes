@@ -3,6 +3,7 @@ from flask_login import login_required, current_user
 from utils.db import get_db_connection
 from utils.pagamentos import classificar_recebimento
 from utils.fuso import hoje_brasilia, janelas_dia_mes
+from routes.vendas import _grupo_forma
 
 bp = Blueprint('bases', __name__)
 
@@ -44,7 +45,7 @@ def _dados_onda1_dashboard(hoje=None):
     def _p_vazio():
         return {'notas': 0, 'total': 0.0, 'ticket': 0.0, 'litros_comb': 0.0, 'linhas': [],
                 'sub_comb': 0.0, 'sub_outros': 0.0, 'qt_outros': 0,
-                'sub_produtos': 0.0, 'acrescimo': 0.0, 'desconto': 0.0}
+                'sub_produtos': 0.0, 'acrescimo': 0.0, 'desconto': 0.0, 'acr_forma': {}}
     _r_vazio = {'venda': 0.0, 'comigo': 0.0, 'meu': 0.0, 'repasse': 0.0,
                 'total': 0.0, 'operadoras': []}
     vazio = {'dia': _p_vazio(), 'mes': _p_vazio(), 'ranking': [],
@@ -66,6 +67,16 @@ def _dados_onda1_dashboard(hoje=None):
                 "FROM vendas_xml v WHERE v.situacao <> 'cancelada' "
                 "AND v.dh_emissao >= %s AND v.dh_emissao < %s", (ini, fim))
             cab = cur.fetchone() or {}
+            # O acrescimo aberto pela forma de pagamento da nota (a mesma
+            # divisao do card da tela /vendas -- routes/vendas._grupo_forma).
+            cur.execute(
+                "SELECT v.forma_pagamento AS forma, COALESCE(SUM(v.vlr_acrescimo),0) AS acr "
+                "FROM vendas_xml v WHERE v.situacao <> 'cancelada' "
+                "AND v.dh_emissao >= %s AND v.dh_emissao < %s "
+                "GROUP BY v.forma_pagamento", (ini, fim))
+            acr_forma = {k: 0.0 for k in ('credito', 'prazo', 'debito', 'misto', 'outros')}
+            for r in cur.fetchall():
+                acr_forma[_grupo_forma(r['forma'])] += float(r['acr'] or 0)
             notas = int(cab.get('notas') or 0)
             total = float(cab.get('total') or 0)
             # Corpo: por categoria (nível ITEM).
@@ -94,7 +105,8 @@ def _dados_onda1_dashboard(hoje=None):
                     'qt_outros': int(o['itens']) if o else 0,
                     'sub_produtos': sub_comb + sub_outros,
                     'acrescimo': float(cab.get('acrescimo') or 0),
-                    'desconto': float(cab.get('desconto') or 0)}
+                    'desconto': float(cab.get('desconto') or 0),
+                    'acr_forma': acr_forma}
 
         dia, mes = _periodo(ini_dia, fim_dia), _periodo(ini_mes, fim_mes)
 

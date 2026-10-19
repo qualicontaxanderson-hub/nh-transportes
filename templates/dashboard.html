@@ -456,6 +456,8 @@
   .onda1-outros td { border-top: 1px dashed #e5e9f0; }
   .onda1-foot { margin-top: auto; padding-top: 10px; border-top: 2px solid #eef2f7; }
   .onda1-foot > div { display: flex; justify-content: space-between; font-size: .75rem; color: #64748b; padding: 2px 0; }
+  .onda1-foot .acr-f { font-size: .68rem; color: #94a3b8; padding: 0 0 0 12px; }
+  .onda1-foot .acr-f b { font-weight: 600; color: #64748b; }
   .onda1-foot .tot { font-size: .82rem; font-weight: 700; color: #1e293b; margin-top: 2px; }
   .onda1-live-dot { width: 9px; height: 9px; border-radius: 50%; background: #22c55e; animation: onda1pulse 1.6s infinite; }
   @keyframes onda1pulse { 0%{box-shadow:0 0 0 0 rgba(34,197,94,.55);} 70%{box-shadow:0 0 0 7px rgba(34,197,94,0);} 100%{box-shadow:0 0 0 0 rgba(34,197,94,0);} }
@@ -622,7 +624,13 @@
         <div class="onda1-foot">
           <div><span>Combustíveis + ARLA</span><b>{{ fmt_moeda(d.sub_comb) }}</b></div>
           <div><span>Outros</span><b>{{ fmt_moeda(d.sub_outros) }}</b></div>
-          {% if d.acrescimo %}<div><span>+ Acréscimo</span><b>{{ fmt_moeda(d.acrescimo) }}</b></div>{% endif %}
+          {% if d.acrescimo %}<div><span>+ Acréscimo</span><b>{{ fmt_moeda(d.acrescimo) }}</b></div>
+          {#- o acrescimo pela forma de pagamento da nota -#}
+          {%- for k, rot in [('credito', 'cartão de crédito'), ('prazo', 'cliente a prazo'), ('debito', 'cartão de débito'),
+                             ('misto', 'pagamento misto'), ('outros', 'dinheiro e outros')]
+              if (d.acr_forma[k] or 0)|abs > 0.005 %}
+          <div class="acr-f"><span>{{ rot }}</span><b>{{ fmt_moeda(d.acr_forma[k]) }}</b></div>
+          {%- endfor %}{% endif %}
           {% if d.desconto %}<div><span>− Desconto</span><b>-{{ fmt_moeda(d.desconto) }}</b></div>{% endif %}
           <div class="tot"><span>Total {{ titulo.split(' ')[-1] }}</span><b>{{ fmt_moeda(d.total) }}</b></div>
         </div>
