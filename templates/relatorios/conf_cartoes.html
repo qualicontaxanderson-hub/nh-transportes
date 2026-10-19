@@ -108,14 +108,37 @@ body > .container-fluid:has(#ccz){
   #ccz details.rel > summary{ cursor:pointer; font-size:.74rem; font-weight:800;
     color:var(--blue-deep); padding:.35rem 0; }
   /* as vendas de cada pagamento, uma a uma (aba Operadora) */
-  #ccz tr.itens > td{ padding:0 .6rem .45rem !important; background:#fbfcfe; }
-  #ccz tr.itens details > summary{ cursor:pointer; font-size:.7rem; font-weight:800;
-    color:var(--blue-deep); padding:.2rem 0; list-style:none; }
-  #ccz tr.itens details > summary::before{ content:'▸ '; }
-  #ccz tr.itens details[open] > summary::before{ content:'▾ '; }
-  #ccz table.vendas{ width:100%; font-size:.72rem; margin:.15rem 0 .2rem; }
-  #ccz table.vendas td{ padding:.18rem .35rem; border-top:1px dashed var(--linha); }
-  #ccz table.vendas td.n{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  /* a lista abre embaixo do pagamento, num painel recuado com o fio da cor
+     da bandeira, e cada coluna diz o que e */
+  #ccz tr.itens > td{ padding:0 .6rem .7rem 1.4rem !important; background:#fff !important; }
+  #ccz .vendas-box{ border:1px solid var(--linha); border-left:3px solid var(--c);
+    border-radius:10px; overflow:hidden; background:#fbfcfe;
+    box-shadow:0 1px 6px rgba(20,35,60,.05); }
+  #ccz table.vendas{ width:100%; font-size:.74rem; margin:0; }
+  #ccz table.vendas th{ background:#f5f7fb; font-size:.6rem; padding:.32rem .5rem; }
+  #ccz table.vendas td{ padding:.28rem .5rem; border-bottom:1px solid #f0f3f7; background:transparent; }
+  #ccz table.vendas tbody tr:hover td{ background:#f2f7fc; }
+  #ccz table.vendas tfoot td{ background:#f5f7fb; border-top:1px solid var(--borda);
+    font-size:.72rem; }
+  #ccz table.vendas a{ color:var(--blue-deep); font-weight:700; text-decoration:none; }
+  #ccz table.vendas a:hover{ text-decoration:underline; }
+  #ccz .abre{ border:1px solid var(--borda); background:#fff; color:var(--blue-deep);
+    border-radius:99px; padding:.05rem .5rem .05rem .35rem; font-size:.66rem;
+    font-weight:800; margin-left:.45rem; cursor:pointer; font-family:inherit;
+    display:inline-flex; align-items:center; gap:.2rem; font-style:normal; }
+  #ccz .abre:hover{ background:#eef5fd; border-color:#bcd3ea; }
+  #ccz .abre i{ font-size:.6rem; transition:transform .15s; }
+  #ccz .abre[aria-expanded="true"]{ background:var(--c); border-color:var(--c); color:#fff; }
+  #ccz .abre[aria-expanded="true"] i{ transform:rotate(90deg); }
+  #ccz .r__s{ font-size:.66rem; color:var(--ambar); font-weight:700; margin-top:.05rem; }
+  #ccz .ph__ok{ font-size:.66rem; font-weight:700; color:var(--ok); margin-top:.1rem; }
+  #ccz .ph__ok.neg{ color:var(--danger); }
+  #ccz .alerta > span{ flex:1 1 auto; }
+  @media (max-width:640px){
+    #ccz tr.itens > td{ padding:0 .4rem .6rem !important; display:block; }
+    #ccz tr.itens > td::before{ display:none; }
+    #ccz table.vendas thead{ display:none; }
+  }
   #ccz .conf__t{ display:flex; gap:.5rem; align-items:center; padding:.6rem .8rem;
     font-size:.7rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em;
     color:var(--blue-deep); }
@@ -854,83 +877,115 @@ body > .container-fluid:has(#ccz){
           {%- if card.forma_recebimento_nome %} · entra pela conta <b>{{ card.forma_recebimento_nome }}</b>{% endif %}</div>
       </div>
       <div class="ph__v">
-        <div class="ph__l {{ 'zero' if not op.n_problema else 'neg' }}">{{ op.n_ok }} de {{ op.pagamentos|length - op.n_aguardando }}</div>
-        <div class="ph__r">pagamentos conferidos</div>
+        <div class="ph__l {{ 'pos' if op.taxa > 0.005 else 'zero' }}">{{ (0 - op.taxa) | fmtmoney }}</div>
+        <div class="ph__r">Saldo final</div>
+        <div class="ph__ok {{ 'neg' if op.n_problema }}"><i class="bi {{ 'bi-check-circle-fill' if not op.n_problema else 'bi-exclamation-triangle-fill' }}"></i>
+          {{ op.n_ok }} de {{ op.pagamentos|length - op.n_aguardando }} pagamentos no extrato</div>
       </div>
     </div>
 
+    {#- Os mesmos quatro quadros do Caixa. O vendido inclui o que ainda nao
+        foi pago, por isso o "a receber" vai embaixo dele: a diferenca e a
+        taxa sao so do que ja foi pago. -#}
     <div class="resumo">
-      <div class="r"><div class="r__r">Vendido no período</div>
-        <div class="r__v">{{ op.vendido | fmtmoney }}</div></div>
-      <div class="r"><div class="r__r">Taxa{% if op.contrato %} · contrato {{ '%.2f'|format(op.contrato) }}%{% endif %}</div>
-        <div class="r__v {{ 'pos' if op.contrato and op.taxa_pct is not none and (op.taxa_pct - op.contrato)|abs < 0.05 else '' }}">{{ op.taxa | fmtmoney }}
-          {%- if op.taxa_pct is not none %} · {{ '%.2f'|format(op.taxa_pct) }}%{% endif %}</div></div>
-      <div class="r"><div class="r__r">Já pago pela operadora</div>
+      <div class="r"><div class="r__r">Vendido</div>
+        <div class="r__v">{{ op.vendido | fmtmoney }}</div>
+        {%- if op.total_receber %}<div class="r__s">{{ op.total_receber | fmtmoney }} ainda a receber</div>{% endif %}</div>
+      <div class="r"><div class="r__r">Recebido</div>
         <div class="r__v">{{ op.liquido | fmtmoney }}</div></div>
-      <div class="r"><div class="r__r">A receber</div>
-        <div class="r__v">{{ op.total_receber | fmtmoney }}</div></div>
+      <div class="r"><div class="r__r">Diferença</div>
+        <div class="r__v {{ 'neg' if op.taxa > 0.005 else 'zero' }}">{{ op.taxa | fmtmoney }}</div></div>
+      <div class="r"><div class="r__r">Taxa{% if op.contrato %} · contrato {{ '%.2f'|format(op.contrato) }}%{% endif %}</div>
+        <div class="r__v {{ 'pos' if op.contrato and op.taxa_pct is not none and (op.taxa_pct - op.contrato)|abs < 0.05 else '' }}">
+          {%- if op.taxa_pct is not none %}{{ '%.2f'|format(op.taxa_pct) }}%{% else %}—{% endif %}</div></div>
     </div>
-    <div class="alerta" style="margin:.5rem .8rem 0">
+    <div class="alerta" style="margin:0 .8rem .6rem">
       <i class="bi bi-calculator"></i>
-      {{ op.n_vendas }} venda{{ 's' if op.n_vendas != 1 }}: {{ op.vendido | fmtmoney }} vendido =
+      <span>{{ op.n_vendas }} venda{{ 's' if op.n_vendas != 1 }}: {{ op.vendido | fmtmoney }} vendido =
       {{ op.liquido | fmtmoney }} já pago + {{ op.taxa | fmtmoney }} de taxa
       {%- if op.total_receber %} + {{ op.total_receber | fmtmoney }} a receber{% endif %}
       {%- if op.n_com_cupom or op.n_sem_cupom %} · <b>{{ op.n_com_cupom }}</b> com cupom fiscal
-      {%- if op.n_sem_cupom %}, <span class="neg">{{ op.n_sem_cupom }} sem cupom</span>{% endif %}{% endif %}</div>
+      {%- if op.n_sem_cupom %}, <span class="neg">{{ op.n_sem_cupom }} sem cupom</span>{% endif %}{% endif %}</span></div>
     {% if op.abatimentos|abs > 0.005 %}
-    <div class="alerta alerta--pos" style="margin:.5rem .8rem 0">
+    <div class="alerta alerta--pos" style="margin:0 .8rem .6rem">
       <i class="bi bi-info-circle-fill"></i>
       {{ op.abatimentos | fmtmoney }} de abatimentos descontados nos pagamentos (não é taxa da venda)</div>
     {% endif %}
 
+    {#- Uma linha por pagamento, nas colunas do Caixa: Dt. venda e o dia (ou
+        os dias) das vendas que a operadora pagou juntas; Diferenca e a taxa
+        daquele pagamento. As vendas, uma a uma, abrem embaixo da linha. -#}
     {% if op.pagamentos %}
+    {% set _ac = namespace(v=0) %}
+    {% set _sem = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'] %}
     <div class="tab">
       <table>
-        <thead><tr><th class="e">Pago em</th><th class="e">Vendas de</th><th>Vendido</th>
-          <th>Taxa</th><th>Operadora pagou</th><th>Extrato do dia</th><th class="e"></th></tr></thead>
+        <thead>
+          <tr><th class="e">Dt. venda</th><th>Venda</th><th class="e">Dt. recebimento</th>
+            <th class="e">Banco</th>
+            <th>Recebimento</th><th>Diferença</th><th>Dif. acumulada</th><th>%</th></tr>
+        </thead>
         <tbody>
           {% for p in op.pagamentos %}
-          <tr class="{{ 'fora' if p.status in ('diverge', 'sem_pagamento') }}">
-            <td class="e" data-r="Pago em">{{ p.data.strftime('%d/%m') }}
-              <span class="dia-semana">{{ ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'][p.data.weekday()] }}</span></td>
-            <td class="e sub" data-r="Vendas de">
-              {%- if p.vendas %}{% for v in p.vendas %}{{ v.strftime('%d/%m') }}{{ ', ' if not loop.last }}{% endfor %}
-              {%- if p.n > 1 %} <span class="sub">({{ p.n }})</span>{% endif %}
-              {%- else %}—{% endif %}</td>
-            <td data-r="Vendido">{{ p.vendido | fmtmoney if p.n else '—' }}</td>
-            <td data-r="Taxa">{% if p.n %}{{ p.taxa | fmtmoney }}{% if p.vendido %} <span class="sub">{{ '%.2f'|format(p.taxa / p.vendido * 100) }}%</span>{% endif %}{% else %}—{% endif %}</td>
-            <td class="forte" data-r="Operadora pagou">{{ p.liquido | fmtmoney if p.n else '—' }}</td>
-            <td class="forte" data-r="Extrato do dia">{% if p.n_creditos %}{{ p.extrato | fmtmoney }}{% if p.n_creditos > 1 %} <span class="sub">({{ p.n_creditos }})</span>{% endif %}{% else %}—{% endif %}
-              {%- if p.outras|abs > 0.005 %}<div class="sub">o dia pagou {{ p.total_dia | fmtmoney }}: inclui {{ p.outras | fmtmoney }} de venda de fora do período</div>{% endif %}
-              {%- if p.abatimentos|abs > 0.005 %}<div class="sub">− {{ p.abatimentos | fmtmoney }} de abatimento</div>{% endif %}</td>
-            <td class="e" data-r="">
-              {%- if p.status == 'ok' %}<i class="bi bi-check-circle-fill" style="color:#146c43" title="caiu no extrato"></i>
-              {%- elif p.status == 'aguardando' %}<span class="sub">extrato ainda não importado</span>
+          {% set _ac.v = _ac.v - p.taxa %}
+          {% set _pp = (p.taxa / p.vendido * 100) if p.vendido else none %}
+          {% set _fora = op.contrato and _pp is not none and (_pp - op.contrato)|abs > 0.15 %}
+          <tr class="{{ 'fora' if p.status in ('diverge', 'sem_pagamento') or _fora }}">
+            <td class="e" data-r="Dt. venda">
+              {%- if p.vendas|length == 1 %}{{ p.vendas[0].strftime('%d/%m/%Y') }}<span class="dia-semana">{{ _sem[p.vendas[0].weekday()] }}</span>
+              {%- elif p.vendas %}{{ p.vendas[0].strftime('%d/%m') }} a {{ p.vendas[-1].strftime('%d/%m/%Y') }}<span class="ncred">{{ p.vendas|length }} dias</span>
+              {%- else %}—{% endif %}
+              {%- if p.itens %}<button type="button" class="abre" data-alvo="it-{{ card.bandeira_id }}-{{ loop.index }}"
+                      aria-expanded="false"><i class="bi bi-chevron-right"></i>{{ p.n }} venda{{ 's' if p.n != 1 }}</button>{% endif %}</td>
+            <td data-r="Venda">{{ p.vendido | fmtmoney if p.n else '—' }}</td>
+            <td class="e" data-r="Dt. recebimento">{{ p.data.strftime('%d/%m/%Y') }}<span class="dia-semana">{{ _sem[p.data.weekday()] }}</span></td>
+            <td class="e sub" data-r="Banco">
+              {%- if p.status == 'ok' %}<i class="bi bi-check-circle-fill" style="color:#146c43" title="caiu no extrato: {{ p.extrato | fmtmoney }}"></i> {{ p.banco }}
+              {%- if p.n_creditos > 1 %} <span class="ncred" title="{{ p.n_creditos }} lançamentos do extrato somados neste dia">{{ p.n_creditos }} créditos</span>{% endif %}
+              {%- elif p.status == 'aguardando' %}<span class="ambar">extrato ainda não importado</span>
               {%- elif p.status == 'sem_pagamento' %}<span class="neg">crédito sem pagamento no arquivo</span>
               {%- elif not p.n_creditos %}<span class="neg">não caiu no extrato</span>
-              {%- else %}<span class="neg">{{ p.dif | fmtmoney }} de diferença</span>{% endif %}</td>
+              {%- else %}{{ p.banco }} · <span class="neg">extrato {{ p.extrato | fmtmoney }}, {{ p.dif | fmtmoney }} de diferença</span>{% endif %}</td>
+            <td data-r="Recebimento">{{ p.liquido | fmtmoney if p.n else '—' }}
+              {%- if p.outras|abs > 0.005 %}<div class="sub" title="o dia pagou {{ p.total_dia | fmtmoney }}">+ {{ p.outras | fmtmoney }} de venda de fora do período</div>{% endif %}
+              {%- if p.abatimentos|abs > 0.005 %}<div class="sub">− {{ p.abatimentos | fmtmoney }} de abatimento</div>{% endif %}</td>
+            <td data-r="Diferença" class="{{ 'neg' if p.taxa > 0.005 else ('pos' if p.taxa < -0.005 else 'zero') }}">{{ p.taxa | fmtmoney if p.n else '' }}</td>
+            <td data-r="Dif. acumulada" class="{{ 'pos' if _ac.v < -0.005 else ('neg' if _ac.v > 0.005 else 'zero') }}">{{ _ac.v | fmtmoney }}</td>
+            <td data-r="%" class="{{ 'neg forte' if _fora }}">{% if _pp is not none %}{{ '%.2f'|format(_pp) }}%
+              {%- if _fora %} <i class="bi bi-exclamation-triangle-fill" title="Fora da taxa de contrato — confira este pagamento"></i>{% endif %}{% endif %}</td>
           </tr>
           {% if p.itens %}
-          <tr class="itens"><td colspan="7">
-            <details><summary>ver {{ 'a venda' if p.n == 1 else 'as %d vendas'|format(p.n) }}</summary>
-              <table class="vendas"><tbody>
-                {% for i in p.itens %}
-                <tr><td>{{ i.dt.strftime('%d/%m %H:%M') }}</td><td class="sub">{{ i.desc }}</td>
-                  <td>{% if i.cupom %}<a href="{{ url_for('vendas.detalhe', venda_id=i.cupom.id) }}" target="_blank"
-                       title="cupom emitido {{ i.cupom.dh_emissao.strftime('%d/%m %H:%M') }} · {{ i.cupom.valor_total | fmtmoney }}">NFC-e {{ i.cupom.numero }}/{{ i.cupom.serie }}</a>
-                    {%- elif i.sem_cupom %}<span class="neg" title="nenhum cupom fiscal casou com esta venda">sem cupom</span>{% endif %}</td>
-                  <td class="n">{{ i.vendido | fmtmoney }}</td>
-                  <td class="n sub">− {{ i.taxa | fmtmoney }}</td>
-                  <td class="n"><b>{{ i.liquido | fmtmoney }}</b></td></tr>
-                {% endfor %}
-              </tbody></table>
-            </details></td></tr>
+          <tr class="itens" id="it-{{ card.bandeira_id }}-{{ loop.index }}" hidden><td colspan="8">
+            <div class="vendas-box">
+              <table class="vendas">
+                <thead><tr><th class="e">Venda</th>
+                  {%- for h in op.cab %}<th class="e">{{ h }}</th>{% endfor %}
+                  <th class="e">Cupom fiscal</th><th>Vendido</th><th>Taxa</th><th>Líquido</th></tr></thead>
+                <tbody>
+                  {% for i in p.itens %}
+                  <tr><td class="e" data-r="Venda">{{ i.dt.strftime('%d/%m') }} <b>{{ i.dt.strftime('%H:%M') }}</b></td>
+                    {%- for c in i.cols %}<td class="e{{ ' sub' if not loop.first }}" data-r="{{ op.cab[loop.index0] }}">{{ c or '—' }}</td>{% endfor %}
+                    <td class="e" data-r="Cupom fiscal">{% if i.cupom %}<a href="{{ url_for('vendas.detalhe', venda_id=i.cupom.id) }}" target="_blank"
+                         title="cupom emitido {{ i.cupom.dh_emissao.strftime('%d/%m %H:%M') }} · {{ i.cupom.valor_total | fmtmoney }}">NFC-e {{ i.cupom.numero }}/{{ i.cupom.serie }}</a>
+                      {%- elif i.sem_cupom %}<span class="neg" title="nenhum cupom fiscal casou com esta venda">sem cupom</span>{% else %}—{% endif %}</td>
+                    <td data-r="Vendido">{{ i.vendido | fmtmoney }}</td>
+                    <td class="sub" data-r="Taxa">− {{ i.taxa | fmtmoney }}</td>
+                    <td class="forte" data-r="Líquido">{{ i.liquido | fmtmoney }}</td></tr>
+                  {% endfor %}
+                </tbody>
+                <tfoot><tr><td class="e" colspan="{{ 2 + op.cab|length }}">{{ p.n }} venda{{ 's' if p.n != 1 }} paga{{ 's' if p.n != 1 }} em {{ p.data.strftime('%d/%m') }}</td>
+                  <td>{{ p.vendido | fmtmoney }}</td><td>− {{ p.taxa | fmtmoney }}</td><td>{{ p.liquido | fmtmoney }}</td></tr></tfoot>
+              </table>
+            </div></td></tr>
           {% endif %}
           {% endfor %}
         </tbody>
-        <tfoot><tr><td class="e" colspan="2"><b>Total pago</b></td>
-          <td><b>{{ op.vendido_pago | fmtmoney }}</b></td><td><b>{{ op.taxa | fmtmoney }}</b></td>
-          <td><b>{{ op.liquido | fmtmoney }}</b></td><td></td><td></td></tr></tfoot>
+        <tfoot><tr><td class="e">Total {{ card.bandeira_nome }}</td>
+          <td>{{ op.vendido_pago | fmtmoney }}</td><td class="e"></td><td class="e"></td>
+          <td>{{ op.liquido | fmtmoney }}</td>
+          <td class="{{ 'neg' if op.taxa > 0.005 else 'zero' }}">{{ op.taxa | fmtmoney }}</td>
+          <td class="{{ 'pos' if _ac.v < -0.005 else 'zero' }}">{{ _ac.v | fmtmoney }}</td>
+          <td>{% if op.taxa_pct is not none %}{{ '%.2f'|format(op.taxa_pct) }}%{% endif %}</td></tr></tfoot>
       </table>
     </div>
     {% endif %}
@@ -1504,6 +1559,17 @@ body > .container-fluid:has(#ccz){
 {% endblock %}
 
 {% block scripts %}
+<script>
+// aba Operadora: abre e fecha as vendas de cada pagamento
+document.addEventListener('click', function (e) {
+  var b = e.target.closest('#ccz .abre');
+  if (!b) return;
+  var tr = document.getElementById(b.dataset.alvo);
+  if (!tr) return;
+  tr.hidden = !tr.hidden;
+  b.setAttribute('aria-expanded', tr.hidden ? 'false' : 'true');
+});
+</script>
 <script>
 (function () {
   // Quick period buttons

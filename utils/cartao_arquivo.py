@@ -1525,11 +1525,17 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
     saida = {}
     cur = conn.cursor(dictionary=True)
 
-    def item(dt, pago, prev, vendido, taxa, liquido, desc, ref=None):
+    def item(dt, pago, prev, vendido, taxa, liquido, desc, ref=None, cols=None):
         dt = dt if isinstance(dt, datetime) else datetime.combine(dt, datetime.min.time())
         return {'dt': dt, 'venda': dt.date(), 'pago': pago, 'prev': prev,
                 'vendido': round(vendido, 2), 'taxa': round(taxa, 2),
-                'liquido': round(liquido, 2), 'desc': desc, 'ref': ref, 'cupom': None}
+                'liquido': round(liquido, 2), 'desc': desc, 'ref': ref, 'cupom': None,
+                'cols': cols or []}
+
+    # o que e cada pedaco do "desc", coluna a coluna, na lista das vendas
+    cabecalhos = {'X7': ['Cliente', 'NF-e', 'Desconto do lote'],
+                  'BARATAO': ['Produto', 'Litros', 'Frentista', 'Cupom Baratão'],
+                  'SIPAG': ['Cartão', 'Final', 'Autorização']}
 
     # o cupom (NFC-e) de cada venda, casado em utils/cartao_cupom; "sem
     # cupom" so a partir de quando ha cupom no sistema
@@ -1562,7 +1568,9 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
                     desc = ' · '.join(x for x in (
                         r['cliente'], ('NF-e %s' % r['nfe']) if r['nfe'] else '',
                         ('desconto %s' % _fmt_br(r['desconto_lote'])) if r['desconto_lote'] else '') if x)
-                    itens.append(item(r['dt_operacao'], r['pago'], r['prev'], vd, tx, vd - tx, desc, r['id']))
+                    itens.append(item(r['dt_operacao'], r['pago'], r['prev'], vd, tx, vd - tx, desc, r['id'],
+                                      [r['cliente'] or '', r['nfe'] or '',
+                                       _fmt_br(r['desconto_lote']) if r['desconto_lote'] else '']))
                 dias = sorted({i['pago'] for i in itens if i['pago']})
                 if dias:
                     ph = ','.join(['%s'] * len(dias))
@@ -1630,7 +1638,9 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
                         r['frentista'], 'cupom %s' % r['cupom'][-8:]) if x)
                     itens.append(item(r['dt_abastecimento'], pago_do_dia.get(d),
                                       d + timedelta(days=2), float(r['venda'] or 0),
-                                      float(r['taxa'] or 0), float(r['repasse'] or 0), desc, r['id']))
+                                      float(r['taxa'] or 0), float(r['repasse'] or 0), desc, r['id'],
+                                      [r['produto'] or '', _fmt_br(r['litros'], 0) if r['litros'] else '',
+                                       r['frentista'] or '', r['cupom'][-8:]]))
             else:
                 sb, sf = _sipag_da_bandeira(b.get('nome'), b.get('tipo'))
                 if not sb or not sf:
@@ -1653,7 +1663,9 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
                         ('final %s' % r['cartao'][-4:]) if r['cartao'] else '',
                         ('aut. %s' % r['autorizacao']) if r['autorizacao'] else '') if x)
                     itens.append(item(r['dt_transacao'], pago, r['prev'], float(r['bruto'] or 0),
-                                      float(tx or 0), float(lq or 0), desc, r['id']))
+                                      float(tx or 0), float(lq or 0), desc, r['id'],
+                                      [(r['tipo_cartao'] or '').strip(), r['cartao'][-4:] if r['cartao'] else '',
+                                       r['autorizacao'] or '']))
                 dias = sorted({i['pago'] for i in itens if i['pago']})
                 if dias:
                     ph = ','.join(['%s'] * len(dias))
@@ -1679,18 +1691,23 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
 
             # o extrato de cada dia de pagamento (pode ser depois do periodo)
             dias_pag = sorted({i['pago'] for i in itens if i['pago']})
-            extrato, ult_extrato = {}, None
+            extrato, bancos, ult_extrato = {}, {}, None
             if fs:
                 ph = ','.join(['%s'] * len(fs))
                 if dias_pag:
                     pd = ','.join(['%s'] * len(dias_pag))
                     cur.execute(f"""
-                        SELECT data_transacao AS d, SUM(valor) AS v, COUNT(*) AS n
-                          FROM bank_transactions
-                         WHERE tipo='CREDIT' AND forma_recebimento_id IN ({ph})
-                           AND data_transacao IN ({pd})
-                         GROUP BY data_transacao""", list(fs) + dias_pag)
-                    extrato = {r['d']: (float(r['v'] or 0), int(r['n'])) for r in cur.fetchall()}
+                        SELECT bt.data_transacao AS d, SUM(bt.valor) AS v, COUNT(*) AS n,
+                               GROUP_CONCAT(DISTINCT COALESCE(NULLIF(ba.apelido,''), ba.banco_nome)
+                                            ORDER BY 1 SEPARATOR ' + ') AS bancos
+                          FROM bank_transactions bt
+                          JOIN bank_accounts ba ON ba.id = bt.account_id
+                         WHERE bt.tipo='CREDIT' AND bt.forma_recebimento_id IN ({ph})
+                           AND bt.data_transacao IN ({pd})
+                         GROUP BY bt.data_transacao""", list(fs) + dias_pag)
+                    _rs = cur.fetchall()
+                    extrato = {r['d']: (float(r['v'] or 0), int(r['n'])) for r in _rs}
+                    bancos = {r['d']: r['bancos'] or '' for r in _rs}
                 cur.execute(f"""
                     SELECT MAX(data_transacao) AS m FROM bank_transactions
                      WHERE account_id IN (SELECT DISTINCT account_id FROM bank_transactions
@@ -1729,7 +1746,7 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
                     'liquido': liq, 'total_dia': tot,
                     'outras': round(tot - liq + abat_dia.get(d, 0.0), 2),
                     'abatimentos': round(abat_dia.get(d, 0.0), 2),
-                    'extrato': round(ext, 2), 'n_creditos': n,
+                    'extrato': round(ext, 2), 'n_creditos': n, 'banco': bancos.get(d, ''),
                     'dif': round(ext - tot, 2), 'status': st,
                     'itens': sorted(its, key=lambda i: i['dt']),
                 })
@@ -1738,6 +1755,7 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
             taxa = sum(x['taxa'] for x in linhas)
             saida[b['id']] = {
                 'operadora': OPERADORAS[op]['nome'],
+                'cab': cabecalhos['SIPAG' if op not in cabecalhos else op],
                 'pagamentos': linhas,
                 'a_receber': sorted(a_receber, key=lambda i: i['dt']),
                 'por_venda': dict(por_venda),
