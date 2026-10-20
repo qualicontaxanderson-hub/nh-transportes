@@ -368,8 +368,9 @@ body > .container-fluid:has(#rcb){
 
         <div class="c-desc" title="{{ t.descricao or t.memo or '' }}">{{ t.descricao or t.memo or '—' }}</div>
 
-        {# Linha 2 — forma de recebimento e banco. No pendente ainda não há
-           forma conciliada, então vale o meio lido do texto do banco. #}
+        {# Linha 2 — para onde foi e banco. Conciliado diz o destino (forma,
+           devolução e de quem, transferência); só o pendente, que ainda não
+           tem destino, mostra o meio lido do texto do banco. #}
         {% set dl = (t.descricao or t.memo or '')|lower %}
         {% set tipo = 'Pix' if 'pix' in dl
                       else ('Boleto' if 'boleto' in dl
@@ -377,7 +378,12 @@ body > .container-fluid:has(#rcb){
                       else ('Transferência' if 'transf' in dl else None))) %}
         <div class="c-meio">
           {% if t.forma_recebimento_nome %}<span class="selo selo--forma">{{ t.forma_recebimento_nome }}</span>
-          {% elif tipo %}<span class="selo selo--tipo">{{ tipo }}</span>{% endif %}
+          {% elif t.tipo_conciliacao == 'devolucao_fornecedor' %}<span class="selo selo--forma">Devolução · {{ t.fornecedor_nome or 'fornecedor' }}</span>
+          {% elif t.tipo_conciliacao == 'devolucao_despesa' %}<span class="selo selo--forma">Devolução de despesa{% if t.despesa_categoria %} · {{ t.despesa_categoria }}{% endif %}</span>
+          {% elif t.tipo_conciliacao == 'transferencia' %}<span class="selo selo--forma">Transferência recebida</span>
+          {% elif t.tipo_conciliacao == 'troco_pix' %}<span class="selo selo--forma">Troco PIX</span>
+          {% elif t.tipo_conciliacao == 'deposito' %}<span class="selo selo--forma">Depósito</span>
+          {% elif t.status != 'conciliado' and tipo %}<span class="selo selo--tipo">{{ tipo }}</span>{% endif %}
           {% if t.conta_apelido or t.banco_nome %}
             <span class="banco">{{ t.conta_apelido or t.banco_nome }}</span>
           {% endif %}
