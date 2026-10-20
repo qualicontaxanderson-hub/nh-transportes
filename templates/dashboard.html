@@ -1219,7 +1219,7 @@ function prazo(per){
   document.getElementById('p-sub').innerHTML = `<b>${f.na}</b> de ${f.n} notas a prazo com acréscimo · ${periodoTxt(per)}`;
   const mx = com.length ? com[0].a : 1;
   let h = com.slice(0, 4).map((c, i) => filaG('var(--praz)', String(i + 1), cap1(c.cli),
-      `${c.n} nota${c.n == 1 ? '' : 's'} · <b>+${N(c.a / (c.v - c.a) * 100)}%</b> · venda ${N(c.v)}`,
+      `${c.n} nota${c.n == 1 ? '' : 's'} · <b>+${N(c.a / (c.v - c.a) * 100)}%</b> · venda ${I(Math.round(c.v))}`,
       R(c.a), `${Math.round(c.a / f.a * 100)}%`, bar(c.a / mx * 100))).join('');
   if (!com.length) h = '<div class="fm fraco"><div class="fm-s">nenhuma venda a prazo com acréscimo</div></div>';
   const vSem = sem.reduce((s, c) => s + c.v, 0), base = f.v - f.a;
