@@ -908,6 +908,15 @@ body > .container-fluid:has(#cnc){
                       o fornecedor devolveu dinheiro. Não é receita.</span>
                   </span>
                 </button>
+                <button type="button" class="destino" id="tab_cr_devdesp_btn"
+                        onclick="alternarAbaCredito('devdesp')">
+                  <span class="destino__i"><i class="bi bi-arrow-return-left"></i></span>
+                  <span class="destino__t">
+                    <span class="destino__n">Devolução de despesa</span>
+                    <span class="destino__d">Pagou uma despesa e o dinheiro voltou — entra
+                      como despesa negativa no mês em que voltou. Não é receita.</span>
+                  </span>
+                </button>
               </div>
             </div>
 
@@ -942,6 +951,17 @@ body > .container-fluid:has(#cnc){
                   {{ f.razao_social }}</option>
                 {% endfor %}
               </select>
+            </div>
+            <!-- Aba Devolucao de despesa -->
+            <div id="aba_cr_devdesp" style="display:none;">
+              <div class="alert alert-warning py-2 px-3 small mb-2">
+                <i class="bi bi-arrow-return-left"></i>
+                <strong>Devolução de despesa</strong> — não vira receita. Lança a
+                despesa <b>negativa</b> no mesmo título, categoria e subcategoria da
+                despesa escolhida, na data em que o dinheiro voltou.
+              </div>
+              <div id="listaDevDesp" class="list-group small"
+                   style="max-height:320px; overflow:auto;"></div>
             </div>
             <!-- Aba Transferência Recebida -->
             <div id="aba_cr_transferencia" style="display:none;">
@@ -2208,7 +2228,9 @@ function mpcIr(n) {
     : (document.getElementById('tab_cr_transf_btn').classList.contains('active')
        ? 'De qual conta?'
        : (document.getElementById('tab_cr_dev_btn').classList.contains('active')
-          ? 'Qual fornecedor devolveu?' : 'Qual forma de recebimento?'));
+          ? 'Qual fornecedor devolveu?'
+          : (document.getElementById('tab_cr_devdesp_btn').classList.contains('active')
+             ? 'Qual despesa voltou?' : 'Qual forma de recebimento?')));
   mpRodape(n);
 }
 
@@ -2238,16 +2260,63 @@ function devSugerirPorCnpj() {
   }
 }
 
+/* Devolucao de despesa: lista as despesas que o credito pode estar
+   devolvendo — as pagas ao mesmo CPF/CNPJ do extrato vem primeiro. */
+function devDespCarregar() {
+  var box = document.getElementById('listaDevDesp');
+  var tx = document.getElementById('modal_tx_id').value;
+  box.textContent = 'Carregando despesas…';
+  fetch('{{ url_for("bank_import.api_devolucao_despesa_candidatos") }}?tx_id=' + encodeURIComponent(tx))
+    .then(function (r) { return r.json(); })
+    .then(function (rows) {
+      box.innerHTML = '';
+      if (!rows.length) { box.textContent = 'Nenhuma despesa encontrada para esta empresa.'; return; }
+      rows.forEach(function (d, i) {
+        var lab = document.createElement('label');
+        lab.className = 'list-group-item d-flex gap-2 align-items-start';
+        var inp = document.createElement('input');
+        inp.type = 'radio'; inp.name = 'devolucao_lancamento_id'; inp.value = d.id;
+        inp.className = 'form-check-input mt-1';
+        if (i === 0 && d.mesmo_doc) inp.checked = true;
+        var txt = document.createElement('span');
+        txt.className = 'flex-grow-1';
+        var b = document.createElement('b');
+        b.textContent = d.data + ' · R$ ' + d.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+        txt.appendChild(b);
+        if (d.mesmo_doc) {
+          var tag = document.createElement('span');
+          tag.className = 'badge bg-success-subtle text-success-emphasis ms-1';
+          tag.textContent = 'mesmo CPF/CNPJ';
+          txt.appendChild(tag);
+        }
+        txt.appendChild(document.createElement('br'));
+        txt.appendChild(document.createTextNode(
+          [d.titulo, d.categoria, d.subcategoria].filter(Boolean).join(' › ')));
+        txt.appendChild(document.createElement('br'));
+        var f = document.createElement('small');
+        f.className = 'text-muted';
+        f.textContent = d.fornecedor || '';
+        txt.appendChild(f);
+        lab.appendChild(inp); lab.appendChild(txt);
+        box.appendChild(lab);
+      });
+    })
+    .catch(function () { box.textContent = 'Erro ao carregar as despesas.'; });
+}
+
 function alternarAbaCredito(aba) {
   document.getElementById('modal_tipo_debito').value =
     aba === 'transferencia' ? 'transferencia'
-      : (aba === 'devolucao' ? 'devolucao_fornecedor' : '');
+      : (aba === 'devolucao' ? 'devolucao_fornecedor'
+      : (aba === 'devdesp' ? 'devolucao_despesa' : ''));
   document.getElementById('aba_cr_forma').style.display        = aba === 'forma'        ? '' : 'none';
   document.getElementById('aba_cr_transferencia').style.display = aba === 'transferencia' ? '' : 'none';
   document.getElementById('aba_cr_devolucao').style.display     = aba === 'devolucao'     ? '' : 'none';
+  document.getElementById('aba_cr_devdesp').style.display       = aba === 'devdesp'       ? '' : 'none';
   if (aba === 'devolucao') devSugerirPorCnpj();
+  if (aba === 'devdesp') devDespCarregar();
   [['tab_cr_forma_btn', 'forma'], ['tab_cr_transf_btn', 'transferencia'],
-   ['tab_cr_dev_btn', 'devolucao']].forEach(function (par) {
+   ['tab_cr_dev_btn', 'devolucao'], ['tab_cr_devdesp_btn', 'devdesp']].forEach(function (par) {
     var b = document.getElementById(par[0]);
     var eu = (par[1] === aba);
     b.classList.toggle('active', eu);
@@ -3182,6 +3251,16 @@ function aprovarSugestoesPagina() {
   const btn = document.getElementById('btnAprovarSugestoes');
   if (btn && total === 0) btn.disabled = true;
 })();
+
+// Devolucao de despesa sem a despesa escolhida nao vai pro servidor.
+document.getElementById('formConciliar').addEventListener('submit', function(ev) {
+  if (document.getElementById('modal_tipo_debito').value === 'devolucao_despesa'
+      && document.getElementById('modal_tipo_tx').value === 'CREDIT'
+      && !this.querySelector('input[name="devolucao_lancamento_id"]:checked')) {
+    ev.preventDefault(); ev.stopImmediatePropagation();
+    alert('Escolha a despesa que foi devolvida.');
+  }
+});
 
 // Converte valores mascarados ("1.935,90") para float ("1935.90") antes de submeter
 document.getElementById('formConciliar').addEventListener('submit', function() {

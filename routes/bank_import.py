@@ -1659,7 +1659,8 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
 def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                   fornecedor_id, forma_recebimento_id, usuario,
                   tipo_debito=None, despesas=None, troco_pix_id=None,
-                  salvar_mapeamento=True, conta_origem_id=None):
+                  salvar_mapeamento=True, conta_origem_id=None,
+                  devolucao_lancamento_id=None):
     """Concilia (ou ignora) uma única transação e aprende mapeamentos.
 
     Para débitos com tipo_debito='despesa', *despesas* é uma lista de dicts:
@@ -1724,6 +1725,49 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
             )
             # Sem auto-aprendizado aqui, de propósito: gravar texto→fornecedor
             # no mapping contaminaria a sugestão dos DÉBITOS do mesmo CNPJ.
+        elif tipo_debito == 'devolucao_despesa':
+            # Crédito → Devolução de despesa (pagou, o serviço não saiu, o
+            # dinheiro voltou). NÃO é receita: vira despesa NEGATIVA no mesmo
+            # título/categoria/subcategoria da despesa original, na data em
+            # que voltou — o mês do pagamento fica cheio e o da devolução
+            # abate. Reverter a conciliação já apaga a linha (bank_transaction_id).
+            if not devolucao_lancamento_id:
+                raise ValueError("Escolha a despesa que foi devolvida.")
+            with conn.cursor(dictionary=True) as _dc:
+                _dc.execute(
+                    """SELECT id, cliente_id, titulo_id, categoria_id, subcategoria_id,
+                              fornecedor, valor
+                         FROM lancamentos_despesas WHERE id=%s AND valor > 0""",
+                    (devolucao_lancamento_id,),
+                )
+                orig = _dc.fetchone()
+                _dc.execute(
+                    "SELECT data_transacao, valor, descricao FROM bank_transactions WHERE id=%s",
+                    (tx_id,),
+                )
+                cred = _dc.fetchone()
+            if not orig or not cred:
+                raise ValueError("Despesa original não encontrada.")
+            cursor.execute(
+                """INSERT INTO lancamentos_despesas
+                       (data, cliente_id, titulo_id, categoria_id, subcategoria_id,
+                        valor, fornecedor, observacao, bank_transaction_id)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (cred['data_transacao'], orig['cliente_id'], orig['titulo_id'],
+                 orig['categoria_id'], orig['subcategoria_id'],
+                 -abs(float(cred['valor'] or 0)), orig['fornecedor'],
+                 'DEVOLUÇÃO da despesa #%s: %s' % (orig['id'], cred['descricao'] or ''),
+                 tx_id),
+            )
+            cursor.execute(
+                """UPDATE bank_transactions
+                   SET status='conciliado', fornecedor_id=NULL,
+                       forma_recebimento_id=NULL,
+                       tipo_conciliacao='devolucao_despesa',
+                       conciliado_em=%s, conciliado_por=%s
+                   WHERE id=%s""",
+                (agora, usuario, tx_id),
+            )
         else:
             # Crédito → Forma de Recebimento
             if not forma_recebimento_id:
@@ -2006,6 +2050,7 @@ def conciliar():
             # Campo proprio: name="fornecedor_id" ja existe no painel de
             # DEBITO deste mesmo form e os dois iriam juntos no POST.
             fornecedor_id = request.form.get('devolucao_fornecedor_id') or None
+        devolucao_lancamento_id = request.form.get('devolucao_lancamento_id') or None
 
         # Despesas: quantas vierem. Era range(1, 4) — teto de 3 — e a tela
         # tinha o mesmo teto. Agora quem manda é o formulário: lemos os
@@ -2167,7 +2212,8 @@ def conciliar():
                                   tipo_debito=tipo_debito, despesas=despesas or None,
                                   troco_pix_id=troco_pix_id,
                                   salvar_mapeamento=salvar_mapeamento,
-                                  conta_origem_id=conta_origem_id)
+                                  conta_origem_id=conta_origem_id,
+                                  devolucao_lancamento_id=devolucao_lancamento_id)
                 ok += 1
         except Exception as exc:
             try:
@@ -3699,6 +3745,58 @@ def api_transacoes_pendentes():
         if row.get('valor') is not None:
             row['valor'] = float(row['valor'])
 
+    return jsonify(rows)
+
+
+@bp.route('/api/devolucao-despesa/candidatos')
+@login_required
+def api_devolucao_despesa_candidatos():
+    """API: despesas que um crédito pode estar devolvendo. Primeiro as pagas
+    ao mesmo CPF/CNPJ do extrato (qualquer data até o crédito); depois as da
+    mesma empresa nos 180 dias anteriores."""
+    tx_id = request.args.get('tx_id', type=int)
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """SELECT bt.data_transacao, bt.cnpj_cpf, ba.cliente_id
+                 FROM bank_transactions bt
+                 JOIN bank_accounts ba ON ba.id = bt.account_id
+                WHERE bt.id = %s""",
+            (tx_id,),
+        )
+        cred = cursor.fetchone()
+        if not cred:
+            return jsonify([])
+        doc = re.sub(r'\D', '', cred['cnpj_cpf'] or '')
+        cursor.execute(
+            """SELECT ld.id, ld.data, ld.valor, ld.fornecedor,
+                      t.nome AS titulo, c.nome AS categoria, s.nome AS subcategoria,
+                      (%s <> '' AND REPLACE(REPLACE(REPLACE(COALESCE(bt.cnpj_cpf,''),
+                           '.',''),'/',''),'-','') = %s) AS mesmo_doc
+                 FROM lancamentos_despesas ld
+                 LEFT JOIN titulos_despesas t ON t.id = ld.titulo_id
+                 LEFT JOIN categorias_despesas c ON c.id = ld.categoria_id
+                 LEFT JOIN subcategorias_despesas s ON s.id = ld.subcategoria_id
+                 LEFT JOIN bank_transactions bt ON bt.id = ld.bank_transaction_id
+                WHERE ld.valor > 0 AND ld.data <= %s
+                  AND ((%s <> '' AND REPLACE(REPLACE(REPLACE(COALESCE(bt.cnpj_cpf,''),
+                           '.',''),'/',''),'-','') = %s)
+                       OR (ld.cliente_id = %s
+                           AND ld.data >= DATE_SUB(%s, INTERVAL 180 DAY)))
+                ORDER BY mesmo_doc DESC, ld.data DESC, ld.id DESC
+                LIMIT 80""",
+            (doc, doc, cred['data_transacao'], doc, doc, cred['cliente_id'],
+             cred['data_transacao']),
+        )
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+    for r in rows:
+        r['data'] = r['data'].strftime('%d/%m/%Y') if r.get('data') else ''
+        r['valor'] = float(r['valor'] or 0)
+        r['mesmo_doc'] = bool(r['mesmo_doc'])
     return jsonify(rows)
 
 
