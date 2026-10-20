@@ -577,6 +577,12 @@
   #nv .fm-v b.ok{ color:var(--ok); } #nv .fm-v b.neg{ color:var(--neg); }
   #nv .fm-v span{ font-size:.68rem; font-weight:800; color:var(--k); }
   #nv .fm-v span.ok{ color:var(--ok); } #nv .fm-v span.neg{ color:var(--neg); }
+  /* fileira em grade: o % desce pra linha do detalhe, e o detalhe usa a largura toda */
+  #nv .fm-g{ display:grid; grid-template-columns:auto minmax(0,1fr) auto; column-gap:10px; row-gap:1px; align-items:baseline; }
+  #nv .fm-g .ic{ grid-row:1 / 3; align-self:center; }
+  #nv .fm-g .fm-s{ margin-top:0; }
+  #nv .fm-gv{ font-size:1rem; font-weight:800; font-variant-numeric:tabular-nums; text-align:right; }
+  #nv .fm-gp{ font-size:.68rem; font-weight:800; color:var(--k); text-align:right; }
   #nv .barra{ height:7px; border-radius:99px; background:#f1f5f9; margin:8px 0 0 44px; overflow:hidden; position:relative; }
   #nv .barra i{ display:block; height:100%; border-radius:99px; background:var(--k); }
   #nv .barra i.neg{ background:#dc2626; }
@@ -1182,6 +1188,10 @@ const fila = (k, ic, nome, sub, valor, pct, barra, extra = '', icCls = 'ic') =>
   `<div class="fm" style="--k:${k}"><div class="fm-l"><span class="${icCls}">${ic}</span>
     <div style="min-width:0"><div class="fm-n">${nome}</div><div class="fm-s">${sub}</div></div>
     <div class="fm-v"><b>${valor}</b>${pct}</div></div>${barra}${extra}</div>`;
+const filaG = (k, ic, nome, sub, valor, pct, barra) =>
+  `<div class="fm" style="--k:${k}"><div class="fm-g"><span class="ic pos">${ic}</span>
+    <div class="fm-n">${nome}</div><b class="fm-gv">${valor}</b>
+    <div class="fm-s">${sub}</div><span class="fm-gp">${pct}</span></div>${barra}</div>`;
 const bar = (w, cls = '', marca = null) => `<div class="barra"><i class="${cls}" style="width:${Math.min(100, w)}%"></i>${marca != null ? `<span class="marca" style="--m:${marca}%"></span>` : ''}</div>`;
 
 // ---------- 1 VENDAS ----------
@@ -1208,9 +1218,9 @@ function prazo(per){
   document.getElementById('p-big').textContent = R(f.a);
   document.getElementById('p-sub').innerHTML = `<b>${f.na}</b> de ${f.n} notas a prazo com acréscimo · ${periodoTxt(per)}`;
   const mx = com.length ? com[0].a : 1;
-  let h = com.slice(0, 4).map((c, i) => fila('var(--praz)', String(i + 1), cap1(c.cli),
+  let h = com.slice(0, 4).map((c, i) => filaG('var(--praz)', String(i + 1), cap1(c.cli),
       `${c.n} nota${c.n == 1 ? '' : 's'} · <b>+${N(c.a / (c.v - c.a) * 100)}%</b> · venda ${N(c.v)}`,
-      R(c.a), `<span>${Math.round(c.a / f.a * 100)}%</span>`, bar(c.a / mx * 100), '', 'ic pos')).join('');
+      R(c.a), `${Math.round(c.a / f.a * 100)}%`, bar(c.a / mx * 100))).join('');
   if (!com.length) h = '<div class="fm fraco"><div class="fm-s">nenhuma venda a prazo com acréscimo</div></div>';
   const vSem = sem.reduce((s, c) => s + c.v, 0), base = f.v - f.a;
   h += `<div class="rod">${sem.length
