@@ -186,8 +186,19 @@ def _descargas(cur, hoje, ini_dia, fim_dia, ini_mes, fim_mes):
 
 
 # --------------------------------------------------------------- compras
+# Etanol pelo "resto" do total da nota, como na tela Compras DF-e: o vProd do
+# etanol nao traz o ICMS-ST, que vem por fora. valor = vNF - itens nao-etanol,
+# rateado pelos litros; se der negativo (dado ruim), fica o vProd.
+_PID = "COALESCE({0}.classificado_produto_id, {0}.produto_id)"
+_SQL_VALOR_ITEM = (
+    "CASE WHEN " + _PID.format('i') + " = 1 AND a.eta_l > 0 AND d.valor_total >= a.outros "
+    "THEN i.quantidade * (d.valor_total - a.outros) / a.eta_l ELSE i.valor_total END")
 _SQL_COMPRA_BASE = (
     "FROM dfe_documentos d JOIN dfe_itens i ON i.documento_id = d.id "
+    "LEFT JOIN (SELECT documento_id, "
+    "SUM(CASE WHEN " + _PID.format('x') + " = 1 THEN quantidade ELSE 0 END) eta_l, "
+    "SUM(CASE WHEN " + _PID.format('x') + " = 1 THEN 0 ELSE valor_total END) outros "
+    "FROM dfe_itens x GROUP BY documento_id) a ON a.documento_id = d.id "
     "WHERE d.cliente_id = %s AND d.tipo = 'NFe' AND d.situacao = 'autorizado' "
     "AND (i.categoria IS NULL OR i.categoria <> 'ignorar') AND i.unidade = 'L' "
     "AND COALESCE(i.classificado_produto_id, i.produto_id) IN (1,2,4,5) ")
@@ -198,17 +209,18 @@ def _compras(cur, hoje, ini_dia, fim_dia, ini_mes, fim_mes):
     cur.execute(
         "SELECT d.id, d.numero, d.dh_emissao, d.emit_nome forn, d.transp_placa placa, d.valor_total vnf, "
         "COALESCE(i.classificado_produto_id, i.produto_id) pid, i.quantidade l, i.valor_unitario pu, "
-        "i.valor_total vt " + _SQL_COMPRA_BASE +
+        "(" + _SQL_VALOR_ITEM + ") vt " + _SQL_COMPRA_BASE +
         "ORDER BY d.dh_emissao DESC, d.id DESC, i.n_item LIMIT 10", (CLIENTE_POSTO,))
     ultimas = []
     for r in cur.fetchall():
         nome, cor = PROD[r['pid']]
         ultimas.append(dict(nf=r['numero'], dh=_iso(r['dh_emissao']), forn=r['forn'] or '', placa=r['placa'],
-                            pid=r['pid'], produto=nome, cor=cor, litros=_f(r['l']), pu=_f(r['pu']),
+                            pid=r['pid'], produto=nome, cor=cor, litros=_f(r['l']),
+                            pu=_f(r['vt']) / _f(r['l']) if r['pid'] == 1 and _f(r['l']) else _f(r['pu']),
                             vt=_f(r['vt']), vnf=_f(r['vnf'])))
     cur.execute(
         "SELECT DATE(d.dh_emissao) dia, COALESCE(i.classificado_produto_id, i.produto_id) pid, "
-        "COUNT(DISTINCT d.id) n, SUM(i.quantidade) l, SUM(i.valor_total) v " + _SQL_COMPRA_BASE +
+        "COUNT(DISTINCT d.id) n, SUM(i.quantidade) l, SUM(" + _SQL_VALOR_ITEM + ") v " + _SQL_COMPRA_BASE +
         "AND d.dh_emissao >= %s GROUP BY 1,2", (CLIENTE_POSTO, ini_m))
     tot = {'dia': {'n': 0, 'l': 0.0, 'v': 0.0, 'prod': {}}, 'mes': {'n': 0, 'l': 0.0, 'v': 0.0, 'prod': {}}}
     for r in cur.fetchall():
