@@ -620,6 +620,35 @@
   #nv .stack{ display:flex; height:10px; border-radius:99px; overflow:hidden; background:#eef2f7; margin:10px 0 2px; }
   #nv .stack i{ display:block; height:100%; background:var(--k); }
 
+  /* Compacto: Vendas, Cartoes e Recebimento cabem inteiros na mesma casca,
+     sem barra de rolagem. Os outros cards rolam de proposito (lista longa). */
+  #nv .bd.cmp{ padding-bottom:8px; }
+  #nv .cmp .fm{ padding:4px 0 4px; }
+  #nv .cmp .fm-l{ gap:8px; }
+  #nv .cmp .ic{ width:26px; height:26px; border-radius:8px; font-size:.8rem; }
+  #nv .cmp .fm-n{ font-size:.8rem; line-height:1.2; }
+  #nv .cmp .fm-s{ font-size:.64rem; line-height:1.2; }
+  #nv .cmp .fm-v b{ font-size:.88rem; line-height:1.2; }
+  #nv .cmp .fm-v span{ font-size:.62rem; line-height:1.1; display:block; }
+  #nv .cmp .barra{ height:4px; margin:4px 0 0 34px; }
+  #nv .cmp .rod{ padding-top:6px; }
+  #nv .cmp .tile{ padding:5px 9px; }
+  #nv .cmp .tile .v{ font-size:.9rem; }
+  #nv .cmp .tot{ margin-top:6px; padding-top:5px; font-size:.82rem; }
+  #nv .cmp .sec{ margin:6px 0 0; }
+  #nv .cmp .alerta{ padding:5px 9px; font-size:.64rem; }
+  #nv .cmp .stack{ height:8px; margin:6px 0 2px; }
+  /* Leve: Vendas e Cartoes so passavam um pouco — apertar como o
+     Recebimento deixava buraco no meio do card. */
+  #nv .cmp.leve .fm{ padding:8px 0 7px; }
+  #nv .cmp.leve .ic{ width:30px; height:30px; font-size:.9rem; }
+  #nv .cmp.leve .fm-n{ font-size:.84rem; }
+  #nv .cmp.leve .fm-s{ font-size:.67rem; }
+  #nv .cmp.leve .fm-v b{ font-size:.95rem; }
+  #nv .cmp.leve .fm-v span{ font-size:.65rem; }
+  #nv .cmp.leve .barra{ height:6px; margin:6px 0 0 38px; }
+  #nv .cmp.leve .band{ padding:6px 0 5px !important; }
+
   @media (max-width: 768px){ #nv .nvc{ flex:0 0 100%; } }
 </style>
 {% endblock %}
@@ -693,7 +722,7 @@
       <div class="hd-top"><span class="tag"><i class="bi bi-receipt"></i> Vendas</span>
         <div class="chave" data-card="v"><button data-p="dia" class="on">Hoje</button><button data-p="mes">Mês</button></div></div>
       <div class="big" id="v-big"></div><div class="sub" id="v-sub"></div></div>
-    <div class="bd" id="v-bd"></div></section>
+    <div class="bd cmp leve" id="v-bd"></div></section>
 
   <section class="onda1-card nvc"><div class="hd h-prazo">
       <div class="hd-top"><span class="tag"><i class="bi bi-person-vcard-fill"></i> Acréscimo a prazo</span>
@@ -704,7 +733,7 @@
   <section class="onda1-card nvc"><div class="hd h-cart">
       <div class="hd-top"><span class="tag"><i class="bi bi-arrow-left-right"></i> Cartões × operadora</span><span class="per">Outubro</span></div>
       <div class="big" id="c-big"></div><div class="sub" id="c-sub"></div></div>
-    <div class="bd" id="c-bd"></div></section>
+    <div class="bd cmp leve" id="c-bd"></div></section>
 
   <section class="onda1-card nvc"><div class="hd h-est">
       <div class="hd-top"><span class="tag"><i class="bi bi-speedometer2"></i> Estoque · agora</span><span class="per">Posto NH</span></div>
@@ -719,7 +748,7 @@
   <section class="onda1-card nvc"><div class="hd h-rec">
       <div class="hd-top"><span class="tag"><i class="bi bi-wallet2"></i> Recebimento do dia</span><span class="per" id="r-per"></span></div>
       <div class="big" id="r-big"></div><div class="sub" id="r-sub"></div></div>
-    <div class="bd" id="r-bd"></div></section>
+    <div class="bd cmp" id="r-bd"></div></section>
 
   <section class="onda1-card nvc"><div class="hd h-desc">
       <div class="hd-top"><span class="tag"><i class="bi bi-truck-flatbed"></i> Últimas descargas</span>
@@ -1217,11 +1246,11 @@ function cartoes(){
     document.getElementById('c-sub').innerHTML = `acréscimo cobrado <b>${R(acrT)}</b> − taxa retida pela operadora <b>${R(taxaT)}</b> · ${MESES[+M-1].toLowerCase()} até ${Dd}/${M}`;
     bandas.sort((x, y) => (x.k == y.k ? y.tx - x.tx : (x.k == 'credito' ? -1 : 1)));
     h += `<div class="sec">Por bandeira · relatório da operadora</div>`;
-    h += bandas.map(x => { const d = x.acr - x.tx; return `<div class="fm" style="--k:${x.cor};padding:7px 0 6px"><div class="fm-l">
-        <span class="ic" style="width:26px;height:26px;border-radius:7px;font-size:.78rem"><i class="bi ${x.k == 'credito' ? 'bi-credit-card-2-front-fill' : 'bi-credit-card-fill'}"></i></span>
-        <div style="min-width:0"><div class="fm-n" style="font-size:.78rem">${x.bn} <small style="font-weight:600;color:var(--mut)">${x.k == 'credito' ? 'crédito' : 'débito'}</small></div>
+    h += bandas.map(x => { const d = x.acr - x.tx; return `<div class="fm band" style="--k:${x.cor};padding:3px 0 2px"><div class="fm-l">
+        <span class="ic" style="width:22px;height:22px;border-radius:6px;font-size:.7rem"><i class="bi ${x.k == 'credito' ? 'bi-credit-card-2-front-fill' : 'bi-credit-card-fill'}"></i></span>
+        <div style="min-width:0"><div class="fm-n" style="font-size:.74rem">${x.bn} <small style="font-weight:600;color:var(--mut)">${x.k == 'credito' ? 'crédito' : 'débito'}</small></div>
         <div class="fm-s">acrésc. <b>${N(x.acr)}</b> · taxa <b>${N(x.tx)}</b> (${N(x.pc)}%)</div></div>
-        <div class="fm-v"><b style="font-size:.88rem" class="${d >= 0 ? 'ok' : 'neg'}">${d >= 0 ? '+' : '−'}${N(Math.abs(d))}</b></div></div></div>`; }).join('');
+        <div class="fm-v"><b style="font-size:.8rem" class="${d >= 0 ? 'ok' : 'neg'}">${d >= 0 ? '+' : '−'}${N(Math.abs(d))}</b></div></div></div>`; }).join('');
     h += `<div class="rod"><div class="alerta amb" style="margin-bottom:8px"><i class="bi bi-info-circle-fill"></i><span>a taxa retida é só do que a operadora <b>já pagou</b>; o acréscimo é do mês inteiro</span></div>
       <div class="tiles"><div class="tile"><div class="r">Vendido no cartão</div><div class="v">${R(vendT)}</div><div class="s">pelo arquivo da operadora</div></div>
       <div class="tile amb"><div class="r">Ainda não caiu</div><div class="v">${R(naoT)}</div><div class="s">a operadora ainda vai pagar</div></div></div></div>`;
