@@ -1138,6 +1138,8 @@ const D = {{ dash_json|safe }};
 const R = v => v.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
 const N = v => v.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
 const L = v => Math.round(v).toLocaleString('pt-BR');
+// Preco por litro como veio na nota: ate 4 casas, sem zero sobrando (2,99 · 3,199 · 5,1489).
+const PU = v => v.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:4});
 const I = v => v.toLocaleString('pt-BR');
 const P1 = v => v.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1});
 const [Y, M, Dd] = D.hoje.split('-');
@@ -1329,7 +1331,7 @@ function compras(per){
   const mx = Math.max(...u.map(x => x.vt));
   let h = lista.map(x => fila(x.cor, `<i class="bi ${PICO3[x.produto]}"></i>`, `${x.produto} <small style="font-weight:600;color:var(--mut)">${L(x.litros)} L · ${x.dh.slice(8, 10)}/${x.dh.slice(5, 7)}</small>`,
       `NF <b>${x.nf}</b> · ${cap1(x.forn.split(' ').slice(0, 2).join(' '))}${x.placa ? ' · ' + x.placa : ''}`,
-      R(x.vt), `<span>${N(x.pu)}/L</span>`, bar(x.vt / mx * 100))).join('');
+      R(x.vt), `<span>${PU(x.pu)}/L</span>`, bar(x.vt / mx * 100))).join('');
   h += `<div class="rod"><div class="tiles"><div class="tile"><div class="r">Hoje</div><div class="v">${R(D.compras.tot.dia.v)}</div><div class="s">${L(D.compras.tot.dia.l)} L · ${D.compras.tot.dia.n} nota${D.compras.tot.dia.n == 1 ? '' : 's'}</div></div>
     <div class="tile"><div class="r">No mês</div><div class="v">${R(D.compras.tot.mes.v)}</div><div class="s">${L(D.compras.tot.mes.l)} L · ${D.compras.tot.mes.n} notas</div></div></div></div>`;
   document.getElementById('k-bd').innerHTML = h;
