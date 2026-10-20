@@ -532,6 +532,95 @@
   @media (max-width: 640px) {
     .bkp-faixa { align-items: flex-start; font-size: 0.78rem; }
   }
+
+  /* ===== Cards do carrossel (19/10/2026): o desenho da previa aprovada,
+     isolado sob #nv para nao brigar com o Bootstrap ===== */
+  #nv{ --ink:#0f172a; --mut:#64748b; --lin:#f1f5f9; --ok:#047857; --okb:#ecfdf5; --neg:#b91c1c; --negb:#fef2f2;
+         --amb:#92400e; --ambb:#fffbeb; --cred:#7c3aed; --deb:#2563eb; --praz:#ea580c; }
+  #nv *{ box-sizing:border-box; }
+  #nv .nvc{ flex:0 0 350px; height:640px; scroll-snap-align:start; background:#fff; border:1px solid #e8edf3;
+    border-radius:18px; overflow:hidden; box-shadow:0 6px 22px rgba(15,23,42,.07); display:flex; flex-direction:column; }
+  #nv .hd{ padding:14px 16px 13px; color:#fff; flex:0 0 auto; min-height:112px; }
+  #nv .hd-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  #nv .tag{ font-size:.68rem; font-weight:800; letter-spacing:1.2px; text-transform:uppercase; display:flex; gap:6px; align-items:center; }
+  #nv .per{ font-size:.7rem; opacity:.85; font-weight:600; }
+  #nv .big{ font-size:1.75rem; font-weight:800; letter-spacing:-.5px; margin-top:8px; line-height:1.1; font-variant-numeric:tabular-nums; }
+  #nv .big small{ font-size:.85rem; font-weight:700; opacity:.85; }
+  #nv .sub{ font-size:.73rem; opacity:.92; margin-top:5px; line-height:1.35; }
+  #nv .sub b{ font-weight:800; }
+  #nv .chave{ display:flex; background:rgba(255,255,255,.18); border-radius:99px; padding:3px; }
+  #nv .chave button{ border:0; background:transparent; color:#fff; font:inherit; font-size:.7rem; font-weight:800; padding:4px 11px; border-radius:99px; cursor:pointer; }
+  #nv .chave button.on{ background:#fff; color:var(--hc, #1e293b); }
+  #nv .h-vendas{ background:linear-gradient(135deg,#2563eb,#1d4ed8); --hc:#1d4ed8; }
+  #nv .h-vendas.mes{ background:linear-gradient(135deg,#7c3aed,#6d28d9); --hc:#6d28d9; }
+  #nv .h-prazo{ background:linear-gradient(135deg,#ea580c,#b45309); --hc:#b45309; }
+  #nv .h-cart{ background:linear-gradient(135deg,#0f766e,#115e59); --hc:#115e59; }
+  #nv .h-est{ background:linear-gradient(135deg,#0891b2,#0e7490); --hc:#0e7490; }
+  #nv .h-vivo{ background:linear-gradient(135deg,#334155,#0f172a); --hc:#0f172a; }
+  #nv .h-rec{ background:linear-gradient(135deg,#059669,#047857); --hc:#047857; }
+  #nv .h-desc{ background:linear-gradient(135deg,#475569,#1e293b); --hc:#1e293b; }
+  #nv .h-comp{ background:linear-gradient(135deg,#b45309,#78350f); --hc:#78350f; }
+  #nv .h-perd{ background:linear-gradient(135deg,#b91c1c,#7f1d1d); --hc:#7f1d1d; }
+  #nv .h-perd.sobra{ background:linear-gradient(135deg,#047857,#064e3b); --hc:#064e3b; }
+  #nv .bd{ padding:4px 16px 14px; flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow-y:auto; scrollbar-width:thin; }
+  #nv .bd::-webkit-scrollbar{ width:5px; } #nv .bd::-webkit-scrollbar-thumb{ background:#cbd5e1; border-radius:99px; }
+  #nv .fm{ padding:11px 0 10px; border-bottom:1px solid var(--lin); }
+  #nv .fm:last-of-type{ border-bottom:0; }
+  #nv .fm-l{ display:flex; align-items:center; gap:10px; }
+  #nv .ic{ width:34px; height:34px; border-radius:10px; display:grid; place-items:center; color:#fff; background:var(--k); font-size:1rem; flex:0 0 auto; }
+  #nv .ic.pos{ font-size:.82rem; font-weight:800; }
+  #nv .fm-n{ font-size:.86rem; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #nv .fm-s{ font-size:.69rem; color:var(--mut); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #nv .fm-s b{ color:#334155; font-weight:700; }
+  #nv .fm-v{ margin-left:auto; text-align:right; flex:0 0 auto; }
+  #nv .fm-v b{ display:block; font-size:1rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  #nv .fm-v b.ok{ color:var(--ok); } #nv .fm-v b.neg{ color:var(--neg); }
+  #nv .fm-v span{ font-size:.68rem; font-weight:800; color:var(--k); }
+  #nv .fm-v span.ok{ color:var(--ok); } #nv .fm-v span.neg{ color:var(--neg); }
+  #nv .barra{ height:7px; border-radius:99px; background:#f1f5f9; margin:8px 0 0 44px; overflow:hidden; position:relative; }
+  #nv .barra i{ display:block; height:100%; border-radius:99px; background:var(--k); }
+  #nv .barra i.neg{ background:#dc2626; }
+  #nv .barra .marca{ position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--ink); left:var(--m); }
+  #nv .fm.fraco .fm-n{ color:#94a3b8; } #nv .fm.fraco .ic{ opacity:.55; }
+  #nv .rod{ margin-top:auto; padding-top:10px; }
+  #nv .tiles{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  #nv .tile{ border-radius:12px; padding:8px 10px; border:1px solid var(--lin); background:#f8fafc; }
+  #nv .tile .r{ font-size:.6rem; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:var(--mut); }
+  #nv .tile .v{ font-size:1rem; font-weight:800; font-variant-numeric:tabular-nums; margin-top:1px; }
+  #nv .tile .s{ font-size:.65rem; color:var(--mut); margin-top:1px; }
+  #nv .tile.ok{ background:var(--okb); border-color:#d1fae5; } #nv .tile.ok .v{ color:var(--ok); }
+  #nv .tile.neg{ background:var(--negb); border-color:#fee2e2; } #nv .tile.neg .v{ color:var(--neg); }
+  #nv .tile.amb{ background:var(--ambb); border-color:#fde68a; } #nv .tile.amb .v{ color:var(--amb); }
+  #nv .tot{ display:flex; justify-content:space-between; font-size:.86rem; font-weight:800; margin-top:10px; padding-top:8px; border-top:2px solid var(--lin); }
+  #nv .alerta{ display:flex; gap:8px; align-items:flex-start; border-radius:10px; padding:8px 10px; font-size:.7rem; font-weight:600; line-height:1.35; }
+  #nv .alerta.amb{ background:var(--ambb); color:var(--amb); } #nv .alerta.ok{ background:var(--okb); color:var(--ok); }
+  #nv .sec{ font-size:.62rem; font-weight:800; color:var(--mut); text-transform:uppercase; letter-spacing:.06em; margin:10px 0 2px; }
+  #nv .mini{ display:flex; gap:12px; font-size:.68rem; color:#475569; padding:4px 0 0 44px; font-variant-numeric:tabular-nums; flex-wrap:wrap; }
+  #nv .mini span b{ font-weight:800; } #nv .mini .ok{ color:var(--ok); } #nv .mini .neg{ color:var(--neg); }
+  #nv .grade{ display:grid; grid-template-columns:1fr 1fr; gap:7px; padding-top:8px; }
+  #nv .q{ border:1px solid var(--lin); border-top:3px solid var(--k); border-radius:12px; padding:6px 8px; background:#fff; }
+  #nv .q.nova{ box-shadow:0 0 0 2px #22c55e55; }
+  #nv .q .h{ display:flex; justify-content:space-between; font-size:.62rem; color:var(--mut); font-weight:700; }
+  #nv .q .p{ font-size:.76rem; font-weight:800; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #nv .q .p small{ font-weight:600; color:var(--mut); }
+  #nv .q .v{ font-size:.92rem; font-weight:800; font-variant-numeric:tabular-nums; margin-top:1px; }
+  #nv .q .v small{ font-size:.62rem; color:var(--ok); font-weight:800; }
+  #nv .q .f{ display:flex; justify-content:space-between; align-items:center; margin-top:4px; gap:4px; }
+  #nv .q .f .vd{ font-size:.6rem; color:var(--mut); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #nv .chip{ font-size:.58rem; font-weight:800; padding:2px 6px; border-radius:99px; background:var(--cb); color:var(--cc); white-space:nowrap; }
+  #nv .pulse{ width:9px; height:9px; border-radius:50%; background:#22c55e; display:inline-block; animation:nvpulse 1.6s infinite; }
+  @keyframes nvpulse{ 0%,100%{ box-shadow:0 0 0 0 #22c55e66 } 50%{ box-shadow:0 0 0 6px #22c55e00 } }
+  #nv .rola{ font-size:.62rem; color:var(--mut); text-align:center; padding:8px 0 0; }
+  #nv .serie{ display:flex; gap:4px; align-items:flex-end; height:58px; padding:4px 0 0; }
+  #nv .sd{ flex:1 1 0; display:flex; flex-direction:column; align-items:center; gap:2px; height:100%; }
+  #nv .sb{ flex:1; width:100%; display:flex; align-items:flex-end; }
+  #nv .sb i{ display:block; width:100%; border-radius:3px 3px 0 0; min-height:2px; }
+  #nv .sb i.ok{ background:#059669; } #nv .sb i.neg{ background:#dc2626; }
+  #nv .sd span{ font-size:.56rem; color:var(--mut); font-weight:700; }
+  #nv .stack{ display:flex; height:10px; border-radius:99px; overflow:hidden; background:#eef2f7; margin:10px 0 2px; }
+  #nv .stack i{ display:block; height:100%; background:var(--k); }
+
+  @media (max-width: 768px){ #nv .nvc{ flex:0 0 100%; } }
 </style>
 {% endblock %}
 
@@ -592,191 +681,67 @@
     </div>
     {% endif %}
 
-    {# ===== Onda 1 — carrossel (ADITIVO; não altera os cards existentes) ===== #}
-    {% macro fmt_moeda(v) %}R$ {{ "{:,.2f}".format(v|float).replace(",","X").replace(".",",").replace("X",".") }}{% endmacro %}
-    {% macro fmt_litros(v) %}{{ "{:,.0f}".format(v|float).replace(",",".") }}{% endmacro %}
-
-    {% macro card_vendas(titulo, icone, accent, d) %}
-    <section class="onda1-card">
-      <div class="onda1-head onda1-head--{{ accent }}">
-        <div class="onda1-head-top">
-          <span class="onda1-tag"><i class="bi {{ icone }}"></i> {{ titulo }}</span>
-          <span class="onda1-notas">{{ d.notas }} nota{{ 's' if d.notas != 1 else '' }}</span>
-        </div>
-        <div class="onda1-big">{{ fmt_moeda(d.total) }}</div>
-        <div class="onda1-ticket"><b>{{ fmt_litros(d.litros_comb) }} L</b> em combustíveis &middot; Ticket médio {{ fmt_moeda(d.ticket) }}</div>
-      </div>
-      <div class="onda1-body">
-        <table class="onda1-tbl"><tbody>
-          {% for l in d.linhas %}
-          <tr>
-            <td><span class="onda1-dot onda1-dot--{{ loop.index0 }}"></span>{{ l.label }}</td>
-            <td class="num">{{ fmt_litros(l.litros) }} L</td>
-            <td class="num strong">{{ fmt_moeda(l.total) }}</td>
-          </tr>
-          {% endfor %}
-          <tr class="onda1-outros">
-            <td><span class="onda1-dot onda1-dot--outros"></span>Outros produtos</td>
-            <td class="num muted">{{ d.qt_outros }} it.</td>
-            <td class="num strong">{{ fmt_moeda(d.sub_outros) }}</td>
-          </tr>
-        </tbody></table>
-        <div class="onda1-foot">
-          <div><span>Combustíveis + ARLA</span><b>{{ fmt_moeda(d.sub_comb) }}</b></div>
-          <div><span>Outros</span><b>{{ fmt_moeda(d.sub_outros) }}</b></div>
-          {% if d.acrescimo %}<div><span>+ Acréscimo</span><b>{{ fmt_moeda(d.acrescimo) }}</b></div>
-          {#- o acrescimo pela forma de pagamento da nota -#}
-          {%- for k, rot in [('credito', 'cartão de crédito'), ('prazo', 'cliente a prazo'), ('debito', 'cartão de débito'),
-                             ('misto', 'pagamento misto'), ('outros', 'dinheiro e outros')]
-              if (d.acr_forma[k] or 0)|abs > 0.005 %}
-          <div class="acr-f"><span>{{ rot }}</span><b>{{ fmt_moeda(d.acr_forma[k]) }}</b></div>
-          {%- endfor %}{% endif %}
-          {% if d.desconto %}<div><span>− Desconto</span><b>-{{ fmt_moeda(d.desconto) }}</b></div>{% endif %}
-          <div class="tot"><span>Total {{ titulo.split(' ')[-1] }}</span><b>{{ fmt_moeda(d.total) }}</b></div>
-        </div>
-      </div>
-    </section>
-    {% endmacro %}
-
-    {# Minha Venda × Repasse: o que é meu (mercadoria + acréscimo que fica comigo)
-       vs. o repasse que fica parado na mão da operadora de cartão. #}
-    {% macro card_repasse(titulo, icone, d) %}
-    <section class="onda1-card">
-      <div class="onda1-head onda1-head--repasse">
-        <div class="onda1-head-top">
-          <span class="onda1-tag"><i class="bi {{ icone }}"></i> {{ titulo }}</span>
-          <span class="onda1-notas">Minha venda × repasse</span>
-        </div>
-        <div class="onda1-big">{{ fmt_moeda(d.meu) }}</div>
-        <div class="onda1-ticket">meu de verdade &middot; total faturado {{ fmt_moeda(d.total) }}</div>
-      </div>
-      <div class="onda1-body">
-        <table class="onda1-tbl"><tbody>
-          <tr>
-            <td>Minha venda <span class="onda1-tbl-cap">(mercadoria)</span></td>
-            <td class="num strong">{{ fmt_moeda(d.venda) }}</td>
-          </tr>
-          <tr>
-            <td>+ Acréscimo que fica comigo</td>
-            <td class="num strong">{{ fmt_moeda(d.comigo) }}</td>
-          </tr>
-          <tr class="onda1-meu">
-            <td>= Meu de verdade</td>
-            <td class="num">{{ fmt_moeda(d.meu) }}</td>
-          </tr>
-        </tbody></table>
-        <div class="onda1-sub2">prazo + degrau de cartão comum ficam comigo</div>
-        <div class="onda1-repbox">
-          <div class="onda1-repbox-top">
-            <span class="lbl"><i class="bi bi-exclamation-triangle-fill"></i> Repasse à operadora</span>
-            <span class="val">{{ fmt_moeda(d.repasse) }}</span>
-          </div>
-          <div class="onda1-repbox-cap">parado na mão de terceiros</div>
-          {% if d.operadoras %}
-            {% for op in d.operadoras %}
-            <div class="onda1-repbox-op"><span>{{ op.nome }}</span><b>{{ fmt_moeda(op.valor) }}</b></div>
-            {% endfor %}
-          {% else %}
-            <div class="onda1-repbox-empty">Nenhum repasse no período.</div>
-          {% endif %}
-        </div>
-        <div class="onda1-foot">
-          <div class="tot"><span>Total faturado</span><b>{{ fmt_moeda(d.total) }}</b></div>
-        </div>
-      </div>
-    </section>
-    {% endmacro %}
-
-    {% set cor_receb = {
-      'Operadora':'#dc2626',
-      'PIX APP':'#0d9488','PIX Manual':'#b45309','Débito APP':'#1d4ed8','Débito Manual':'#2563eb',
-      'Crédito APP':'#7c3aed','Crédito Manual':'#8b5cf6','Dinheiro':'#059669','Cheque':'#475569',
-      'Prazo':'#d97706','Transferência':'#0891b2','Combo':'#64748b','Outros':'#64748b'} %}
-    <div class="carousel-onda1" data-onda1>
+    {# ===== Carrossel da inicial: nove cards desenhados pelo JavaScript a
+        partir de dash_json (utils/dashboard_cards). Ao vivo e Cartoes x
+        operadora chegam por fetch. ===== #}
+    <div class="carousel-onda1" id="nv" data-onda1
+         data-vivo="{{ url_for('api.vendas_ultimas') }}?n=20"
+         data-cartoes="{{ url_for('api.dashboard_cartoes') }}">
       <button type="button" class="onda1-arrow onda1-prev" aria-label="Anterior"><i class="bi bi-chevron-left"></i></button>
       <div class="onda1-track" data-onda1-track>
+  <section class="onda1-card nvc"><div class="hd h-vendas" id="v-hd">
+      <div class="hd-top"><span class="tag"><i class="bi bi-receipt"></i> Vendas</span>
+        <div class="chave" data-card="v"><button data-p="dia" class="on">Hoje</button><button data-p="mes">Mês</button></div></div>
+      <div class="big" id="v-big"></div><div class="sub" id="v-sub"></div></div>
+    <div class="bd" id="v-bd"></div></section>
 
-        {{ card_vendas('Vendas do Dia', 'bi-calendar-day', 'dia', onda1.dia) }}
-        {{ card_vendas('Vendas do Mês', 'bi-calendar-month', 'mes', onda1.mes) }}
+  <section class="onda1-card nvc"><div class="hd h-prazo">
+      <div class="hd-top"><span class="tag"><i class="bi bi-person-vcard-fill"></i> Acréscimo a prazo</span>
+        <div class="chave" data-card="p"><button data-p="dia" class="on">Hoje</button><button data-p="mes">Mês</button></div></div>
+      <div class="big" id="p-big"></div><div class="sub" id="p-sub"></div></div>
+    <div class="bd" id="p-bd"></div></section>
 
-        {# CARD — ESTOQUE AGORA (Posto NH · saldo dos 4 combustíveis).
-           MESMO molde do card_vendas: onda1-head (gradiente existente) + head-top
-           (tag + onda1-notas) + onda1-big + onda1-ticket, e corpo onda1-tbl. #}
-        {% set ns_est = namespace(total=0) %}
-        {% for c in tempo_real_cards %}{% if c.saldo is not none %}{% set ns_est.total = ns_est.total + c.saldo %}{% endif %}{% endfor %}
-        <section class="onda1-card">
-          <div class="onda1-head onda1-head--rank">
-            <div class="onda1-head-top">
-              <span class="onda1-tag"><i class="bi bi-speedometer2"></i> Estoque · Agora</span>
-              <span class="onda1-notas">Posto NH</span>
-            </div>
-            <div class="onda1-big">{{ fmt_litros(ns_est.total) }} L</div>
-            <div class="onda1-ticket">saldo agora · abertura + descargas &minus; vendas</div>
-          </div>
-          <div class="onda1-body">
-            {% if tempo_real_cards %}
-              <table class="onda1-tbl"><tbody>
-                {% for c in tempo_real_cards %}
-                <tr>
-                  <td><span class="onda1-dot" style="background:{{ c.cor }}"></span>{{ c.nome }}</td>
-                  <td class="num strong">{% if c.saldo is not none %}{{ fmt_litros(c.saldo) }} L{% else %}<span class="muted">—</span>{% endif %}</td>
-                </tr>
-                {% endfor %}
-              </tbody></table>
-            {% else %}
-              <div class="onda1-empty"><i class="bi bi-inbox"></i> Sem leitura de abertura hoje</div>
-            {% endif %}
-          </div>
-        </section>
+  <section class="onda1-card nvc"><div class="hd h-cart">
+      <div class="hd-top"><span class="tag"><i class="bi bi-arrow-left-right"></i> Cartões × operadora</span><span class="per">Outubro</span></div>
+      <div class="big" id="c-big"></div><div class="sub" id="c-sub"></div></div>
+    <div class="bd" id="c-bd"></div></section>
 
-        {# CARD 3 — AO VIVO #}
-        <section class="onda1-card">
-          <div class="onda1-head onda1-head--live">
-            <div class="onda1-head-top">
-              <span class="onda1-tag"><i class="bi bi-broadcast"></i> Ao Vivo</span>
-              <span class="onda1-live-dot" title="atualiza a cada 30s"></span>
-            </div>
-            <div class="onda1-live-sub">Últimas 5 vendas</div>
-          </div>
-          <div class="onda1-body">
-            <ul class="onda1-live" id="onda1LiveList" data-endpoint="{{ url_for('api.vendas_ultimas') }}">
-              <li class="onda1-live-empty">Carregando…</li>
-            </ul>
-          </div>
-        </section>
+  <section class="onda1-card nvc"><div class="hd h-est">
+      <div class="hd-top"><span class="tag"><i class="bi bi-speedometer2"></i> Estoque · agora</span><span class="per">Posto NH</span></div>
+      <div class="big" id="e-big"></div><div class="sub" id="e-sub"></div></div>
+    <div class="bd" id="e-bd"></div></section>
 
-        {# CARD 5 — RECEBIMENTO DO DIA (por classe; conciliação PIX APP x Manual) #}
-        <section class="onda1-card">
-          <div class="onda1-head onda1-head--receb">
-            <div class="onda1-head-top">
-              <span class="onda1-tag"><i class="bi bi-wallet2"></i> Recebimento do Dia</span>
-              <span class="onda1-notas">{{ onda1.recebimento|length }} classe{{ 's' if onda1.recebimento|length != 1 else '' }}</span>
-            </div>
-            <div class="onda1-big">{{ fmt_moeda(onda1.recebimento_total) }}</div>
-            <div class="onda1-ticket">todas as vendas do dia · por forma de recebimento</div>
-          </div>
-          <div class="onda1-body">
-            {% if onda1.recebimento %}
-              <table class="onda1-tbl"><tbody>
-                {% for r in onda1.recebimento %}
-                <tr>
-                  <td><span class="onda1-dot" style="background:{{ cor_receb.get(r.classe,'#64748b') }}"></span>{{ r.classe }}</td>
-                  <td class="num muted">{{ r.pct|round(0)|int }}%</td>
-                  <td class="num strong">{{ fmt_moeda(r.valor) }}</td>
-                </tr>
-                {% endfor %}
-              </tbody></table>
-            {% else %}
-              <div class="onda1-empty"><i class="bi bi-inbox"></i> Sem vendas hoje</div>
-            {% endif %}
-          </div>
-        </section>
+  <section class="onda1-card nvc"><div class="hd h-vivo">
+      <div class="hd-top"><span class="tag"><i class="bi bi-broadcast"></i> Ao vivo</span><span class="pulse"></span></div>
+      <div class="big" id="l-big"></div><div class="sub" id="l-sub"></div></div>
+    <div class="bd"><div class="grade" id="l-grade"></div><div class="rola">▾ role para ver as 20</div></div></section>
 
+  <section class="onda1-card nvc"><div class="hd h-rec">
+      <div class="hd-top"><span class="tag"><i class="bi bi-wallet2"></i> Recebimento do dia</span><span class="per" id="r-per"></span></div>
+      <div class="big" id="r-big"></div><div class="sub" id="r-sub"></div></div>
+    <div class="bd" id="r-bd"></div></section>
+
+  <section class="onda1-card nvc"><div class="hd h-desc">
+      <div class="hd-top"><span class="tag"><i class="bi bi-truck-flatbed"></i> Últimas descargas</span>
+        <div class="chave" data-card="d"><button data-p="dia" class="on">Hoje</button><button data-p="mes">Mês</button></div></div>
+      <div class="big" id="d-big"></div><div class="sub" id="d-sub"></div></div>
+    <div class="bd" id="d-bd"></div></section>
+
+  <section class="onda1-card nvc"><div class="hd h-comp">
+      <div class="hd-top"><span class="tag"><i class="bi bi-cart-check-fill"></i> Últimas compras</span>
+        <div class="chave" data-card="k"><button data-p="dia" class="on">Hoje</button><button data-p="mes">Mês</button></div></div>
+      <div class="big" id="k-big"></div><div class="sub" id="k-sub"></div></div>
+    <div class="bd" id="k-bd"></div></section>
+
+  <section class="onda1-card nvc"><div class="hd h-perd" id="x-hd">
+      <div class="hd-top"><span class="tag"><i class="bi bi-droplet-half"></i> Perdas de produto</span>
+        <div class="chave" data-card="x"><button data-p="dia" class="on">Dia</button><button data-p="mes">Mês</button></div></div>
+      <div class="big" id="x-big"></div><div class="sub" id="x-sub"></div></div>
+    <div class="bd" id="x-bd"></div></section>
       </div>
       <button type="button" class="onda1-arrow onda1-next" aria-label="Próximo"><i class="bi bi-chevron-right"></i></button>
       <div class="onda1-dots" data-onda1-dots></div>
     </div>
-    {# ===== fim Onda 1 ===== #}
 
     <!-- Product Breakdown Row -->
     {#- Paleta conferida no validador: as cores antigas reprovavam — verde e
@@ -1133,7 +1098,7 @@
 })();
 </script>
 
-<!-- Onda 1 – navegação do carrossel + card Ao Vivo (fetch 30s) -->
+<!-- Carrossel: setas e bolinhas -->
 <script>
 (function () {
   var root = document.querySelector('[data-onda1]');
@@ -1161,35 +1126,246 @@
   var t; track.addEventListener('scroll', function () { clearTimeout(t); t = setTimeout(syncDots, 60); });
   syncDots();
 
-  // ---- Card AO VIVO ----
-  var list = document.getElementById('onda1LiveList');
-  if (list) {
-    var url = list.getAttribute('data-endpoint');
-    function esc(s) { var d = document.createElement('div'); d.textContent = (s == null ? '' : s); return d.innerHTML; }
-    function moeda(v) { return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-    function qtd(v, un) { return v ? (Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + (un ? ' ' + un : '')) : ''; }
-    function carregar() {
-      fetch(url, { headers: { 'Accept': 'application/json' } })
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (d) {
-          if (!d || !d.ok) return;
-          if (!d.vendas.length) { list.innerHTML = '<li class="onda1-live-empty">Sem vendas ainda</li>'; return; }
-          list.innerHTML = d.vendas.map(function (x) {
-            var extra = x.extra > 0 ? '<span class="lv-extra">+' + x.extra + ' ' + (x.extra > 1 ? 'itens' : 'item') + '</span>' : '';
-            return '<li class="onda1-live-item">'
-              + '<div class="lv-l"><span class="lv-prod">' + esc(x.produto) + extra + '</span>'
-              + '<span class="lv-vend">' + esc(x.vendedor) + '</span></div>'
-              + '<div class="lv-r"><span class="lv-val">' + moeda(x.valor) + '</span>'
-              + '<span class="lv-meta">' + esc(qtd(x.litros, x.unidade)) + ' · ' + esc(x.hora) + '</span></div>'
-              + '</li>';
-          }).join('');
-        })
-        .catch(function () { /* silencioso: mantém o último estado renderizado */ });
+})();
+</script>
+<!-- Cards do carrossel: desenho a partir de dash_json; Ao vivo (30s) e Cartoes por fetch -->
+<script>
+(function () {
+  var root = document.getElementById('nv');
+  if (!root) return;
+const D = {{ dash_json|safe }};
+  if (!D) return;
+const R = v => v.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+const N = v => v.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+const L = v => Math.round(v).toLocaleString('pt-BR');
+const I = v => v.toLocaleString('pt-BR');
+const P1 = v => v.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1});
+const [Y, M, Dd] = D.hoje.split('-');
+const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const PCOR = {'Diesel S-500':'#5A6675','Diesel S-10':'#2B7FC4','Etanol':'#2E9E5B','Gasolina C':'#E0A02E','ARLA':'#12A0A0'};
+const PICO = {'Diesel S-500':'bi-truck','Diesel S-10':'bi-truck-front','Etanol':'bi-droplet-fill','Gasolina C':'bi-fuel-pump-fill','ARLA':'bi-moisture'};
+const periodoTxt = per => per == 'dia' ? `hoje, ${Dd}/${M}` : `${MESES[+M-1]} até ${Dd}/${M}`;
+const cap1 = s => s.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());
+// uma fileira padrão
+const fila = (k, ic, nome, sub, valor, pct, barra, extra = '', icCls = 'ic') =>
+  `<div class="fm" style="--k:${k}"><div class="fm-l"><span class="${icCls}">${ic}</span>
+    <div style="min-width:0"><div class="fm-n">${nome}</div><div class="fm-s">${sub}</div></div>
+    <div class="fm-v"><b>${valor}</b>${pct}</div></div>${barra}${extra}</div>`;
+const bar = (w, cls = '', marca = null) => `<div class="barra"><i class="${cls}" style="width:${Math.min(100, w)}%"></i>${marca != null ? `<span class="marca" style="--m:${marca}%"></span>` : ''}</div>`;
+
+// ---------- 1 VENDAS ----------
+function vendas(per){
+  const d = D.onda1[per], f = D.formas[per];
+  document.getElementById('v-hd').classList.toggle('mes', per == 'mes');
+  document.getElementById('v-big').textContent = R(d.total);
+  document.getElementById('v-sub').innerHTML = `<b>${I(d.notas)}</b> notas · <b>${L(d.litros_comb)} L</b> · ticket ${R(d.ticket)} · ${periodoTxt(per)}`;
+  const na = Object.values(f).reduce((s, x) => s + x.na, 0), nd = Object.values(f).reduce((s, x) => s + x.nd, 0);
+  let h = d.linhas.map(l => fila(PCOR[l.label], `<i class="bi ${PICO[l.label]}"></i>`, l.label, `<b>${L(l.litros)} L</b>`,
+      R(l.total), `<span>${Math.round(l.total / d.total * 100)}%</span>`, bar(l.total / d.total * 100))).join('');
+  if (d.sub_outros > 0) h += fila('#94a3b8', '<i class="bi bi-bag"></i>', 'Outros produtos', `${d.qt_outros} itens`, R(d.sub_outros), '', '');
+  h += `<div class="rod"><div class="tiles">
+    <div class="tile ok"><div class="r">+ Acréscimo</div><div class="v">${R(d.acrescimo)}</div><div class="s">${I(na)} notas · ${P1(d.acrescimo / (d.total - d.acrescimo) * 100)}% da venda</div></div>
+    <div class="tile ${d.desconto > 0 ? 'neg' : ''}"><div class="r">− Desconto</div><div class="v">${d.desconto > 0 ? '− ' : ''}${R(d.desconto)}</div><div class="s">${nd ? I(nd) + ' nota' + (nd == 1 ? '' : 's') : 'nenhum desconto'}</div></div></div>
+    <div class="tot"><span>Total ${per == 'dia' ? 'do dia' : 'do mês'}</span><span>${R(d.total)}</span></div></div>`;
+  document.getElementById('v-bd').innerHTML = h;
+}
+
+// ---------- 2 PRAZO ----------
+function prazo(per){
+  const f = D.formas[per].prazo, lista = D.prazo[per];
+  const com = lista.filter(c => c.a > 0.004), sem = lista.filter(c => c.a <= 0.004);
+  document.getElementById('p-big').textContent = R(f.a);
+  document.getElementById('p-sub').innerHTML = `<b>${f.na}</b> de ${f.n} notas a prazo com acréscimo · ${periodoTxt(per)}`;
+  const mx = com.length ? com[0].a : 1;
+  let h = com.slice(0, 4).map((c, i) => fila('var(--praz)', String(i + 1), cap1(c.cli),
+      `${c.n} nota${c.n == 1 ? '' : 's'} · <b>+${N(c.a / (c.v - c.a) * 100)}%</b> · venda ${N(c.v)}`,
+      R(c.a), `<span>${Math.round(c.a / f.a * 100)}%</span>`, bar(c.a / mx * 100), '', 'ic pos')).join('');
+  if (!com.length) h = '<div class="fm fraco"><div class="fm-s">nenhuma venda a prazo com acréscimo</div></div>';
+  const vSem = sem.reduce((s, c) => s + c.v, 0), base = f.v - f.a;
+  h += `<div class="rod">${sem.length
+      ? `<div class="alerta amb" style="margin-bottom:8px"><i class="bi bi-exclamation-circle-fill"></i><span><b>${sem.length} cliente${sem.length == 1 ? '' : 's'}</b> a prazo sem acréscimo · ${R(vSem)} — ${sem.slice(0, 3).map(c => cap1(c.cli.split(' ').slice(0, 2).join(' '))).join(', ')}${sem.length > 3 ? '…' : ''}</span></div>`
+      : `<div class="alerta ok" style="margin-bottom:8px"><i class="bi bi-check-circle-fill"></i>todo cliente a prazo pagou acréscimo</div>`}
+    <div class="tiles"><div class="tile"><div class="r">Vendido a prazo</div><div class="v">${R(f.v)}</div><div class="s">${f.n} nota${f.n == 1 ? '' : 's'}</div></div>
+    <div class="tile ok"><div class="r">Acréscimo médio</div><div class="v">+${base > 0 ? N(f.a / base * 100) : '0,00'}%</div><div class="s">sobre o preço à vista</div></div></div></div>`;
+  document.getElementById('p-bd').innerHTML = h;
+}
+
+// ---------- 3 CARTOES x OPERADORA (mes) ----------
+// os numeros do Conf. Cartoes · aba Operadora, do mes corrente: vendido no
+// cartao, taxa retida (so do que ja foi pago) e o que ainda nao caiu
+function cartoes(){
+  const bd = document.getElementById('c-bd');
+  document.getElementById('c-big').textContent = '…';
+  document.getElementById('c-sub').textContent = 'lendo os arquivos das operadoras';
+  bd.innerHTML = '<div class="rola" style="padding-top:40px"><i class="bi bi-hourglass-split"></i> carregando o Conf. Cartões…</div>';
+  fetch(root.dataset.cartoes, {headers: {'Accept': 'application/json'}}).then(r => r.ok ? r.json() : null).then(j => {
+    if (!j || !j.ok) { bd.innerHTML = '<div class="rola" style="padding-top:40px">não foi possível ler o Conf. Cartões agora</div>'; document.getElementById('c-big').textContent = '—'; document.getElementById('c-sub').textContent = ''; return; }
+    const f = D.formas.mes, b = D.band.mes, REL = j.tipos;
+    let h = '', acrT = 0, taxaT = 0, vendT = 0, naoT = 0, bandas = [];
+    for (const [k, nome, ic, cor] of [['credito', 'Crédito', 'bi-credit-card-2-front-fill', 'var(--cred)'], ['debito', 'Débito', 'bi-credit-card-fill', 'var(--deb)']]){
+      const acr = f[k].a, r = REL[k] || {vendido: 0, taxa: 0, pct: 0, nao_caiu: 0, band: {}}, dif = acr - r.taxa;
+      acrT += acr; taxaT += r.taxa; vendT += r.vendido; naoT += r.nao_caiu;
+      h += fila(cor, `<i class="bi ${ic}"></i>`, nome, `acrésc. <b>${N(acr)}</b> · taxa <b>${N(r.taxa)}</b>`,
+        (dif >= 0 ? '+ ' : '− ') + R(Math.abs(dif)), `<span class="${dif >= 0 ? 'ok' : 'neg'}">taxa ${N(r.pct || 0)}%</span>`,
+        bar(acr ? r.taxa / acr * 100 : 0, '', 100));
+      for (const [bn, x] of Object.entries(r.band)) if (bn != 'Outras') bandas.push({k, cor, bn, tx: x.taxa, pc: x.pct || 0, acr: (b[k][bn] || {a: 0}).a});
     }
-    carregar();
-    setInterval(carregar, 30000);
-  }
+    const difT = acrT - taxaT;
+    document.getElementById('c-big').textContent = (difT >= 0 ? '+ ' : '− ') + R(Math.abs(difT));
+    document.getElementById('c-sub').innerHTML = `acréscimo cobrado <b>${R(acrT)}</b> − taxa retida pela operadora <b>${R(taxaT)}</b> · ${MESES[+M-1].toLowerCase()} até ${Dd}/${M}`;
+    bandas.sort((x, y) => (x.k == y.k ? y.tx - x.tx : (x.k == 'credito' ? -1 : 1)));
+    h += `<div class="sec">Por bandeira · relatório da operadora</div>`;
+    h += bandas.map(x => { const d = x.acr - x.tx; return `<div class="fm" style="--k:${x.cor};padding:7px 0 6px"><div class="fm-l">
+        <span class="ic" style="width:26px;height:26px;border-radius:7px;font-size:.78rem"><i class="bi ${x.k == 'credito' ? 'bi-credit-card-2-front-fill' : 'bi-credit-card-fill'}"></i></span>
+        <div style="min-width:0"><div class="fm-n" style="font-size:.78rem">${x.bn} <small style="font-weight:600;color:var(--mut)">${x.k == 'credito' ? 'crédito' : 'débito'}</small></div>
+        <div class="fm-s">acrésc. <b>${N(x.acr)}</b> · taxa <b>${N(x.tx)}</b> (${N(x.pc)}%)</div></div>
+        <div class="fm-v"><b style="font-size:.88rem" class="${d >= 0 ? 'ok' : 'neg'}">${d >= 0 ? '+' : '−'}${N(Math.abs(d))}</b></div></div></div>`; }).join('');
+    h += `<div class="rod"><div class="alerta amb" style="margin-bottom:8px"><i class="bi bi-info-circle-fill"></i><span>a taxa retida é só do que a operadora <b>já pagou</b>; o acréscimo é do mês inteiro</span></div>
+      <div class="tiles"><div class="tile"><div class="r">Vendido no cartão</div><div class="v">${R(vendT)}</div><div class="s">pelo arquivo da operadora</div></div>
+      <div class="tile amb"><div class="r">Ainda não caiu</div><div class="v">${R(naoT)}</div><div class="s">a operadora ainda vai pagar</div></div></div></div>`;
+    bd.innerHTML = h;
+  }).catch(() => { bd.innerHTML = '<div class="rola" style="padding-top:40px">não foi possível ler o Conf. Cartões agora</div>'; });
+}
+
+// ---------- 4 ESTOQUE ----------
+function estoque(){
+  const e = D.estoque, tot = e.reduce((s, t) => s + (t.saldo || 0), 0), cap = e.reduce((s, t) => s + t.cap, 0);
+  document.getElementById('e-big').innerHTML = `${L(tot)} L <small>de ${L(cap)} L</small>`;
+  document.getElementById('e-sub').innerHTML = `<b>${Math.round(tot / cap * 100)}%</b> dos tanques · abertura + descargas − vendas de hoje`;
+  const ICO = {'Gasolina':'bi-fuel-pump-fill','Etanol':'bi-droplet-fill','S-500':'bi-truck','S-10':'bi-truck-front'};
+  let menor = null;
+  let h = e.map(t => { const pc = t.cap ? (t.saldo || 0) / t.cap * 100 : 0, aut = t.med_dia ? (t.saldo || 0) / t.med_dia : 0;
+    if (aut && (!menor || aut < menor.aut)) menor = {nome: t.nome, aut};
+    return fila(t.cor, `<i class="bi ${ICO[t.nome] || 'bi-droplet'}"></i>`, t.nome,
+      `abriu <b>${L(t.abriu || 0)}</b> · rec. <b>${L(t.rec)}</b> · vend. <b>${L(t.ven)}</b>`,
+      `${t.saldo == null ? '—' : L(t.saldo)} L`, `<span class="${pc < 25 ? 'neg' : ''}">${Math.round(pc)}% do tanque</span>`, bar(pc, pc < 25 ? 'neg' : ''),
+      `<div class="mini"><span>dura <b class="${aut < 1.5 ? 'neg' : ''}">~${P1(aut)} dia${aut >= 1.95 ? 's' : ''}</b> pela venda média do mês</span></div>`); }).join('');
+  const baixos = e.filter(t => t.cap && (t.saldo || 0) / t.cap < .25).map(t => t.nome);
+  h += `<div class="rod">${baixos.length ? `<div class="alerta amb" style="margin-bottom:8px"><i class="bi bi-fuel-pump-fill"></i><span><b>${baixos.join(' e ')}</b> abaixo de 25% do tanque — programar descarga</span></div>` : ''}
+    <div class="tiles"><div class="tile"><div class="r">Recebido hoje</div><div class="v">${L(e.reduce((s, t) => s + t.rec, 0))} L</div><div class="s">descargas do dia</div></div>
+    <div class="tile ${menor && menor.aut < 1.5 ? 'neg' : 'amb'}"><div class="r">Acaba primeiro</div><div class="v">${menor ? menor.nome : '—'}</div><div class="s">${menor ? '~' + P1(menor.aut) + ' dia de venda' : ''}</div></div></div></div>`;
+  document.getElementById('e-bd').innerHTML = h;
+}
+
+// ---------- 5 AO VIVO ----------
+const CCH = {'PIX APP':['#dcfce7','#166534'],'PIX Manual':['#dcfce7','#166534'],'Dinheiro':['#fef3c7','#92400e'],'Prazo':['#ffedd5','#c2410c'],
+  'Crédito Manual':['#ede9fe','#5b21b6'],'Crédito APP':['#ede9fe','#5b21b6'],'Débito Manual':['#dbeafe','#1e40af'],'Débito APP':['#dbeafe','#1e40af'],
+  'Cheque':['#e2e8f0','#334155'],'Combo':['#fce7f3','#9d174d'],'Transferência':['#ccfbf1','#115e59'],'Operadora':['#fee2e2','#991b1b']};
+const PCOR2 = {'S-500':'#5A6675','S-10':'#2B7FC4','ETANOL':'#2E9E5B','GASOLINA':'#E0A02E','ARLA':'#12A0A0'};
+function vivoDesenha(v){
+  if (!v.length) { document.getElementById('l-grade').innerHTML = '<div class="rola">sem vendas ainda</div>'; return; }
+  document.getElementById('l-big').innerHTML = `${v.length} vendas <small>· última ${v[0].hora}</small>`;
+  document.getElementById('l-sub').innerHTML = `<b>${R(v.reduce((s, x) => s + x.valor, 0))}</b> nas últimas ${v.length} notas · ${v[v.length - 1].hora} a ${v[0].hora}`;
+  document.getElementById('l-grade').innerHTML = v.map((x, i) => { const c = CCH[x.classe] || ['#f1f5f9', '#334155'];
+    const cor = Object.entries(PCOR2).find(([k]) => x.produto.toUpperCase().includes(k));
+    return `<div class="q${i == 0 ? ' nova' : ''}" style="--k:${cor ? cor[1] : '#94a3b8'}"><div class="h"><span>${x.hora}</span><span>nº ${x.numero}</span></div>
+      <div class="p">${x.produto.replace('DIESEL ', '')} <small>${x.litros ? L(x.litros) + ' L' : ''}${x.extra ? ' +' + x.extra : ''}</small></div>
+      <div class="v">${R(x.valor)}${x.acr ? ` <small>+${N(x.acr)}</small>` : ''}</div>
+      <div class="f"><span class="vd">${x.vendedor.split(' ')[0]}</span><span class="chip" style="--cb:${c[0]};--cc:${c[1]}">${x.classe}</span></div></div>`; }).join('');
+}
+
+function vivo(){
+  fetch(root.dataset.vivo, {headers: {'Accept': 'application/json'}}).then(r => r.ok ? r.json() : null)
+    .then(j => { if (j && j.ok) vivoDesenha(j.vendas); }).catch(() => {});
+}
+// ---------- 6 RECEBIMENTO ----------
+const FAM = [
+  ['PIX', ['PIX APP', 'PIX Manual'], '#059669', 'bi-qr-code'],
+  ['Cartão de crédito', ['Crédito APP', 'Crédito Manual'], '#7c3aed', 'bi-credit-card-2-front-fill'],
+  ['Cartão de débito', ['Débito APP', 'Débito Manual'], '#2563eb', 'bi-credit-card-fill'],
+  ['Dinheiro', ['Dinheiro'], '#d97706', 'bi-cash-stack'],
+  ['Prazo', ['Prazo'], '#ea580c', 'bi-person-vcard-fill'],
+  ['Cheque', ['Cheque'], '#475569', 'bi-journal-check'],
+  ['Combo', ['Combo'], '#be185d', 'bi-layers-fill'],
+  ['Transferência', ['Transferência'], '#0f766e', 'bi-bank2'],
+  ['Operadora', ['Operadora'], '#991b1b', 'bi-building'],
+];
+function receb(){
+  const r = D.receb, tot = D.receb_total, by = Object.fromEntries(r.map(x => [x.classe, x]));
+  const fam = FAM.map(([nome, cls, cor, ic]) => { const ps = cls.map(c => by[c]).filter(Boolean);
+    return {nome, cor, ic, n: ps.reduce((s, x) => s + x.n, 0), v: ps.reduce((s, x) => s + x.valor, 0),
+      det: ps.length > 1 ? ' · ' + ps.map(x => `${x.classe.replace(/^.*? /, '').toLowerCase()} <b>${L(x.valor)}</b>`).join(' · ') : ''}; })
+    .filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+  const banco = fam.filter(f => f.nome == 'PIX' || f.nome.startsWith('Cartão') || f.nome == 'Transferência').reduce((s, f) => s + f.v, 0);
+  const caixa = fam.filter(f => f.nome == 'Dinheiro' || f.nome == 'Cheque').reduce((s, f) => s + f.v, 0);
+  document.getElementById('r-per').textContent = `${Dd}/${M}`;
+  document.getElementById('r-big').textContent = R(tot);
+  document.getElementById('r-sub').innerHTML = `<b>${I(r.reduce((s, x) => s + x.n, 0))}</b> notas · ${fam.length} formas de recebimento`;
+  const mx = fam[0].v;
+  let h = `<div class="stack">${fam.map(f => `<i style="--k:${f.cor};width:${f.v / tot * 100}%"></i>`).join('')}</div>`;
+  h += fam.map(f => fila(f.cor, `<i class="bi ${f.ic}"></i>`, f.nome, `${f.n} nota${f.n == 1 ? '' : 's'}${f.det}`, R(f.v),
+      `<span>${P1(f.v / tot * 100)}%</span>`, bar(f.v / mx * 100))).join('');
+  h += `<div class="rod"><div class="tiles"><div class="tile ok"><div class="r">Cai no banco</div><div class="v">${R(banco)}</div><div class="s">PIX, cartão e transferência · ${Math.round(banco / tot * 100)}%</div></div>
+    <div class="tile amb"><div class="r">Em caixa</div><div class="v">${R(caixa)}</div><div class="s">dinheiro e cheque · ${Math.round(caixa / tot * 100)}%</div></div></div></div>`;
+  document.getElementById('r-bd').innerHTML = h;
+}
+
+// ---------- 7 DESCARGAS ----------
+const PICO3 = {'Gasolina':'bi-fuel-pump-fill','Etanol':'bi-droplet-fill','S-500':'bi-truck','S-10':'bi-truck-front'};
+function descargas(per){
+  const t = D.descargas.tot[per], u = D.descargas.ultimas;
+  document.getElementById('d-big').innerHTML = `${L(t.l)} L <small>· ${t.n} descarga${t.n == 1 ? '' : 's'}</small>`;
+  const prods = Object.entries(t.prod).sort((a, b) => b[1] - a[1]);
+  document.getElementById('d-sub').innerHTML = (prods.length ? prods.map(([p, l]) => `<b>${p}</b> ${L(l)}`).join(' · ') : 'nenhuma descarga') + ' · ' + periodoTxt(per);
+  const lista = u;
+  const mx = Math.max(...u.map(x => x.litros));
+  let h = lista.map(x => fila(x.cor, `<i class="bi ${PICO3[x.produto]}"></i>`, `${x.produto} <small style="font-weight:600;color:var(--mut)">tanque ${x.tanque} · ${x.dia.slice(8)}/${x.dia.slice(5, 7)} ${x.hi}</small>`,
+      x.nf ? `NF <b>${x.nf}</b> · ${cap1(x.forn.split(' ').slice(0, 2).join(' '))}${x.placa ? ' · ' + x.placa : ''}` : `<span class="neg">sem nota vinculada</span> · ${L(x.vi)} → ${L(x.vf)} L`,
+      `${L(x.litros)} L`, `<span class="${x.status == 'vinculada' ? 'ok' : 'neg'}">${x.status == 'vinculada' ? 'conferida' : 'a vincular'}</span>`, bar(x.litros / mx * 100))).join('');
+  const pend = u.filter(x => x.status != 'vinculada').length;
+  h += `<div class="rod">${pend ? `<div class="alerta amb" style="margin-bottom:8px"><i class="bi bi-link-45deg"></i><span><b>${pend} descarga${pend == 1 ? '' : 's'}</b> sem nota vinculada nas últimas ${u.length}</span></div>` : ''}
+    <div class="tiles"><div class="tile"><div class="r">Hoje</div><div class="v">${L(D.descargas.tot.dia.l)} L</div><div class="s">${D.descargas.tot.dia.n} descargas</div></div>
+    <div class="tile"><div class="r">No mês</div><div class="v">${L(D.descargas.tot.mes.l)} L</div><div class="s">${D.descargas.tot.mes.n} descargas</div></div></div></div>`;
+  document.getElementById('d-bd').innerHTML = h;
+}
+
+// ---------- 8 COMPRAS ----------
+function compras(per){
+  const t = D.compras.tot[per], u = D.compras.ultimas;
+  document.getElementById('k-big').textContent = R(t.v);
+  const prods = Object.entries(t.prod).sort((a, b) => b[1].v - a[1].v);
+  document.getElementById('k-sub').innerHTML = `<b>${L(t.l)} L</b> em ${t.n} nota${t.n == 1 ? '' : 's'}` + (prods.length ? ' · ' + prods.map(([p, x]) => `${p} ${N(x.v / x.l)}/L`).join(' · ') : '') + ' · ' + periodoTxt(per);
+  const lista = u;
+  const mx = Math.max(...u.map(x => x.vt));
+  let h = lista.map(x => fila(x.cor, `<i class="bi ${PICO3[x.produto]}"></i>`, `${x.produto} <small style="font-weight:600;color:var(--mut)">${L(x.litros)} L · ${x.dh.slice(8, 10)}/${x.dh.slice(5, 7)}</small>`,
+      `NF <b>${x.nf}</b> · ${cap1(x.forn.split(' ').slice(0, 2).join(' '))}${x.placa ? ' · ' + x.placa : ''}`,
+      R(x.vt), `<span>${N(x.pu)}/L</span>`, bar(x.vt / mx * 100))).join('');
+  h += `<div class="rod"><div class="tiles"><div class="tile"><div class="r">Hoje</div><div class="v">${R(D.compras.tot.dia.v)}</div><div class="s">${L(D.compras.tot.dia.l)} L · ${D.compras.tot.dia.n} nota${D.compras.tot.dia.n == 1 ? '' : 's'}</div></div>
+    <div class="tile"><div class="r">No mês</div><div class="v">${R(D.compras.tot.mes.v)}</div><div class="s">${L(D.compras.tot.mes.l)} L · ${D.compras.tot.mes.n} notas</div></div></div></div>`;
+  document.getElementById('k-bd').innerHTML = h;
+}
+
+// ---------- 9 PERDAS (conciliacao: leitura final − (inicial + descarga − venda)) ----------
+function perdas(per){
+  const p = D.perdas, c = p[per], itens = Object.values(c);
+  const tot = itens.reduce((s, x) => s + x.perda, 0), rs = itens.reduce((s, x) => s + x.rs, 0), ven = itens.reduce((s, x) => s + x.ven, 0);
+  document.getElementById('x-hd').classList.toggle('sobra', tot >= 0);
+  document.getElementById('x-big').innerHTML = `${tot >= 0 ? '+' : '−'} ${L(Math.abs(tot))} L <small>· ${tot >= 0 ? 'sobra' : 'perda'} ${R(Math.abs(rs))}</small>`;
+  document.getElementById('x-sub').innerHTML = (per == 'dia' ? `último dia fechado: <b>${p.ultimo_dia.slice(8)}/${p.ultimo_dia.slice(5, 7)}</b>` : `<b>${p.n_dias} dias</b> fechados em ${MESES[+M-1].toLowerCase()}`) +
+    ` · ${P1(Math.abs(tot) / ven * 100)}% do vendido · ao custo médio de compra`;
+  const mx = Math.max(...itens.map(x => Math.abs(x.perda))) || 1;
+  let h = itens.map(x => fila(x.cor, `<i class="bi ${PICO3[x.nome]}"></i>`, x.nome,
+      `vendeu <b>${L(x.ven)}</b> · recebeu <b>${L(x.rec)}</b> · ${x.dias} dia${x.dias == 1 ? '' : 's'}`,
+      `${x.perda >= 0 ? '+' : '−'} ${L(Math.abs(x.perda))} L`, `<span class="${x.perda >= 0 ? 'ok' : 'neg'}">${x.perda >= 0 ? '+' : '−'} ${R(Math.abs(x.rs))}</span>`,
+      bar(Math.abs(x.perda) / mx * 100, x.perda < 0 ? 'neg' : ''))).join('');
+  const ult = p.serie.slice(-10), mxs = Math.max(...ult.map(x => Math.abs(x.Gasolina + x.Etanol + x['S-500'] + x['S-10']))) || 1;
+  h += `<div class="sec">Dia a dia · saldo da conciliação</div><div class="serie">${ult.map(x => { const t = x.Gasolina + x.Etanol + x['S-500'] + x['S-10'];
+    return `<div class="sd" title="${x.d.slice(8)}/${x.d.slice(5, 7)}: ${t >= 0 ? '+' : '−'}${L(Math.abs(t))} L"><div class="sb"><i class="${t < 0 ? 'neg' : 'ok'}" style="height:${Math.abs(t) / mxs * 100}%"></i></div><span>${x.d.slice(8)}</span></div>`; }).join('')}</div>`;
+  const piores = p.serie.map(s => ({d: s.d, t: s.Gasolina + s.Etanol + s['S-500'] + s['S-10']})).sort((a, b) => a.t - b.t).slice(0, 2);
+  h += `<div class="rod">${per == 'mes' && piores.length ? `<div class="alerta amb" style="margin-bottom:8px"><i class="bi bi-exclamation-circle-fill"></i><span>maiores perdas: ${piores.map(x => `<b>${x.d.slice(8)}/${x.d.slice(5, 7)}</b> ${L(x.t)} L`).join(' · ')} — conferir descarga lançada no dia errado</span></div>` : ''}
+    <div class="tiles"><div class="tile ${tot < 0 ? 'neg' : 'ok'}"><div class="r">${tot < 0 ? 'Perda' : 'Sobra'} em litros</div><div class="v">${L(Math.abs(tot))} L</div><div class="s">${P1(Math.abs(tot) / ven * 100)}% do que vendeu</div></div>
+    <div class="tile ${tot < 0 ? 'neg' : 'ok'}"><div class="r">Em reais</div><div class="v">${R(Math.abs(rs))}</div><div class="s">ao custo médio do mês</div></div></div></div>`;
+  document.getElementById('x-bd').innerHTML = h;
+}
+
+root.querySelectorAll('.chave button').forEach(b => b.onclick = () => {
+  const card = b.closest('.chave').dataset.card;
+  b.closest('.chave').querySelectorAll('button').forEach(x => x.classList.toggle('on', x == b));
+  ({v: vendas, p: prazo, d: descargas, k: compras, x: perdas})[card](b.dataset.p);
+});
+vendas('dia'); prazo('dia'); cartoes(); estoque(); vivo(); receb(); descargas('dia'); compras('dia'); perdas('dia');
+  setInterval(vivo, 30000);
+
 })();
 </script>
 {% endblock %}
-

@@ -875,23 +875,20 @@ def index():
                  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
     context['mes_atual'] = f"{_meses_pt[hoje.month - 1]}/{hoje.year}"
     context['onda1'] = onda1
-
-    # Onda 1 — card ESTOQUE AGORA (Posto NH, cliente_id=1): saldo em tempo real.
-    # ISOLADO e seguro: qualquer erro -> card vazio, nunca derruba a home.
-    # Reaproveita o helper de routes.estoque.
-    tempo_real_cards = []
+    # Os nove cards do carrossel (utils/dashboard_cards): o JSON vai para o
+    # template e o JavaScript desenha. Falhou um bloco, ele vai vazio.
     try:
-        from routes.estoque import dados_tempo_real
-        _conn = get_db_connection()
-        _cur = _conn.cursor(dictionary=True)
-        try:
-            tempo_real_cards = dados_tempo_real(_cur, cliente_id=1)
-        finally:
-            _cur.close()
-            _conn.close()
+        import json as _json
+        from utils.dashboard_cards import coletar as _coletar_cards
+        context['dash_json'] = _json.dumps(
+            _coletar_cards(hoje_brasilia(), onda1), ensure_ascii=False, default=str
+        ).replace('</', '<\\/')
     except Exception:
-        current_app.logger.exception('[home] card de estoque (onda1) falhou')
-    context['tempo_real_cards'] = tempo_real_cards
+        current_app.logger.exception('[home] cards do carrossel falharam')
+        context['dash_json'] = 'null'
+
+    # O card de estoque do carrossel passou a vir de utils/dashboard_cards
+    # (19/10/2026): o saldo em tempo real entra pelo dash_json.
 
     # Faixa do backup na nuvem. Fica na inicial, e nao numa tela de manutencao,
     # porque a exigencia e que a falha tenha TESTEMUNHA: uma rodada que nao
