@@ -1,0 +1,248 @@
+{% extends 'base.html' %}
+{% block title %}Vendas de Cartão{% endblock %}
+
+{% block styles %}
+<style>
+body > .container-fluid:has(#ccv){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#ccv){ padding:.7rem 1rem 0; }
+}
+</style>
+<style>
+  /* A mesma casca da Conf. Cartões (topo em faixa, filtro em cartão, pílulas).
+     O que é novo aqui é a cascata: cada passo só mostra o que sobrou dos de
+     cima, com quantas vendas e quanto cada opção tem. */
+  #ccv{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#146c43; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#4b5563; --ink:#151d27; --borda:#d9e0e8;
+        --linha:#eef1f5; color:var(--ink); max-width:100%; }
+
+  #ccv .migalha{ font-size:.72rem; color:var(--muted); margin-bottom:.5rem; }
+  #ccv .migalha a{ color:var(--blue-deep); text-decoration:none; font-weight:700; }
+  #ccv .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .7rem; margin-bottom:.7rem; }
+  #ccv .topo__t{ font-weight:800; font-size:1.02rem; }
+  #ccv .topo__s{ font-size:.76rem; opacity:.96; margin-top:.1rem; }
+
+  #ccv .tipos{ display:flex; gap:.35rem; flex-wrap:wrap; align-items:center;
+    background:#fff; border:1px solid var(--borda); border-radius:13px;
+    padding:.5rem .6rem; margin-bottom:.7rem; }
+  #ccv .tipos > b{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.06em; margin-right:.15rem; }
+  #ccv .tipos a{ border:1px solid var(--borda); background:#f7f9fc; border-radius:99px;
+    padding:.26rem .72rem; font-size:.76rem; font-weight:800; color:#3a4655;
+    text-decoration:none; white-space:nowrap; }
+  #ccv .tipos a:hover{ background:#eef5fd; color:var(--blue-deep); }
+  #ccv .tipos a.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+
+  #ccv .filtro{ background:#fff; border:1px solid var(--borda); border-radius:13px;
+    padding:.75rem .8rem .7rem; margin-bottom:.7rem; }
+  #ccv .passo{ display:flex; gap:.6rem; align-items:flex-start; }
+  #ccv .passo + .passo{ margin-top:.6rem; padding-top:.55rem; border-top:1px solid var(--linha); }
+  #ccv .passo__r{ flex:0 0 7.2rem; display:flex; gap:.4rem; align-items:center;
+    padding-top:.3rem; font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.05em; }
+  #ccv .passo__n{ width:1.25rem; height:1.25rem; border-radius:99px; flex:0 0 auto;
+    background:#e8eef6; color:var(--blue-deep); display:inline-flex;
+    align-items:center; justify-content:center; font-size:.66rem; }
+  #ccv .passo.feito .passo__n{ background:var(--blue); color:#fff; }
+  #ccv .chips{ display:flex; gap:.35rem; flex-wrap:wrap; flex:1 1 auto; align-items:center; }
+  #ccv .chips a{ border:1px solid var(--borda); border-radius:99px; padding:.3rem .7rem;
+    font-size:.78rem; font-weight:700; background:#fff; color:#3a4655;
+    text-decoration:none; display:inline-flex; gap:.4rem; align-items:baseline;
+    line-height:1.15; white-space:nowrap; }
+  #ccv .chips a:hover{ background:#f2f7fc; border-color:#bcd3ea; color:var(--blue-deep); }
+  #ccv .chips a.on{ background:var(--blue); border-color:var(--blue); color:#fff;
+    box-shadow:0 2px 8px rgba(20,35,60,.16); }
+  #ccv .chips a.todos.on{ background:#3a4655; border-color:#3a4655; }
+  #ccv .chips small{ font-size:.66rem; font-weight:700; color:#8a95a3;
+    font-variant-numeric:tabular-nums; }
+  #ccv .chips a.on small{ color:rgba(255,255,255,.82); }
+  #ccv .vazio{ font-size:.74rem; color:var(--muted); padding-top:.3rem; }
+  #ccv .campo{ display:flex; flex-direction:column; gap:.2rem; }
+  #ccv .campo > span{ font-size:.62rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.05em; }
+  #ccv .campo input{ border:1px solid var(--borda); border-radius:9px;
+    padding:.38rem .55rem; font-size:.84rem; font-family:inherit; background:#fff;
+    color:var(--ink); min-width:9.5rem; }
+  #ccv .campo input.num{ min-width:0; width:8rem; }
+  #ccv .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:9px; padding:.42rem .85rem; font-size:.82rem; font-weight:700;
+    font-family:inherit; cursor:pointer; text-decoration:none; display:inline-flex;
+    gap:.35rem; align-items:center; white-space:nowrap; align-self:flex-end; }
+  #ccv .bt--sim{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #ccv .periodo{ display:flex; gap:.5rem; flex-wrap:wrap; align-items:flex-end; flex:1 1 auto; }
+
+  #ccv .resumo{ display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:.5rem;
+    margin-bottom:.7rem; }
+  #ccv .r{ background:#fff; border:1px solid var(--borda); border-left:3px solid var(--blue);
+    border-radius:11px; padding:.5rem .65rem; min-width:0; }
+  #ccv .r__l{ font-size:.6rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.05em; }
+  #ccv .r__v{ font-size:1rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  #ccv .r__s{ font-size:.68rem; color:var(--muted); }
+
+  #ccv .quadro{ background:#fff; border:1px solid var(--borda); border-radius:13px;
+    overflow:hidden; margin-bottom:.7rem; }
+  #ccv .tab{ overflow-x:auto; }
+  #ccv table{ width:100%; border-collapse:collapse; font-size:.77rem;
+    font-variant-numeric:tabular-nums; }
+  #ccv th{ background:#f0f4f8; color:#3d4854; font-size:.62rem; text-transform:uppercase;
+    letter-spacing:.04em; font-weight:800; padding:.42rem .5rem; white-space:nowrap;
+    text-align:right; border-bottom:1px solid var(--borda); }
+  #ccv th.e, #ccv td.e{ text-align:left; }
+  #ccv td{ padding:.34rem .5rem; text-align:right; white-space:nowrap;
+    border-bottom:1px solid #f4f6f9; }
+  #ccv tbody tr:hover td{ background:#fafbfd; }
+  #ccv tfoot td{ background:#f0f4f8; font-weight:800; border-top:2px solid var(--borda); }
+  #ccv td a{ color:var(--blue-deep); font-weight:700; text-decoration:none; }
+  #ccv td a:hover{ text-decoration:underline; }
+  #ccv .sub{ color:var(--muted); }
+  #ccv .forte{ font-weight:800; }
+  #ccv .neg{ color:var(--danger); font-weight:700; }
+  #ccv .pos{ color:var(--ok); font-weight:700; }
+  #ccv .ambar{ color:var(--ambar); font-weight:700; }
+  #ccv .tp{ font-size:.6rem; font-weight:800; border-radius:99px; padding:.08rem .42rem;
+    background:#e8eef6; color:var(--blue-deep); }
+  #ccv .tp.c{ background:#efe8fb; color:#5b34a3; }
+  #ccv .nada{ background:#fff; border:1px solid var(--borda); border-radius:13px;
+    padding:1rem; color:var(--muted); font-size:.85rem; margin-bottom:.7rem; }
+
+  @media (max-width:900px){
+    #ccv .resumo{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+  }
+  @media (max-width:640px){
+    #ccv .passo{ flex-direction:column; gap:.35rem; }
+    #ccv .passo__r{ flex:0 0 auto; padding-top:0; }
+    #ccv .tab{ overflow-x:visible; }
+    #ccv .tab table, #ccv .tab tbody, #ccv .tab tr, #ccv .tab td{ display:block; width:100%; }
+    #ccv .tab thead, #ccv .tab tfoot{ display:none; }
+    #ccv .tab tr{ border-bottom:1px solid var(--linha); padding:.35rem 0; }
+    #ccv .tab td{ border:0; text-align:right; padding:.14rem .7rem; white-space:normal;
+      display:flex; justify-content:space-between; gap:.6rem; }
+    #ccv .tab td::before{ content:attr(data-r); color:var(--muted); font-weight:700;
+      font-size:.68rem; text-transform:uppercase; letter-spacing:.03em; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+{#- Vendas de cartão, uma a uma, com filtro em cascata:
+    período → forma → operadora → bandeira → vendedor → nota fiscal.
+    As vendas são as mesmas da aba Operadora da Conf. Cartões. -#}
+<div id="ccv">
+
+  <div class="migalha">
+    <a href="{{ url_for('index') }}">Dashboard</a> / Relatórios /
+    <a href="{{ url_for('conf_cartoes.conf_cartoes') }}?{{ qs_operadora }}">Conf. Cartões</a> / Vendas
+  </div>
+
+  <div class="topo">
+    <div class="topo__t"><i class="bi bi-funnel-fill"></i> Vendas de Cartão</div>
+    <div class="topo__s">Cada venda do arquivo da operadora, com a nota fiscal e o
+      vendedor — escolha passo a passo; cada passo só mostra o que teve venda</div>
+  </div>
+
+  <div class="tipos">
+    <b><i class="bi bi-diagram-3"></i> Conferir por</b>
+    <a href="{{ url_for('conf_cartoes.conf_cartoes') }}?{{ qs_caixa }}">Caixa</a>
+    <a href="{{ url_for('conf_cartoes.conf_cartoes') }}?{{ qs_operadora }}">Operadora</a>
+    <a href="{{ url_for('conf_cartoes.conf_cartoes') }}?{{ qs_auditoria }}">Auditoria (operadora × caixa)</a>
+    <a class="on" href="?data_inicio={{ data_inicio }}&data_fim={{ data_fim }}">Vendas</a>
+  </div>
+
+  <div class="filtro">
+    <form method="get" class="passo feito">
+      <div class="passo__r"><span class="passo__n">1</span> Período</div>
+      <div class="periodo">
+        <label class="campo"><span>De</span>
+          <input type="date" name="data_inicio" value="{{ data_inicio }}"></label>
+        <label class="campo"><span>Até</span>
+          <input type="date" name="data_fim" value="{{ data_fim }}"></label>
+        {%- for k, v in hidden %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+        <button class="bt bt--sim" type="submit"><i class="bi bi-search"></i> Apurar</button>
+      </div>
+    </form>
+
+    {% for g in grupos %}
+    <div class="passo{{ ' feito' if g.val }}">
+      <div class="passo__r"><span class="passo__n">{{ loop.index + 1 }}</span> {{ g.nome }}</div>
+      <div class="chips">
+        {% if g.opcoes %}
+        <a class="todos{{ ' on' if not g.val }}" href="{{ g.url_todos }}">{{ 'Todos' if g.chave == 'vend' else 'Todas' }}</a>
+        {% for o in g.opcoes %}
+        <a class="{{ 'on' if g.val == o.v }}" href="{{ o.url }}"
+           title="{{ o.n }} venda{{ 's' if o.n != 1 }}">{{ o.r }}
+          <small>{{ o.n }} · {{ o.total | fmtmoney }}</small></a>
+        {% endfor %}
+        {% else %}
+        <span class="vazio">nenhuma venda no que foi escolhido acima</span>
+        {% endif %}
+        {% if g.chave == 'nota' %}
+        <form method="get" style="display:flex; gap:.35rem; align-items:flex-end; margin-left:auto;">
+          <input type="hidden" name="data_inicio" value="{{ data_inicio }}">
+          <input type="hidden" name="data_fim" value="{{ data_fim }}">
+          {%- for k, v in hidden %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+          <label class="campo"><span>Número da nota</span>
+            <input class="num" type="text" inputmode="numeric" name="num" value="{{ num }}" placeholder="ex.: 15296"></label>
+          <button class="bt" type="submit"><i class="bi bi-search"></i></button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="resumo">
+    <div class="r"><div class="r__l">Vendido</div><div class="r__v">{{ tot.vendido | fmtmoney }}</div>
+      <div class="r__s">{{ tot.n }} venda{{ 's' if tot.n != 1 }}</div></div>
+    <div class="r"><div class="r__l">Recebido</div><div class="r__v">{{ tot.liquido | fmtmoney }}</div>
+      <div class="r__s">de {{ tot.pago_vendido | fmtmoney }} já pagos</div></div>
+    <div class="r"><div class="r__l">Taxa</div><div class="r__v neg">{{ tot.taxa | fmtmoney }}</div>
+      <div class="r__s">{% if tot.taxa_pct is not none %}{{ '%.2f'|format(tot.taxa_pct) }}% do que foi pago{% else %}—{% endif %}</div></div>
+    <div class="r"><div class="r__l">A receber</div><div class="r__v ambar">{{ tot.a_receber | fmtmoney }}</div>
+      <div class="r__s">ainda não pago</div></div>
+    <div class="r"><div class="r__l">Nota fiscal</div><div class="r__v">{{ tot.n_cupom }}</div>
+      <div class="r__s">com nota{% if tot.n_sem %} · <span class="neg">{{ tot.n_sem }} sem</span>{% endif %}</div></div>
+  </div>
+
+  {% if vendas %}
+  <div class="quadro"><div class="tab">
+    <table>
+      <thead><tr>
+        <th class="e">Venda</th><th class="e">Forma</th><th class="e">Operadora</th>
+        <th class="e">Bandeira</th><th class="e">Detalhe</th><th class="e">Nota fiscal</th>
+        <th class="e">Vendedor</th><th>Vendido</th><th>Taxa</th><th>Líquido</th>
+        <th class="e">Pagamento</th></tr></thead>
+      <tbody>
+        {% for v in vendas %}
+        <tr>
+          <td class="e" data-r="Venda">{{ v.dt.strftime('%d/%m') }} <b>{{ v.dt.strftime('%H:%M') }}</b></td>
+          <td class="e" data-r="Forma"><span class="tp{{ ' c' if v.tipo == 'CREDITO' }}">{{ 'Crédito' if v.tipo == 'CREDITO' else 'Débito' }}</span></td>
+          <td class="e" data-r="Operadora">{{ v.operadora }}</td>
+          <td class="e" data-r="Bandeira">{{ v.bandeira }}</td>
+          <td class="e sub" data-r="Detalhe">{{ v.cols | select | join(' · ') }}</td>
+          <td class="e" data-r="Nota fiscal">{% if v.cupom %}<a href="{{ url_for('vendas.detalhe', venda_id=v.cupom.id) }}" target="_blank"
+               title="emitida {{ v.cupom.dh_emissao.strftime('%d/%m %H:%M') }} · {{ v.cupom.valor_total | fmtmoney }}">NFC-e {{ v.cupom.numero }}/{{ v.cupom.serie }}</a>
+            {%- elif v.sem_cupom %}<span class="neg">sem cupom</span>{% else %}—{% endif %}</td>
+          <td class="e" data-r="Vendedor">{% if v.vendedor %}<span title="{{ v.vendedor_raw }}">{{ v.vendedor }}</span>{% else %}—{% endif %}</td>
+          <td class="forte" data-r="Vendido">{{ v.vendido | fmtmoney }}</td>
+          <td class="sub" data-r="Taxa">{% if v.pago %}− {{ v.taxa | fmtmoney }}{% else %}—{% endif %}</td>
+          <td data-r="Líquido">{% if v.pago %}{{ v.liquido | fmtmoney }}{% else %}—{% endif %}</td>
+          <td class="e" data-r="Pagamento">{% if v.pago %}<span class="pos"><i class="bi bi-check-circle-fill"></i> pago {{ v.pago.strftime('%d/%m') }}</span>
+            {%- else %}<span class="ambar">a receber{% if v.prev %} · {{ v.prev.strftime('%d/%m') }}{% endif %}</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr><td class="e" colspan="7">{{ tot.n }} venda{{ 's' if tot.n != 1 }}</td>
+        <td>{{ tot.vendido | fmtmoney }}</td><td>− {{ tot.taxa | fmtmoney }}</td>
+        <td>{{ tot.liquido | fmtmoney }}</td><td class="e">{{ tot.a_receber | fmtmoney }} a receber</td></tr></tfoot>
+    </table>
+  </div></div>
+  {% else %}
+  <div class="nada">Nenhuma venda de cartão no arquivo da operadora com essa escolha.</div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -485,6 +485,8 @@ body > .container-fluid:has(#ccz){
     <a class="{{ 'on' if not fonte }}" href="?{{ qs_fonte }}{{ '&' if qs_fonte }}fonte=caixa">Caixa</a>
     <a class="{{ 'on' if fonte == 'operadora' }}" href="?{{ qs_fonte }}{{ '&' if qs_fonte }}fonte=operadora">Operadora</a>
     <a class="{{ 'on' if fonte == 'auditoria' }}" href="?{{ qs_fonte }}{{ '&' if qs_fonte }}fonte=auditoria">Auditoria (operadora × caixa)</a>
+    <a href="{{ url_for('conf_cartoes.conf_cartoes_vendas') }}?data_inicio={{ data_inicio }}&data_fim={{ data_fim }}"
+       title="cada venda, com nota fiscal e vendedor, filtrada passo a passo">Vendas</a>
     <span class="obs">{% if fonte == 'operadora' %}a venda vem do arquivo da operadora (X7, Baratão, SIPAG)
       {% elif fonte == 'auditoria' %}onde o caixa lançou diferente do que a operadora registrou
       {% else %}a venda vem do fechamento de caixa{% endif %}</span>

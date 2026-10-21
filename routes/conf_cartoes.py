@@ -1848,3 +1848,125 @@ def ajuste_del():
         return jsonify({'success': False, 'message': str(e)}), 500
     finally:
         conn.close()
+
+
+@bp.route('/conf_cartoes/vendas', methods=['GET'])
+@login_required
+@admin_required
+def conf_cartoes_vendas():
+    """As vendas de cartao, uma a uma, com filtro em cascata.
+
+    A ordem e fixa: periodo -> credito/debito -> operadora -> bandeira ->
+    vendedor -> nota fiscal. Cada passo so mostra o que teve venda depois dos
+    passos de cima: em 18/10 sem Baratao o Baratao nem aparece; o vendedor
+    que nao trabalhou no dia tambem nao. As vendas sao as MESMAS da aba
+    Operadora (cartao_arquivo.pagamentos_operadora), entao os numeros batem.
+    """
+    args = request.args
+    data_inicio = args.get('data_inicio', '').strip()
+    data_fim = args.get('data_fim', '').strip()
+    if not data_inicio or not data_fim:
+        data_inicio, data_fim = _default_period()
+
+    vendas = []
+    conn = get_db_connection()
+    try:
+        _ensure_vinculos_table(conn)
+        bandeiras = _get_bandeiras(conn)
+        vinculos_map = defaultdict(list)
+        for b in bandeiras:
+            for v in b.get('vinculos', []):
+                vinculos_map[b['id']].append(v['forma_recebimento_id'])
+        bands, desde, _ = cartao_arquivo.ciclos_operadora(
+            conn, bandeiras, vinculos_map, data_inicio, data_fim)
+        ops = cartao_arquivo.pagamentos_operadora(
+            conn, bands, vinculos_map, desde, data_inicio, data_fim)
+    finally:
+        conn.close()
+
+    for b in bands:
+        o = ops.get(b['id'])
+        if not o:
+            continue
+        tipo_b = (b.get('tipo') or '').upper()
+        its = [i for p in o['pagamentos'] for i in p['itens']] + o['a_receber']
+        for i in its:
+            cp = i.get('cupom')
+            vendas.append({
+                'dt': i['dt'], 'tipo': tipo_b, 'operadora': o['operadora'],
+                'bandeira': b['nome'], 'cab': o['cab'], 'cols': i['cols'],
+                'vendedor': (cp or {}).get('vendedor') or '',
+                'vendedor_raw': (cp or {}).get('vendedor_raw') or '',
+                'cupom': cp, 'sem_cupom': i.get('sem_cupom'),
+                'vendido': i['vendido'], 'taxa': i['taxa'], 'liquido': i['liquido'],
+                'pago': i['pago'], 'prev': i['prev'],
+            })
+    vendas.sort(key=lambda v: v['dt'])
+
+    # Os passos, em ordem. Cada um tem as opcoes do que sobrou dos de cima;
+    # o escolhido que sumiu (troca de periodo) cai fora sozinho.
+    SEM_VEND = '(sem vendedor)'
+    passos = [
+        ('tipo', 'Forma', lambda v: v['tipo']),
+        ('op', 'Operadora', lambda v: v['operadora']),
+        ('band', 'Bandeira', lambda v: v['bandeira']),
+        ('vend', 'Vendedor', lambda v: v['vendedor'] or SEM_VEND),
+        ('nota', 'Nota fiscal', lambda v: 'COM' if v['cupom'] else 'SEM'),
+    ]
+    rotulo = {'DEBITO': 'Débito', 'CREDITO': 'Crédito',
+              'COM': 'Com nota', 'SEM': 'Sem nota'}
+    resto = vendas
+    escolha, grupos = {}, []
+    for chave, nome, f in passos:
+        soma = defaultdict(lambda: [0, 0.0])
+        for v in resto:
+            s = soma[f(v)]
+            s[0] += 1
+            s[1] += v['vendido']
+        ordem = (sorted(soma, key=lambda k: -soma[k][1]) if chave in ('op', 'band', 'vend')
+                 else sorted(soma))
+        val = (args.get(chave) or '').strip()
+        if val not in soma:
+            val = ''
+        escolha[chave] = val
+        grupos.append({'chave': chave, 'nome': nome, 'val': val, 'opcoes': [
+            {'v': k, 'r': rotulo.get(k, k), 'n': soma[k][0], 'total': round(soma[k][1], 2)}
+            for k in ordem]})
+        if val:
+            resto = [v for v in resto if f(v) == val]
+
+    # o numero da nota, digitado, filtra por ultimo
+    num = ''.join(ch for ch in (args.get('num') or '') if ch.isdigit())
+    if num:
+        resto = [v for v in resto if v['cupom'] and str(v['cupom']['numero']) == num]
+
+    # o link de cada pilula: troca o proprio passo e ZERA os de baixo, porque
+    # o que estava escolhido embaixo pode nao existir na escolha nova
+    base = [('data_inicio', data_inicio), ('data_fim', data_fim)]
+    for n, g in enumerate(grupos):
+        de_cima = base + [(x['chave'], x['val']) for x in grupos[:n] if x['val']]
+        g['url_todos'] = '?' + urlencode(de_cima)
+        for o in g['opcoes']:
+            o['url'] = '?' + urlencode(de_cima + [(g['chave'], o['v'])])
+    hidden = [(g['chave'], g['val']) for g in grupos if g['val']]
+
+    pago = [v for v in resto if v['pago']]
+    tot = {
+        'n': len(resto),
+        'vendido': round(sum(v['vendido'] for v in resto), 2),
+        'pago_vendido': round(sum(v['vendido'] for v in pago), 2),
+        'taxa': round(sum(v['taxa'] for v in pago), 2),
+        'liquido': round(sum(v['liquido'] for v in pago), 2),
+        'a_receber': round(sum(v['vendido'] for v in resto if not v['pago']), 2),
+        'n_cupom': sum(1 for v in resto if v['cupom']),
+        'n_sem': sum(1 for v in resto if v['sem_cupom']),
+    }
+    tot['taxa_pct'] = (tot['taxa'] / tot['pago_vendido'] * 100) if tot['pago_vendido'] else None
+
+    return render_template(
+        'relatorios/conf_cartoes_vendas.html',
+        data_inicio=data_inicio, data_fim=data_fim, grupos=grupos, escolha=escolha,
+        hidden=hidden, num=num, vendas=resto, tot=tot,
+        qs_operadora=urlencode(base + [('fonte', 'operadora')]),
+        qs_caixa=urlencode(base + [('fonte', 'caixa')]),
+        qs_auditoria=urlencode(base + [('fonte', 'auditoria')]))
