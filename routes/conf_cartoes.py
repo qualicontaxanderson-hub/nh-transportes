@@ -1260,12 +1260,12 @@ def conf_cartoes():
     tipo = (args.get('tipo') or '').strip().upper()
     if tipo not in ('DEBITO', 'CREDITO'):
         tipo = ''
-    # Qual conferencia: a do Caixa (de sempre), a da Operadora (a MESMA tela,
-    # com a venda do arquivo da operadora) ou a Auditoria (operadora x caixa).
+    # Qual conferencia: a da Operadora (a que abre: a venda vem do arquivo da
+    # operadora), a do Caixa (fonte=caixa) ou a Auditoria (operadora x caixa).
     # "arquivo" era o nome da auditoria antes de ela ganhar aba propria.
     _f = (args.get('fonte') or '').strip()
-    fonte = ('operadora' if _f == 'operadora'
-             else 'auditoria' if _f in ('auditoria', 'arquivo') else '')
+    fonte = ('' if _f == 'caixa'
+             else 'auditoria' if _f in ('auditoria', 'arquivo') else 'operadora')
     qs_fonte = urlencode(
         [(k, v) for k, v in args.items(multi=True) if k not in ('band', 'fonte')])
     qs_base = urlencode(

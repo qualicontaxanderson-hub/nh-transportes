@@ -405,7 +405,7 @@ body > .container-fluid:has(#ccz){
         barra de rolagem é o que fazia esta faixa parecer rascunho. -#}
     {% if band %}<input type="hidden" name="band" value="{{ band }}">{% endif %}
     {% if tipo %}<input type="hidden" name="tipo" value="{{ tipo }}">{% endif %}
-    {% if fonte %}<input type="hidden" name="fonte" value="{{ fonte }}">{% endif %}
+    <input type="hidden" name="fonte" value="{{ fonte or 'caixa' }}">
 
     <div class="linha1">
       <label class="campo"><span>De</span>
@@ -482,7 +482,7 @@ body > .container-fluid:has(#ccz){
         Auditoria  operadora × caixa: o que o caixa lançou diferente. -#}
   <div class="tipos">
     <b><i class="bi bi-diagram-3"></i> Conferir por</b>
-    <a class="{{ 'on' if not fonte }}" href="?{{ qs_fonte }}">Caixa</a>
+    <a class="{{ 'on' if not fonte }}" href="?{{ qs_fonte }}{{ '&' if qs_fonte }}fonte=caixa">Caixa</a>
     <a class="{{ 'on' if fonte == 'operadora' }}" href="?{{ qs_fonte }}{{ '&' if qs_fonte }}fonte=operadora">Operadora</a>
     <a class="{{ 'on' if fonte == 'auditoria' }}" href="?{{ qs_fonte }}{{ '&' if qs_fonte }}fonte=auditoria">Auditoria (operadora × caixa)</a>
     <span class="obs">{% if fonte == 'operadora' %}a venda vem do arquivo da operadora (X7, Baratão, SIPAG)
@@ -960,7 +960,7 @@ body > .container-fluid:has(#ccz){
               <table class="vendas">
                 <thead><tr><th class="e">Venda</th>
                   {%- for h in op.cab %}<th class="e">{{ h }}</th>{% endfor %}
-                  <th class="e">Cupom fiscal</th><th>Vendido</th><th>Taxa</th><th>Líquido</th></tr></thead>
+                  <th class="e">Cupom fiscal</th><th class="e">Vendedor</th><th>Vendido</th><th>Taxa</th><th>Líquido</th></tr></thead>
                 <tbody>
                   {% for i in p.itens %}
                   <tr><td class="e" data-r="Venda">{{ i.dt.strftime('%d/%m') }} <b>{{ i.dt.strftime('%H:%M') }}</b></td>
@@ -968,12 +968,13 @@ body > .container-fluid:has(#ccz){
                     <td class="e" data-r="Cupom fiscal">{% if i.cupom %}<a href="{{ url_for('vendas.detalhe', venda_id=i.cupom.id) }}" target="_blank"
                          title="cupom emitido {{ i.cupom.dh_emissao.strftime('%d/%m %H:%M') }} · {{ i.cupom.valor_total | fmtmoney }}">NFC-e {{ i.cupom.numero }}/{{ i.cupom.serie }}</a>
                       {%- elif i.sem_cupom %}<span class="neg" title="nenhum cupom fiscal casou com esta venda">sem cupom</span>{% else %}—{% endif %}</td>
+                    <td class="e" data-r="Vendedor">{% if i.cupom and i.cupom.vendedor %}<span title="{{ i.cupom.vendedor_raw }}">{{ i.cupom.vendedor }}</span>{% else %}—{% endif %}</td>
                     <td data-r="Vendido">{{ i.vendido | fmtmoney }}</td>
                     <td class="sub" data-r="Taxa">− {{ i.taxa | fmtmoney }}</td>
                     <td class="forte" data-r="Líquido">{{ i.liquido | fmtmoney }}</td></tr>
                   {% endfor %}
                 </tbody>
-                <tfoot><tr><td class="e" colspan="{{ 2 + op.cab|length }}">{{ p.n }} venda{{ 's' if p.n != 1 }} paga{{ 's' if p.n != 1 }} em {{ p.data.strftime('%d/%m') }}</td>
+                <tfoot><tr><td class="e" colspan="{{ 3 + op.cab|length }}">{{ p.n }} venda{{ 's' if p.n != 1 }} paga{{ 's' if p.n != 1 }} em {{ p.data.strftime('%d/%m') }}</td>
                   <td>{{ p.vendido | fmtmoney }}</td><td>− {{ p.taxa | fmtmoney }}</td><td>{{ p.liquido | fmtmoney }}</td></tr></tfoot>
               </table>
             </div></td></tr>
@@ -993,7 +994,7 @@ body > .container-fluid:has(#ccz){
     {% if op.a_receber %}
     <div class="tab">
       <table>
-        <thead><tr><th class="e">A receber — venda de</th><th class="e">Detalhe</th><th>Valor</th><th class="e">Previsto para</th></tr></thead>
+        <thead><tr><th class="e">A receber — venda de</th><th class="e">Detalhe</th><th class="e">Vendedor</th><th>Valor</th><th class="e">Previsto para</th></tr></thead>
         <tbody>
           {% for a in op.a_receber %}
           <tr>
@@ -1001,12 +1002,13 @@ body > .container-fluid:has(#ccz){
             <td class="e sub" data-r="Detalhe">{{ a.desc }}
               {%- if a.cupom %} · <a href="{{ url_for('vendas.detalhe', venda_id=a.cupom.id) }}" target="_blank">NFC-e {{ a.cupom.numero }}/{{ a.cupom.serie }}</a>
               {%- elif a.sem_cupom %} · <span class="neg">sem cupom</span>{% endif %}</td>
+            <td class="e" data-r="Vendedor">{% if a.cupom and a.cupom.vendedor %}<span title="{{ a.cupom.vendedor_raw }}">{{ a.cupom.vendedor }}</span>{% else %}—{% endif %}</td>
             <td class="forte" data-r="Valor">{{ a.vendido | fmtmoney }}</td>
             <td class="e sub" data-r="Previsto para">{% if a.prev %}{{ a.prev.strftime('%d/%m/%Y') }}{% else %}—{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
-        <tfoot><tr><td class="e" colspan="2"><b>Total a receber</b></td>
+        <tfoot><tr><td class="e" colspan="3"><b>Total a receber</b></td>
           <td><b>{{ op.total_receber | fmtmoney }}</b></td><td></td></tr></tfoot>
       </table>
     </div>

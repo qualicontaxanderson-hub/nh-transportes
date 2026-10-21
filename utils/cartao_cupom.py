@@ -301,8 +301,18 @@ def refazer(conn, data_inicio, data_fim):
     return dict(out)
 
 
+def _vendedor(raw):
+    """'JOAO BATISTA FELIX D' -> 'Joao Batista'. O SGA corta o nome em 20
+    letras, entao com 20 a ultima palavra pode estar pela metade e sai."""
+    w = (raw or '').split()
+    if len((raw or '').strip()) >= 20 and len(w) > 1:
+        w = w[:-1]
+    return ' '.join(w[:2]).title()
+
+
 def cupons_das_vendas(conn, operadora, ref_ids):
-    """{ref_id: {id, numero, serie, dh_emissao, valor_total}} das vendas casadas."""
+    """{ref_id: {id, numero, serie, dh_emissao, valor_total, vendedor,
+    vendedor_raw}} das vendas casadas."""
     if not ref_ids:
         return {}
     ensure_table(conn)
@@ -310,10 +320,15 @@ def cupons_das_vendas(conn, operadora, ref_ids):
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(f"""
-            SELECT v.ref_id, x.id, x.numero, x.serie, x.dh_emissao, x.valor_total
+            SELECT v.ref_id, x.id, x.numero, x.serie, x.dh_emissao, x.valor_total,
+                   x.vendedor_raw
               FROM cartao_cupom_vinculo v JOIN vendas_xml x ON x.id = v.vendas_xml_id
              WHERE v.operadora = %s AND v.ref_id IN ({ph})""", [operadora] + list(ref_ids))
-        return {r['ref_id']: r for r in cur.fetchall()}
+        out = {}
+        for r in cur.fetchall():
+            r['vendedor'] = _vendedor(r['vendedor_raw'])
+            out[r['ref_id']] = r
+        return out
     finally:
         cur.close()
 
