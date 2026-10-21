@@ -639,6 +639,7 @@
   #nv .cmp .fm-g{ column-gap:8px; row-gap:0; }
   #nv .cmp .fm-gv{ font-size:.88rem; line-height:1.2; }
   #nv .cmp .fm-gp{ font-size:.62rem; line-height:1.2; }
+  #nv .cmp .fm-g + .barra{ margin-top:3px; }
   #nv .cmp .barra{ height:4px; margin:4px 0 0 34px; }
   #nv .cmp .rod{ padding-top:6px; }
   #nv .cmp .tile{ padding:5px 9px; }
@@ -1325,12 +1326,15 @@ const FAM = [
   ['Transferência', ['Transferência'], '#0f766e', 'bi-bank2'],
   ['Operadora', ['Operadora'], '#991b1b', 'bi-building'],
 ];
+// valor curto pro detalhe app/manual: no mes e no ano passa do milhao
+const LC = v => v >= 1e6 ? (v / 1e6).toLocaleString('pt-BR', {maximumFractionDigits: 2}) + ' mi'
+  : v >= 1e5 ? Math.round(v / 1e3).toLocaleString('pt-BR') + ' mil' : L(v);
 function receb(per = 'dia'){
   const rp = (D.receb_per || {})[per];
   const r = rp ? rp.linhas : D.receb, tot = rp ? rp.total : D.receb_total, by = Object.fromEntries(r.map(x => [x.classe, x]));
   const fam = FAM.map(([nome, cls, cor, ic]) => { const ps = cls.map(c => by[c]).filter(Boolean);
     return {nome, cor, ic, n: ps.reduce((s, x) => s + x.n, 0), v: ps.reduce((s, x) => s + x.valor, 0),
-      det: ps.length > 1 ? ' · ' + ps.map(x => `${x.classe.replace(/^.*? /, '').toLowerCase()} <b>${L(x.valor)}</b>`).join(' · ') : ''}; })
+      det: ps.length > 1 ? ' · ' + ps.map(x => `${x.classe.replace(/^.*? /, '').toLowerCase()} <b>${LC(x.valor)}</b>`).join(' · ') : ''}; })
     .filter(x => x.v > 0).sort((a, b) => b.v - a.v);
   const banco = fam.filter(f => f.nome == 'PIX' || f.nome.startsWith('Cartão') || f.nome == 'Transferência').reduce((s, f) => s + f.v, 0);
   const caixa = fam.filter(f => f.nome == 'Dinheiro' || f.nome == 'Cheque').reduce((s, f) => s + f.v, 0);
