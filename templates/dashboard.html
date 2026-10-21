@@ -581,6 +581,8 @@
   #nv .fm-g{ display:grid; grid-template-columns:auto minmax(0,1fr) auto; column-gap:10px; row-gap:1px; align-items:baseline; }
   #nv .fm-g .ic{ grid-row:1 / 3; align-self:center; }
   #nv .fm-g .fm-s{ margin-top:0; }
+  #nv .fm-g.larga{ grid-template-columns:auto minmax(0,1fr) auto auto; }
+  #nv .fm-g.larga .fm-s{ grid-column:2 / 5; }
   #nv .fm-gv{ font-size:1rem; font-weight:800; font-variant-numeric:tabular-nums; text-align:right; }
   #nv .fm-gp{ font-size:.68rem; font-weight:800; color:var(--k); text-align:right; }
   #nv .barra{ height:7px; border-radius:99px; background:#f1f5f9; margin:8px 0 0 44px; overflow:hidden; position:relative; }
@@ -1197,6 +1199,11 @@ const filaG = (k, ic, nome, sub, valor, pct, barra) =>
   `<div class="fm" style="--k:${k}"><div class="fm-g"><span class="ic pos">${ic}</span>
     <div class="fm-n">${nome}</div><b class="fm-gv">${valor}</b>
     <div class="fm-s">${sub}</div><span class="fm-gp">${pct}</span></div>${barra}</div>`;
+// variante larga: % na linha do nome, o detalhe corre por baixo do valor
+const filaL = (k, ic, nome, sub, valor, pct, barra) =>
+  `<div class="fm" style="--k:${k}"><div class="fm-g larga"><span class="ic pos">${ic}</span>
+    <div class="fm-n">${nome}</div><span class="fm-gp">${pct}</span><b class="fm-gv">${valor}</b>
+    <div class="fm-s">${sub}</div></div>${barra}</div>`;
 const bar = (w, cls = '', marca = null) => `<div class="barra"><i class="${cls}" style="width:${Math.min(100, w)}%"></i>${marca != null ? `<span class="marca" style="--m:${marca}%"></span>` : ''}</div>`;
 
 // ---------- 1 VENDAS ----------
@@ -1345,7 +1352,7 @@ function receb(per = 'dia'){
   if (!fam.length) { document.getElementById('r-bd').innerHTML = '<div class="fm fraco"><div class="fm-s">nenhuma venda no período</div></div>'; return; }
   const mx = fam[0].v;
   let h = `<div class="stack">${fam.map(f => `<i style="--k:${f.cor};width:${f.v / tot * 100}%"></i>`).join('')}</div>`;
-  h += fam.map(f => filaG(f.cor, `<i class="bi ${f.ic}"></i>`, f.nome, `${I(f.n)} nota${f.n == 1 ? '' : 's'}${f.det}`, R(f.v),
+  h += fam.map(f => filaL(f.cor, `<i class="bi ${f.ic}"></i>`, f.nome, `${I(f.n)} nota${f.n == 1 ? '' : 's'}${f.det}`, R(f.v),
       `${P1(f.v / tot * 100)}%`, bar(f.v / mx * 100))).join('');
   h += `<div class="rod"><div class="tiles"><div class="tile ok"><div class="r">Cai no banco</div><div class="v">${R(banco)}</div><div class="s">PIX, cartão e transferência · ${Math.round(banco / tot * 100)}%</div></div>
     <div class="tile amb"><div class="r">Em caixa</div><div class="v">${R(caixa)}</div><div class="s">dinheiro e cheque · ${Math.round(caixa / tot * 100)}%</div></div></div></div>`;
