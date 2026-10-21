@@ -636,6 +636,9 @@
   #nv .cmp .fm-s{ font-size:.64rem; line-height:1.2; }
   #nv .cmp .fm-v b{ font-size:.88rem; line-height:1.2; }
   #nv .cmp .fm-v span{ font-size:.62rem; line-height:1.1; display:block; }
+  #nv .cmp .fm-g{ column-gap:8px; row-gap:0; }
+  #nv .cmp .fm-gv{ font-size:.88rem; line-height:1.2; }
+  #nv .cmp .fm-gp{ font-size:.62rem; line-height:1.2; }
   #nv .cmp .barra{ height:4px; margin:4px 0 0 34px; }
   #nv .cmp .rod{ padding-top:6px; }
   #nv .cmp .tile{ padding:5px 9px; }
@@ -1338,8 +1341,8 @@ function receb(per = 'dia'){
   if (!fam.length) { document.getElementById('r-bd').innerHTML = '<div class="fm fraco"><div class="fm-s">nenhuma venda no período</div></div>'; return; }
   const mx = fam[0].v;
   let h = `<div class="stack">${fam.map(f => `<i style="--k:${f.cor};width:${f.v / tot * 100}%"></i>`).join('')}</div>`;
-  h += fam.map(f => fila(f.cor, `<i class="bi ${f.ic}"></i>`, f.nome, `${f.n} nota${f.n == 1 ? '' : 's'}${f.det}`, R(f.v),
-      `<span>${P1(f.v / tot * 100)}%</span>`, bar(f.v / mx * 100))).join('');
+  h += fam.map(f => filaG(f.cor, `<i class="bi ${f.ic}"></i>`, f.nome, `${I(f.n)} nota${f.n == 1 ? '' : 's'}${f.det}`, R(f.v),
+      `${P1(f.v / tot * 100)}%`, bar(f.v / mx * 100))).join('');
   h += `<div class="rod"><div class="tiles"><div class="tile ok"><div class="r">Cai no banco</div><div class="v">${R(banco)}</div><div class="s">PIX, cartão e transferência · ${Math.round(banco / tot * 100)}%</div></div>
     <div class="tile amb"><div class="r">Em caixa</div><div class="v">${R(caixa)}</div><div class="s">dinheiro e cheque · ${Math.round(caixa / tot * 100)}%</div></div></div></div>`;
   document.getElementById('r-bd').innerHTML = h;
