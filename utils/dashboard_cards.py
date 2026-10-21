@@ -47,14 +47,14 @@ def coletar(hoje, onda1):
            'receb': onda1.get('recebimento') or [], 'receb_total': onda1.get('recebimento_total') or 0.0,
            'formas': {}, 'prazo': {'dia': [], 'mes': []}, 'band': {'dia': {}, 'mes': {}},
            'estoque': [], 'descargas': {'ultimas': [], 'tot': {}}, 'compras': {'ultimas': [], 'tot': {}},
-           'perdas': {}}
+           'perdas': {}, 'receb_per': {}}
     conn = cur = None
     try:
         conn = get_db_connection()
         cur = conn.cursor(dictionary=True)
         for nome, fn in (('formas', _formas), ('prazo', _prazo), ('band', _band),
                          ('estoque', _estoque), ('descargas', _descargas),
-                         ('compras', _compras), ('perdas', _perdas)):
+                         ('compras', _compras), ('perdas', _perdas), ('receb_per', _receb_per)):
             try:
                 out[nome] = fn(cur, hoje, ini_dia, fim_dia, ini_mes, fim_mes)
             except Exception:
@@ -69,6 +69,40 @@ def coletar(hoje, onda1):
                     c.close()
             except Exception:
                 pass
+    return out
+
+
+# ---------------------------------------------------------- recebimento
+def _receb_per(cur, hoje, ini_dia, fim_dia, ini_mes, fim_mes):
+    """Recebimento por classe no dia, no mes e no ano -- a mesma regra do
+    card de hoje (routes/bases, classificar_recebimento), uma leitura so."""
+    ini_ano = hoje.strftime('%Y-01-01 00:00:00')
+    cur.execute(
+        "SELECT dh_emissao, forma_pagamento, card_bandeira, card_credenciadora, "
+        "card_autorizacao, tef_terminal, cliente_doc, COALESCE(valor_total,0) AS vt "
+        "FROM vendas_xml WHERE situacao <> 'cancelada' "
+        "AND dh_emissao >= %s AND dh_emissao < %s", (ini_ano, fim_dia))
+    per = {k: {} for k in ('dia', 'mes', 'ano')}
+    desde = None
+    for r in cur.fetchall():
+        cls = classificar_recebimento(
+            r['forma_pagamento'], r['card_bandeira'], r['card_credenciadora'],
+            r['card_autorizacao'], r['tef_terminal'], r['cliente_doc'])
+        vt = _f(r['vt'])
+        dh = str(r['dh_emissao'])
+        if desde is None or dh < desde:
+            desde = dh
+        for k, ini in (('ano', ini_ano), ('mes', ini_mes), ('dia', ini_dia)):
+            if dh >= ini:
+                d = per[k].setdefault(cls, [0, 0.0])
+                d[0] += 1
+                d[1] += vt
+    out = {'desde': desde[:10] if desde else None}
+    for k, por in per.items():
+        tot = sum(v[1] for v in por.values())
+        out[k] = {'total': tot, 'linhas': sorted(
+            ({'classe': c, 'n': v[0], 'valor': v[1]} for c, v in por.items()),
+            key=lambda x: -x['valor'])}
     return out
 
 

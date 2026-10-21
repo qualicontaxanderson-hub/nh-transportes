@@ -752,7 +752,8 @@
     <div class="bd"><div class="grade" id="l-grade"></div><div class="rola">▾ role para ver as 20</div></div></section>
 
   <section class="onda1-card nvc"><div class="hd h-rec">
-      <div class="hd-top"><span class="tag"><i class="bi bi-wallet2"></i> Recebimento do dia</span><span class="per" id="r-per"></span></div>
+      <div class="hd-top"><span class="tag"><i class="bi bi-wallet2"></i> Recebimento</span>
+        <div class="chave" data-card="r"><button data-p="dia" class="on">Hoje</button><button data-p="mes">Mês</button><button data-p="ano">Ano</button></div></div>
       <div class="big" id="r-big"></div><div class="sub" id="r-sub"></div></div>
     <div class="bd cmp" id="r-bd"></div></section>
 
@@ -1321,17 +1322,20 @@ const FAM = [
   ['Transferência', ['Transferência'], '#0f766e', 'bi-bank2'],
   ['Operadora', ['Operadora'], '#991b1b', 'bi-building'],
 ];
-function receb(){
-  const r = D.receb, tot = D.receb_total, by = Object.fromEntries(r.map(x => [x.classe, x]));
+function receb(per = 'dia'){
+  const rp = (D.receb_per || {})[per];
+  const r = rp ? rp.linhas : D.receb, tot = rp ? rp.total : D.receb_total, by = Object.fromEntries(r.map(x => [x.classe, x]));
   const fam = FAM.map(([nome, cls, cor, ic]) => { const ps = cls.map(c => by[c]).filter(Boolean);
     return {nome, cor, ic, n: ps.reduce((s, x) => s + x.n, 0), v: ps.reduce((s, x) => s + x.valor, 0),
       det: ps.length > 1 ? ' · ' + ps.map(x => `${x.classe.replace(/^.*? /, '').toLowerCase()} <b>${L(x.valor)}</b>`).join(' · ') : ''}; })
     .filter(x => x.v > 0).sort((a, b) => b.v - a.v);
   const banco = fam.filter(f => f.nome == 'PIX' || f.nome.startsWith('Cartão') || f.nome == 'Transferência').reduce((s, f) => s + f.v, 0);
   const caixa = fam.filter(f => f.nome == 'Dinheiro' || f.nome == 'Cheque').reduce((s, f) => s + f.v, 0);
-  document.getElementById('r-per').textContent = `${Dd}/${M}`;
   document.getElementById('r-big').textContent = R(tot);
-  document.getElementById('r-sub').innerHTML = `<b>${I(r.reduce((s, x) => s + x.n, 0))}</b> notas · ${fam.length} formas de recebimento`;
+  const des = (D.receb_per || {}).desde, perTxt = per == 'ano'
+      ? (des && des > `${Y}-01-01` ? `desde ${des.slice(8)}/${des.slice(5, 7)}` : `${Y} até ${Dd}/${M}`) : periodoTxt(per);
+  document.getElementById('r-sub').innerHTML = `<b>${I(r.reduce((s, x) => s + x.n, 0))}</b> notas · ${fam.length} formas · ${perTxt}`;
+  if (!fam.length) { document.getElementById('r-bd').innerHTML = '<div class="fm fraco"><div class="fm-s">nenhuma venda no período</div></div>'; return; }
   const mx = fam[0].v;
   let h = `<div class="stack">${fam.map(f => `<i style="--k:${f.cor};width:${f.v / tot * 100}%"></i>`).join('')}</div>`;
   h += fam.map(f => fila(f.cor, `<i class="bi ${f.ic}"></i>`, f.nome, `${f.n} nota${f.n == 1 ? '' : 's'}${f.det}`, R(f.v),
@@ -1402,7 +1406,7 @@ function perdas(per){
 root.querySelectorAll('.chave button').forEach(b => b.onclick = () => {
   const card = b.closest('.chave').dataset.card;
   b.closest('.chave').querySelectorAll('button').forEach(x => x.classList.toggle('on', x == b));
-  ({v: vendas, p: prazo, d: descargas, k: compras, x: perdas})[card](b.dataset.p);
+  ({v: vendas, p: prazo, r: receb, d: descargas, k: compras, x: perdas})[card](b.dataset.p);
 });
 vendas('dia'); prazo('dia'); cartoes(); estoque(); vivo(); receb(); descargas('dia'); compras('dia'); perdas('dia');
   setInterval(vivo, 30000);
