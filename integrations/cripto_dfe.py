@@ -16,18 +16,23 @@ Para gerar a chave-mestra (uma única vez) e configurá-la no Railway:
 """
 import os
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
 _ENV_VAR = 'DFE_CRYPTO_KEY'
 
 
-def _get_fernet() -> Fernet:
+def _get_fernet() -> MultiFernet:
     """
     Constrói o Fernet a partir de DFE_CRYPTO_KEY. Levanta RuntimeError claro
     se a variável não estiver configurada ou for inválida.
+
+    Aceita várias chaves separadas por vírgula: a PRIMEIRA cifra, todas
+    decifram. É o que deixa trocar a chave sem parar a captura (22/10/2026,
+    incidente da Railway): "nova,velha" → scripts/rotacionar_crypto_key.py
+    recifra o banco → só "nova".
     """
-    chave = os.environ.get(_ENV_VAR, '').strip()
-    if not chave:
+    chaves = [c.strip() for c in os.environ.get(_ENV_VAR, '').split(',') if c.strip()]
+    if not chaves:
         raise RuntimeError(
             f"A variável de ambiente {_ENV_VAR} não está configurada. "
             f"Gere uma chave com: "
@@ -37,7 +42,7 @@ def _get_fernet() -> Fernet:
         )
     try:
         # Fernet aceita a chave como bytes (urlsafe base64, 32 bytes decodificados).
-        return Fernet(chave.encode('utf-8') if isinstance(chave, str) else chave)
+        return MultiFernet([Fernet(c.encode('utf-8')) for c in chaves])
     except (ValueError, TypeError) as exc:
         raise RuntimeError(
             f"{_ENV_VAR} inválida (não é uma chave Fernet urlsafe-base64 de 32 bytes). "
