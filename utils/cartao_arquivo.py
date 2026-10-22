@@ -67,6 +67,12 @@ OPERADORAS = {
     # O extrato PIX do banco (utils/pix_extrato) vem pelo mesmo caminho, mas
     # nao e operadora de cartao: nao tem bandeira nem entra na Conferencia.
     'PIX': {'nome': 'PIX', 'extensoes': ('.xlsx',), 'so_arquivo': True},
+    # O Sicredi (maquininha ate 13/07/2026) atende as MESMAS bandeiras da
+    # SIPAG: entra dentro delas, antes do dia em que a SIPAG assumiu. O nome
+    # do arquivo e livre ("Cartao Abril a junho - Sicredi.xlsx"): basta ter
+    # Sicredi no nome. Vem depois do PIX: "PIX ... Sicredi" e extrato PIX.
+    'SICREDI': {'nome': 'SICREDI', 'extensoes': ('.xlsx',), 'contem': 'SICREDI',
+                'dentro_de': 'SIPAG'},
 }
 
 EXTENSOES = tuple(sorted({e for o in OPERADORAS.values() for e in o['extensoes']}))
@@ -85,8 +91,8 @@ def operadora_do_nome(nome):
     """'X7 17-10.xls' -> 'X7'; 'Baratão 17-10.csv' -> 'BARATAO'."""
     n = _sem_acento(nome).strip().upper()
     for prefixo, o in OPERADORAS.items():
-        if n.startswith(o.get('prefixos', (prefixo,))) and \
-                n.lower().endswith(o['extensoes']):
+        nome_ok = (o['contem'] in n) if 'contem' in o else n.startswith(o.get('prefixos', (prefixo,)))
+        if nome_ok and n.lower().endswith(o['extensoes']):
             return prefixo
     return None
 
@@ -452,6 +458,10 @@ def importar(conn, nome, conteudo):
             tipo, vendas = ler_sipag(conteudo, nome)
             lotes = []
             gravar_sipag(conn, tipo, nome, vendas)
+        elif operadora == 'SICREDI':
+            ensure_tables_sicredi(conn)
+            lotes, vendas = [], ler_sicredi(conteudo)
+            gravar_sicredi(conn, nome, vendas)
         elif operadora == 'PIX':
             from utils import pix_extrato
             cab, vendas = pix_extrato.ler_sicoob(conteudo)
@@ -547,7 +557,7 @@ def operadora_da_bandeira(conn, bandeira_id):
         return None
     nome = _sem_acento(b['nome']).strip().upper()
     for prefixo, o in OPERADORAS.items():
-        if o.get('so_arquivo'):
+        if o.get('so_arquivo') or o.get('dentro_de'):
             continue
         if 'bandeiras' in o:
             if nome.startswith(o['bandeiras']):
@@ -1335,7 +1345,7 @@ def conferencia_sipag(conn, bandeira_id, forma_ids, data_inicio, data_fim):
 def _operadora_de(nome, tipo):
     nome = _sem_acento(nome).strip().upper()
     for prefixo, o in OPERADORAS.items():
-        if o.get('so_arquivo'):
+        if o.get('so_arquivo') or o.get('dentro_de'):
             continue
         if 'bandeiras' in o:
             if nome.startswith(o['bandeiras']):
@@ -1481,6 +1491,25 @@ def ciclos_operadora(conn, bandeiras, vinculos_map, data_inicio, data_fim):
                     # antes de a SIPAG assumir, o pagamento e de teste
                     if ok and not (d0 and rd < d0):
                         c[rd.isoformat()][r['v'].isoformat()] += float(r['valor'] or 0)
+                # antes da SIPAG a maquininha era do Sicredi: o credito do
+                # extrato desse tempo e dele, e o "desde" recua junto
+                sic = _sicredi_antes(cur, sb, sf, d0,
+                                     'dt_pagamento BETWEEN %s AND %s OR '
+                                     '(dt_transacao >= %s AND dt_transacao < %s)',
+                                     (ini, fim, ini, fim1))
+                for r in sic:
+                    v = r['dt_transacao'].date()
+                    rd, ok = entra(r['pago'], r['prev'], v)
+                    if ok:
+                        c[rd.isoformat()][v.isoformat()] += float(r['bruto'] or 0)
+                if d0:
+                    try:
+                        cur.execute("SELECT MIN(DATE(dt_transacao)) AS d FROM cartao_sicredi_transacoes "
+                                    "WHERE bandeira=%s AND forma=%s AND status='Aprovada' "
+                                    "AND dt_transacao < %s", (sb, sf, d0))
+                        d0 = (cur.fetchone() or {}).get('d') or d0
+                    except Exception:
+                        pass                # tabela ainda nao existe
             if d0 is None and not c:
                 continue
             copia = dict(b)
@@ -1666,6 +1695,20 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
                                       float(tx or 0), float(lq or 0), desc, r['id'],
                                       [(r['tipo_cartao'] or '').strip(), r['cartao'][-4:] if r['cartao'] else '',
                                        r['autorizacao'] or '']))
+                # o Sicredi, antes de a SIPAG assumir: mesma bandeira, mesmas
+                # colunas; a taxa e o MDR da propria venda
+                sic_ate = _sipag_desde(cur, sb, sf, fs)
+                for r in _sicredi_antes(cur, sb, sf, sic_ate,
+                                        'dt_transacao >= %s AND dt_transacao < %s', (ini, fim1)):
+                    desc = ' · '.join(x for x in (
+                        r['produto'] or '', ('final %s' % r['cartao'][-4:]) if r['cartao'] else '',
+                        ('aut. %s' % r['autorizacao']) if r['autorizacao'] else '') if x)
+                    it = item(r['dt_transacao'], r['pago'], r['prev'], float(r['bruto'] or 0),
+                              float(r['taxa'] or 0), float(r['liquido'] or 0), desc, r['id'],
+                              [r['produto'] or '', r['cartao'][-4:] if r['cartao'] else '',
+                               r['autorizacao'] or ''])
+                    it['op'], it['operadora'] = 'SICREDI', OPERADORAS['SICREDI']['nome']
+                    itens.append(it)
                 dias = sorted({i['pago'] for i in itens if i['pago']})
                 if dias:
                     ph = ','.join(['%s'] * len(dias))
@@ -1678,14 +1721,30 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
                     for r in cur.fetchall():
                         total_dia[r['d']] = float(r['l'] or 0)
                         abat_dia[r['d']] = -float(r['ab'] or 0)
+                    # o Sicredi do dia inteiro (com venda de fora do periodo)
+                    sic_dias = sorted({i['pago'] for i in itens
+                                       if i['pago'] and i.get('op') == 'SICREDI'})
+                    if sic_dias:
+                        pd = ','.join(['%s'] * len(sic_dias))
+                        cur.execute(f'''
+                            SELECT dt_pagamento AS d, SUM(liquido) AS l
+                              FROM cartao_sicredi_transacoes
+                             WHERE bandeira=%s AND forma=%s AND status='Aprovada'
+                               AND dt_pagamento IN ({pd})
+                             GROUP BY dt_pagamento''', [sb, sf] + sic_dias)
+                        for r in cur.fetchall():
+                            total_dia[r['d']] = total_dia.get(r['d'], 0.0) + float(r['l'] or 0)
 
             if cartao_cupom and itens:
-                try:
-                    cps = cartao_cupom.cupons_das_vendas(conn, op, [i['ref'] for i in itens if i['ref']])
-                except Exception:
-                    cps = {}
+                cps = {}
+                for o_ in {i.get('op', op) for i in itens}:
+                    try:
+                        cps[o_] = cartao_cupom.cupons_das_vendas(
+                            conn, o_, [i['ref'] for i in itens if i['ref'] and i.get('op', op) == o_])
+                    except Exception:
+                        cps[o_] = {}
                 for it in itens:
-                    it['cupom'] = cps.get(it['ref'])
+                    it['cupom'] = cps.get(it.get('op', op), {}).get(it['ref'])
                     it['sem_cupom'] = (not it['cupom'] and cupom_desde is not None
                                        and it['dt'] >= cupom_desde)
 
@@ -1753,8 +1812,9 @@ def pagamentos_operadora(conn, bandeiras, vinculos_map, desde, data_inicio, data
             vendido = sum(i['vendido'] for i in itens)
             vendido_pago = sum(x['vendido'] for x in linhas)
             taxa = sum(x['taxa'] for x in linhas)
+            nomes = sorted({i.get('operadora') or OPERADORAS[op]['nome'] for i in itens})
             saida[b['id']] = {
-                'operadora': OPERADORAS[op]['nome'],
+                'operadora': ' + '.join(nomes) if nomes else OPERADORAS[op]['nome'],
                 'cab': cabecalhos['SIPAG' if op not in cabecalhos else op],
                 'pagamentos': linhas,
                 'a_receber': sorted(a_receber, key=lambda i: i['dt']),
@@ -1784,3 +1844,165 @@ def _fmt_br(v, casas=2):
     """1234.5 -> '1.234,50' (so para o texto da venda)."""
     s = ('{:,.%df}' % casas).format(float(v or 0))
     return s.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+
+# ── Sicredi (a maquininha antes da SIPAG) ─────────────────────────────────────
+#
+# Ate 13/07/2026 as maquininhas eram do Sicredi; a SIPAG assumiu em ~15/07.
+# O portal do Sicredi exporta o "Relatorio de vendas detalhado" (.xlsx), uma
+# transacao por linha, com a taxa (MDR) e a Data efetiva do pagamento -- o
+# mesmo papel dos dois relatorios da SIPAG num arquivo so. As bandeiras do
+# cadastro sao as mesmas (VISA, MASTERCARD, ELO...): na aba Operadora a venda
+# do Sicredi entra na bandeira, antes do dia em que a SIPAG assumiu.
+# Jan-jul/2026: credito 0,85% e debito 0,80%, todas as bandeiras, pago D+1.
+#
+# O mesmo arquivo traz o PIX da maquininha ("Via QRCODE"); fica gravado, mas
+# nao e cartao e nao entra na conferencia.
+
+#: bandeira do Sicredi -> como a SIPAG (e o cadastro) escreve
+_SICREDI_BANDEIRA = {'VISA': 'Visa', 'MASTERCARD': 'Mastercard', 'MDS': 'Mastercard',
+                     'ELO FULL': 'Elo', 'ELO': 'Elo', 'AMEX FULL': 'Amex',
+                     'AMEX': 'Amex', 'CABAL': 'Cabal'}
+
+
+def ler_sicredi(conteudo):
+    """As transacoes do "Relatorio de vendas detalhado" do Sicredi (.xlsx)."""
+    import openpyxl
+    wb = openpyxl.load_workbook(io.BytesIO(conteudo), read_only=True, data_only=True)
+    linhas = list(wb.worksheets[0].iter_rows(values_only=True))
+    if not linhas or 'vendas detalhado' not in str(linhas[0][0] or '').lower():
+        raise ValueError('nao parece um relatorio do Sicredi: falta o '
+                         '"Relatório de vendas detalhado" na 1a linha')
+    try:
+        i = next(k for k, r in enumerate(linhas) if r and r[0] == 'Data da venda')
+    except StopIteration:
+        raise ValueError('relatorio do Sicredi sem a linha de cabecalho')
+    cab = [str(c or '').strip() for c in linhas[i]]
+
+    def t(r, nome):
+        v = r[cab.index(nome)] if nome in cab else None
+        v = str(v).strip() if v is not None else ''
+        return '' if v == '-' else v
+
+    def n(r, nome):
+        v = r[cab.index(nome)] if nome in cab else None
+        return float(v) if isinstance(v, (int, float)) else _num(str(v or ''))
+
+    saida, vistos = [], defaultdict(int)
+    for r in linhas[i + 1:]:
+        if not r or not r[0] or str(r[0]).startswith('Total'):
+            continue
+        dt = datetime.strptime('%s %s' % (t(r, 'Data da venda'), t(r, 'Hora da venda')),
+                               '%d/%m/%Y %H:%M:%S')
+        mod = t(r, 'Modalidade')
+        band = t(r, 'Bandeira')
+        x = {
+            'dt_transacao': dt,
+            'autorizacao': t(r, 'Código de autorização')[:40],
+            'estabelecimento': t(r, 'Código do estabelecimento'),
+            'modalidade': mod, 'produto': t(r, 'Produto'),
+            'bandeira_sicredi': band,
+            'bandeira': _SICREDI_BANDEIRA.get(_sem_acento(band).upper(), band),
+            'forma': mod if mod in ('Crédito', 'Débito') else None,
+            'canal': t(r, 'Canal'),
+            'bruto': n(r, 'Valor bruto transação'),
+            'bruto_parcela': n(r, 'Valor bruto da parcela'),
+            'taxa': n(r, 'Valor da taxa (MDR)'),
+            'liquido': n(r, 'Valor líquido da parcela/transação'),
+            'status': t(r, 'Status'),
+            'terminal': t(r, 'Número do terminal'),
+            'comprovante': t(r, 'Comprovante de venda'),
+            'pedido': t(r, 'Código do pedido'),
+            'cartao': t(r, 'Número do cartão'),
+            'dt_prevista': _data(t(r, 'Data prevista pagamento da venda')),
+            'dt_pagamento': _data(t(r, 'Data efetiva do pagamento da venda')),
+            'cod_pagamento': t(r, 'Código do pagamento'),
+            'tipo_cartao': t(r, 'Tipo de cartão'),
+        }
+        # Nao ha um numero unico em toda linha (a recusada nao tem pedido);
+        # terminal + comprovante + hora + valor separa, e a ordem de aparicao
+        # desempata linha repetida.
+        base = '|'.join(str(x[k]) for k in ('dt_transacao', 'terminal', 'comprovante',
+                                            'autorizacao', 'bruto', 'status'))
+        vistos[base] += 1
+        x['chave'] = hashlib.sha1(('%s|%d' % (base, vistos[base])).encode('utf-8')).hexdigest()
+        saida.append(x)
+    if not saida:
+        raise ValueError('relatorio do Sicredi sem nenhuma transacao')
+    return saida
+
+
+_COLS_SICREDI = ('chave', 'dt_transacao', 'autorizacao', 'estabelecimento', 'modalidade',
+                 'produto', 'bandeira_sicredi', 'bandeira', 'forma', 'canal', 'bruto',
+                 'bruto_parcela', 'taxa', 'liquido', 'status', 'terminal', 'comprovante',
+                 'pedido', 'cartao', 'dt_prevista', 'dt_pagamento', 'cod_pagamento',
+                 'tipo_cartao')
+
+
+def ensure_tables_sicredi(conn):
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS cartao_sicredi_transacoes (
+            id               INT AUTO_INCREMENT PRIMARY KEY,
+            chave            CHAR(40)     NOT NULL,
+            dt_transacao     DATETIME     NOT NULL,
+            autorizacao      VARCHAR(40)  NULL,
+            estabelecimento  VARCHAR(20)  NULL,
+            modalidade       VARCHAR(30)  NULL,
+            produto          VARCHAR(30)  NULL,
+            bandeira_sicredi VARCHAR(30)  NULL,
+            bandeira         VARCHAR(30)  NULL,
+            forma            VARCHAR(20)  NULL,
+            canal            VARCHAR(20)  NULL,
+            bruto            DECIMAL(12,2) NOT NULL DEFAULT 0,
+            bruto_parcela    DECIMAL(12,2) NOT NULL DEFAULT 0,
+            taxa             DECIMAL(12,2) NOT NULL DEFAULT 0,
+            liquido          DECIMAL(12,2) NOT NULL DEFAULT 0,
+            status           VARCHAR(20)  NULL,
+            terminal         VARCHAR(20)  NULL,
+            comprovante      VARCHAR(20)  NULL,
+            pedido           VARCHAR(30)  NULL,
+            cartao           VARCHAR(30)  NULL,
+            dt_prevista      DATE         NULL,
+            dt_pagamento     DATE         NULL,
+            cod_pagamento    VARCHAR(30)  NULL,
+            tipo_cartao      VARCHAR(20)  NULL,
+            arquivo          VARCHAR(200) NULL,
+            atualizado_em    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_chave (chave),
+            KEY ix_tr (dt_transacao),
+            KEY ix_pg (dt_pagamento),
+            KEY ix_band (bandeira, forma)
+        )""")
+    conn.commit()
+    cur.close()
+
+
+def gravar_sicredi(conn, arquivo, linhas):
+    cols = _COLS_SICREDI + ('arquivo',)
+    sql = ('INSERT INTO cartao_sicredi_transacoes (%s) VALUES (%s) '
+           'ON DUPLICATE KEY UPDATE %s' % (
+               ', '.join(cols), ', '.join(['%s'] * len(cols)),
+               ', '.join('%s=VALUES(%s)' % (c, c) for c in cols if c != 'chave')))
+    cur = conn.cursor()
+    cur.executemany(sql, [tuple(x[k] for k in _COLS_SICREDI) + (arquivo[:200],)
+                          for x in linhas])
+    conn.commit()
+    cur.close()
+
+
+def _sicredi_antes(cur, sb, sf, ate, onde, params):
+    """As vendas de cartao aprovadas do Sicredi para a bandeira, antes de
+    `ate` (o dia em que a SIPAG assumiu; None = todas) e no recorte `onde`.
+    Sem a tabela, nada."""
+    try:
+        cur.execute(f"""
+            SELECT id, dt_transacao, bruto, taxa, liquido, produto, cartao, autorizacao,
+                   dt_pagamento AS pago, dt_prevista AS prev
+              FROM cartao_sicredi_transacoes
+             WHERE bandeira=%s AND forma=%s AND status='Aprovada'
+               AND (%s IS NULL OR dt_transacao < %s) AND ({onde})
+             ORDER BY dt_transacao""", [sb, sf, ate, ate] + list(params))
+    except Exception:
+        return []                       # tabela ainda nao existe
+    return cur.fetchall()

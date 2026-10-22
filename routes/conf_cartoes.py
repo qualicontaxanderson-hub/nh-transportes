@@ -1893,7 +1893,7 @@ def conf_cartoes_vendas():
         for i in its:
             cp = i.get('cupom')
             vendas.append({
-                'dt': i['dt'], 'tipo': tipo_b, 'operadora': o['operadora'],
+                'dt': i['dt'], 'tipo': tipo_b, 'operadora': i.get('operadora') or o['operadora'],
                 'bandeira': b['nome'], 'cab': o['cab'], 'cols': i['cols'],
                 'vendedor': (cp or {}).get('vendedor') or '',
                 'vendedor_raw': (cp or {}).get('vendedor_raw') or '',

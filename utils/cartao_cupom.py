@@ -16,6 +16,8 @@ Como casa, medido em set/2026:
            no XML (lancamento manual) casa sem a bandeira.        ~83%
            Ate ago/2026 o PDV gravava o cupom de cartao com bandeira
            "Outros" (a do PIX): uma 3a passada, de 5 min, aceita.
+  SICREDI  a maquininha antes da SIPAG (ate 13/07/2026): igual a SIPAG,
+           valor + bandeira + debito/credito + horario.
 
   PIX      o extrato PIX do banco (utils/pix_extrato): o cupom do PIX APP
            guarda os 30 primeiros caracteres do TxID; o "via chave" tem o
@@ -129,12 +131,24 @@ def _casar_baratao(cur, ini, fim, presos):
     return pares
 
 
-def _casar_sipag(cur, ini, fim, presos):
-    cur.execute("""
-        SELECT id, dt_transacao, bruto, bandeira, forma FROM cartao_sipag_transacoes
-         WHERE nsu <> '0' AND arq_realizadas IS NOT NULL
-           AND dt_transacao >= %s AND dt_transacao < %s
-         ORDER BY dt_transacao""", (ini, fim))
+#: de onde vem a venda de cada operadora que casa por valor + hora
+_VENDAS_VALOR_HORA = {
+    'SIPAG': """SELECT id, dt_transacao, bruto, bandeira, forma FROM cartao_sipag_transacoes
+                WHERE nsu <> '0' AND arq_realizadas IS NOT NULL
+                  AND dt_transacao >= %s AND dt_transacao < %s
+                ORDER BY dt_transacao""",
+    'SICREDI': """SELECT id, dt_transacao, bruto, bandeira, forma FROM cartao_sicredi_transacoes
+                  WHERE status = 'Aprovada' AND forma IS NOT NULL
+                    AND dt_transacao >= %s AND dt_transacao < %s
+                  ORDER BY dt_transacao""",
+}
+
+
+def _casar_sipag(cur, ini, fim, presos, op='SIPAG'):
+    try:
+        cur.execute(_VENDAS_VALOR_HORA[op], (ini, fim))
+    except Exception:
+        return []                       # tabela da operadora ainda nao existe
     vendas = cur.fetchall()
     if not vendas:
         return []
@@ -167,7 +181,7 @@ def _casar_sipag(cur, ini, fim, presos):
                 c = min(cs, key=lambda c: abs((c['dh_emissao'] - v['dt_transacao']).total_seconds()))
                 presos.add(c['id'])
                 v['_ok'] = True
-                pares.append(('SIPAG', v['id'], c['id'], metodo))
+                pares.append((op, v['id'], c['id'], metodo))
     return pares
 
 
@@ -274,6 +288,7 @@ def refazer(conn, data_inicio, data_fim):
         for op, tab, col in (('X7', 'cartao_arquivo_vendas', 'dt_operacao'),
                              ('BARATAO', 'cartao_baratao_cupons', 'dt_abastecimento'),
                              ('SIPAG', 'cartao_sipag_transacoes', 'dt_transacao'),
+                             ('SICREDI', 'cartao_sicredi_transacoes', 'dt_transacao'),
                              ('PIX', 'pix_extrato', 'dt')):
             try:
                 cur.execute(f"""
@@ -291,6 +306,7 @@ def refazer(conn, data_inicio, data_fim):
         pares += _casar_pix(cur, ini, fim, presos)
         _gravar(cur, pares)
         pares += _gravar(cur, _casar_sipag(cur, ini, fim, presos))
+        pares += _gravar(cur, _casar_sipag(cur, ini, fim, presos, 'SICREDI'))
         pares += _gravar(cur, _casar_pix(cur, ini, fim, presos, exato=False))
         conn.commit()
     finally:
