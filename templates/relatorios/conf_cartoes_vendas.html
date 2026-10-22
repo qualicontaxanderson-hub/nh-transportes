@@ -186,7 +186,12 @@ body > .container-fluid:has(#ccv){
           <input type="hidden" name="data_fim" value="{{ data_fim }}">
           {%- for k, v in hidden %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
           <label class="campo"><span>Número da nota</span>
-            <input class="num" type="text" inputmode="numeric" name="num" value="{{ num }}" placeholder="ex.: 15296"></label>
+            <input class="num" type="text" inputmode="numeric" name="num" value="{{ num }}" placeholder="clique ou digite"
+                   list="notas-lista" autocomplete="off"
+                   onchange="if(this.value && this.list && [...this.list.options].some(o => o.value === this.value)) this.form.submit()"></label>
+          <datalist id="notas-lista">
+            {%- for n in notas_lista %}<option value="{{ n.num }}" label="{{ n.r }}">{{ n.r }}</option>{% endfor %}
+          </datalist>
           <button class="bt" type="submit"><i class="bi bi-search"></i></button>
         </form>
         {% endif %}
@@ -214,7 +219,7 @@ body > .container-fluid:has(#ccv){
       <thead><tr>
         <th class="e">Venda</th><th class="e">Forma</th><th class="e">Operadora</th>
         <th class="e">Bandeira</th><th class="e">Detalhe</th><th class="e">Nota fiscal</th>
-        <th class="e">Vendedor</th><th>Vendido</th><th>Taxa</th><th>Líquido</th>
+        <th class="e">Vendedor</th><th>Vendido</th><th>Taxa</th><th>%</th><th>Líquido</th>
         <th class="e">Pagamento</th></tr></thead>
       <tbody>
         {% for v in vendas %}
@@ -230,6 +235,7 @@ body > .container-fluid:has(#ccv){
           <td class="e" data-r="Vendedor">{% if v.vendedor %}<span title="{{ v.vendedor_raw }}">{{ v.vendedor }}</span>{% else %}—{% endif %}</td>
           <td class="forte" data-r="Vendido">{{ v.vendido | fmtmoney }}</td>
           <td class="sub" data-r="Taxa">{% if v.pago %}− {{ v.taxa | fmtmoney }}{% else %}—{% endif %}</td>
+          <td class="sub" data-r="%">{% if v.pago and v.vendido %}{{ ('%.2f' % (v.taxa / v.vendido * 100)) | replace('.', ',') }}%{% else %}—{% endif %}</td>
           <td data-r="Líquido">{% if v.pago %}{{ v.liquido | fmtmoney }}{% else %}—{% endif %}</td>
           <td class="e" data-r="Pagamento">{% if v.pago %}<span class="pos"><i class="bi bi-check-circle-fill"></i> pago {{ v.pago.strftime('%d/%m') }}</span>
             {%- else %}<span class="ambar">a receber{% if v.prev %} · {{ v.prev.strftime('%d/%m') }}{% endif %}</span>{% endif %}</td>
@@ -238,6 +244,7 @@ body > .container-fluid:has(#ccv){
       </tbody>
       <tfoot><tr><td class="e" colspan="7">{{ tot.n }} venda{{ 's' if tot.n != 1 }}</td>
         <td>{{ tot.vendido | fmtmoney }}</td><td>− {{ tot.taxa | fmtmoney }}</td>
+        <td>{% if tot.taxa_pct is not none %}{{ ('%.2f' % tot.taxa_pct) | replace('.', ',') }}%{% else %}—{% endif %}</td>
         <td>{{ tot.liquido | fmtmoney }}</td><td class="e">{{ tot.a_receber | fmtmoney }} a receber</td></tr></tfoot>
     </table>
   </div></div>

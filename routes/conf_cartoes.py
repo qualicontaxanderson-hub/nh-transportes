@@ -1935,6 +1935,18 @@ def conf_cartoes_vendas():
         if val:
             resto = [v for v in resto if f(v) == val]
 
+    # a lista do campo numero: as notas do que sobrou dos passos, pra clicar
+    # e escolher em vez de ter que saber o numero de cor
+    notas_lista, vistas = [], set()
+    for v in resto:
+        cp = v['cupom']
+        if cp and str(cp['numero']) not in vistas:
+            vistas.add(str(cp['numero']))
+            notas_lista.append({'num': str(cp['numero']), 'r': ' · '.join(
+                x for x in (v['dt'].strftime('%d/%m %H:%M'), v['bandeira'],
+                            v['vendedor'], f"{v['vendido']:.2f}".replace('.', ',')) if x)})
+    notas_lista.sort(key=lambda n: (len(n['num']), n['num']))
+
     # o numero da nota, digitado, filtra por ultimo
     num = ''.join(ch for ch in (args.get('num') or '') if ch.isdigit())
     if num:
@@ -1966,7 +1978,7 @@ def conf_cartoes_vendas():
     return render_template(
         'relatorios/conf_cartoes_vendas.html',
         data_inicio=data_inicio, data_fim=data_fim, grupos=grupos, escolha=escolha,
-        hidden=hidden, num=num, vendas=resto, tot=tot,
+        hidden=hidden, num=num, notas_lista=notas_lista, vendas=resto, tot=tot,
         qs_operadora=urlencode(base + [('fonte', 'operadora')]),
         qs_caixa=urlencode(base + [('fonte', 'caixa')]),
         qs_auditoria=urlencode(base + [('fonte', 'auditoria')]))
