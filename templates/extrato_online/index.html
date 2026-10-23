@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+
+{% block title %}Extrato On-Line - NH Transportes{% endblock %}
+
+{% block styles %}
+<style>
+/* ═══════════════════════════════════════════════════════════════════════
+   Extrato On-Line — o extrato lido DIRETO do banco, pela API.
+
+   Só leitura. Cada lançamento do banco aparece com um selo: "No sistema"
+   (o OFX já trouxe) ou "Falta" (o banco tem e o sistema não). Mesmo visual
+   do Relatório do banco.
+   ═════════════════════════════════════════════════════════════════════ */
+body > .container-fluid:has(#eol){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){
+  body > .container-fluid:has(#eol){ padding:.7rem 1rem 0; }
+}
+#eol.container-fluid{ padding-left:0; padding-right:0; }
+
+#eol{
+  --azul:#1D63A5; --azul-deep:#0C4C86; --azul-claro:#eaf1f9;
+  --verde:#17963C;
+  --ink:#151d27; --ink-2:#3a4655; --muted:#6b7684;
+  --line:#e7ebf1; --line-2:#d9e0e8; --surface:#f7f9fc;
+  --ok:#1c6b34; --ok-bg:#e4f4e8;
+  --pend:#8a5a00; --pend-bg:#fdf0d6;
+  --danger:#a32d2d; --danger-bg:#fbe9e9;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  color:var(--ink); overflow-x:hidden;
+}
+
+/* ── Topo ─────────────────────────────────────────────────────────── */
+#eol .topo{ background:linear-gradient(120deg,var(--azul-deep),var(--azul)); color:#fff;
+  border-radius:14px; padding:.6rem .8rem .15rem; margin-bottom:.7rem; }
+#eol .topo__l1{ display:flex; align-items:center; gap:.5rem; }
+#eol .topo h3{ margin:0; font-size:1.05rem; font-weight:800; letter-spacing:-.01em; }
+#eol .voltar{ display:inline-flex; align-items:center; gap:.3rem;
+  background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.28); color:#fff;
+  border-radius:99px; padding:.22rem .62rem; font-size:.75rem; font-weight:700;
+  text-decoration:none; flex:0 0 auto; }
+#eol .voltar:hover{ background:rgba(255,255,255,.3); color:#fff; }
+#eol .so-leitura{ margin-left:auto; font-size:.68rem; font-weight:800; letter-spacing:.04em;
+  text-transform:uppercase; background:rgba(255,255,255,.18); border-radius:99px;
+  padding:.18rem .55rem; white-space:nowrap; }
+#eol .abas{ display:flex; gap:.35rem; overflow-x:auto; padding:.55rem 0 .5rem;
+  scrollbar-width:none; }
+#eol .abas::-webkit-scrollbar{ display:none; }
+#eol .aba{ flex:0 0 auto; border-radius:99px; padding:.32rem .8rem; font-size:.79rem;
+  font-weight:800; white-space:nowrap; color:#fff; text-decoration:none;
+  background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22); }
+#eol .aba:hover{ background:rgba(255,255,255,.26); color:#fff; }
+#eol .aba.on{ background:#fff; color:var(--azul-deep); border-color:#fff; }
+
+/* ── Consulta ─────────────────────────────────────────────────────── */
+#eol .busca{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+  padding:.7rem; margin-bottom:.7rem; display:grid; gap:.6rem;
+  grid-template-columns:1fr 1fr; align-items:end; }
+@media (min-width:768px){ #eol .busca{ grid-template-columns:2fr 1fr 1fr auto; } }
+#eol .busca .campo-banco{ grid-column:1 / -1; }
+@media (min-width:768px){ #eol .busca .campo-banco{ grid-column:auto; } }
+#eol .busca label{ display:block; font-size:.68rem; font-weight:800; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.05em; margin-bottom:.2rem; }
+#eol .busca select, #eol .busca input{ width:100%; border:1px solid var(--line-2);
+  border-radius:9px; padding:.42rem .55rem; font-size:.88rem; font-family:inherit;
+  background:#fff; color:var(--ink); min-width:0; }
+#eol .busca .conta-sub{ font-size:.7rem; color:var(--muted); margin-top:.2rem; }
+#eol .btn-consultar{ grid-column:1 / -1; border:0; border-radius:10px; padding:.55rem .9rem;
+  background:var(--azul); color:#fff; font-weight:800; font-size:.88rem; cursor:pointer;
+  display:inline-flex; align-items:center; justify-content:center; gap:.4rem; }
+@media (min-width:768px){ #eol .btn-consultar{ grid-column:auto; } }
+#eol .btn-consultar:hover{ background:var(--azul-deep); }
+#eol .btn-consultar[disabled]{ opacity:.7; cursor:wait; }
+
+#eol .aviso{ border-radius:12px; padding:.65rem .8rem; margin-bottom:.7rem;
+  font-size:.85rem; font-weight:600; display:flex; gap:.5rem; align-items:flex-start; }
+#eol .aviso--erro{ background:var(--danger-bg); color:var(--danger); }
+#eol .aviso--info{ background:var(--azul-claro); color:var(--azul-deep); }
+
+/* ── Números ──────────────────────────────────────────────────────── */
+#eol .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:.7rem; }
+@media (min-width:768px){ #eol .nums{ grid-template-columns:repeat(4,1fr); } }
+#eol .nums .n{ border-radius:13px; padding:.55rem .75rem; color:#fff;
+  box-shadow:0 2px 8px rgba(20,35,60,.12); }
+#eol .nums .r{ font-size:.66rem; font-weight:800; text-transform:uppercase;
+  letter-spacing:.06em; opacity:.92; }
+#eol .nums .v{ font-size:1.02rem; font-weight:800; letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums; line-height:1.28; }
+#eol .nums .s{ font-size:.7rem; font-weight:700; opacity:.9; }
+#eol .n--a{ background:linear-gradient(135deg,#2E6FB0,#1D63A5); }
+#eol .n--b{ background:linear-gradient(135deg,#22A24B,#17963C); }
+#eol .n--d{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
+#eol .n--c{ background:linear-gradient(135deg,#7a8594,#5b6573); }
+
+/* ── Lista ────────────────────────────────────────────────────────── */
+#eol .lst{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+  overflow:hidden; margin-bottom:.7rem; }
+#eol .topo-lst{ display:flex; align-items:center; gap:.55rem; padding:.55rem .7rem;
+  border-bottom:1px solid var(--line); font-size:.78rem; font-weight:700; color:var(--muted); }
+#eol .dia{ display:flex; align-items:center; gap:.5rem; padding:.45rem .7rem;
+  background:var(--azul-claro); color:var(--azul-deep); font-size:.79rem;
+  font-weight:800; border-bottom:1px solid var(--line-2); position:sticky; top:0; z-index:3; }
+#eol .dia .tot{ margin-left:auto; font-variant-numeric:tabular-nums; }
+#eol .lin{ padding:.5rem .7rem; border-bottom:1px solid var(--line); }
+#eol .lin:last-child{ border-bottom:0; }
+#eol .lin--falta{ background:#fffaf0; }
+#eol .l1{ display:flex; align-items:baseline; gap:.5rem; min-width:0; }
+#eol .desc{ font-size:.85rem; font-weight:700; letter-spacing:-.01em; min-width:0;
+  line-height:1.28; overflow-wrap:anywhere; flex:1 1 auto; }
+#eol .valor{ flex:0 0 auto; font-size:.95rem; font-weight:800;
+  font-variant-numeric:tabular-nums; letter-spacing:-.02em; white-space:nowrap; }
+#eol .valor--e{ color:var(--verde); }
+#eol .valor--s{ color:var(--danger); }
+#eol .memo{ font-size:.74rem; color:var(--ink-2); margin-top:.1rem; overflow-wrap:anywhere; }
+#eol .l3{ display:flex; flex-wrap:wrap; align-items:center; gap:.3rem; margin-top:.25rem; }
+#eol .selo{ display:inline-block; font-size:.66rem; font-weight:800; border-radius:5px;
+  padding:.08rem .38rem; white-space:nowrap; }
+#eol .selo--ok{ background:var(--ok-bg); color:var(--ok); }
+#eol .selo--pend{ background:var(--pend-bg); color:var(--pend); }
+#eol .ofx{ font-size:.7rem; color:var(--muted); min-width:0; overflow-wrap:anywhere; }
+#eol .doc{ font-family:var(--mono); font-size:.7rem; color:var(--muted); font-weight:600; }
+#eol .vazio{ padding:1.4rem .8rem; text-align:center; color:var(--muted); font-size:.85rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% macro milhar(v) -%}
+{{ '{:,}'.format(v or 0)|replace(',','.') }}
+{%- endmacro %}
+
+<div class="container-fluid" id="eol">
+
+  <div class="topo">
+    <div class="topo__l1">
+      <a class="voltar" href="{{ url_for('bank_import.index') }}">
+        <i class="bi bi-chevron-left"></i> Banco
+      </a>
+      <h3>Extrato On-Line</h3>
+      <span class="so-leitura"><i class="bi bi-eye"></i> Só consulta</span>
+    </div>
+    <div class="abas">
+      {% with ativa = 'extrato_online' %}{% include 'includes/abas_banco.html' %}{% endwith %}
+    </div>
+  </div>
+
+  <form class="busca" method="get" action="{{ url_for('extrato_online.index') }}"
+        onsubmit="var b=this.querySelector('.btn-consultar'); b.disabled=true; b.innerHTML='<span class=&quot;spinner-border spinner-border-sm&quot;></span> Consultando o banco…';">
+    <input type="hidden" name="consultar" value="1">
+    <div class="campo-banco">
+      <label for="eol-banco">Banco</label>
+      <select id="eol-banco" name="banco">
+        {% for k, b in bancos.items() %}
+          <option value="{{ k }}" {{ 'selected' if k == chave }}>{{ b.rotulo }}</option>
+        {% endfor %}
+      </select>
+      <div class="conta-sub">Conta {{ banco.conta }}</div>
+    </div>
+    <div>
+      <label for="eol-ini">De</label>
+      <input id="eol-ini" type="date" name="ini" value="{{ ini.isoformat() }}" max="{{ ontem.isoformat() }}">
+    </div>
+    <div>
+      <label for="eol-fim">Até</label>
+      <input id="eol-fim" type="date" name="fim" value="{{ fim.isoformat() }}" max="{{ ontem.isoformat() }}">
+    </div>
+    <button type="submit" class="btn-consultar"><i class="bi bi-cloud-download"></i> Consultar no banco</button>
+  </form>
+
+  {% if erro %}
+    <div class="aviso aviso--erro"><i class="bi bi-exclamation-triangle-fill"></i><div>{{ erro }}</div></div>
+  {% elif not consultado %}
+    <div class="aviso aviso--info"><i class="bi bi-info-circle-fill"></i>
+      <div>Busca o extrato direto no banco e mostra o que <b>já está no sistema</b> e o que
+      <b>falta</b>. Nada é gravado. Só dias fechados — até ontem.</div></div>
+  {% endif %}
+
+  {% if consultado %}
+    <div class="nums">
+      <div class="n n--a">
+        <div class="r">No banco</div>
+        <div class="v">{{ milhar(r.total) }}</div>
+        <div class="s">{{ r.entradas | formatar_moeda }} entr. · {{ r.saidas | formatar_moeda }} saíd.</div>
+      </div>
+      <div class="n n--b">
+        <div class="r">Já no sistema</div>
+        <div class="v">{{ milhar(r.no_sistema) }}</div>
+      </div>
+      <div class="n n--d">
+        <div class="r">Faltam no sistema</div>
+        <div class="v">{{ milhar(r.faltam) }}</div>
+      </div>
+      <div class="n n--c">
+        <div class="r">Só no sistema</div>
+        <div class="v">{{ milhar(r.so_ofx) }}</div>
+      </div>
+    </div>
+
+    <div class="lst">
+      <div class="topo-lst">
+        <span>{{ banco.rotulo }} · {{ ini.strftime('%d/%m') }} a {{ fim.strftime('%d/%m/%Y') }}</span>
+      </div>
+      {% for d in dias %}
+        <div class="dia">
+          <span>{{ d.data.strftime('%d/%m/%Y') }}</span>
+          <span class="tot">{{ d.saldo | formatar_moeda }}</span>
+        </div>
+        {% for l in d.linhas %}
+          {% set tx = l.tx %}
+          <div class="lin{{ '' if l.no_sistema else ' lin--falta' }}">
+            <div class="l1">
+              <div class="desc">{{ tx.descricao or '—' }}</div>
+              <div class="valor {{ 'valor--e' if tx.tipo == 'CREDIT' else 'valor--s' }}">
+                {{ '' if tx.tipo == 'CREDIT' else '−' }}{{ tx.valor | formatar_moeda }}
+              </div>
+            </div>
+            {% if tx.memo %}<div class="memo">{{ tx.memo }}</div>{% endif %}
+            <div class="l3">
+              {% if l.no_sistema %}
+                <span class="selo selo--ok">No sistema</span>
+                <span class="ofx">OFX: {{ l.ofx.descricao or '—' }}</span>
+              {% else %}
+                <span class="selo selo--pend">Falta</span>
+              {% endif %}
+              {% if tx.numero_documento %}<span class="doc">doc {{ tx.numero_documento }}</span>{% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="vazio">O banco não devolveu lançamentos neste período.</div>
+      {% endfor %}
+    </div>
+
+    {% if so_ofx %}
+      <div class="lst">
+        <div class="topo-lst"><span>Só no sistema — o OFX tem, o banco não devolveu</span></div>
+        {% for o in so_ofx %}
+          <div class="lin">
+            <div class="l1">
+              <div class="desc">{{ o.descricao or '—' }}</div>
+              <div class="valor {{ 'valor--e' if o.tipo == 'CREDIT' else 'valor--s' }}">
+                {{ '' if o.tipo == 'CREDIT' else '−' }}{{ o.valor | formatar_moeda }}
+              </div>
+            </div>
+            <div class="l3">
+              <span class="doc">{{ o.data_transacao.strftime('%d/%m/%Y') }}</span>
+              {% if o.memo %}<span class="ofx">{{ o.memo }}</span>{% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endif %}
+
+</div>
+{% endblock %}
