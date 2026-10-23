@@ -284,6 +284,29 @@ def para_transacao(t):
     }
 
 
+def partes_complemento(memo):
+    """'Recebimento Pix|@Wisney Cunha Oliveira|@***.783.651-**|@' ->
+    ['Recebimento Pix', 'Wisney Cunha Oliveira', '***.783.651-**'].
+
+    Formato visto na primeira consulta real (23/10/2026): o Sicoob separa os
+    campos com '|' e marca o começo de cada um com '@'.
+    """
+    return [p.strip().lstrip('@').strip() for p in str(memo or '').split('|')
+            if p.strip().lstrip('@').strip()]
+
+
+def texto_como_ofx(tx):
+    """O texto que o OFX do Sicoob grava no NAME para esta transação, sem o corte.
+
+    Na mesma consulta: o NAME do OFX é o complemento da API com os campos
+    colados por espaço e cortado em 32 caracteres ('Recebimento Pix Edimilson
+    Silva' <- 'Recebimento Pix|@Edimilson Silva Miele|@...'). Sem complemento,
+    o OFX usa a própria descrição.
+    """
+    partes = partes_complemento(tx.get('memo'))
+    return ' '.join(partes[:2]) if partes else (tx.get('descricao') or '')
+
+
 def hash_api(tx, repeticao):
     """Hash estável da transação da API, com prefixo próprio — não colide com o do OFX
     (fitid|data|valor|descrição) e repete igual a cada consulta do mesmo dia."""
@@ -355,15 +378,52 @@ def comparar(api_txs, inicio, fim):
     fila = defaultdict(list)
     for o in ofx:
         fila[_chave(o['data_transacao'], o['tipo'], o['valor'])].append(o)
-    casados, so_api = [], []
+    grupos = defaultdict(list)
     for a in api_txs:
-        k = _chave(a['data_transacao'], a['tipo'], a['valor'])
-        if fila[k]:
-            casados.append((a, fila[k].pop(0)))
-        else:
-            so_api.append(a)
+        grupos[_chave(a['data_transacao'], a['tipo'], a['valor'])].append(a)
+
+    # Dentro do mesmo (dia, tipo, valor) — 65 grupos de PIX iguais só em
+    # 16-22/10 — o par é decidido pelo TEXTO: primeiro os que coincidem mais.
+    # Só por data e valor, o PIX do Wisney aparecia ao lado do da Pauliana.
+    casados, so_api = [], []
+    for k, apis in grupos.items():
+        ofxs = fila.pop(k, [])
+        pares = sorted(((_prefixo_comum(texto_como_ofx(a), o['descricao']), i, j)
+                        for i, a in enumerate(apis) for j, o in enumerate(ofxs)),
+                       reverse=True)
+        usados_a, usados_o = set(), set()
+        for _score, i, j in pares:
+            if i in usados_a or j in usados_o:
+                continue
+            usados_a.add(i)
+            usados_o.add(j)
+            casados.append((apis[i], ofxs[j]))
+        so_api += [a for i, a in enumerate(apis) if i not in usados_a]
+        fila[k] = [o for j, o in enumerate(ofxs) if j not in usados_o]
     so_ofx = [o for lst in fila.values() for o in lst]
     return {'casados': casados, 'so_api': so_api, 'so_ofx': so_ofx}
+
+
+def mesmo_texto_do_ofx(tx, ofx):
+    """O OFX teria escrito este mesmo texto? NAME do OFX = texto_como_ofx cortado
+    em 32. É o que diz se regras e memorizações continuariam casando."""
+    a, b = _normal(texto_como_ofx(tx)), _normal(ofx.get('descricao'))
+    return bool(b) and a[:len(b)] == b
+
+
+def _normal(txt):
+    return ' '.join(_sem_acento(txt).upper().split())
+
+
+def _prefixo_comum(a, b):
+    """Quantos caracteres do começo coincidem (sem acento, maiúsculo)."""
+    a, b = _normal(a), _normal(b)
+    n = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        n += 1
+    return n
 
 
 def main():
@@ -379,9 +439,8 @@ def main():
     r = comparar(api, a.inicio, a.fim)
     print(f"\nAPI {len(api)} · casados {len(r['casados'])} · "
           f"só na API {len(r['so_api'])} · só no OFX {len(r['so_ofx'])}")
-    textos = Counter((x['descricao'] == o['descricao'], x['memo'] == (o['memo'] or ''))
-                     for x, o in r['casados'])
-    print(f"texto igual ao OFX (descricao, memo): {dict(textos)}")
+    textos = Counter(mesmo_texto_do_ofx(x, o) for x, o in r['casados'])
+    print(f"texto igual ao OFX: {textos[True]} de {len(r['casados'])}")
     print('\n-- amostra casados: API | OFX')
     for x, o in r['casados'][:25]:
         print(f"{x['data_transacao']} {x['tipo'][:1]} {x['valor']:>10.2f}  "

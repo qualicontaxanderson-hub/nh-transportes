@@ -77,9 +77,16 @@ def _consultar(mod, ini, fim):
         return {'erro': f'Não foi possível ler o extrato: {exc}'}
 
     # Uma lista só, por dia, na ordem do banco — cada linha com o seu selo.
-    linhas = [{'tx': a, 'ofx': o, 'no_sistema': True} for a, o in r['casados']]
-    linhas += [{'tx': a, 'ofx': None, 'no_sistema': False} for a in r['so_api']]
-    linhas.sort(key=lambda l: l['tx']['data_transacao'])
+    linhas = [{'tx': a, 'ofx': o, 'no_sistema': True,
+               'texto_igual': mod.mesmo_texto_do_ofx(a, o)} for a, o in r['casados']]
+    linhas += [{'tx': a, 'ofx': None, 'no_sistema': False, 'texto_igual': None}
+               for a in r['so_api']]
+    for l in linhas:
+        l['partes'] = mod.partes_complemento(l['tx']['memo'])
+        doc = l['tx']['numero_documento'] or ''
+        l['doc'] = doc if any(c.isdigit() for c in doc) else None   # 'Pix' não diz nada
+    ordem = {id(a): i for i, a in enumerate(api)}       # a ordem do banco
+    linhas.sort(key=lambda l: (l['tx']['data_transacao'], ordem.get(id(l['tx']), 0)))
     dias, atual = [], None
     for l in linhas:
         d = l['tx']['data_transacao']
@@ -92,7 +99,17 @@ def _consultar(mod, ini, fim):
 
     entradas = sum(l['tx']['valor'] for l in linhas if l['tx']['tipo'] == 'CREDIT')
     saidas = sum(l['tx']['valor'] for l in linhas if l['tx']['tipo'] == 'DEBIT')
+    # O lado do sistema somado à parte — a conclusão compara os dois totais,
+    # não só a contagem de pares.
+    ofx = [o for _a, o in r['casados']] + r['so_ofx']
+    ofx_ent = sum(float(o['valor']) for o in ofx if o['tipo'] == 'CREDIT')
+    ofx_sai = sum(float(o['valor']) for o in ofx if o['tipo'] == 'DEBIT')
+    bateu = (not r['so_api'] and not r['so_ofx']
+             and round(entradas, 2) == round(ofx_ent, 2) and round(saidas, 2) == round(ofx_sai, 2))
     return {'consultado': True, 'dias': dias, 'so_ofx': r['so_ofx'],
             'r': {'total': len(linhas), 'no_sistema': len(r['casados']),
                   'faltam': len(r['so_api']), 'so_ofx': len(r['so_ofx']),
-                  'entradas': entradas, 'saidas': saidas}}
+                  'texto_igual': sum(1 for l in linhas if l['texto_igual']),
+                  'entradas': entradas, 'saidas': saidas,
+                  'ofx_total': len(ofx), 'ofx_ent': ofx_ent, 'ofx_sai': ofx_sai,
+                  'bateu': bateu}}

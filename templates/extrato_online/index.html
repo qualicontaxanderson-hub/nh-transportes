@@ -121,6 +121,17 @@ body > .container-fluid:has(#eol){
 #eol .selo--pend{ background:var(--pend-bg); color:var(--pend); }
 #eol .ofx{ font-size:.7rem; color:var(--muted); min-width:0; overflow-wrap:anywhere; }
 #eol .doc{ font-family:var(--mono); font-size:.7rem; color:var(--muted); font-weight:600; }
+/* ── Conclusão ────────────────────────────────────────────────────── */
+#eol .veredito{ border-radius:12px; padding:.65rem .8rem; margin-bottom:.7rem; }
+#eol .veredito--ok{ background:var(--ok-bg); color:var(--ok); }
+#eol .veredito--dif{ background:var(--pend-bg); color:var(--pend); }
+#eol .veredito__t{ font-weight:800; font-size:.95rem; display:flex; gap:.45rem; align-items:center; }
+#eol .veredito__tab{ margin-top:.4rem; font-size:.8rem; border-collapse:collapse; width:100%; max-width:520px; }
+#eol .veredito__tab th, #eol .veredito__tab td{ padding:.15rem .5rem .15rem 0; text-align:right;
+  font-variant-numeric:tabular-nums; white-space:nowrap; }
+#eol .veredito__tab th:first-child, #eol .veredito__tab td:first-child{ text-align:left; }
+#eol .veredito__tab th{ font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; opacity:.85; }
+#eol .veredito__s{ font-size:.76rem; font-weight:600; margin-top:.35rem; }
 #eol .vazio{ padding:1.4rem .8rem; text-align:center; color:var(--muted); font-size:.85rem; }
 </style>
 {% endblock %}
@@ -198,6 +209,23 @@ body > .container-fluid:has(#eol){
       </div>
     </div>
 
+    <div class="veredito {{ 'veredito--ok' if r.bateu else 'veredito--dif' }}">
+      <div class="veredito__t">
+        {% if r.bateu %}<i class="bi bi-check-circle-fill"></i> Veio tudo — o banco e o sistema batem
+        {% else %}<i class="bi bi-exclamation-circle-fill"></i> O banco e o sistema NÃO batem{% endif %}
+      </div>
+      <table class="veredito__tab">
+        <tr><th></th><th>Banco (API)</th><th>Sistema (OFX)</th></tr>
+        <tr><td>Lançamentos</td><td>{{ milhar(r.total) }}</td><td>{{ milhar(r.ofx_total) }}</td></tr>
+        <tr><td>Entradas</td><td>{{ r.entradas | formatar_moeda }}</td><td>{{ r.ofx_ent | formatar_moeda }}</td></tr>
+        <tr><td>Saídas</td><td>{{ r.saidas | formatar_moeda }}</td><td>{{ r.ofx_sai | formatar_moeda }}</td></tr>
+      </table>
+      {% if r.no_sistema %}
+      <div class="veredito__s">Texto igual ao do OFX em {{ milhar(r.texto_igual) }} de {{ milhar(r.no_sistema) }}
+        (é o que as regras e memorizações de conciliação usam).</div>
+      {% endif %}
+    </div>
+
     <div class="lst">
       <div class="topo-lst">
         <span>{{ banco.rotulo }} · {{ ini.strftime('%d/%m') }} a {{ fim.strftime('%d/%m/%Y') }}</span>
@@ -216,15 +244,16 @@ body > .container-fluid:has(#eol){
                 {{ '' if tx.tipo == 'CREDIT' else '−' }}{{ tx.valor | formatar_moeda }}
               </div>
             </div>
-            {% if tx.memo %}<div class="memo">{{ tx.memo }}</div>{% endif %}
+            {% if l.partes %}<div class="memo">{{ l.partes | join(' · ') }}</div>{% endif %}
             <div class="l3">
               {% if l.no_sistema %}
                 <span class="selo selo--ok">No sistema</span>
+                {% if not l.texto_igual %}<span class="selo selo--pend">texto diferente</span>{% endif %}
                 <span class="ofx">OFX: {{ l.ofx.descricao or '—' }}</span>
               {% else %}
                 <span class="selo selo--pend">Falta</span>
               {% endif %}
-              {% if tx.numero_documento %}<span class="doc">doc {{ tx.numero_documento }}</span>{% endif %}
+              {% if l.doc %}<span class="doc">doc {{ l.doc }}</span>{% endif %}
             </div>
           </div>
         {% endfor %}
