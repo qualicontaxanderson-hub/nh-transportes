@@ -1,0 +1,198 @@
+"""
+PIX recebido no extrato (API do banco) ⇄ cupom da venda (vendas_xml, NFC-e).
+
+SÓ LEITURA e SÓ EM MEMÓRIA: nada é gravado. É o "comprovante daquele
+abastecimento" do Extrato On-Line — o PIX do banco com o cupom que ele pagou.
+
+As regras são as do utils/cartao_cupom._casar_pix (Conferência de Cartões),
+do mais certo para o menos:
+
+  1. nome  — no PIX "via chave" o frentista digita o nome do pagador na
+             autorização do cupom ("ROSA MARIA 1410"): a primeira palavra da
+             autorização está no nome que o banco mandou, mesmo valor, mesmo dia;
+  2. hora  — mesmo valor e até 10 min de diferença (quando o banco dá a hora:
+             o Cora dá; o Sicoob, se mandar);
+  3. dia   — sem hora: mesmo valor no mesmo dia. Um candidato só casa; mais
+             de um fica como "possíveis", para a pessoa escolher.
+
+Cupom de PIX = bandeira "Outros" no XML (é como o PDV grava o PIX), fora o
+repasse do Baratão. Um cupom serve a um PIX só.
+"""
+from collections import defaultdict
+from datetime import datetime, timedelta
+
+from utils.cartao_cupom import BARATAO_CNPJ, _palavras, _vendedor
+
+JANELA_HORA = timedelta(minutes=10)
+JANELA_NOME = timedelta(hours=2)
+
+
+def _cupons(ini, fim):
+    """Cupons de PIX autorizados no período, com os itens de combustível."""
+    from utils.db import get_db_connection
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""
+            SELECT id, numero, serie, dh_emissao, valor_total, card_autorizacao,
+                   card_credenciadora, vendedor_raw, cliente_nome, placa, km
+              FROM vendas_xml
+             WHERE dh_emissao >= %s AND dh_emissao < %s
+               AND card_bandeira = 'Outros' AND situacao = 'autorizada'
+               AND COALESCE(cliente_doc, '') <> %s
+             ORDER BY dh_emissao""",
+            (datetime.combine(ini, datetime.min.time()),
+             datetime.combine(fim + timedelta(days=1), datetime.min.time()), BARATAO_CNPJ))
+        cupons = cur.fetchall()
+        if cupons:
+            ids = [c['id'] for c in cupons]
+            itens = defaultdict(list)
+            for i in range(0, len(ids), 500):
+                fatia = ids[i:i + 500]
+                cur.execute(f"""
+                    SELECT venda_id, produto_xml, quantidade, unidade, eh_combustivel
+                      FROM vendas_xml_itens WHERE venda_id IN ({','.join(['%s'] * len(fatia))})
+                     ORDER BY venda_id, n_item""", tuple(fatia))
+                for r in cur.fetchall():
+                    itens[r['venda_id']].append(r)
+            for c in cupons:
+                its = itens.get(c['id'], [])
+                comb = [i for i in its if i['eh_combustivel']] or its
+                c['itens'] = ' + '.join(
+                    f"{(i['produto_xml'] or '').strip().title()} {float(i['quantidade'] or 0):,.2f} {(i['unidade'] or '').upper()}"
+                    .replace(',', 'X').replace('.', ',').replace('X', '.') for i in comb[:2])
+                c['vendedor'] = _vendedor(c['vendedor_raw'])
+    finally:
+        cur.close()
+        conn.close()
+    return cupons
+
+
+def _extrato_pix(banco, ini, fim):
+    """Os PIX do "Extrato Pix" importado no período, com o cupom já ligado."""
+    from utils.db import get_db_connection
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""
+            SELECT p.id, p.dt, p.valor, p.pagador, v.vendas_xml_id
+              FROM pix_extrato p
+              LEFT JOIN cartao_cupom_vinculo v ON v.operadora = 'PIX' AND v.ref_id = p.id
+             WHERE p.banco = %s AND p.dt >= %s AND p.dt < %s
+             ORDER BY p.dt""",
+            (banco, datetime.combine(ini, datetime.min.time()),
+             datetime.combine(fim + timedelta(days=1), datetime.min.time())))
+        return cur.fetchall()
+    except Exception:
+        return []                       # tabela ainda não existe
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _quando(tx):
+    """datetime do PIX, se o banco deu a hora; senão None."""
+    if not tx.get('hora'):
+        return None
+    h, m = tx['hora'].split(':')
+    return datetime.combine(tx['data_transacao'], datetime.min.time()).replace(hour=int(h), minute=int(m))
+
+
+def casar(pix, ini, fim, credenciadora=None):
+    """pix: transações (formato do adapter) de PIX RECEBIDO.
+
+    Devolve ({id(tx): {'status', 'metodo', 'cupom', 'candidatos', 'minutos'}},
+             cupons_sem_pix). cupons_sem_pix só faz sentido para o banco que
+    liquida o PIX do cupom (credenciadora) — para os outros volta [].
+    """
+    cupons = _cupons(ini, fim)
+    usados, out = set(), {}
+
+    def mesmo_valor(c, tx):
+        return abs(float(c['valor_total']) - float(tx['valor'])) < 0.005
+
+    def livres(tx):
+        return [c for c in cupons if c['id'] not in usados and mesmo_valor(c, tx)
+                and c['dh_emissao'].date() == tx['data_transacao']]
+
+    def liga(tx, c, metodo):
+        usados.add(c['id'])
+        q = _quando(tx)
+        out[id(tx)] = {'status': 'casou', 'metodo': metodo, 'cupom': c, 'candidatos': [],
+                       'minutos': (round((q - c['dh_emissao']).total_seconds() / 60) if q else None)}
+
+    def preferido(cs, tx):
+        """O mais perto na hora; do mesmo banco primeiro."""
+        q = _quando(tx)
+        return min(cs, key=lambda c: ((credenciadora and (c['card_credenciadora'] or '') not in ('', credenciadora)),
+                                      abs((c['dh_emissao'] - q).total_seconds()) if q else 0))
+
+    # 0) o MESMO PIX no "Extrato Pix" importado (utils/pix_extrato): ele tem a
+    #    hora ao segundo e o cupom já ligado pela Conferência de Cartões (TxID,
+    #    nome, valor+hora — 85% dos PIX de 14 a 21/10/2026). O extrato da API
+    #    não traz hora; herdá-la daqui é o que faz o resto casar direito.
+    from utils.pix_extrato import CREDENCIADORA
+    banco_pix = CREDENCIADORA.get(credenciadora or '')
+    if banco_pix:
+        por_id = {c['id']: c for c in cupons}
+        extrato = _extrato_pix(banco_pix, ini, fim)
+        presos = set()
+        for tx in pix:
+            if tx.get('hora'):
+                continue
+            nomes = set(_palavras(tx.get('quem')))
+            cs = [p for p in extrato if p['id'] not in presos and p['dt'].date() == tx['data_transacao']
+                  and abs(float(p['valor']) - float(tx['valor'])) < 0.005]
+            pelo_nome = [p for p in cs if nomes and _palavras(p['pagador'])[:1]
+                         and _palavras(p['pagador'])[0] in nomes]
+            if len(pelo_nome) >= 1:
+                cs = pelo_nome
+            if len(cs) != 1 and not (pelo_nome and len(set(p['pagador'] for p in pelo_nome)) == 1):
+                continue                # ambíguo: não chuta a hora
+            p = min(cs, key=lambda p: p['dt'])
+            presos.add(p['id'])
+            tx['hora'] = p['dt'].strftime('%H:%M')
+            tx['hora_fonte'] = 'Extrato Pix'
+            c = por_id.get(p['vendas_xml_id'])
+            if c and c['id'] not in usados:
+                liga(tx, c, 'extrato')
+
+    # 1) nome digitado na autorização
+    for tx in pix:
+        if id(tx) in out:
+            continue
+        nomes = set(_palavras(tx.get('quem')))
+        q = _quando(tx)
+        cs = [c for c in livres(tx)
+              if _palavras(c['card_autorizacao'])[:1] and _palavras(c['card_autorizacao'])[0] in nomes
+              and (q is None or abs(c['dh_emissao'] - q) <= JANELA_NOME)]
+        if cs:
+            liga(tx, preferido(cs, tx), 'nome')
+    # 2) valor + hora
+    for tx in pix:
+        q = _quando(tx)
+        if id(tx) in out or q is None:
+            continue
+        cs = [c for c in livres(tx) if abs(c['dh_emissao'] - q) <= JANELA_HORA]
+        if cs:
+            liga(tx, preferido(cs, tx), 'hora')
+    # 3) valor + dia: só um candidato casa; vários ficam para escolher
+    em_aberto = set()                   # cupons que são candidatos de algum PIX
+    for tx in pix:
+        if id(tx) in out:
+            continue
+        cs = livres(tx)
+        if _quando(tx) is None and len(cs) == 1:
+            liga(tx, cs[0], 'dia')
+        else:
+            em_aberto.update(c['id'] for c in cs)
+            out[id(tx)] = {'status': 'possiveis' if cs else 'sem', 'metodo': None, 'cupom': None,
+                           'candidatos': cs[:3], 'minutos': None}
+
+    # "Cupom PIX sem PIX" é só o que nenhum PIX do período pode ter pago — o
+    # cupom que é candidato de um PIX com vários possíveis não entra.
+    sem_pix = []
+    if credenciadora:
+        sem_pix = [c for c in cupons if c['id'] not in usados and c['id'] not in em_aberto
+                   and (c['card_credenciadora'] or '') == credenciadora]
+    return out, sem_pix

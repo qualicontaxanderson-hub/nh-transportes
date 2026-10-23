@@ -12,15 +12,33 @@ períodos, o período inteiro num painel e um card + um quadro por TIPO de
 movimento (PIX recebido, cartões, transferências...). O tipo sai do próprio
 texto do banco — ver _categoria().
 
-Um banco novo é uma entrada em BANCOS: rótulo, conta e o módulo que sabe
-ler(), comparar() e mesmo_texto_do_ofx() — o resto (mTLS, token, HTTP,
+Um banco novo é uma entrada em BANCOS: rótulo, conta, cor e o módulo que
+sabe ler(), comparar() e mesmo_texto_do_ofx() — o resto (mTLS, token, HTTP,
 comparação) é comum, em integrations/banco_api.
+
+SÓ ADMIN (23/10/2026): ninguém mais vê esta tela por enquanto.
+
+Cada lançamento é um card (modelo A da prévia preview-extrato-cards.html):
+o PIX recebido traz o cupom do abastecimento (integrations/extrato_cupom);
+o que já está no sistema traz PARA QUEM foi conciliado — o texto do banco
+não diz ('DÉB.TIT.COMPE EFETIVADO' foi a EQUATORIAL).
+
+CACHE: um clique num card ou filtro não consulta o banco de novo. O
+resultado fica guardado alguns minutos por (banco, período); "Consultar no
+banco" sempre busca de novo.
 """
+import logging
+import threading
+import time
 from collections import OrderedDict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from flask import Blueprint, render_template, request
 from flask_login import login_required
+
+from utils.decorators import admin_required
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('extrato_online', __name__, url_prefix='/banco/extrato-online')
 
@@ -40,11 +58,25 @@ def _cora(conta):
     return carrega
 
 
+# 'cor': o contorno de tudo daquela conta na tela. 'credenciadora': o CNPJ que
+# o cupom grava quando o PIX é liquidado por este banco — é o que permite
+# dizer "cupom PIX sem PIX no banco".
 BANCOS = {
-    'sicoob-nh': {'rotulo': 'SICOOB - NH', 'conta': '5024 / 148.186-0', 'modulo': _sicoob},
-    'cora-nh': {'rotulo': 'CORA - NH', 'conta': '0001 / 3456427-0', 'modulo': _cora('posto')},
-    'cora-prest': {'rotulo': 'CORA - PREST', 'conta': '0001 / 27677832', 'modulo': _cora('prest')},
+    'sicoob-nh': {'rotulo': 'SICOOB - NH', 'conta': '5024 / 148.186-0', 'modulo': _sicoob,
+                  'cor': '#00897B', 'credenciadora': '02038232000164'},
+    'cora-nh': {'rotulo': 'CORA - NH', 'conta': '0001 / 3456427-0', 'modulo': _cora('posto'),
+                'cor': '#E8336D', 'credenciadora': None},
+    'cora-prest': {'rotulo': 'CORA - PREST', 'conta': '0001 / 27677832', 'modulo': _cora('prest'),
+                   'cor': '#8E24AA', 'credenciadora': None},
 }
+
+# Resultado guardado por (banco, início, fim): período com hoje vale 1 min
+# (o dia ainda muda), período fechado vale 10 min.
+_CACHE = {}
+_TRAVA = threading.Lock()
+VALE_COM_HOJE = 60
+VALE_FECHADO = 600
+MAX_GUARDADOS = 8
 
 # Ordem dos cards e dos quadros: primeiro o que entra, depois o que sai.
 CATEGORIAS = OrderedDict([
@@ -124,6 +156,7 @@ def _atalhos(hoje):
 
 @bp.route('/')
 @login_required
+@admin_required
 def index():
     hoje = date.today()
     ontem = hoje - timedelta(days=1)
@@ -149,15 +182,36 @@ def index():
         elif (fim - ini).days + 1 > MAX_DIAS:
             ctx['erro'] = f'Período máximo de {MAX_DIAS} dias por consulta.'
         else:
-            ctx.update(_consultar(banco['modulo'](), ini, fim, hoje))
+            ctx.update(_consultar_guardado(chave, ini, fim, hoje,
+                                           novo=bool(request.args.get('novo'))))
     return render_template('extrato_online/index.html', **ctx)
 
 
-def _consultar(mod, ini, fim, hoje):
+def _consultar_guardado(chave, ini, fim, hoje, novo=False):
+    k = (chave, ini, fim)
+    agora = time.monotonic()
+    with _TRAVA:
+        g = _CACHE.get(k)
+        if g and not novo and agora < g[0]:
+            return dict(g[1], do_cache=True)
+    res = _consultar(BANCOS[chave], ini, fim, hoje)
+    if not res.get('erro'):
+        with _TRAVA:
+            _CACHE[k] = (agora + (VALE_COM_HOJE if fim >= hoje else VALE_FECHADO), res)
+            while len(_CACHE) > MAX_GUARDADOS:
+                _CACHE.pop(min(_CACHE, key=lambda x: _CACHE[x][0]))
+    return dict(res, do_cache=False)
+
+
+def _consultar(banco, ini, fim, hoje):
     from integrations.banco_api import BancoAuthError, BancoError, SemCredencial
+    from integrations.extrato_cupom import casar as casar_cupons
+    mod = banco['modulo']()
+    t0 = time.monotonic()
     try:
         # Tela só MOSTRA: o dia de hoje pode entrar (ainda mudando no banco).
         api = mod.ler(ini, fim, incluir_hoje=True)
+        t1 = time.monotonic()
         r = mod.comparar(api, ini, fim)
     except SemCredencial as exc:
         return {'erro': f'Falta configurar o acesso ao banco: {exc}'}
@@ -165,13 +219,15 @@ def _consultar(mod, ini, fim, hoje):
         return {'erro': f'O banco recusou o acesso (credencial ou certificado): {exc}'}
     except (BancoError, ValueError) as exc:
         return {'erro': f'Não foi possível ler o extrato: {exc}'}
+    t2 = time.monotonic()
 
     linhas = [{'tx': a, 'ofx': o, 'no_sistema': True,
                'texto_igual': mod.mesmo_texto_do_ofx(a, o)} for a, o in r['casados']]
     linhas += [{'tx': a, 'ofx': None, 'no_sistema': False, 'texto_igual': None}
                for a in r['so_api']]
     ordem = {id(a): i for i, a in enumerate(api)}       # a ordem do banco
-    linhas.sort(key=lambda l: (l['tx']['data_transacao'], ordem.get(id(l['tx']), 0)))
+    linhas.sort(key=lambda l: (l['tx']['data_transacao'], l['tx'].get('hora') or '',
+                               ordem.get(id(l['tx']), 0)))
     for l in linhas:
         tx = l['tx']
         # Quem pagou / recebeu: cada adapter já entrega separado do texto.
@@ -181,6 +237,39 @@ def _consultar(mod, ini, fim, hoje):
         l['sinal'] = tx['valor'] if tx['tipo'] == 'CREDIT' else -tx['valor']
         doc = tx['numero_documento'] or ''
         l['doc'] = doc if any(c.isdigit() for c in doc) else None   # 'Pix' não diz nada
+        # Para quem foi, segundo a conciliação do sistema (ver banco_api.conciliacao_de).
+        l['conc'] = (l['ofx'] or {}).get('conciliacao')
+        l['cupom'] = None
+
+    # Sem nome, só documento (PIX enviado do Sicoob): o nome vem do sistema.
+    try:
+        from integrations.banco_api import nomes_por_documento
+        sem_nome = [l for l in linhas if not l['quem'] and l['doc_pessoa'] and '*' not in l['doc_pessoa']]
+        achados = nomes_por_documento([l['doc_pessoa'] for l in sem_nome])
+        for l in sem_nome:
+            n = achados.get(''.join(ch for ch in l['doc_pessoa'] if ch.isdigit()))
+            if n:
+                l['quem'], l['quem_fonte'] = n
+    except Exception:
+        logger.exception('[extrato-online] busca de nome por CNPJ falhou')
+    for l in linhas:
+        l['mensagem'] = l['tx'].get('mensagem') or ''
+
+    # PIX recebido ⇄ cupom do abastecimento (Vendas Migradas).
+    pix_in = [l for l in linhas if l['cat'] == 'pix_in']
+    sem_pix = []
+    if pix_in:
+        try:
+            casa, sem_pix = casar_cupons([l['tx'] for l in pix_in], ini, fim, banco.get('credenciadora'))
+            for l in pix_in:
+                l['cupom'] = casa.get(id(l['tx']))
+        except Exception:
+            # O cupom é complemento: se a consulta das vendas falhar, o extrato
+            # continua valendo e a tela mostra sem ele.
+            logger.exception('[extrato-online] casamento PIX x cupom falhou')
+    t3 = time.monotonic()
+    logger.info('[extrato-online] %s %s..%s: banco %.1fs, sistema %.1fs, cupons %.1fs, %d lançamentos',
+                banco['rotulo'], ini, fim, t1 - t0, t2 - t1, t3 - t2, len(linhas))
 
     # Um card por tipo de movimento, com a soma, a conferência e o dia a dia.
     cards = OrderedDict()
@@ -213,8 +302,16 @@ def _consultar(mod, ini, fim, hoje):
     for l in linhas:
         d = l['tx']['data_transacao']
         por_dia[d] = por_dia.get(d, 0.0) + l['sinal']
+    cup = [l['cupom'] or {} for l in pix_in]
     return {'consultado': True, 'linhas': linhas, 'cards': cards, 'so_ofx': r['so_ofx'],
             'inclui_hoje': fim >= hoje, 'so_hoje': so_hoje, 'por_dia': por_dia,
+            'consultado_em': datetime.now().strftime('%H:%M'),
+            'tempos': {'banco': t1 - t0, 'sistema': t2 - t1, 'cupons': t3 - t2},
+            'pix': {'n': len(pix_in), 'total': sum(l['tx']['valor'] for l in pix_in),
+                    'casou': sum(1 for c in cup if c.get('status') == 'casou'),
+                    'possiveis': sum(1 for c in cup if c.get('status') == 'possiveis'),
+                    'sem': sum(1 for c in cup if c.get('status') == 'sem'),
+                    'cupons_sem_pix': sem_pix},
             'r': {'total': len(linhas), 'no_sistema': len(r['casados']),
                   'faltam': len(r['so_api']), 'so_ofx': len(r['so_ofx']),
                   'texto_igual': sum(1 for l in linhas if l['texto_igual']),

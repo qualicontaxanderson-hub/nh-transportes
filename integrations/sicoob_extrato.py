@@ -80,6 +80,22 @@ def _data(bruta):
     raise TransacaoInvalida(f'data não reconhecida: {bruta!r}')
 
 
+def _hora(bruta):
+    """'2026-10-23T14:32:10.000-03:00' -> '14:32'; meia-noite exata ou sem hora -> None.
+
+    A documentação descreve 'data' como data e hora, mas pode vir só o dia
+    (T00:00:00). Meia-noite em ponto é tratada como "o banco não disse a hora"
+    — um PIX às 00:00:00 cravado é raro demais para valer o risco de mostrar
+    hora inventada em todos os outros.
+    """
+    s = str(bruta or '').strip()
+    if len(s) >= 16 and s[10] in 'T ' and s[13] == ':':
+        hhmm = s[11:16]
+        if s[11:19] not in ('00:00:00', '00:00'):
+            return hhmm
+    return None
+
+
 def partes_complemento(memo):
     """'Recebimento Pix|@Wisney Cunha Oliveira|@***.783.651-**|@' ->
     ['Recebimento Pix', 'Wisney Cunha Oliveira', '***.783.651-**'].
@@ -89,6 +105,13 @@ def partes_complemento(memo):
     """
     return [p.strip().lstrip('@').strip() for p in str(memo or '').split('|')
             if p.strip().lstrip('@').strip()]
+
+
+def _parece_documento(txt):
+    """'48.116.722 0001-32', '***.783.651-**', '33503987000116': CPF/CNPJ,
+    inteiro ou mascarado — só dígitos, pontuação, espaço e '*'."""
+    t = str(txt or '').strip()
+    return bool(t) and sum(c.isdigit() for c in t) >= 6 and all(c.isdigit() or c in '.-/* ' for c in t)
 
 
 def para_transacao(t):
@@ -118,12 +141,23 @@ def para_transacao(t):
     descricao = str(t.get('descricao') or '').strip()
     memo = str(t.get('descInfComplementar') or '').strip()
     cnpj_cpf, tipo_chave = _extract_cnpj_cpf(f'{descricao} {memo} {t.get("cpfCnpj") or ""}')
+    # O complemento traz, depois do tipo, nome OU documento, e às vezes a
+    # mensagem do PIX: 'Recebimento Pix|@Wisney Cunha Oliveira|@***.783.651-**|@'
+    # e 'Pagamento Pix|@48.116.722 0001-32|@10M Etanol|@' (PIX enviado: o
+    # Sicoob dá o CNPJ de quem recebeu, não o nome — a tela busca no cadastro).
     partes = partes_complemento(memo)
+    resto = partes[1:]
+    nome = next((p for p in resto if not _parece_documento(p)), '') if resto else ''
+    doc_p = next((p for p in resto if _parece_documento(p)), '')
+    msg = ' · '.join(p for p in resto if p not in (nome, doc_p))
+    if nome and doc_p and resto.index(doc_p) < resto.index(nome):
+        # documento antes do texto: o texto é a mensagem do PIX, não o nome
+        nome, msg = '', ' · '.join(p for p in resto if p != doc_p)
     return {
         'fitid': None,
         'tipo': tipo_ofx,
         'data_transacao': _data(t.get('data')),
-        'hora': None,           # o extrato do Sicoob só traz o dia
+        'hora': _hora(t.get('data')),
         'valor': float(abs(bruto).quantize(Decimal('0.01'))),
         'descricao': descricao,
         'memo': memo,
@@ -131,9 +165,10 @@ def para_transacao(t):
         'tipo_chave': tipo_chave,
         'hash_dedup': None,     # ver hash_api(): só faz sentido quando houver gravação
         'numero_documento': str(t.get('numeroDocumento') or '').strip() or None,
-        # Para a tela: 'Recebimento Pix · Nome · CPF' — o nome é o que se procura.
-        'quem': partes[1] if len(partes) > 1 else (partes[0] if partes else ''),
-        'doc_pessoa': partes[2] if len(partes) > 2 else '',
+        # Para a tela: quem pagou/recebeu, o documento e a mensagem, separados.
+        'quem': nome or ('' if doc_p else (partes[0] if partes else '')),
+        'doc_pessoa': doc_p,
+        'mensagem': msg,
         'categoria_banco': None,  # o Sicoob não diz; a tela deduz do texto
     }
 

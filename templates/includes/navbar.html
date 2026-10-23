@@ -185,7 +185,10 @@
             <li><a class="dropdown-item" href="/financeiro/recebimentos/"><i class="bi bi-credit-card" style="color: #17a2b8;"></i> Receb. Frete</a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="/banco/"><i class="bi bi-file-earmark-arrow-up" style="color: #1D63A5;"></i> Importação Bancária (OFX)</a></li>
+            {#- Só ADMIN por enquanto (23/10/2026) — a rota também barra. -#}
+            {% if nivel_usuario == 'ADMIN' %}
             <li><a class="dropdown-item" href="/banco/extrato-online/"><i class="bi bi-cloud-download" style="color: #0C4C86;"></i> Extrato On-Line</a></li>
+            {% endif %}
             <li><a class="dropdown-item" href="/banco/conciliar"><i class="bi bi-check2-all" style="color: #28a745;"></i> Conciliação</a></li>
             <li><a class="dropdown-item" href="/banco/regras/"><i class="bi bi-funnel" style="color: #fd7e14;"></i> Regras de Conciliação</a></li>
             <li><a class="dropdown-item" href="/banco/regras/memorias"><i class="bi bi-bookmark-star" style="color: #6f42c1;"></i> Memorizações</a></li>

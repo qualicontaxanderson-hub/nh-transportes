@@ -15,6 +15,7 @@ SÓ LEITURA: nada aqui grava no banco de dados.
 """
 import logging
 import os
+import re
 import sys
 import threading
 import time
@@ -26,8 +27,10 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-TIMEOUT = (10, 60)
-TENTATIVAS = 3              # rede, 429 e 5xx; 401/403 nunca repete
+# Quem espera é uma pessoa na tela, e o app tem só 2 workers (start.sh): uma
+# consulta presa segura metade do sistema. Pior caso: 25 + 2 + 25 s.
+TIMEOUT = (8, 25)
+TENTATIVAS = 2              # rede, 429 e 5xx; 401/403 nunca repete
 BACKOFF_BASE = 2
 MARGEM_TOKEN = 60           # renova 60s antes de vencer (Sicoob: 300s; Cora: 24h)
 
@@ -298,6 +301,10 @@ def comparar(api_txs, inicio, fim, account_id, texto_como_ofx):
     for a in api_txs:
         grupos[_chave(a['data_transacao'], a['tipo'], a['valor'])].append(a)
 
+    conc = conciliacao_de([o['id'] for o in ofx])
+    for o in ofx:
+        o['conciliacao'] = conc.get(o['id'])
+
     casados, so_api = [], []
     for k, apis in grupos.items():
         ofxs = fila.pop(k, [])
@@ -315,6 +322,135 @@ def comparar(api_txs, inicio, fim, account_id, texto_como_ofx):
         fila[k] = [o for j, o in enumerate(ofxs) if j not in usados_o]
     so_ofx = [o for lst in fila.values() for o in lst]
     return {'casados': casados, 'so_api': so_api, 'so_ofx': so_ofx}
+
+
+def _nomes(cur, sql, ids):
+    if not ids:
+        return {}
+    marks = ','.join(['%s'] * len(ids))
+    cur.execute(sql.format(marks=marks), tuple(ids))
+    return cur.fetchall()
+
+
+def conciliacao_de(bt_ids):
+    """Para quem foi cada lançamento JÁ conciliado no sistema — o que o texto do
+    banco não diz ('DÉB.TIT.COMPE EFETIVADO' foi EQUATORIAL, 03/08/2026).
+
+    {bank_transaction_id: {'tipo', 'texto', 'status'}}. Só SELECT. A ordem é a
+    do mais específico para o mais genérico: despesa lançada > fornecedor >
+    forma de recebimento > transferência > troco PIX > depósito do caixa.
+    """
+    if not bt_ids:
+        return {}
+    from utils.db import get_db_connection
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    out = {}
+    try:
+        for i in range(0, len(bt_ids), 500):
+            ids = bt_ids[i:i + 500]
+            base = {r['id']: r for r in _nomes(cur, """
+                SELECT bt.id, bt.status, bt.tipo_conciliacao,
+                       COALESCE(NULLIF(f.nome_fantasia, ''), f.razao_social) AS fornecedor,
+                       fr.nome AS forma, COALESCE(bd.apelido, bo.apelido) AS outra_conta
+                  FROM bank_transactions bt
+                  LEFT JOIN fornecedores f ON f.id = bt.fornecedor_id
+                  LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
+                  LEFT JOIN bank_accounts bd ON bd.id = bt.conta_destino_id
+                  LEFT JOIN bank_accounts bo ON bo.id = bt.conta_origem_id
+                 WHERE bt.id IN ({marks})""", ids)}
+            desp = defaultdict(list)
+            for r in _nomes(cur, """
+                SELECT ld.bank_transaction_id AS id, ld.fornecedor, ld.valor,
+                       cd.nome AS categoria, sd.nome AS subcategoria
+                  FROM lancamentos_despesas ld
+                  LEFT JOIN categorias_despesas cd ON cd.id = ld.categoria_id
+                  LEFT JOIN subcategorias_despesas sd ON sd.id = ld.subcategoria_id
+                 WHERE ld.bank_transaction_id IN ({marks})""", ids):
+                desp[r['id']].append(r)
+            troco = {r['id'] for r in _nomes(cur, """
+                SELECT bank_transaction_id AS id FROM troco_pix
+                 WHERE bank_transaction_id IN ({marks})""", ids)}
+            deposito = {r['id'] for t in ('deposito_bank_vinculos', 'lancamentos_caixa_comprovacao')
+                        for r in _nomes(cur, f"""
+                SELECT bank_transaction_id AS id FROM {t}
+                 WHERE bank_transaction_id IN ({{marks}})""", ids)}
+            for i_, r in base.items():
+                if desp.get(i_):
+                    partes = []
+                    for d in desp[i_]:
+                        cat = ' / '.join(x for x in (d['categoria'], d['subcategoria']) if x)
+                        partes.append(' · '.join(x for x in (d['fornecedor'], cat) if x))
+                    tipo, texto = 'despesa', ' + '.join(dict.fromkeys(p for p in partes if p))
+                elif r['fornecedor']:
+                    tipo, texto = 'fornecedor', r['fornecedor']
+                elif r['forma']:
+                    tipo, texto = 'forma', r['forma']
+                elif r['tipo_conciliacao'] == 'transferencia':
+                    tipo, texto = 'transferencia', f"transferência · {r['outra_conta'] or 'outra conta'}"
+                elif i_ in troco:
+                    tipo, texto = 'troco', 'troco PIX'
+                elif i_ in deposito:
+                    tipo, texto = 'deposito', 'depósito do caixa'
+                else:
+                    tipo, texto = ('sem_destino' if r['status'] == 'conciliado' else 'pendente'), ''
+                out[i_] = {'tipo': tipo, 'texto': texto, 'status': r['status']}
+    finally:
+        cur.close()
+        conn.close()
+    return out
+
+
+def nomes_por_documento(docs):
+    """{cnpj/cpf (só dígitos): (nome, fonte)} — para o PIX enviado do Sicoob, que
+    traz o CNPJ de quem recebeu e não o nome ('48.116.722 0001-32' foi o
+    PETROLEO TABOCAO, 23/10/2026).
+
+    Ordem, do que reflete o uso real para o cadastro puro:
+      1. histórico: o fornecedor com que esse CNPJ já foi conciliado mais vezes
+         (paga-se um CNPJ e a nota vem de outro — a conciliação sabe);
+      2. memorização (bank_supplier_mapping);
+      3. cadastro de fornecedores; 4. cadastro de clientes.
+    """
+    docs = sorted({re.sub(r'\D', '', d or '') for d in docs} - {''})
+    docs = [d for d in docs if len(d) in (11, 14)]
+    if not docs:
+        return {}
+    from utils.db import get_db_connection
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    out = {}
+    try:
+        consultas = (
+            ('conciliações anteriores', """
+                SELECT bt.cnpj_cpf AS doc, COALESCE(NULLIF(f.nome_fantasia, ''), f.razao_social) AS nome,
+                       COUNT(*) AS n
+                  FROM bank_transactions bt JOIN fornecedores f ON f.id = bt.fornecedor_id
+                 WHERE bt.cnpj_cpf IN ({marks}) GROUP BY 1, 2 ORDER BY n DESC"""),
+            ('memorização', """
+                SELECT m.cnpj_cpf AS doc, COALESCE(NULLIF(f.nome_fantasia, ''), f.razao_social) AS nome
+                  FROM bank_supplier_mapping m JOIN fornecedores f ON f.id = m.fornecedor_id
+                 WHERE m.cnpj_cpf IN ({marks})"""),
+            ('fornecedores', """
+                SELECT REGEXP_REPLACE(cnpj, '[^0-9]', '') AS doc,
+                       COALESCE(NULLIF(nome_fantasia, ''), razao_social) AS nome
+                  FROM fornecedores WHERE REGEXP_REPLACE(cnpj, '[^0-9]', '') IN ({marks})"""),
+            ('clientes', """
+                SELECT REGEXP_REPLACE(cnpj, '[^0-9]', '') AS doc,
+                       COALESCE(NULLIF(nome_fantasia, ''), razao_social) AS nome
+                  FROM clientes WHERE REGEXP_REPLACE(cnpj, '[^0-9]', '') IN ({marks})"""),
+        )
+        for fonte, sql in consultas:
+            falta = [d for d in docs if d not in out]
+            if not falta:
+                break
+            for r in _nomes(cur, sql, falta):
+                if r['doc'] not in out and r['nome']:
+                    out[r['doc']] = (r['nome'], fonte)
+    finally:
+        cur.close()
+        conn.close()
+    return out
 
 
 def imprimir_comparacao(mod, inicio, fim):

@@ -21,7 +21,10 @@
       ('contas',         'Contas',         'bank_import.gerenciar_contas'),
       ('regras',         'Regras',         'conciliacao_regras.lista'),
       ('memorias',       'Memorizações',   'conciliacao_regras.memorias')] %}
+{#- Extrato On-Line: só ADMIN por enquanto (23/10/2026). -#}
+{%- if chave != 'extrato_online' or (current_user.nivel or '')|trim|upper in ('ADMIN', 'ADMINISTRADOR') %}
 <a class="aba{{ ' on' if ativa == chave }}" href="{{ url_for(destino) }}">{{ rotulo }}</a>
+{%- endif %}
 {%- endfor %}
 <script>
 (function () {
