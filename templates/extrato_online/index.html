@@ -4,13 +4,6 @@
 
 {% block styles %}
 <style>
-/* ═══════════════════════════════════════════════════════════════════════
-   Extrato On-Line — o extrato lido DIRETO do banco, pela API.
-
-   Só leitura. Cada lançamento do banco aparece com um selo: "No sistema"
-   (o OFX já trouxe) ou "Falta" (o banco tem e o sistema não). Mesmo visual
-   do Relatório do banco.
-   ═════════════════════════════════════════════════════════════════════ */
 body > .container-fluid:has(#eol){
   background:transparent; box-shadow:none; border-radius:0;
   padding:.3rem .3rem 0; margin:0; max-width:none;
@@ -18,269 +11,490 @@ body > .container-fluid:has(#eol){
 @media (min-width:992px){
   body > .container-fluid:has(#eol){ padding:.7rem 1rem 0; }
 }
-#eol.container-fluid{ padding-left:0; padding-right:0; }
+</style>
+<style>
+  /* Extrato On-Line — a casca da Conf. Cartões (/relatorios/conf_cartoes):
+     topo em faixa, filtro em cartão, régua de períodos, o período inteiro
+     num painel, um card por tipo de movimento e um quadro por tipo. */
+  #eol{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#146c43; --danger:#a32d2d;
+        --ambar:#8a5a00; --muted:#4b5563; --ink:#151d27; --borda:#d9e0e8;
+        --linha:#eef1f5; color:var(--ink); max-width:100%; }
 
-#eol{
-  --azul:#1D63A5; --azul-deep:#0C4C86; --azul-claro:#eaf1f9;
-  --verde:#17963C;
-  --ink:#151d27; --ink-2:#3a4655; --muted:#6b7684;
-  --line:#e7ebf1; --line-2:#d9e0e8; --surface:#f7f9fc;
-  --ok:#1c6b34; --ok-bg:#e4f4e8;
-  --pend:#8a5a00; --pend-bg:#fdf0d6;
-  --danger:#a32d2d; --danger-bg:#fbe9e9;
-  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
-  color:var(--ink); overflow-x:hidden;
-}
+  #eol .migalha{ font-size:.72rem; color:var(--muted); margin-bottom:.5rem; }
+  #eol .migalha a{ color:var(--blue-deep); text-decoration:none; font-weight:700; }
 
-/* ── Topo ─────────────────────────────────────────────────────────── */
-#eol .topo{ background:linear-gradient(120deg,var(--azul-deep),var(--azul)); color:#fff;
-  border-radius:14px; padding:.6rem .8rem .15rem; margin-bottom:.7rem; }
-#eol .topo__l1{ display:flex; align-items:center; gap:.5rem; }
-#eol .topo h3{ margin:0; font-size:1.05rem; font-weight:800; letter-spacing:-.01em; }
-#eol .voltar{ display:inline-flex; align-items:center; gap:.3rem;
-  background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.28); color:#fff;
-  border-radius:99px; padding:.22rem .62rem; font-size:.75rem; font-weight:700;
-  text-decoration:none; flex:0 0 auto; }
-#eol .voltar:hover{ background:rgba(255,255,255,.3); color:#fff; }
-#eol .so-leitura{ margin-left:auto; font-size:.68rem; font-weight:800; letter-spacing:.04em;
-  text-transform:uppercase; background:rgba(255,255,255,.18); border-radius:99px;
-  padding:.18rem .55rem; white-space:nowrap; }
-#eol .abas{ display:flex; gap:.35rem; overflow-x:auto; padding:.55rem 0 .5rem;
-  scrollbar-width:none; }
-#eol .abas::-webkit-scrollbar{ display:none; }
-#eol .aba{ flex:0 0 auto; border-radius:99px; padding:.32rem .8rem; font-size:.79rem;
-  font-weight:800; white-space:nowrap; color:#fff; text-decoration:none;
-  background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22); }
-#eol .aba:hover{ background:rgba(255,255,255,.26); color:#fff; }
-#eol .aba.on{ background:#fff; color:var(--azul-deep); border-color:#fff; }
+  #eol .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+    color:#fff; border-radius:14px; padding:.75rem .85rem .7rem; margin-bottom:.7rem;
+    display:flex; align-items:center; gap:.7rem; flex-wrap:wrap; }
+  #eol .topo__t{ font-weight:800; font-size:1.02rem; }
+  #eol .topo__s{ font-size:.76rem; opacity:.96; margin-top:.1rem; }
+  #eol .topo__acoes{ margin-left:auto; display:flex; gap:.35rem; flex-wrap:wrap; }
+  #eol .topo__acoes span, #eol .topo__acoes a{ border:1px solid rgba(255,255,255,.35);
+    background:rgba(255,255,255,.14); color:#fff; border-radius:9px;
+    padding:.35rem .7rem; font-size:.78rem; font-weight:700; text-decoration:none;
+    display:inline-flex; gap:.3rem; align-items:center; }
+  #eol .topo__acoes a:hover{ background:rgba(255,255,255,.26); }
 
-/* ── Consulta ─────────────────────────────────────────────────────── */
-#eol .busca{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
-  padding:.7rem; margin-bottom:.7rem; display:grid; gap:.6rem;
-  grid-template-columns:1fr 1fr; align-items:end; }
-@media (min-width:768px){ #eol .busca{ grid-template-columns:2fr 1fr 1fr auto; } }
-#eol .busca .campo-banco{ grid-column:1 / -1; }
-@media (min-width:768px){ #eol .busca .campo-banco{ grid-column:auto; } }
-#eol .busca label{ display:block; font-size:.68rem; font-weight:800; color:var(--muted);
-  text-transform:uppercase; letter-spacing:.05em; margin-bottom:.2rem; }
-#eol .busca select, #eol .busca input{ width:100%; border:1px solid var(--line-2);
-  border-radius:9px; padding:.42rem .55rem; font-size:.88rem; font-family:inherit;
-  background:#fff; color:var(--ink); min-width:0; }
-#eol .busca .conta-sub{ font-size:.7rem; color:var(--muted); margin-top:.2rem; }
-#eol .btn-consultar{ grid-column:1 / -1; border:0; border-radius:10px; padding:.55rem .9rem;
-  background:var(--azul); color:#fff; font-weight:800; font-size:.88rem; cursor:pointer;
-  display:inline-flex; align-items:center; justify-content:center; gap:.4rem; }
-@media (min-width:768px){ #eol .btn-consultar{ grid-column:auto; } }
-#eol .btn-consultar:hover{ background:var(--azul-deep); }
-#eol .btn-consultar[disabled]{ opacity:.7; cursor:wait; }
+  #eol .filtro{ background:#fff; border:1px solid var(--borda); border-radius:13px;
+    padding:.75rem .8rem .7rem; margin-bottom:.7rem; }
+  #eol .linha1{ display:flex; gap:.5rem; align-items:end; flex-wrap:wrap; }
+  #eol .linha1__b{ display:flex; gap:.4rem; margin-left:auto; }
+  #eol .campo{ display:flex; flex-direction:column; gap:.2rem; min-width:0; }
+  #eol .campo > span{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.05em; }
+  #eol .campo input{ border:1px solid var(--borda); border-radius:9px;
+    padding:.42rem .55rem; font-size:.84rem; font-family:inherit;
+    background:#fff; color:var(--ink); min-width:9.5rem; }
+  #eol .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+    border-radius:9px; padding:.45rem .85rem; font-size:.83rem; font-weight:700;
+    font-family:inherit; cursor:pointer; text-decoration:none; display:inline-flex;
+    gap:.35rem; align-items:center; white-space:nowrap; }
+  #eol .bt--sim{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #eol .bt[disabled]{ opacity:.7; cursor:wait; }
 
-#eol .aviso{ border-radius:12px; padding:.65rem .8rem; margin-bottom:.7rem;
-  font-size:.85rem; font-weight:600; display:flex; gap:.5rem; align-items:flex-start; }
-#eol .aviso--erro{ background:var(--danger-bg); color:var(--danger); }
-#eol .aviso--info{ background:var(--azul-claro); color:var(--azul-deep); }
+  #eol .grupo{ display:flex; gap:.6rem; align-items:flex-start;
+    margin-top:.6rem; padding-top:.55rem; border-top:1px solid var(--linha); }
+  #eol .grupo__r{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.05em; padding-top:.42rem;
+    min-width:4.2rem; flex:0 0 auto; }
+  #eol .chips{ display:flex; gap:.35rem; flex-wrap:wrap; flex:1 1 auto; }
+  #eol .chips label{ --c:var(--blue); border:1px solid var(--borda);
+    border-radius:99px; padding:.34rem .75rem; font-size:.79rem; font-weight:700;
+    cursor:pointer; background:#fff; color:#55606e; display:inline-flex;
+    gap:.35rem; align-items:center; line-height:1.15; }
+  #eol .chips label.on{ background:var(--c); border-color:var(--c); color:#fff;
+    font-weight:800; box-shadow:0 2px 8px rgba(20,35,60,.16); }
+  #eol .chips input{ position:absolute; opacity:0; width:0; height:0; }
+  #eol .chips .conta{ font-size:.66rem; font-weight:700; opacity:.85; }
+  #eol .chips .breve{ border-style:dashed; color:#97a1ad; cursor:default; }
 
-/* ── Números ──────────────────────────────────────────────────────── */
-#eol .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:.7rem; }
-@media (min-width:768px){ #eol .nums{ grid-template-columns:repeat(4,1fr); } }
-#eol .nums .n{ border-radius:13px; padding:.55rem .75rem; color:#fff;
-  box-shadow:0 2px 8px rgba(20,35,60,.12); }
-#eol .nums .r{ font-size:.66rem; font-weight:800; text-transform:uppercase;
-  letter-spacing:.06em; opacity:.92; }
-#eol .nums .v{ font-size:1.02rem; font-weight:800; letter-spacing:-.02em;
-  font-variant-numeric:tabular-nums; line-height:1.28; }
-#eol .nums .s{ font-size:.7rem; font-weight:700; opacity:.9; }
-#eol .n--a{ background:linear-gradient(135deg,#2E6FB0,#1D63A5); }
-#eol .n--b{ background:linear-gradient(135deg,#22A24B,#17963C); }
-#eol .n--d{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
-#eol .n--c{ background:linear-gradient(135deg,#7a8594,#5b6573); }
+  #eol .meses, #eol .tipos{ display:flex; gap:.35rem; flex-wrap:wrap;
+    align-items:center; background:#fff; border:1px solid var(--borda);
+    border-radius:13px; padding:.5rem .6rem; margin-bottom:.7rem; }
+  #eol .meses > b, #eol .tipos > b{ font-size:.66rem; font-weight:800;
+    color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-right:.15rem; }
+  #eol .meses a, #eol .tipos a{ border:1px solid var(--borda); background:#f7f9fc;
+    border-radius:99px; padding:.26rem .72rem; font-size:.76rem; font-weight:800;
+    color:#3a4655; text-decoration:none; white-space:nowrap; }
+  #eol .meses a:hover, #eol .tipos a:hover{ background:#eef5fd; color:var(--blue-deep); }
+  #eol .meses a.on, #eol .tipos a.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #eol .meses .obs, #eol .tipos .obs{ font-size:.68rem; color:var(--muted); margin-left:auto; }
 
-/* ── Lista ────────────────────────────────────────────────────────── */
-#eol .lst{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
-  overflow:hidden; margin-bottom:.7rem; }
-#eol .topo-lst{ display:flex; align-items:center; gap:.55rem; padding:.55rem .7rem;
-  border-bottom:1px solid var(--line); font-size:.78rem; font-weight:700; color:var(--muted); }
-#eol .dia{ display:flex; align-items:center; gap:.5rem; padding:.45rem .7rem;
-  background:var(--azul-claro); color:var(--azul-deep); font-size:.79rem;
-  font-weight:800; border-bottom:1px solid var(--line-2); position:sticky; top:0; z-index:3; }
-#eol .dia .tot{ margin-left:auto; font-variant-numeric:tabular-nums; }
-#eol .lin{ padding:.5rem .7rem; border-bottom:1px solid var(--line); }
-#eol .lin:last-child{ border-bottom:0; }
-#eol .lin--falta{ background:#fffaf0; }
-#eol .l1{ display:flex; align-items:baseline; gap:.5rem; min-width:0; }
-#eol .desc{ font-size:.85rem; font-weight:700; letter-spacing:-.01em; min-width:0;
-  line-height:1.28; overflow-wrap:anywhere; flex:1 1 auto; }
-#eol .valor{ flex:0 0 auto; font-size:.95rem; font-weight:800;
-  font-variant-numeric:tabular-nums; letter-spacing:-.02em; white-space:nowrap; }
-#eol .valor--e{ color:var(--verde); }
-#eol .valor--s{ color:var(--danger); }
-#eol .memo{ font-size:.74rem; color:var(--ink-2); margin-top:.1rem; overflow-wrap:anywhere; }
-#eol .l3{ display:flex; flex-wrap:wrap; align-items:center; gap:.3rem; margin-top:.25rem; }
-#eol .selo{ display:inline-block; font-size:.66rem; font-weight:800; border-radius:5px;
-  padding:.08rem .38rem; white-space:nowrap; }
-#eol .selo--ok{ background:var(--ok-bg); color:var(--ok); }
-#eol .selo--pend{ background:var(--pend-bg); color:var(--pend); }
-#eol .ofx{ font-size:.7rem; color:var(--muted); min-width:0; overflow-wrap:anywhere; }
-#eol .doc{ font-family:var(--mono); font-size:.7rem; color:var(--muted); font-weight:600; }
-/* ── Conclusão ────────────────────────────────────────────────────── */
-#eol .veredito{ border-radius:12px; padding:.65rem .8rem; margin-bottom:.7rem; }
-#eol .veredito--ok{ background:var(--ok-bg); color:var(--ok); }
-#eol .veredito--dif{ background:var(--pend-bg); color:var(--pend); }
-#eol .veredito__t{ font-weight:800; font-size:.95rem; display:flex; gap:.45rem; align-items:center; }
-#eol .veredito__tab{ margin-top:.4rem; font-size:.8rem; border-collapse:collapse; width:100%; max-width:520px; }
-#eol .veredito__tab th, #eol .veredito__tab td{ padding:.15rem .5rem .15rem 0; text-align:right;
-  font-variant-numeric:tabular-nums; white-space:nowrap; }
-#eol .veredito__tab th:first-child, #eol .veredito__tab td:first-child{ text-align:left; }
-#eol .veredito__tab th{ font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; opacity:.85; }
-#eol .veredito__s{ font-size:.76rem; font-weight:600; margin-top:.35rem; }
-#eol .vazio{ padding:1.4rem .8rem; text-align:center; color:var(--muted); font-size:.85rem; }
+  #eol .aviso{ display:flex; gap:.5rem; align-items:flex-start; background:#eaf1f9;
+    color:var(--blue-deep); border-radius:11px; padding:.65rem .8rem; font-size:.82rem;
+    font-weight:600; margin-bottom:.7rem; }
+  #eol .aviso--erro{ background:#fbe9e9; color:var(--danger); }
+  #eol .aviso--hoje{ background:#fdf8ee; color:#6b4708; }
+
+  /* ---- o período inteiro ------------------------------------------- */
+  #eol .painel{ background:#fff; border:1px solid var(--borda); border-radius:16px;
+    margin-bottom:.7rem; overflow:hidden; box-shadow:0 3px 14px rgba(20,35,60,.07);
+    display:grid; }
+  @media (min-width:992px){ #eol .painel{ grid-template-columns:minmax(290px,.9fr) 1.4fr; } }
+  #eol .caixa{ padding:.9rem 1rem 1rem; border-bottom:1px solid var(--linha);
+    background:linear-gradient(160deg,#f2f7fc,#eaf2f9 70%,#e4eef8); }
+  #eol .caixa--ok{ background:linear-gradient(160deg,#eef8f1,#e4f4e8 70%,#dbefe1); }
+  #eol .caixa--dif{ background:linear-gradient(160deg,#fdf8ee,#fbf0d9 70%,#f8e8c6); }
+  @media (min-width:992px){ #eol .caixa{ border-bottom:0; border-right:1px solid var(--linha); } }
+  #eol .caixa__r{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.07em; }
+  #eol .caixa__v{ font-size:1.45rem; font-weight:800; line-height:1.15; margin-top:.15rem;
+    display:flex; gap:.45rem; align-items:center; }
+  #eol .caixa--ok .caixa__v{ color:var(--ok); }
+  #eol .caixa--dif .caixa__v{ color:var(--ambar); }
+  #eol .caixa__s{ font-size:.76rem; color:#3a4655; margin-top:.25rem; font-weight:600; }
+  #eol .cmp{ width:100%; margin-top:.7rem; border-collapse:separate; border-spacing:0;
+    background:#fff; border:1px solid var(--borda); border-radius:10px; overflow:hidden;
+    font-size:.8rem; font-variant-numeric:tabular-nums; }
+  #eol .cmp th, #eol .cmp td{ padding:.32rem .55rem; text-align:right; white-space:nowrap;
+    border-bottom:1px solid var(--linha); }
+  #eol .cmp tr:last-child td{ border-bottom:0; }
+  #eol .cmp th{ font-size:.6rem; font-weight:800; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.05em; background:#f7f9fc; }
+  #eol .cmp th:first-child, #eol .cmp td:first-child{ text-align:left; color:var(--muted); font-weight:700; }
+  #eol .cmp td{ font-weight:800; }
+
+  #eol .rank{ padding:.85rem 1rem .9rem; }
+  #eol .rank__t{ font-size:.66rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.07em; margin-bottom:.6rem; }
+  #eol .rk{ display:grid; grid-template-columns:1fr auto; gap:.15rem .6rem;
+    align-items:baseline; margin-bottom:.55rem; }
+  #eol .rk:last-child{ margin-bottom:0; }
+  #eol .rk__n{ font-weight:800; font-size:.84rem; display:flex; gap:.4rem; align-items:center; min-width:0; }
+  #eol .rk__n a{ color:inherit; text-decoration:none; }
+  #eol .rk__n a:hover{ color:var(--blue); text-decoration:underline; }
+  #eol .rk__v{ font-weight:800; font-size:.86rem; text-align:right; font-variant-numeric:tabular-nums; }
+  #eol .rk__b{ grid-column:1/-1; height:7px; border-radius:99px; background:#eef1f5; overflow:hidden; }
+  #eol .rk__b i{ display:block; height:100%; border-radius:99px; }
+  #eol .rk__d{ grid-column:1/-1; font-size:.68rem; color:var(--muted); display:flex;
+    gap:.7rem; flex-wrap:wrap; font-variant-numeric:tabular-nums; }
+
+  /* ---- os cards ---------------------------------------------------- */
+  #eol .pgrade{ display:grid; gap:.6rem; margin-bottom:.7rem;
+    grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); align-items:start; }
+  #eol a.pc{ display:block; color:inherit; text-decoration:none; transition:box-shadow .12s, opacity .12s; }
+  #eol a.pc:hover{ box-shadow:0 5px 18px rgba(20,35,60,.14); }
+  #eol .pc{ background:#fff; border:1px solid var(--borda); border-top:4px solid var(--c);
+    border-radius:14px; padding:.7rem .8rem .6rem; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #eol .pc--off{ opacity:.5; }
+  #eol .pc--on{ box-shadow:0 0 0 2px var(--c), 0 4px 16px rgba(20,35,60,.12); }
+  #eol .pc--tot{ background:linear-gradient(165deg,#fbfcfe,#f3f6fa); }
+  #eol .pc__t{ display:flex; align-items:center; gap:.5rem; }
+  #eol .pc__i{ width:2rem; height:2rem; border-radius:9px; background:var(--c);
+    color:#fff; display:inline-grid; place-items:center; font-size:1rem; opacity:.9; flex:0 0 auto; }
+  #eol .pc__n{ font-weight:800; font-size:.98rem; text-transform:uppercase; }
+  #eol .pc__r{ font-size:.64rem; font-weight:800; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.04em; }
+  #eol .pc__v{ margin-top:.4rem; }
+  #eol .pc__v b{ font-size:1.4rem; font-weight:800; color:var(--c);
+    letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1; }
+  #eol .pc__g{ display:grid; grid-template-columns:1fr 1fr; gap:.3rem; margin-top:.5rem; }
+  #eol .pc__g div{ background:#f7f9fc; border:1px solid var(--linha); border-radius:9px; padding:.3rem .45rem; }
+  #eol .pc__g dt{ font-size:.6rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
+  #eol .pc__g dd{ margin:.05rem 0 0; font-size:.84rem; font-weight:800; font-variant-numeric:tabular-nums; color:#26354d; }
+  #eol .pc__f{ margin-top:.45rem; border-top:1px dashed var(--linha); padding-top:.4rem;
+    font-size:.73rem; color:var(--muted); display:flex; justify-content:space-between; gap:.4rem; }
+  #eol .pc__f b{ color:#26354d; font-variant-numeric:tabular-nums; }
+  #eol .pc__cl{ font-size:.63rem; font-weight:800; color:var(--c); opacity:.75;
+    text-transform:uppercase; letter-spacing:.03em; margin-top:.35rem; }
+  #eol .spark{ display:flex; align-items:flex-end; gap:2px; height:30px; margin-top:.45rem; }
+  #eol .spark i{ flex:1 1 0; background:var(--c); opacity:.28; border-radius:2px 2px 0 0; min-height:2px; }
+  #eol .spark i.ult{ opacity:.95; }
+  #eol .pbar{ display:flex; height:6px; border-radius:99px; overflow:hidden; background:#eef1f5; margin-top:.4rem; }
+  #eol .pbar i{ display:block; height:100%; }
+
+  /* ---- um quadro por tipo ------------------------------------------ */
+  #eol .cx{ background:#fff; border:1px solid var(--borda); border-radius:14px;
+    margin-bottom:.7rem; overflow:hidden; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+  #eol .ph{ display:flex; align-items:center; gap:.6rem; padding:.6rem .8rem;
+    border-left:4px solid var(--c); border-bottom:1px solid var(--linha); flex-wrap:wrap; }
+  #eol .ph__i{ width:1.9rem; height:1.9rem; border-radius:8px; background:var(--c);
+    color:#fff; display:inline-grid; place-items:center; font-size:.9rem; opacity:.92; }
+  #eol .ph__n{ font-weight:800; font-size:.95rem; text-transform:uppercase; }
+  #eol .ph__c{ font-size:.68rem; color:var(--muted); font-weight:700; }
+  #eol .ph__v{ margin-left:auto; text-align:right; }
+  #eol .ph__l{ font-size:1.02rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  #eol .ph__ok{ font-size:.66rem; font-weight:700; color:var(--ok); margin-top:.1rem; }
+  #eol .ph__ok.neg{ color:var(--ambar); }
+
+  #eol .tab{ overflow-x:auto; }
+  #eol table.t{ width:100%; border-collapse:collapse; font-size:.78rem; font-variant-numeric:tabular-nums; }
+  #eol table.t th{ background:#f0f4f8; color:#3d4854; font-size:.63rem; text-transform:uppercase;
+    letter-spacing:.04em; font-weight:800; padding:.4rem .5rem; white-space:nowrap;
+    text-align:right; border-bottom:1px solid var(--borda); }
+  #eol table.t th.e, #eol table.t td.e{ text-align:left; }
+  #eol table.t td{ padding:.36rem .5rem; text-align:right; white-space:nowrap; border-bottom:1px solid #f4f6f9; }
+  #eol table.t td.quem{ white-space:normal; font-weight:700; min-width:12rem; }
+  #eol table.t tbody tr:hover td{ background:#fafbfd; }
+  #eol table.t tr.falta td{ background:#fdf8ee; }
+  #eol table.t tfoot td{ background:#f0f4f8; font-weight:800; border-top:2px solid var(--borda); }
+  #eol .sub{ font-size:.7rem; color:var(--muted); font-weight:600; }
+  #eol .dia-semana{ font-size:.68rem; color:var(--muted); font-weight:700; margin-left:.2rem; }
+  #eol .pos{ color:var(--ok); font-weight:800; }
+  #eol .neg{ color:var(--danger); font-weight:800; }
+  #eol .st{ display:inline-flex; gap:.25rem; align-items:center; font-weight:800; font-size:.72rem; }
+  #eol .st--ok{ color:var(--ok); }
+  #eol .st--falta{ color:var(--ambar); }
+  #eol .difer{ background:#fdf8ee; color:#6b4708; border-radius:6px; padding:.02rem .3rem;
+    font-size:.6rem; font-weight:800; text-transform:uppercase; margin-left:.25rem; }
+
+  #eol .nada{ background:#fff; border:1px solid var(--borda); border-radius:14px;
+    padding:2.2rem 1rem; text-align:center; color:var(--muted); font-size:.9rem; margin-bottom:.7rem; }
+  #eol .rod{ font-size:.72rem; color:var(--muted); background:#fff; border:1px solid var(--borda);
+    border-radius:12px; padding:.7rem .85rem; margin-bottom:.7rem; line-height:1.55; }
+  #eol .rod b{ color:#26354d; }
+
+  /* No celular a tabela vira cartão, como na Conf. Cartões. */
+  @media (max-width:640px){
+    #eol .tab{ overflow-x:visible; }
+    #eol .tab table, #eol .tab tbody, #eol .tab tr, #eol .tab td{ display:block; width:100%; }
+    #eol .tab thead{ display:none; }
+    #eol .tab tr{ border-bottom:1px solid var(--linha); padding:.35rem 0; }
+    #eol table.t td{ border:0; text-align:right; padding:.16rem .7rem; white-space:normal;
+      display:flex; justify-content:space-between; gap:.6rem; min-width:0; }
+    #eol table.t td::before{ content:attr(data-r); color:var(--muted); font-weight:700;
+      font-size:.7rem; text-transform:uppercase; letter-spacing:.03em; flex:0 0 auto; }
+    #eol table.t td:empty{ display:none; }
+    #eol .tab tfoot{ display:none; }
+    #eol .linha1__b{ margin-left:0; width:100%; }
+    #eol .linha1__b .bt{ flex:1 1 auto; justify-content:center; }
+    #eol .campo{ flex:1 1 8rem; }
+    #eol .campo input{ min-width:0; width:100%; }
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-{% macro milhar(v) -%}
-{{ '{:,}'.format(v or 0)|replace(',','.') }}
+{%- set _sem = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'] -%}
+{%- macro milhar(v) -%}{{ '{:,}'.format(v or 0)|replace(',','.') }}{%- endmacro -%}
+{%- macro link(cat_=none, ver_=none, ini_=none, fim_=none) -%}
+{{ url_for('extrato_online.index', banco=chave, consultar=1,
+           ini=(ini_ or ini).isoformat(), fim=(fim_ or fim).isoformat(),
+           cat=(cat if cat_ is none else cat_) or none,
+           ver=(ver if ver_ is none else ver_) or none) }}
 {%- endmacro %}
 
-<div class="container-fluid" id="eol">
+<div id="eol">
+
+  <div class="migalha">
+    <a href="{{ url_for('index') }}">Dashboard</a> / Financeiro / Extrato On-Line
+  </div>
 
   <div class="topo">
-    <div class="topo__l1">
-      <a class="voltar" href="{{ url_for('bank_import.index') }}">
-        <i class="bi bi-chevron-left"></i> Banco
-      </a>
-      <h3>Extrato On-Line</h3>
-      <span class="so-leitura"><i class="bi bi-eye"></i> Só consulta</span>
+    <div>
+      <div class="topo__t"><i class="bi bi-cloud-download-fill"></i> Extrato On-Line</div>
+      <div class="topo__s">O extrato lido direto do banco, pela API — conferido com o que o
+        OFX já lançou no sistema</div>
     </div>
-    <div class="abas">
-      {% with ativa = 'extrato_online' %}{% include 'includes/abas_banco.html' %}{% endwith %}
+    <div class="topo__acoes">
+      <a href="{{ url_for('bank_import.index') }}"><i class="bi bi-bank"></i> Banco</a>
+      <span title="Esta tela não grava nada no sistema"><i class="bi bi-eye"></i> Só consulta</span>
     </div>
   </div>
 
-  <form class="busca" method="get" action="{{ url_for('extrato_online.index') }}"
-        onsubmit="var b=this.querySelector('.btn-consultar'); b.disabled=true; b.innerHTML='<span class=&quot;spinner-border spinner-border-sm&quot;></span> Consultando o banco…';">
+  <form method="get" class="filtro" action="{{ url_for('extrato_online.index') }}"
+        onsubmit="var b=this.querySelector('.bt--sim'); b.disabled=true; b.innerHTML='<span class=&quot;spinner-border spinner-border-sm&quot;></span> Consultando…';">
     <input type="hidden" name="consultar" value="1">
-    <div class="campo-banco">
-      <label for="eol-banco">Banco</label>
-      <select id="eol-banco" name="banco">
+    {% if cat %}<input type="hidden" name="cat" value="{{ cat }}">{% endif %}
+    {% if ver %}<input type="hidden" name="ver" value="{{ ver }}">{% endif %}
+    <div class="linha1">
+      <label class="campo"><span>De</span>
+        <input type="date" name="ini" value="{{ ini.isoformat() }}" max="{{ hoje.isoformat() }}"></label>
+      <label class="campo"><span>Até</span>
+        <input type="date" name="fim" value="{{ fim.isoformat() }}" max="{{ hoje.isoformat() }}"></label>
+      <div class="linha1__b">
+        <button type="submit" class="bt bt--sim"><i class="bi bi-cloud-download"></i> Consultar no banco</button>
+        <a class="bt" href="{{ url_for('extrato_online.index') }}"><i class="bi bi-arrow-counterclockwise"></i> Limpar</a>
+      </div>
+    </div>
+    <div class="grupo">
+      <span class="grupo__r">Banco</span>
+      <div class="chips">
         {% for k, b in bancos.items() %}
-          <option value="{{ k }}" {{ 'selected' if k == chave }}>{{ b.rotulo }}</option>
+        <label class="{{ 'on' if k == chave }}">
+          <input type="radio" name="banco" value="{{ k }}" {{ 'checked' if k == chave }}
+                 onchange="this.form.requestSubmit()">
+          <i class="bi bi-bank2"></i> {{ b.rotulo }} <span class="conta">{{ b.conta }}</span></label>
         {% endfor %}
-      </select>
-      <div class="conta-sub">Conta {{ banco.conta }}</div>
+        <label class="breve" title="Os próximos bancos entram aqui">+ outros bancos em breve</label>
+      </div>
     </div>
-    <div>
-      <label for="eol-ini">De</label>
-      <input id="eol-ini" type="date" name="ini" value="{{ ini.isoformat() }}" max="{{ hoje.isoformat() }}">
-    </div>
-    <div>
-      <label for="eol-fim">Até</label>
-      <input id="eol-fim" type="date" name="fim" value="{{ fim.isoformat() }}" max="{{ hoje.isoformat() }}">
-    </div>
-    <button type="submit" class="btn-consultar"><i class="bi bi-cloud-download"></i> Consultar no banco</button>
   </form>
+
+  <div class="meses">
+    <b><i class="bi bi-calendar3"></i> Período</b>
+    {% for rot, a_ini, a_fim in atalhos %}
+    <a class="{{ 'on' if consultado and ini == a_ini and fim == a_fim }}"
+       href="{{ link(ini_=a_ini, fim_=a_fim) }}">{{ rot }}</a>
+    {% endfor %}
+    <span class="obs">um clique já consulta o banco · máximo de 31 dias por vez</span>
+  </div>
 
   {% if erro %}
     <div class="aviso aviso--erro"><i class="bi bi-exclamation-triangle-fill"></i><div>{{ erro }}</div></div>
   {% elif not consultado %}
-    <div class="aviso aviso--info"><i class="bi bi-info-circle-fill"></i>
-      <div>Busca o extrato direto no banco e mostra o que <b>já está no sistema</b> e o que
-      <b>falta</b>. Nada é gravado. O dia de hoje pode ser consultado, mas ainda está
-      mudando no banco — o OFX dele só chega amanhã, então tudo de hoje aparece como "Falta".</div></div>
+    <div class="aviso"><i class="bi bi-info-circle-fill"></i>
+      <div>Escolha o período e clique em <b>Consultar no banco</b> (ou num atalho acima). A tela
+      busca o extrato direto no Sicoob e mostra o que <b>já está no sistema</b> e o que
+      <b>falta</b>. Nada é gravado.</div></div>
   {% endif %}
 
   {% if consultado %}
-    <div class="nums">
-      <div class="n n--a">
-        <div class="r">No banco</div>
-        <div class="v">{{ milhar(r.total) }}</div>
-        <div class="s">{{ r.entradas | formatar_moeda }} entr. · {{ r.saidas | formatar_moeda }} saíd.</div>
-      </div>
-      <div class="n n--b">
-        <div class="r">Já no sistema</div>
-        <div class="v">{{ milhar(r.no_sistema) }}</div>
-      </div>
-      <div class="n n--d">
-        <div class="r">Faltam no sistema</div>
-        <div class="v">{{ milhar(r.faltam) }}</div>
-      </div>
-      <div class="n n--c">
-        <div class="r">Só no sistema</div>
-        <div class="v">{{ milhar(r.so_ofx) }}</div>
-      </div>
-    </div>
+  {% set rr = r %}
 
-    <div class="veredito {{ 'veredito--ok' if r.bateu else 'veredito--dif' }}">
-      <div class="veredito__t">
-        {% if r.bateu %}<i class="bi bi-check-circle-fill"></i> Veio tudo — o banco e o sistema batem
-        {% else %}<i class="bi bi-exclamation-circle-fill"></i> O banco e o sistema NÃO batem{% endif %}
+  {% if inclui_hoje %}
+  <div class="aviso aviso--hoje"><i class="bi bi-clock-history"></i>
+    <div>O período inclui <b>hoje</b>: o dia ainda está mudando no banco e o OFX dele só chega
+    amanhã — por isso os lançamentos de hoje aparecem como <b>Falta</b>. Isso é esperado.</div></div>
+  {% endif %}
+
+  {# ---- o período inteiro: a conclusão e o ranking --------------------- #}
+  <div class="painel">
+    <div class="caixa {{ 'caixa--ok' if rr.bateu else ('caixa--dif' if not so_hoje else '') }}">
+      <div class="caixa__r">Conferência banco × sistema</div>
+      <div class="caixa__v">
+        {% if rr.bateu %}<i class="bi bi-check-circle-fill"></i> Veio tudo
+        {% elif so_hoje %}<i class="bi bi-clock-history"></i> Dia em andamento
+        {% else %}<i class="bi bi-exclamation-circle-fill"></i> Não bate{% endif %}
       </div>
-      <table class="veredito__tab">
+      <div class="caixa__s">
+        {% if rr.bateu %}o banco e o sistema têm os mesmos {{ milhar(rr.total) }} lançamentos, com os mesmos valores
+        {% else %}{{ milhar(rr.faltam) }} só no banco · {{ milhar(rr.so_ofx) }} só no sistema{% endif %}
+      </div>
+      <table class="cmp">
         <tr><th></th><th>Banco (API)</th><th>Sistema (OFX)</th></tr>
-        <tr><td>Lançamentos</td><td>{{ milhar(r.total) }}</td><td>{{ milhar(r.ofx_total) }}</td></tr>
-        <tr><td>Entradas</td><td>{{ r.entradas | formatar_moeda }}</td><td>{{ r.ofx_ent | formatar_moeda }}</td></tr>
-        <tr><td>Saídas</td><td>{{ r.saidas | formatar_moeda }}</td><td>{{ r.ofx_sai | formatar_moeda }}</td></tr>
+        <tr><td>Lançamentos</td><td>{{ milhar(rr.total) }}</td><td>{{ milhar(rr.ofx_total) }}</td></tr>
+        <tr><td>Entradas</td><td class="pos">{{ rr.entradas | fmtmoney }}</td><td class="pos">{{ rr.ofx_ent | fmtmoney }}</td></tr>
+        <tr><td>Saídas</td><td class="neg">{{ rr.saidas | fmtmoney }}</td><td class="neg">{{ rr.ofx_sai | fmtmoney }}</td></tr>
       </table>
-      {% if r.no_sistema %}
-      <div class="veredito__s">Texto igual ao do OFX em {{ milhar(r.texto_igual) }} de {{ milhar(r.no_sistema) }}
-        (é o que as regras e memorizações de conciliação usam).</div>
+      {% if rr.no_sistema %}
+      <div class="caixa__s" style="margin-top:.5rem">Texto igual ao do OFX em
+        <b>{{ milhar(rr.texto_igual) }} de {{ milhar(rr.no_sistema) }}</b> — é o texto que as
+        regras e memorizações de conciliação usam.</div>
       {% endif %}
     </div>
 
-    <div class="lst">
-      <div class="topo-lst">
-        <span>{{ banco.rotulo }} · {{ ini.strftime('%d/%m') }} a {{ fim.strftime('%d/%m/%Y') }}</span>
+    <div class="rank">
+      <div class="rank__t">Para onde foi o dinheiro · {{ ini.strftime('%d/%m') }} a {{ fim.strftime('%d/%m/%Y') }}</div>
+      {% set vmax = (cards.values() | map(attribute='total') | max) if cards else 0 %}
+      {% for k, c in cards.items() %}
+      <div class="rk">
+        <div class="rk__n"><i class="bi {{ c.icone }}" style="color:{{ c.cor }}"></i>
+          <a href="{{ link(cat_=('' if cat == k else k)) }}">{{ c.nome }}</a></div>
+        <div class="rk__v {{ 'pos' if c.entrada else 'neg' }}">{{ '' if c.entrada else '−' }}{{ c.total | fmtmoney }}</div>
+        <div class="rk__b"><i style="width:{{ (c.total / vmax * 100) if vmax else 0 }}%;background:{{ c.cor }}"></i></div>
+        <div class="rk__d"><span>{{ milhar(c.n) }} lançamento{{ 's' if c.n != 1 }}</span>
+          {% if c.n_falta %}<span class="st st--falta">{{ c.n_falta }} falta{{ 'm' if c.n_falta != 1 }}</span>{% endif %}</div>
       </div>
-      {% for d in dias %}
-        <div class="dia">
-          <span>{{ d.data.strftime('%d/%m/%Y') }}</span>
-          <span class="tot">{{ d.saldo | formatar_moeda }}</span>
-        </div>
-        {% for l in d.linhas %}
-          {% set tx = l.tx %}
-          <div class="lin{{ '' if l.no_sistema else ' lin--falta' }}">
-            <div class="l1">
-              <div class="desc">{{ tx.descricao or '—' }}</div>
-              <div class="valor {{ 'valor--e' if tx.tipo == 'CREDIT' else 'valor--s' }}">
-                {{ '' if tx.tipo == 'CREDIT' else '−' }}{{ tx.valor | formatar_moeda }}
-              </div>
-            </div>
-            {% if l.partes %}<div class="memo">{{ l.partes | join(' · ') }}</div>{% endif %}
-            <div class="l3">
-              {% if l.no_sistema %}
-                <span class="selo selo--ok">No sistema</span>
-                {% if not l.texto_igual %}<span class="selo selo--pend">texto diferente</span>{% endif %}
-                <span class="ofx">OFX: {{ l.ofx.descricao or '—' }}</span>
-              {% else %}
-                <span class="selo selo--pend">Falta</span>
-              {% endif %}
-              {% if l.doc %}<span class="doc">doc {{ l.doc }}</span>{% endif %}
-            </div>
-          </div>
-        {% endfor %}
       {% else %}
-        <div class="vazio">O banco não devolveu lançamentos neste período.</div>
+      <div class="sub">O banco não devolveu lançamentos neste período.</div>
       {% endfor %}
     </div>
+  </div>
 
-    {% if so_ofx %}
-      <div class="lst">
-        <div class="topo-lst"><span>Só no sistema — o OFX tem, o banco não devolveu</span></div>
-        {% for o in so_ofx %}
-          <div class="lin">
-            <div class="l1">
-              <div class="desc">{{ o.descricao or '—' }}</div>
-              <div class="valor {{ 'valor--e' if o.tipo == 'CREDIT' else 'valor--s' }}">
-                {{ '' if o.tipo == 'CREDIT' else '−' }}{{ o.valor | formatar_moeda }}
-              </div>
-            </div>
-            <div class="l3">
-              <span class="doc">{{ o.data_transacao.strftime('%d/%m/%Y') }}</span>
-              {% if o.memo %}<span class="ofx">{{ o.memo }}</span>{% endif %}
-            </div>
-          </div>
+  {% if cards %}
+  {# ---- os cards ------------------------------------------------------- #}
+  <div class="pgrade">
+    {% set dmax = (por_dia.values() | map('abs') | max) if por_dia else 0 %}
+    <a class="pc pc--tot{{ ' pc--on' if not cat }}" style="--c:#475569" href="{{ link(cat_='') }}">
+      <div class="pc__t"><span class="pc__i"><i class="bi bi-stack"></i></span>
+        <div><div class="pc__n">Tudo</div>
+          <div class="pc__r">{{ cards|length }} tipos · {{ milhar(rr.total) }} lançamentos</div></div></div>
+      <div class="pc__v"><b>{{ (rr.entradas - rr.saidas) | fmtmoney }}</b></div>
+      <div class="pc__r">saldo do período (entradas − saídas)</div>
+      <div class="pc__g">
+        <div><dt>Entradas</dt><dd class="pos">{{ rr.entradas | fmtmoney }}</dd></div>
+        <div><dt>Saídas</dt><dd class="neg">{{ rr.saidas | fmtmoney }}</dd></div>
+        <div><dt>No sistema</dt><dd>{{ milhar(rr.no_sistema) }}</dd></div>
+        <div><dt>Faltam</dt><dd class="{{ 'neg' if rr.faltam }}">{{ milhar(rr.faltam) }}</dd></div>
+      </div>
+      <div class="spark">
+        {% for d, v in por_dia.items() %}
+        <i class="{{ 'ult' if loop.last }}" style="height:{{ 15 + 85 * (v|abs / dmax) if dmax else 50 }}%"
+           title="{{ d.strftime('%d/%m') }}: {{ v | fmtmoney }}"></i>
         {% endfor %}
       </div>
-    {% endif %}
+      <div class="pc__f"><span>saldo dia a dia</span><span>{{ por_dia|length }} dia{{ 's' if por_dia|length != 1 }} com movimento</span></div>
+      <div class="pc__cl">{% if cat %}<i class="bi bi-arrow-left"></i> clique para ver tudo
+        {% else %}<i class="bi bi-check2"></i> vendo todos os tipos{% endif %}</div>
+    </a>
+
+    {% for k, c in cards.items() %}
+    {% set cmax = (c.por_dia.values() | max) if c.por_dia else 0 %}
+    {% set base = rr.entradas if c.entrada else rr.saidas %}
+    {% set fatia = (c.total / base * 100) if base else 0 %}
+    <a class="pc{{ ' pc--on' if cat == k }}{{ ' pc--off' if cat and cat != k }}" style="--c:{{ c.cor }}"
+       href="{{ link(cat_=('' if cat == k else k)) }}">
+      <div class="pc__t"><span class="pc__i"><i class="bi {{ c.icone }}"></i></span>
+        <div><div class="pc__n">{{ c.nome }}</div>
+          <div class="pc__r">{{ 'entrada' if c.entrada else 'saída' }} · {{ milhar(c.n) }} lançamento{{ 's' if c.n != 1 }}</div></div></div>
+      <div class="pc__v"><b>{{ c.total | fmtmoney }}</b></div>
+      <div class="pc__r">{{ 'entrou' if c.entrada else 'saiu' }} no período</div>
+      <div class="pc__g">
+        <div><dt>No sistema</dt><dd>{{ milhar(c.n_sistema) }}</dd></div>
+        <div><dt>Faltam</dt><dd class="{{ 'neg' if c.n_falta }}">{{ milhar(c.n_falta) }}</dd></div>
+      </div>
+      <div class="spark">
+        {% for d, v in c.por_dia.items() %}
+        <i class="{{ 'ult' if loop.last }}" style="height:{{ 15 + 85 * (v / cmax) if cmax else 50 }}%"
+           title="{{ d.strftime('%d/%m') }}: {{ v | fmtmoney }}"></i>
+        {% endfor %}
+      </div>
+      <div class="pc__f"><span>último lançamento</span><b>{{ c.ultimo.strftime('%d/%m/%Y') }}</b></div>
+      <div class="pc__f"><span>fatia das {{ 'entradas' if c.entrada else 'saídas' }}</span><b>{{ '%.0f'|format(fatia) }}%</b></div>
+      <div class="pbar"><i style="width:{{ fatia }}%;background:{{ c.cor }}"></i></div>
+      <div class="pc__cl">{% if cat == k %}<i class="bi bi-check2"></i> vendo só este — clique para voltar
+        {% else %}<i class="bi bi-hand-index"></i> clique para ver só este{% endif %}</div>
+    </a>
+    {% endfor %}
+  </div>
+
+  <div class="tipos">
+    <b><i class="bi bi-funnel"></i> Mostrar</b>
+    <a class="{{ 'on' if not ver }}" href="{{ link(ver_='') }}">Tudo</a>
+    <a class="{{ 'on' if ver == 'falta' }}" href="{{ link(ver_='falta') }}">Só o que falta ({{ milhar(rr.faltam) }})</a>
+    <a class="{{ 'on' if ver == 'texto' }}" href="{{ link(ver_='texto') }}">Texto diferente do OFX ({{ milhar(rr.no_sistema - rr.texto_igual) }})</a>
+    <span class="obs">filtra as linhas dos quadros abaixo</span>
+  </div>
+
+  {# ---- um quadro por tipo -------------------------------------------- #}
+  {% for k, c in cards.items() if not cat or cat == k %}
+  {% set ls = c.linhas | selectattr('no_sistema', 'false') | list if ver == 'falta'
+         else (c.linhas | selectattr('no_sistema') | rejectattr('texto_igual') | list if ver == 'texto' else c.linhas) %}
+  {% if ls %}
+  <div class="cx" style="--c:{{ c.cor }}">
+    <div class="ph">
+      <span class="ph__i"><i class="bi {{ c.icone }}"></i></span>
+      <div><div class="ph__n">{{ c.nome }}</div>
+        <div class="ph__c">{{ banco.rotulo }} · {{ milhar(ls|length) }} de {{ milhar(c.n) }} lançamento{{ 's' if c.n != 1 }}</div></div>
+      <div class="ph__v">
+        <div class="ph__l {{ 'pos' if c.entrada else 'neg' }}">{{ '' if c.entrada else '−' }}{{ c.total | fmtmoney }}</div>
+        <div class="ph__ok {{ 'neg' if c.n_falta }}"><i class="bi {{ 'bi-check-circle-fill' if not c.n_falta else 'bi-exclamation-triangle-fill' }}"></i>
+          {{ milhar(c.n_sistema) }} de {{ milhar(c.n) }} no sistema</div>
+      </div>
+    </div>
+    <div class="tab">
+      <table class="t">
+        <thead><tr><th class="e">Data</th><th class="e">Quem / o quê</th><th class="e">Lançamento no banco</th>
+          <th>Valor</th><th class="e">No sistema</th><th class="e">Como o OFX escreveu</th></tr></thead>
+        <tbody>
+          {% for l in ls %}
+          {% set tx = l.tx %}
+          <tr class="{{ '' if l.no_sistema else 'falta' }}">
+            <td class="e" data-r="Data">{{ tx.data_transacao.strftime('%d/%m/%Y') }}<span class="dia-semana">{{ _sem[tx.data_transacao.weekday()] }}</span></td>
+            <td class="e quem" data-r="Quem">{{ l.quem or '—' }}{% if l.doc_pessoa %}<div class="sub">{{ l.doc_pessoa }}</div>{% endif %}</td>
+            <td class="e sub" data-r="No banco">{{ tx.descricao or '—' }}{% if l.doc %} · doc {{ l.doc }}{% endif %}</td>
+            <td data-r="Valor" class="{{ 'pos' if tx.tipo == 'CREDIT' else 'neg' }}">{{ '' if tx.tipo == 'CREDIT' else '−' }}{{ tx.valor | fmtmoney }}</td>
+            <td class="e" data-r="No sistema">{% if l.no_sistema %}<span class="st st--ok"><i class="bi bi-check-circle-fill"></i> sim</span>
+              {%- if not l.texto_igual %}<span class="difer">texto diferente</span>{% endif %}
+              {%- else %}<span class="st st--falta"><i class="bi bi-exclamation-triangle-fill"></i> falta</span>{% endif %}</td>
+            <td class="e sub" data-r="OFX">{{ l.ofx.descricao if l.ofx else '' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot><tr><td class="e" colspan="3">Total {{ c.nome }}{% if ls|length != c.n %} (filtrado){% endif %}</td>
+          {% set soma = ls | map(attribute='tx.valor') | sum %}
+          <td class="{{ 'pos' if c.entrada else 'neg' }}">{{ '' if c.entrada else '−' }}{{ soma | fmtmoney }}</td><td class="e"></td><td class="e"></td></tr></tfoot>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+  {% if ver and not (ver == 'falta' and rr.faltam) and not (ver == 'texto' and rr.no_sistema - rr.texto_igual) %}
+  <div class="nada"><i class="bi bi-check-circle" style="color:var(--ok)"></i>
+    {{ 'Nada falta no sistema neste período.' if ver == 'falta' else 'Todos os textos batem com o OFX.' }}</div>
+  {% endif %}
+  {% endif %}
+
+  {% if so_ofx and not cat %}
+  <div class="cx" style="--c:#64748b">
+    <div class="ph">
+      <span class="ph__i"><i class="bi bi-question-circle"></i></span>
+      <div><div class="ph__n">Só no sistema</div>
+        <div class="ph__c">o OFX tem e o banco não devolveu nesta consulta</div></div>
+    </div>
+    <div class="tab">
+      <table class="t">
+        <thead><tr><th class="e">Data</th><th class="e">Como o OFX escreveu</th><th>Valor</th></tr></thead>
+        <tbody>
+          {% for o in so_ofx %}
+          <tr><td class="e" data-r="Data">{{ o.data_transacao.strftime('%d/%m/%Y') }}</td>
+            <td class="e quem" data-r="OFX">{{ o.descricao or '—' }}{% if o.memo %}<div class="sub">{{ o.memo }}</div>{% endif %}</td>
+            <td data-r="Valor" class="{{ 'pos' if o.tipo == 'CREDIT' else 'neg' }}">{{ '' if o.tipo == 'CREDIT' else '−' }}{{ o.valor | fmtmoney }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="rod">
+    <b>Como ler:</b> cada linha é um lançamento que o banco devolveu agora, pela API. <b>No sistema: sim</b>
+    quer dizer que o OFX já trouxe esse mesmo lançamento (mesmo dia, tipo e valor; entre lançamentos
+    iguais, o par é escolhido pelo nome). <b>Falta</b> é o que o banco tem e o sistema ainda não.
+    <b>Texto diferente</b> avisa que o OFX escreveu outro texto — é por esse texto que as regras e
+    memorizações conciliam. Esta tela não grava nada.
+  </div>
   {% endif %}
 
 </div>
