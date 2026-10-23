@@ -13,7 +13,8 @@ movimento (PIX recebido, cartões, transferências...). O tipo sai do próprio
 texto do banco — ver _categoria().
 
 Um banco novo é uma entrada em BANCOS: rótulo, conta e o módulo que sabe
-ler() e comparar().
+ler(), comparar() e mesmo_texto_do_ofx() — o resto (mTLS, token, HTTP,
+comparação) é comum, em integrations/banco_api.
 """
 from collections import OrderedDict
 from datetime import date, timedelta
@@ -32,8 +33,17 @@ def _sicoob():
     return sicoob_extrato
 
 
+def _cora(conta):
+    def carrega():
+        from integrations import cora_extrato
+        return cora_extrato.CONTAS[conta]
+    return carrega
+
+
 BANCOS = {
     'sicoob-nh': {'rotulo': 'SICOOB - NH', 'conta': '5024 / 148.186-0', 'modulo': _sicoob},
+    'cora-nh': {'rotulo': 'CORA - NH', 'conta': '0001 / 3456427-0', 'modulo': _cora('posto')},
+    'cora-prest': {'rotulo': 'CORA - PREST', 'conta': '0001 / 27677832', 'modulo': _cora('prest')},
 }
 
 # Ordem dos cards e dos quadros: primeiro o que entra, depois o que sai.
@@ -46,18 +56,33 @@ CATEGORIAS = OrderedDict([
     ('transf_out', {'nome': 'Transf. enviada', 'icone': 'bi-arrow-up-right',    'cor': '#a16207'}),
     ('pagto',    {'nome': 'Pagamentos',       'icone': 'bi-receipt',            'cor': '#6f42c1'}),
     ('tarifa',   {'nome': 'Tarifas',          'icone': 'bi-percent',            'cor': '#a32d2d'}),
+    ('bloqueio', {'nome': 'Bloqueios',        'icone': 'bi-lock',               'cor': '#334155'}),
     ('outros_out', {'nome': 'Outras saídas',   'icone': 'bi-dash-circle',       'cor': '#64748b'}),
 ])
 
+# Quando o banco diz o tipo (Cora: transaction.type), vale o que ele diz.
+# Lista ABERTA na documentação do Cora: tipo novo cai no texto, abaixo.
+POR_TIPO_DO_BANCO = {
+    'PIX': ('pix_in', 'pix_out'), 'TRANSFER': ('transf_in', 'transf_out'),
+    'PAYMENT': ('outros_in', 'pagto'), 'FEE': ('outros_in', 'tarifa'),
+    'CARD': ('cartao', 'pagto'), 'BANK_DOMICILE': ('cartao', 'outros_out'),
+    'BLOCK': ('bloqueio', 'bloqueio'), 'JUD_BLOCKER': ('bloqueio', 'bloqueio'),
+    'LIMIT_RESERVATION': ('bloqueio', 'bloqueio'),
+}
+
 
 def _categoria(tx):
-    """Tipo do movimento pelo texto do banco. Medido na 1ª consulta real
-    (16-22/10/2026): 'PIX RECEBIDO - OUTRA IF', 'CR COMPRAS VISA ELECTRON',
-    'CR ANTECIPAÇÃO MASTERCARD', 'CRED.TRANSF.CONTAS INTERCREDIS',
-    'TARIFA RECEBIMENTO PIX'. O que não se reconhece cai em "Outras"."""
-    from integrations.sicoob_extrato import _normal
-    d = _normal(f"{tx.get('descricao')} {tx.get('memo')}")
+    """Tipo do movimento. Sem o tipo do banco, pelo texto — medido na 1ª
+    consulta real do Sicoob (16-22/10/2026): 'PIX RECEBIDO - OUTRA IF',
+    'CR COMPRAS VISA ELECTRON', 'CR ANTECIPAÇÃO MASTERCARD',
+    'CRED.TRANSF.CONTAS INTERCREDIS', 'TARIFA RECEBIMENTO PIX'. O que não se
+    reconhece cai em "Outras"."""
+    from integrations.banco_api import normal
     entrada = tx['tipo'] == 'CREDIT'
+    par = POR_TIPO_DO_BANCO.get(tx.get('categoria_banco') or '')
+    if par:
+        return par[0] if entrada else par[1]
+    d = normal(f"{tx.get('descricao')} {tx.get('memo')}")
     if 'TARIFA' in d:
         return 'tarifa'
     if 'PIX' in d:
@@ -129,15 +154,16 @@ def index():
 
 
 def _consultar(mod, ini, fim, hoje):
+    from integrations.banco_api import BancoAuthError, BancoError, SemCredencial
     try:
         # Tela só MOSTRA: o dia de hoje pode entrar (ainda mudando no banco).
         api = mod.ler(ini, fim, incluir_hoje=True)
         r = mod.comparar(api, ini, fim)
-    except mod.SemCredencial as exc:
+    except SemCredencial as exc:
         return {'erro': f'Falta configurar o acesso ao banco: {exc}'}
-    except mod.SicoobAuthError as exc:
+    except BancoAuthError as exc:
         return {'erro': f'O banco recusou o acesso (credencial ou certificado): {exc}'}
-    except (mod.SicoobError, ValueError) as exc:
+    except (BancoError, ValueError) as exc:
         return {'erro': f'Não foi possível ler o extrato: {exc}'}
 
     linhas = [{'tx': a, 'ofx': o, 'no_sistema': True,
@@ -148,10 +174,9 @@ def _consultar(mod, ini, fim, hoje):
     linhas.sort(key=lambda l: (l['tx']['data_transacao'], ordem.get(id(l['tx']), 0)))
     for l in linhas:
         tx = l['tx']
-        partes = mod.partes_complemento(tx['memo'])
-        # 'Recebimento Pix · Nome · CPF': o nome é o que se procura; o resto é detalhe.
-        l['quem'] = partes[1] if len(partes) > 1 else (partes[0] if partes else '')
-        l['doc_pessoa'] = partes[2] if len(partes) > 2 else ''
+        # Quem pagou / recebeu: cada adapter já entrega separado do texto.
+        l['quem'] = tx.get('quem') or ''
+        l['doc_pessoa'] = tx.get('doc_pessoa') or ''
         l['cat'] = _categoria(tx)
         l['sinal'] = tx['valor'] if tx['tipo'] == 'CREDIT' else -tx['valor']
         doc = tx['numero_documento'] or ''

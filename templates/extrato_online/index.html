@@ -58,15 +58,22 @@ body > .container-fluid:has(#eol){
     text-transform:uppercase; letter-spacing:.05em; padding-top:.42rem;
     min-width:4.2rem; flex:0 0 auto; }
   #eol .chips{ display:flex; gap:.35rem; flex-wrap:wrap; flex:1 1 auto; }
-  #eol .chips label{ --c:var(--blue); border:1px solid var(--borda);
+  #eol .chips a{ --c:var(--blue); border:1px solid var(--borda); text-decoration:none;
     border-radius:99px; padding:.34rem .75rem; font-size:.79rem; font-weight:700;
     cursor:pointer; background:#fff; color:#55606e; display:inline-flex;
     gap:.35rem; align-items:center; line-height:1.15; }
-  #eol .chips label.on{ background:var(--c); border-color:var(--c); color:#fff;
+  #eol .chips a:hover{ background:#f2f7fc; border-color:#bcd3ea; color:var(--blue-deep); }
+  #eol .chips a.on{ background:var(--c); border-color:var(--c); color:#fff;
     font-weight:800; box-shadow:0 2px 8px rgba(20,35,60,.16); }
-  #eol .chips input{ position:absolute; opacity:0; width:0; height:0; }
   #eol .chips .conta{ font-size:.66rem; font-weight:700; opacity:.85; }
-  #eol .chips .breve{ border-style:dashed; color:#97a1ad; cursor:default; }
+
+  /* Consultar o banco leva segundos: sem aviso, parece que o clique não pegou. */
+  #eol-carregando{ position:fixed; inset:0; z-index:2000; display:none;
+    align-items:center; justify-content:center; background:rgba(15,30,50,.35); }
+  #eol-carregando.on{ display:flex; }
+  #eol-carregando div{ background:#fff; border-radius:14px; padding:1rem 1.3rem;
+    font-weight:800; color:#0C4C86; display:flex; gap:.6rem; align-items:center;
+    box-shadow:0 10px 30px rgba(0,0,0,.2); max-width:90vw; }
 
   #eol .meses, #eol .tipos{ display:flex; gap:.35rem; flex-wrap:wrap;
     align-items:center; background:#fff; border:1px solid var(--borda);
@@ -227,8 +234,8 @@ body > .container-fluid:has(#eol){
 {% block content %}
 {%- set _sem = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'] -%}
 {%- macro milhar(v) -%}{{ '{:,}'.format(v or 0)|replace(',','.') }}{%- endmacro -%}
-{%- macro link(cat_=none, ver_=none, ini_=none, fim_=none) -%}
-{{ url_for('extrato_online.index', banco=chave, consultar=1,
+{%- macro link(cat_=none, ver_=none, ini_=none, fim_=none, banco_=none) -%}
+{{ url_for('extrato_online.index', banco=banco_ or chave, consultar=1,
            ini=(ini_ or ini).isoformat(), fim=(fim_ or fim).isoformat(),
            cat=(cat if cat_ is none else cat_) or none,
            ver=(ver if ver_ is none else ver_) or none) }}
@@ -252,8 +259,7 @@ body > .container-fluid:has(#eol){
     </div>
   </div>
 
-  <form method="get" class="filtro" action="{{ url_for('extrato_online.index') }}"
-        onsubmit="var b=this.querySelector('.bt--sim'); b.disabled=true; b.innerHTML='<span class=&quot;spinner-border spinner-border-sm&quot;></span> Consultando…';">
+  <form method="get" class="filtro" action="{{ url_for('extrato_online.index') }}">
     <input type="hidden" name="consultar" value="1">
     {% if cat %}<input type="hidden" name="cat" value="{{ cat }}">{% endif %}
     {% if ver %}<input type="hidden" name="ver" value="{{ ver }}">{% endif %}
@@ -267,16 +273,16 @@ body > .container-fluid:has(#eol){
         <a class="bt" href="{{ url_for('extrato_online.index') }}"><i class="bi bi-arrow-counterclockwise"></i> Limpar</a>
       </div>
     </div>
+    <input type="hidden" name="banco" value="{{ chave }}">
     <div class="grupo">
       <span class="grupo__r">Banco</span>
       <div class="chips">
+        {#- Link, não rádio: clicar no banco já escolhido também consulta. -#}
         {% for k, b in bancos.items() %}
-        <label class="{{ 'on' if k == chave }}">
-          <input type="radio" name="banco" value="{{ k }}" {{ 'checked' if k == chave }}
-                 onchange="this.form.requestSubmit()">
-          <i class="bi bi-bank2"></i> {{ b.rotulo }} <span class="conta">{{ b.conta }}</span></label>
+        <a class="{{ 'on' if k == chave }}" href="{{ link(banco_=k, cat_='', ver_='') }}"
+           data-banco="{{ b.rotulo }}">
+          <i class="bi bi-bank2"></i> {{ b.rotulo }} <span class="conta">{{ b.conta }}</span></a>
         {% endfor %}
-        <label class="breve" title="Os próximos bancos entram aqui">+ outros bancos em breve</label>
       </div>
     </div>
   </form>
@@ -295,7 +301,7 @@ body > .container-fluid:has(#eol){
   {% elif not consultado %}
     <div class="aviso"><i class="bi bi-info-circle-fill"></i>
       <div>Escolha o período e clique em <b>Consultar no banco</b> (ou num atalho acima). A tela
-      busca o extrato direto no Sicoob e mostra o que <b>já está no sistema</b> e o que
+      busca o extrato direto no {{ banco.rotulo }} e mostra o que <b>já está no sistema</b> e o que
       <b>falta</b>. Nada é gravado.</div></div>
   {% endif %}
 
@@ -441,7 +447,8 @@ body > .container-fluid:has(#eol){
           {% for l in ls %}
           {% set tx = l.tx %}
           <tr class="{{ '' if l.no_sistema else 'falta' }}">
-            <td class="e" data-r="Data">{{ tx.data_transacao.strftime('%d/%m/%Y') }}<span class="dia-semana">{{ _sem[tx.data_transacao.weekday()] }}</span></td>
+            <td class="e" data-r="Data">{{ tx.data_transacao.strftime('%d/%m/%Y') }}<span class="dia-semana">{{ _sem[tx.data_transacao.weekday()] }}</span>
+              {%- if tx.hora %} <b>{{ tx.hora }}</b>{% endif %}</td>
             <td class="e quem" data-r="Quem">{{ l.quem or '—' }}{% if l.doc_pessoa %}<div class="sub">{{ l.doc_pessoa }}</div>{% endif %}</td>
             <td class="e sub" data-r="No banco">{{ tx.descricao or '—' }}{% if l.doc %} · doc {{ l.doc }}{% endif %}</td>
             <td data-r="Valor" class="{{ 'pos' if tx.tipo == 'CREDIT' else 'neg' }}">{{ '' if tx.tipo == 'CREDIT' else '−' }}{{ tx.valor | fmtmoney }}</td>
@@ -498,4 +505,30 @@ body > .container-fluid:has(#eol){
   {% endif %}
 
 </div>
+
+<div id="eol-carregando" role="status" aria-live="polite">
+  <div><span class="spinner-border spinner-border-sm"></span>
+    <span>Consultando o <span id="eol-qual">{{ banco.rotulo }}</span>…</span></div>
+</div>
+<script>
+(function () {
+  /* Todo clique que consulta o banco (botão, banco, período, card, filtro)
+     mostra o aviso na hora — a resposta do banco leva alguns segundos. */
+  var caixa = document.getElementById('eol-carregando');
+  function mostra(qual) {
+    if (qual) document.getElementById('eol-qual').textContent = qual;
+    caixa.classList.add('on');
+  }
+  document.querySelectorAll('#eol a[href*="consultar=1"]').forEach(function (a) {
+    a.addEventListener('click', function (ev) {
+      if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.button) return;
+      mostra(a.getAttribute('data-banco'));
+    });
+  });
+  var f = document.querySelector('#eol form.filtro');
+  if (f) f.addEventListener('submit', function () { mostra(); });
+  /* Voltar pelo navegador não pode trazer a tela com o aviso preso. */
+  window.addEventListener('pageshow', function () { caixa.classList.remove('on'); });
+})();
+</script>
 {% endblock %}
