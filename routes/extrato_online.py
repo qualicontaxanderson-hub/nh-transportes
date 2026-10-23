@@ -50,10 +50,11 @@ def index():
            'ini': ini, 'fim': fim, 'ontem': ontem,
            'consultado': False, 'erro': None, 'r': None, 'dias': []}
 
+    hoje = date.today()
+    ctx['hoje'] = hoje
     if request.args.get('consultar'):
-        if fim > ontem:
-            ctx['erro'] = ('Só dá para consultar dias fechados — até ontem '
-                           f'({ontem:%d/%m}). O dia de hoje ainda está mudando no banco.')
+        if fim > hoje:
+            ctx['erro'] = f'A data final não pode passar de hoje ({hoje:%d/%m}).'
         elif ini > fim:
             ctx['erro'] = 'A data inicial está depois da final.'
         elif (fim - ini).days + 1 > MAX_DIAS:
@@ -65,7 +66,8 @@ def index():
 
 def _consultar(mod, ini, fim):
     try:
-        api = mod.ler(ini, fim)
+        # Tela só MOSTRA: o dia de hoje pode entrar (ainda mudando no banco).
+        api = mod.ler(ini, fim, incluir_hoje=True)
         r = mod.comparar(api, ini, fim)
     except mod.SemCredencial as exc:
         return {'erro': f'Falta configurar o acesso ao banco: {exc}'}

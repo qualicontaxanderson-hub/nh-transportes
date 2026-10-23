@@ -300,12 +300,16 @@ def _meses(inicio, fim):
         d = ate + timedelta(days=1)
 
 
-def ler(inicio, fim, sessao=None):
-    """Período na API -> lista no formato do OFXParser. Só dias FECHADOS (até ontem):
-    dia pela metade faria a segunda consulta achar lançamentos novos no meio
-    dos antigos."""
-    if fim >= date.today():
-        raise ValueError(f'Só dias fechados: fim {fim} precisa ser antes de hoje.')
+def ler(inicio, fim, sessao=None, incluir_hoje=False):
+    """Período na API -> lista no formato do OFXParser.
+
+    Por padrão só dias FECHADOS (até ontem): quem for GRAVAR não pode pegar
+    dia pela metade — a segunda consulta acharia lançamentos novos no meio
+    dos antigos. ``incluir_hoje`` é só para quem MOSTRA (a tela de consulta).
+    """
+    limite = date.today() if incluir_hoje else date.today() - timedelta(days=1)
+    if fim > limite:
+        raise ValueError(f'Período até {fim} passa do permitido ({limite}).')
     if inicio > fim:
         raise ValueError(f'Período invertido: {inicio} > {fim}.')
     sessao = sessao or abrir_sessao()

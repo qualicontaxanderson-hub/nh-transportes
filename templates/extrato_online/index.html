@@ -159,11 +159,11 @@ body > .container-fluid:has(#eol){
     </div>
     <div>
       <label for="eol-ini">De</label>
-      <input id="eol-ini" type="date" name="ini" value="{{ ini.isoformat() }}" max="{{ ontem.isoformat() }}">
+      <input id="eol-ini" type="date" name="ini" value="{{ ini.isoformat() }}" max="{{ hoje.isoformat() }}">
     </div>
     <div>
       <label for="eol-fim">Até</label>
-      <input id="eol-fim" type="date" name="fim" value="{{ fim.isoformat() }}" max="{{ ontem.isoformat() }}">
+      <input id="eol-fim" type="date" name="fim" value="{{ fim.isoformat() }}" max="{{ hoje.isoformat() }}">
     </div>
     <button type="submit" class="btn-consultar"><i class="bi bi-cloud-download"></i> Consultar no banco</button>
   </form>
@@ -173,7 +173,8 @@ body > .container-fluid:has(#eol){
   {% elif not consultado %}
     <div class="aviso aviso--info"><i class="bi bi-info-circle-fill"></i>
       <div>Busca o extrato direto no banco e mostra o que <b>já está no sistema</b> e o que
-      <b>falta</b>. Nada é gravado. Só dias fechados — até ontem.</div></div>
+      <b>falta</b>. Nada é gravado. O dia de hoje pode ser consultado, mas ainda está
+      mudando no banco — o OFX dele só chega amanhã, então tudo de hoje aparece como "Falta".</div></div>
   {% endif %}
 
   {% if consultado %}
