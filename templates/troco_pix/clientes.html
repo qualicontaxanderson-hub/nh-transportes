@@ -105,6 +105,11 @@ body > .container-fluid:has(#tpc){
   #tpc .selo--off{ background:#e7ebf0; color:#3d4854; }
   #tpc .selo--rep{ background:#fdf0d6; color:var(--ambar); }
   #tpc .selo--novo{ background:#ede7f8; color:#453675; }
+  #tpc .selo--outra{ background:#fbe9e9; color:var(--danger); }
+  #tpc .banco{ margin-top:.45rem; padding:.45rem .55rem; border-radius:8px;
+    background:#fdf6e7; border:1px solid #f0d8a8; font-size:.76rem; color:var(--ink); }
+  #tpc .banco--outra{ background:#fbe9e9; border-color:#f0c8c8; }
+  #tpc .banco form{ margin-top:.4rem; }
 
   #tpc .c__c{ background:#f7f9fc; border-top:1px solid #eef1f5;
     padding:.65rem .8rem .75rem; }
@@ -197,6 +202,10 @@ body > .container-fluid:has(#tpc){
     <button type="button" class="aba" data-f="rep" onclick="tpcFiltra(this)">
       Nome repetido <span class="b">{{ totais.repetidos }}</span></button>
     {% endif %}
+    {% if totais.nome_banco %}
+    <button type="button" class="aba" data-f="banco" onclick="tpcFiltra(this)">
+      Nome ≠ banco <span class="b">{{ totais.nome_banco }}</span></button>
+    {% endif %}
   </div>
 
   <div class="conta" id="tpc-conta"></div>
@@ -210,7 +219,8 @@ body > .container-fluid:has(#tpc){
          data-ativo="{{ '1' if c.ativo else '0' }}"
          data-usos="{{ usos }}"
          data-rep="{{ '1' if rep else '0' }}"
-         data-busca="{{ (nome ~ ' ' ~ (c.chave_pix or '') ~ ' ' ~ (c.tipo_chave_pix or '')) | lower }}">
+         data-banco="{{ '1' if c.banco_cmp in ('parecido', 'outra') else '0' }}"
+         data-busca="{{ (nome ~ ' ' ~ (c.chave_pix or '') ~ ' ' ~ (c.tipo_chave_pix or '') ~ ' ' ~ (c.banco.nome if c.banco else '')) | lower }}">
       <div class="c__h" onclick="tpcAbre(this)">
         <span class="c__ic">{{ nome[:2] | upper }}</span>
         <div class="c__t">
@@ -222,6 +232,10 @@ body > .container-fluid:has(#tpc){
             {% if rep %}<span class="selo selo--rep"
                 title="Há mais de um cadastro com este nome">nome repetido</span>{% endif %}
             {% if not usos %}<span class="selo selo--novo">nunca usado</span>{% endif %}
+            {% if c.banco_cmp == 'parecido' %}<span class="selo selo--rep"
+                title="O banco mostrou: {{ c.banco.nome }}">nome ≠ banco</span>
+            {% elif c.banco_cmp == 'outra' %}<span class="selo selo--outra"
+                title="O PIX desta chave cai na conta de {{ c.banco.nome }}">PIX cai em outra conta</span>{% endif %}
           </div>
         </div>
         <div class="val">
@@ -252,6 +266,21 @@ body > .container-fluid:has(#tpc){
           {% if rep %}
           <div class="dica">Outro cadastro tem este mesmo nome — confira a chave
             antes de escolher.</div>
+          {% endif %}
+          {# O que o banco devolveu no ultimo troco conciliado (utils/troco_pix_banco) #}
+          {% if c.banco_cmp == 'parecido' %}
+          <div class="banco">
+            O banco mostra <b>{{ c.banco.nome }}</b>{% if c.banco.doc %} · {{ c.banco.doc_fmt }}{% endif %}
+            <form method="POST" action="{{ url_for('troco_pix.cliente_nome_do_banco', cliente_id=c.id) }}"
+                  onsubmit="return confirm('Trocar o nome para {{ c.banco.nome|replace("'", "") }}?');">
+              <button type="submit" class="bt bt--ed"><i class="bi bi-arrow-repeat"></i> Atualizar nome</button>
+            </form>
+          </div>
+          {% elif c.banco_cmp == 'outra' %}
+          <div class="banco banco--outra">
+            O PIX desta chave cai na conta de <b>{{ c.banco.nome }}</b>{% if c.banco.doc %} · {{ c.banco.doc_fmt }}{% endif %}
+            (último em {{ c.banco.data.strftime('%d/%m/%Y') }}). Confira se é isso mesmo.
+          </div>
           {% endif %}
         </div>
 
@@ -326,6 +355,7 @@ function tpcCabe(c){
     case 'off':   return c.getAttribute('data-ativo') === '0';
     case 'sem':   return c.getAttribute('data-usos') === '0';
     case 'rep':   return c.getAttribute('data-rep') === '1';
+    case 'banco': return c.getAttribute('data-banco') === '1';
     default:      return true;
   }
 }

@@ -1204,6 +1204,16 @@ def clientes():
         """)
         repetidos = {r['nome_completo'] for r in cursor.fetchall()}
 
+        # O nome e o documento que o BANCO devolveu nos trocos conciliados, ao
+        # lado do cadastro: parecido ganha o botao "Atualizar nome"; chave de
+        # outra pessoa so avisa (ver utils/troco_pix_banco).
+        from utils.troco_pix_banco import comparar_nome, do_banco
+        banco = do_banco(cursor)
+        for c in clientes:
+            b = banco.get(c['id'])
+            c['banco'] = b if b and b['nome'] else None
+            c['banco_cmp'] = comparar_nome(c, b) if c['banco'] else None
+
         totais = {
             'clientes': len(clientes),
             'ativos': sum(1 for c in clientes if c.get('ativo')),
@@ -1211,6 +1221,7 @@ def clientes():
             'com_troco': sum(1 for c in clientes if (c.get('n_trocos') or 0) > 0),
             'sem_uso': sum(1 for c in clientes if not (c.get('n_trocos') or 0)),
             'repetidos': len(repetidos),
+            'nome_banco': sum(1 for c in clientes if c['banco_cmp'] in ('parecido', 'outra')),
             'total_pago': sum(float(c.get('total_recebido') or 0) for c in clientes),
         }
 
@@ -1337,6 +1348,37 @@ def cliente_editar(cliente_id):
     except Exception as e:
         flash(f'Erro ao atualizar cliente: {str(e)}', 'danger')
         return redirect(url_for('troco_pix.cliente_editar', cliente_id=cliente_id))
+
+@troco_pix_bp.route('/clientes/<int:cliente_id>/nome-do-banco', methods=['POST'])
+@login_required
+def cliente_nome_do_banco(cliente_id):
+    """Troca o nome do cadastro pelo que o banco devolveu — só quando é a
+    mesma pessoa com o nome parecido. Chave de outra pessoa não se corrige
+    aqui: o nome do banco seria o de quem recebe, não o do cliente."""
+    from utils.troco_pix_banco import comparar_nome, do_banco
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM troco_pix_clientes WHERE id = %s", (cliente_id,))
+        cliente = cursor.fetchone()
+        b = do_banco(cursor, [cliente_id]).get(cliente_id) if cliente else None
+        if not cliente or not b or not b['nome']:
+            flash('O banco ainda não mostrou o nome deste cliente.', 'warning')
+        elif comparar_nome(cliente, b) != 'parecido':
+            flash('O nome do banco não é parecido com o do cadastro — não foi trocado.', 'warning')
+        else:
+            cursor.execute("UPDATE troco_pix_clientes SET nome_completo = %s WHERE id = %s",
+                           (b['nome'], cliente_id))
+            conn.commit()
+            flash(f'Nome atualizado: {cliente["nome_completo"]} → {b["nome"]}', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao atualizar o nome: {e}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+    return redirect(url_for('troco_pix.clientes'))
+
 
 @troco_pix_bp.route('/clientes/excluir/<int:cliente_id>', methods=['POST'])
 @login_required

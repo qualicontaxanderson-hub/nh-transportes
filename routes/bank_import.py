@@ -1095,13 +1095,15 @@ def _auto_vincular_troco_pix(cursor, conn, account_id):
 
       * débito PENDENTE da conta, no MESMO dia e com o MESMO valor do troco;
       * o favorecido é o cliente PIX: o nome dele está no texto do banco, ou o
-        CPF/CNPJ da chave PIX é o documento do lançamento;
+        CPF/CNPJ da chave PIX é o documento do lançamento, ou é o documento em
+        que trocos anteriores dele já caíram (utils/troco_pix_banco);
       * UM candidato só, dos dois lados (um troco -> um débito e o débito não
         serve a outro troco). Dois trocos iguais no dia ficam para a mão.
 
     Medido em 24/10/2026 nos 368 trocos com valor desde 01/06: a regra achou
-    322, todos IGUAIS ao vínculo que foi feito à mão, nenhum diferente. Os que
-    ela não acha (nome digitado errado, banco lançou no dia seguinte, dois
+    322 só por nome/chave e 347 com o documento já visto, todos IGUAIS ao
+    vínculo que foi feito à mão, nenhum diferente. Os que ela não acha
+    (primeiro troco com nome errado, banco lançou no dia seguinte, dois
     iguais) continuam pela tela, como antes.
 
     conciliado_por = 'auto-troco' (não 'auto'): o _auto_conciliar_por_regras
@@ -1109,7 +1111,8 @@ def _auto_vincular_troco_pix(cursor, conn, account_id):
     """
     try:
         cursor.execute(
-            """SELECT tp.id, tp.data, tp.troco_pix, tpc.nome_completo, tpc.tipo_chave_pix, tpc.chave_pix
+            """SELECT tp.id, tp.data, tp.troco_pix, tp.troco_pix_cliente_id AS cid,
+                      tpc.nome_completo, tpc.tipo_chave_pix, tpc.chave_pix
                  FROM troco_pix tp
                  JOIN troco_pix_clientes tpc ON tpc.id = tp.troco_pix_cliente_id
                 WHERE tp.bank_transaction_id IS NULL AND tp.troco_pix > 0
@@ -1141,14 +1144,21 @@ def _auto_vincular_troco_pix(cursor, conn, account_id):
             [account_id] + datas,
         )
         ocupados = {r['bank_transaction_id'] for r in cursor.fetchall()}
+        # O documento em que os trocos do cliente JÁ caíram: liga mesmo com o
+        # nome digitado errado ou a chave por telefone/e-mail (347 de 368).
+        from utils.troco_pix_banco import do_banco
+        aprendidos = do_banco(cursor, sorted({t['cid'] for t in trocos}))
 
         def favorecido(t, b):
             nome = _sem_acento_maiusculo(t['nome_completo'])
             if nome and nome in _sem_acento_maiusculo(b['descricao']):
                 return True
+            doc = re.sub(r'\D', '', b['cnpj_cpf'] or '')
+            if doc and doc in (aprendidos.get(t['cid']) or {}).get('docs', ()):
+                return True
             if t['tipo_chave_pix'] in ('CPF', 'CNPJ'):
                 chave = re.sub(r'\D', '', t['chave_pix'] or '')
-                return bool(chave) and chave == re.sub(r'\D', '', b['cnpj_cpf'] or '')
+                return bool(chave) and chave == doc
             return False
 
         candidatos = {}
