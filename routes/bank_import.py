@@ -917,7 +917,10 @@ def _save_transactions(cursor, conn, account_id, transactions):
                     time.sleep(0.3 * (attempt + 1))
                     continue
                 raise
-    # 4. Auto-conciliação imediata por regras de descrição (para os que ficaram pendentes)
+    # 4. Troco PIX com certeza (mesmo dia, valor e favorecido, um só candidato) —
+    #    antes das regras: é o vínculo mais certo que existe para esse débito
+    _auto_vincular_troco_pix(cursor, conn, account_id)
+    # 4b. Auto-conciliação imediata por regras de descrição (para os que ficaram pendentes)
     _auto_conciliar_por_regras(cursor, conn, account_id)
     # 5. Auto-conciliação de despesas por CNPJ (cria lancamentos_despesas automaticamente)
     _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping)
@@ -1077,6 +1080,112 @@ def _update_bank_tx_conciliada(cursor, tx_id, forma_id, agora):
            WHERE id = %s""",
         (agora, tx_id),
     )
+
+
+def _sem_acento_maiusculo(txt):
+    import unicodedata
+    t = unicodedata.normalize('NFKD', txt or '').encode('ascii', 'ignore').decode()
+    return re.sub(r'\s+', ' ', t.upper()).strip()
+
+
+def _auto_vincular_troco_pix(cursor, conn, account_id):
+    """
+    Liga o Troco PIX (pedido na pista) ao PIX enviado que o banco lançou,
+    sem ninguém clicar — só quando não há dúvida:
+
+      * débito PENDENTE da conta, no MESMO dia e com o MESMO valor do troco;
+      * o favorecido é o cliente PIX: o nome dele está no texto do banco, ou o
+        CPF/CNPJ da chave PIX é o documento do lançamento;
+      * UM candidato só, dos dois lados (um troco -> um débito e o débito não
+        serve a outro troco). Dois trocos iguais no dia ficam para a mão.
+
+    Medido em 24/10/2026 nos 368 trocos com valor desde 01/06: a regra achou
+    322, todos IGUAIS ao vínculo que foi feito à mão, nenhum diferente. Os que
+    ela não acha (nome digitado errado, banco lançou no dia seguinte, dois
+    iguais) continuam pela tela, como antes.
+
+    conciliado_por = 'auto-troco' (não 'auto'): o _auto_conciliar_por_regras
+    revisita os 'auto' e poderia trocar a conciliação.
+    """
+    try:
+        cursor.execute(
+            """SELECT tp.id, tp.data, tp.troco_pix, tpc.nome_completo, tpc.tipo_chave_pix, tpc.chave_pix
+                 FROM troco_pix tp
+                 JOIN troco_pix_clientes tpc ON tpc.id = tp.troco_pix_cliente_id
+                WHERE tp.bank_transaction_id IS NULL AND tp.troco_pix > 0
+                  AND UPPER(COALESCE(tp.status, '')) <> 'CANCELADO'
+                  AND tp.data IN (SELECT DISTINCT data_transacao FROM bank_transactions
+                                   WHERE account_id=%s AND tipo='DEBIT' AND status='pendente')""",
+            (account_id,),
+        )
+        trocos = cursor.fetchall()
+        if not trocos:
+            return 0
+        datas = sorted({t['data'] for t in trocos})
+        ph = ','.join(['%s'] * len(datas))
+        cursor.execute(
+            f"""SELECT id, data_transacao, valor, descricao, cnpj_cpf
+                  FROM bank_transactions
+                 WHERE account_id=%s AND tipo='DEBIT' AND status='pendente'
+                   AND data_transacao IN ({ph})""",
+            [account_id] + datas,
+        )
+        por_dia_valor = defaultdict(list)
+        for b in cursor.fetchall():
+            por_dia_valor[(b['data_transacao'], f"{float(b['valor']):.2f}")].append(b)
+        # Trocos já ligados ocupam o débito: não podem ser escolhidos de novo
+        cursor.execute(
+            f"""SELECT bank_transaction_id FROM troco_pix
+                 WHERE bank_transaction_id IN (SELECT id FROM bank_transactions
+                                                WHERE account_id=%s AND data_transacao IN ({ph}))""",
+            [account_id] + datas,
+        )
+        ocupados = {r['bank_transaction_id'] for r in cursor.fetchall()}
+
+        def favorecido(t, b):
+            nome = _sem_acento_maiusculo(t['nome_completo'])
+            if nome and nome in _sem_acento_maiusculo(b['descricao']):
+                return True
+            if t['tipo_chave_pix'] in ('CPF', 'CNPJ'):
+                chave = re.sub(r'\D', '', t['chave_pix'] or '')
+                return bool(chave) and chave == re.sub(r'\D', '', b['cnpj_cpf'] or '')
+            return False
+
+        candidatos = {}
+        for t in trocos:
+            candidatos[t['id']] = [b for b in por_dia_valor[(t['data'], f"{float(t['troco_pix']):.2f}")]
+                                   if b['id'] not in ocupados and favorecido(t, b)]
+        disputa = Counter(b['id'] for cs in candidatos.values() for b in cs)
+
+        agora = _dt.datetime.now()
+        n = 0
+        for t in trocos:
+            cs = candidatos[t['id']]
+            if len(cs) != 1 or disputa[cs[0]['id']] != 1:
+                continue
+            bt_id = cs[0]['id']
+            cursor.execute(
+                """UPDATE bank_transactions
+                      SET status='conciliado', conciliado_em=%s, conciliado_por='auto-troco',
+                          tipo_conciliacao='troco_pix'
+                    WHERE id=%s AND status='pendente'""",
+                (agora, bt_id),
+            )
+            if cursor.rowcount != 1:
+                continue
+            cursor.execute(
+                "UPDATE troco_pix SET bank_transaction_id=%s WHERE id=%s AND bank_transaction_id IS NULL",
+                (bt_id, t['id']),
+            )
+            n += 1
+        conn.commit()
+        if n:
+            logger.info("_auto_vincular_troco_pix: conta %s, %d troco(s) PIX ligado(s)", account_id, n)
+        return n
+    except Exception:
+        conn.rollback()
+        logger.exception("_auto_vincular_troco_pix: falhou (conta %s) — fica para a tela", account_id)
+        return 0
 
 
 def _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping):
