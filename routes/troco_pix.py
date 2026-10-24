@@ -504,9 +504,26 @@ def listar():
         
         # Formatar total do dia para exibição
         total_dia_formatado = formatar_moeda(total_dia)
-        
-        return render_template('troco_pix/listar.html', 
+
+        # No formato da tela da pista: a hora de cada uma e a lista separada
+        # por dia, com o troco do dia no cabecalho. criado_em e UTC (mesma
+        # conta de pista()).
+        brasilia_tz = pytz.timezone('America/Sao_Paulo')
+        dias = []
+        for t in transacoes:
+            ce = t.get('criado_em')
+            t['criado_em_br'] = ((pytz.utc.localize(ce) if ce.tzinfo is None else ce)
+                                 .astimezone(brasilia_tz) if ce else None)
+            if not dias or dias[-1]['data'] != t.get('data'):
+                dias.append({'data': t.get('data'), 'itens': [], 'troco': 0.0})
+            dias[-1]['itens'].append(t)
+            if (t.get('status') or '').upper() != 'CANCELADO':
+                dias[-1]['troco'] += float(t.get('troco_pix') or 0)
+
+        return render_template('troco_pix/listar.html',
                              transacoes=transacoes,
+                             dias=dias,
+                             hoje=data_hoje,
                              clientes=clientes,
                              resumo=resumo,
                              total_dia=total_dia_formatado,

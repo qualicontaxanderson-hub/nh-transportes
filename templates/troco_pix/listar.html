@@ -101,29 +101,64 @@ body > .container-fluid:has(#tpx){
   #tpx .conta{ font-size:.76rem; color:var(--muted); margin-bottom:.5rem;
     font-weight:700; }
 
+  /* O card e o da tela da pista (pista.html): hora, cliente PIX, controle e
+     frentista, valor; venda e cheque embaixo; botoes no pe. O que so o
+     administrativo tem — conciliacao, comprovante, excluir — mora no
+     "Conciliar", que abre o card. */
+  #tpx .dia{ font-size:.8rem; font-weight:800; color:var(--blue-deep);
+    background:#eaf1f9; border-radius:9px; padding:.35rem .6rem;
+    margin:.9rem 0 .45rem; display:flex; gap:.5rem; align-items:center; }
+  #tpx .dia span{ margin-left:auto; font-variant-numeric:tabular-nums; }
+  #tpx .dia[hidden], #tpx .lista[hidden]{ display:none; }
   #tpx .lista{ background:#fff; border:1px solid var(--borda);
     border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(20,35,60,.06); }
   #tpx .c{ border-bottom:1px solid #eef1f5; }
   #tpx .c:last-child{ border-bottom:0; }
   #tpx .c[hidden]{ display:none; }
-  #tpx .c__h{ display:flex; gap:.6rem; padding:.6rem .8rem; align-items:flex-start;
-    cursor:pointer; min-width:0; }
-  #tpx .c__h:hover{ background:#fafbfd; }
-  #tpx .c__ic{ flex:0 0 34px; height:34px; border-radius:9px; background:#eaf1f9;
-    color:var(--blue-deep); display:grid; place-items:center; font-size:.95rem; }
+  #tpx .c__cab{ padding:.65rem .8rem; }
+  #tpx .c__l{ display:flex; gap:.6rem; align-items:flex-start; }
+  #tpx .c__h{ flex:0 0 auto; font-weight:800; font-size:.95rem;
+    font-variant-numeric:tabular-nums; color:var(--blue-deep); }
   #tpx .c__t{ flex:1; min-width:0; }
-  #tpx .c__n{ font-weight:800; font-size:.87rem; line-height:1.3;
+  #tpx .c__n{ font-weight:800; font-size:.87rem; line-height:1.25;
     overflow-wrap:anywhere; }
-  #tpx .c__f{ color:var(--muted); font-size:.74rem; margin-top:.1rem;
+  #tpx .c__f{ color:var(--muted); font-size:.73rem; margin-top:.1rem;
     overflow-wrap:anywhere; }
-  #tpx .c__s{ display:flex; gap:.3rem; flex-wrap:wrap; margin-top:.28rem; }
   #tpx .val{ text-align:right; flex:0 0 auto; }
-  #tpx .val__v{ font-weight:800; font-size:.88rem; color:var(--blue-deep);
+  #tpx .val__v{ font-weight:800; font-size:.95rem; color:var(--blue-deep);
     font-variant-numeric:tabular-nums; white-space:nowrap; }
   #tpx .val__r{ font-size:.66rem; color:var(--muted); white-space:nowrap; }
-  #tpx .chev{ color:var(--muted); font-size:.8rem; align-self:center;
-    transition:transform .2s; }
+  #tpx .val--zero .val__v{ color:var(--muted); font-size:.86rem; }
+  #tpx .par{ display:flex; gap:.9rem; flex-wrap:wrap; margin-top:.4rem;
+    font-size:.78rem; }
+  #tpx .par b{ font-variant-numeric:tabular-nums; }
+  #tpx .par span{ color:var(--muted); }
+  #tpx .pe{ display:flex; align-items:center; gap:.4rem; margin-top:.5rem;
+    flex-wrap:wrap; }
+  #tpx .pe .bt{ border-radius:10px; padding:.42rem .8rem; font-size:.82rem; }
+  #tpx .chev{ font-size:.75rem; transition:transform .2s; }
   #tpx .c.aberto .chev{ transform:rotate(180deg); }
+
+  @media (min-width:992px){
+    #tpx .lista{ display:grid; gap:.6rem; background:transparent; border:0;
+      box-shadow:none; overflow:visible;
+      grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); }
+    #tpx .c{ background:#fff; border:1px solid var(--borda); border-radius:12px;
+      box-shadow:0 2px 10px rgba(20,35,60,.06); display:flex;
+      flex-direction:column; }
+    #tpx .c:last-child{ border-bottom:1px solid var(--borda); }
+    #tpx .c__cab{ display:flex; flex-direction:column; flex:1; }
+    #tpx .c__l{ flex-wrap:wrap; align-items:baseline; row-gap:.15rem; }
+    #tpx .c__h{ order:1; font-size:1rem; }
+    #tpx .c__t{ order:3; flex:1 1 100%; }
+    #tpx .val{ order:4; flex:1 1 100%; text-align:left; margin-top:.15rem; }
+    #tpx .val__v{ font-size:1.3rem; }
+    #tpx .par{ margin-top:.45rem; padding-top:.4rem;
+      border-top:1px solid #eef1f5; gap:.8rem; }
+    #tpx .pe{ margin-top:auto; padding-top:.5rem; }
+    /* aberto, o card ocupa a linha toda: a conciliacao precisa de largura */
+    #tpx .c.aberto{ grid-column:1 / -1; }
+  }
 
   #tpx .selo{ display:inline-block; border-radius:99px; padding:.14rem .5rem;
     font-size:.64rem; font-weight:800; white-space:nowrap; }
@@ -280,8 +315,12 @@ body > .container-fluid:has(#tpx){
 
   <div class="conta" id="tpx-conta"></div>
 
-  <div class="lista" id="tpx-lista">
-    {% for t in transacoes %}
+  {% for d in dias %}
+  <div class="dia"><i class="bi {{ 'bi-calendar-day' if d.data == hoje else 'bi-calendar3' }}"></i>
+    {{ 'Hoje' if d.data == hoje else (d.data.strftime(_fmt) if d.data else '—') }}
+    <span>{{ d.troco | formatar_moeda }}</span></div>
+  <div class="lista">
+    {% for t in d.itens %}
     {% set st = (t.status or '')|upper %}
     {% set ctrl = t.get('numero_sequencial') or '—' %}
     {% set posto = t.posto_nome or '—' %}
@@ -291,23 +330,43 @@ body > .container-fluid:has(#tpx){
     {% set conc = tem_troco and t.get('bank_transaction_id') %}
     <div class="c" data-troco="{{ '1' if tem_troco else '0' }}"
          data-conc="{{ '1' if conc else '0' }}" data-s="{{ st }}"
-         data-busca="{{ (ctrl ~ ' ' ~ posto ~ ' ' ~ pix ~ ' ' ~ dia ~ ' ' ~ ((t.troco_pix or 0)|string)) | lower }}">
-      <div class="c__h" onclick="tpxAbre(this)">
-        <span class="c__ic"><i class="bi bi-cash-coin"></i></span>
+         data-busca="{{ (ctrl ~ ' ' ~ posto ~ ' ' ~ pix ~ ' ' ~ (t.get('frentista_nome') or '') ~ ' ' ~ dia ~ ' ' ~ ((t.troco_pix or 0)|string)) | lower }}">
+      <div class="c__cab">
+      <div class="c__l">
+        <div class="c__h">{{ t.criado_em_br.strftime('%H:%M') if t.criado_em_br else '—' }}</div>
         <div class="c__t">
-          <div class="c__n">{{ posto }}</div>
-          <div class="c__f">{{ dia }}{% if tem_troco %} · {{ pix }}{% endif %}</div>
-          <div class="c__s">
-            <span class="ctrl">{{ ctrl }}</span>
+          <div class="c__n">{{ pix }}</div>
+          <div class="c__f">{{ ctrl }}
+            {%- if t.get('frentista_nome') %} · {{ t.frentista_nome }}{% endif -%}
+          </div>
+        </div>
+        <div class="val {{ '' if tem_troco else 'val--zero' }}">
+          {% if tem_troco %}
+          <div class="val__v">{{ t.troco_pix | formatar_moeda }}</div>
+          <div class="val__r">troco PIX</div>
+          {% else %}
+          <div class="val__v">—</div>
+          <div class="val__r">sem troco</div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="par">
+        <span>Venda <b>{{ (t.venda_total or 0) | formatar_moeda }}</b></span>
+        <span>Cheque <b>{{ (t.cheque_valor or 0) | formatar_moeda }}</b></span>
+        {% if (t.troco_total or 0) != (t.troco_pix or 0) %}
+        <span>Troco total <b>{{ t.troco_total | formatar_moeda }}</b></span>
+        {% endif %}
+      </div>
+      <div class="pe">
+            {% if tem_troco %}
             {# O selo diz o que falta fazer. Sem troco nao falta nada: nao ha
                PIX a mandar nem lancamento a casar no extrato — chamar isso de
                "pendente" punha 16 das 23 do mes numa fila que nao existe. #}
-            {% if not tem_troco %}
-            <span class="selo selo--canc">sem troco</span>
-            {% elif conc %}
+            {% if conc %}
             <span class="selo selo--conc"><i class="bi bi-check-circle"></i> conciliado</span>
             {% else %}
             <span class="selo selo--pend">falta conciliar</span>
+            {% endif %}
             {% endif %}
             {# O aviso que o banco mandou por e-mail na hora do PIX. Nao e
                conciliacao — e a diferenca entre "o troco ja saiu, falta
@@ -335,21 +394,14 @@ body > .container-fluid:has(#tpx){
             {% endif %}
             {% if st == 'CANCELADO' %}
             <span class="selo selo--canc">cancelado</span>{% endif %}
-          </div>
-        </div>
-        <div class="val">
-          {% if tem_troco %}
-          <div class="val__v">{{ t.troco_pix | formatar_moeda }}</div>
-          <div class="val__r">troco PIX</div>
-          {% else %}
-          {# R$ 0,00 com "troco PIX" embaixo nao diz nada. O que esse registro
-             tem de verdade e a venda. #}
-          <div class="val__v" style="color:var(--muted)">
-            {{ (t.venda_total or 0) | formatar_moeda }}</div>
-          <div class="val__r">venda</div>
-          {% endif %}
-        </div>
-        <i class="bi bi-chevron-down chev"></i>
+        <a class="bt" href="{{ url_for('troco_pix.visualizar', troco_pix_id=t.id) }}">
+          <i class="bi bi-eye"></i> Ver</a>
+        <a class="bt bt--ed" href="{{ url_for('troco_pix.editar', troco_pix_id=t.id) }}">
+          <i class="bi bi-pencil"></i> Editar</a>
+        <button type="button" class="bt bt--ghost" onclick="tpxAbre(this)">
+          {{ 'Conciliar' if tem_troco and not conc else 'Detalhes' }}
+          <i class="bi bi-chevron-down chev"></i></button>
+      </div>
       </div>
 
       <div class="c__c" hidden>
@@ -367,6 +419,8 @@ body > .container-fluid:has(#tpx){
             <div class="bloco__t">Quem recebe</div>
             <div class="li"><span class="k">Cliente PIX</span>
               <span class="v">{{ pix }}</span></div>
+            <div class="li"><span class="k">Posto</span>
+              <span class="v">{{ posto }}</span></div>
             {% if t.get('chave_pix') %}
             <div class="li"><span class="k">Chave
               {{ (t.tipo_chave_pix or '')|lower }}</span>
@@ -430,10 +484,6 @@ body > .container-fluid:has(#tpx){
         {% endif %}
 
         <div class="acoes">
-          <a class="bt" href="{{ url_for('troco_pix.visualizar', troco_pix_id=t.id) }}">
-            <i class="bi bi-eye"></i> Ver</a>
-          <a class="bt bt--ed" href="{{ url_for('troco_pix.editar', troco_pix_id=t.id) }}">
-            <i class="bi bi-pencil"></i> Editar</a>
           {% if current_user.nivel.upper() in ['ADMIN', 'GERENTE', 'SUPERVISOR'] %}
           <form method="POST" action="{{ url_for('troco_pix.excluir', troco_pix_id=t.id) }}"
                 onsubmit="return confirm('Excluir esta transação?');">
@@ -446,14 +496,15 @@ body > .container-fluid:has(#tpx){
         </div>
       </div>
     </div>
-    {% else %}
-    <div class="nada">
-      <i class="bi bi-inbox" style="font-size:1.6rem;opacity:.4;display:block;
-         margin-bottom:.4rem;"></i>
-      Nenhuma solicitação nesse período.
-    </div>
     {% endfor %}
   </div>
+  {% else %}
+  <div class="lista"><div class="nada">
+    <i class="bi bi-inbox" style="font-size:1.6rem;opacity:.4;display:block;
+       margin-bottom:.4rem;"></i>
+    Nenhuma solicitação nesse período.
+  </div></div>
+  {% endfor %}
 </div>
 
 <!-- Modal: Vincular Transação Bancária -->
@@ -570,6 +621,15 @@ function tpxAplica(){
     var okB = !termo || (c.getAttribute('data-busca') || '').indexOf(termo) >= 0;
     c.hidden = !(okS && okB);
     if (!c.hidden) vistos++;
+  }
+  // o dia some junto quando nenhum card dele ficou
+  var listas = document.querySelectorAll('#tpx .lista');
+  for (var j = 0; j < listas.length; j++){
+    var l = listas[j];
+    if (!l.querySelector('.c')) continue;
+    l.hidden = !l.querySelector('.c:not([hidden])');
+    var cab = l.previousElementSibling;
+    if (cab && cab.classList.contains('dia')) cab.hidden = l.hidden;
   }
   var conta = document.getElementById('tpx-conta');
   if (conta) {
