@@ -134,6 +134,7 @@ def para_transacao(e):
         'quem': nome or descricao,
         'doc_pessoa': doc,
         'categoria_banco': categoria,
+        'bruto': e,             # o lançamento como o Cora mandou (/extrato-online/bruto)
     }
 
 

@@ -33,7 +33,7 @@ import time
 from collections import OrderedDict
 from datetime import date, datetime, timedelta
 
-from flask import Blueprint, render_template, request
+from flask import Blueprint, Response, json, render_template, request
 from flask_login import login_required
 
 from utils.decorators import admin_required
@@ -186,6 +186,40 @@ def index():
             ctx.update(_consultar_guardado(chave, ini, fim, hoje,
                                            novo=bool(request.args.get('novo'))))
     return render_template('extrato_online/index.html', **ctx)
+
+
+@bp.route('/bruto')
+@login_required
+@admin_required
+def bruto():
+    """Os lançamentos do período como o banco mandou, ao lado do texto que o
+    OFX gravou para o mesmo lançamento — para montar o texto da API igual ao
+    do OFX (as regras e memorizações casam pelo texto). Só lê; baixa um JSON."""
+    hoje = date.today()
+    chave = request.args.get('banco') or ''
+    if chave not in BANCOS:
+        return Response('banco desconhecido', status=400)
+    ini = _data(request.args.get('ini'), hoje)
+    fim = min(_data(request.args.get('fim'), hoje), hoje)
+    if ini > fim or (fim - ini).days + 1 > MAX_DIAS:
+        return Response('período inválido', status=400)
+    res = _consultar_guardado(chave, ini, fim, hoje)
+    if res.get('erro'):
+        return Response(res['erro'], status=502)
+    itens = []
+    for l in res['linhas']:
+        tx, o = l['tx'], l['ofx'] or {}
+        itens.append({'data': str(tx['data_transacao']), 'hora': tx.get('hora'),
+                      'tipo': tx['tipo'], 'valor': tx['valor'],
+                      'texto_api': tx.get('descricao'),
+                      'ofx_descricao': o.get('descricao'), 'ofx_memo': o.get('memo'),
+                      'ofx_fitid': o.get('fitid'), 'texto_igual': l['texto_igual'],
+                      'bruto': tx.get('bruto')})
+    corpo = json.dumps({'banco': chave, 'ini': str(ini), 'fim': str(fim), 'lancamentos': itens},
+                       ensure_ascii=False, indent=1, default=str)
+    nome = f'extrato-{chave}-{ini:%Y%m%d}-{fim:%Y%m%d}.json'
+    return Response(corpo, mimetype='application/json',
+                    headers={'Content-Disposition': f'attachment; filename={nome}'})
 
 
 def _consultar_guardado(chave, ini, fim, hoje, novo=False):

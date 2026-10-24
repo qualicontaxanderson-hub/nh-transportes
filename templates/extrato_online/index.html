@@ -315,6 +315,8 @@ body > .container-fluid:has(#eol){
     <div class="topo__acoes">
       <a href="{{ url_for('bank_import.index') }}"><i class="bi bi-bank"></i> Banco</a>
       <span title="Esta tela não grava nada no sistema"><i class="bi bi-eye"></i> Só consulta</span>
+      {% if consultado and chave.startswith('cora') %}<a href="{{ url_for('extrato_online.bruto', banco=chave, ini=ini.isoformat(), fim=fim.isoformat()) }}"
+        title="O período como o banco mandou, ao lado do texto do OFX"><i class="bi bi-filetype-json"></i> Dados do banco</a>{% endif %}
     </div>
   </div>
 
