@@ -63,7 +63,8 @@ def _cora(conta):
 # dizer "cupom PIX sem PIX no banco".
 BANCOS = {
     'sicoob-nh': {'rotulo': 'SICOOB - NH', 'conta': '5024 / 148.186-0', 'modulo': _sicoob,
-                  'cor': '#00897B', 'credenciadora': '02038232000164'},
+                  'cor': '#00897B', 'credenciadora': '02038232000164',
+                  'fds_no_dia_util': True},     # ver banco_api.proximo_dia_util
     'cora-nh': {'rotulo': 'CORA - NH', 'conta': '0001 / 3456427-0', 'modulo': _cora('posto'),
                 'cor': '#E8336D', 'credenciadora': None},
     'cora-prest': {'rotulo': 'CORA - PREST', 'conta': '0001 / 27677832', 'modulo': _cora('prest'),
@@ -204,13 +205,21 @@ def _consultar_guardado(chave, ini, fim, hoje, novo=False):
 
 
 def _consultar(banco, ini, fim, hoje):
-    from integrations.banco_api import BancoAuthError, BancoError, SemCredencial
+    from integrations.banco_api import BancoAuthError, BancoError, SemCredencial, proximo_dia_util
     from integrations.extrato_cupom import casar as casar_cupons
     mod = banco['modulo']()
     t0 = time.monotonic()
     try:
         # Tela só MOSTRA: o dia de hoje pode entrar (ainda mudando no banco).
-        api = mod.ler(ini, fim, incluir_hoje=True)
+        # No fim de semana o Sicoob já lança o que entra hoje com a data de
+        # segunda: pedido só até hoje, o PIX de hoje não aparecia.
+        fim_banco = fim
+        if fim == hoje and banco.get('fds_no_dia_util'):
+            fim_banco = proximo_dia_util(hoje)
+        api = mod.ler(ini, fim_banco, incluir_hoje=True)
+        for tx in api:
+            if tx['data_transacao'] > hoje:
+                tx['lancado_para'] = tx['data_transacao']
         t1 = time.monotonic()
         r = mod.comparar(api, ini, fim)
     except SemCredencial as exc:

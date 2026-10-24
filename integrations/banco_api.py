@@ -226,11 +226,20 @@ def json_(r, rotulo='banco'):
 # ---------------------------------------------------------------------------
 # Período e texto
 # ---------------------------------------------------------------------------
+def proximo_dia_util(d):
+    """Sábado/domingo -> a segunda seguinte; dia de semana -> o próprio dia.
+
+    O Sicoob lança o que entra no fim de semana com a data do próximo dia útil
+    (conta 10: nenhum lançamento em sáb/dom; seg 19/10/2026 = 423, sáb+dom+seg).
+    Feriado de dia de semana não entra aqui."""
+    return d + timedelta(days=7 - d.weekday()) if d.weekday() >= 5 else d
+
+
 def validar_periodo(inicio, fim, incluir_hoje=False):
     """Por padrão só dias FECHADOS (até ontem): quem for GRAVAR não pode pegar
     dia pela metade — a segunda consulta acharia lançamentos novos no meio
     dos antigos. ``incluir_hoje`` é só para quem MOSTRA (a tela de consulta)."""
-    limite = date.today() if incluir_hoje else date.today() - timedelta(days=1)
+    limite = proximo_dia_util(date.today()) if incluir_hoje else date.today() - timedelta(days=1)
     if fim > limite:
         raise ValueError(f'Período até {fim} passa do permitido ({limite}).')
     if inicio > fim:
