@@ -158,6 +158,23 @@ def _pela_ordem(pix, out, livres, usados):
                                    'candidatos': [], 'minutos': None,
                                    'janela': (lo, hi)}
                     mudou = True
+        # A hora que o banco não deu: a do cupom (o PIX entra minutos antes
+        # da nota sair) ou, sem cupom, entre os vizinhos que têm.
+        for i, tx in enumerate(txs):
+            if tx.get('hora'):
+                continue
+            h = hora_cupom(tx)
+            if h:
+                tx['hora_aprox'] = h.strftime('%H:%M')
+                continue
+            antes = next((h for h in map(hora_cupom, reversed(txs[:i])) if h), None)
+            depois = next((h for h in map(hora_cupom, txs[i + 1:]) if h), None)
+            lo, hi = (depois, antes) if novo_antes else (antes, depois)
+            if lo and hi and lo.date() == hi.date():
+                tx['hora_entre'] = (lo.strftime('%H:%M'), hi.strftime('%H:%M'))
+            elif lo or hi:
+                tx['hora_entre'] = (lo.strftime('%H:%M') if lo else None,
+                                    hi.strftime('%H:%M') if hi else None)
 
 
 def casar(pix, ini, fim, credenciadora=None):
