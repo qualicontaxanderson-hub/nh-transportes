@@ -382,8 +382,8 @@ body > .container-fluid:has(#eol){
   <div class="kpis">
     <div class="kpi k1"><span>PIX recebidos</span><b>{{ milhar(pix.n) }} · {{ pix.total | fmtmoney }}</b>
       <small>{{ ini.strftime('%d/%m') }}{% if fim != ini %} a {{ fim.strftime('%d/%m') }}{% endif %} · {{ banco.rotulo }}</small></div>
-    <div class="kpi k2"><span>Casados com cupom</span><b>{{ milhar(pix.casou) }}</b>
-      <small>{{ '%.0f'|format(pix.casou / pix.n * 100) }}% — PIX ⇄ NFC-e das Vendas Migradas</small></div>
+    <div class="kpi k2"><span>Casados com cupom</span><b>{{ milhar(pix.casou) }}{% if pix.provavel %} <small>+ {{ milhar(pix.provavel) }} quase</small>{% endif %}</b>
+      <small>{{ '%.0f'|format(pix.casou / pix.n * 100) }}% reconhecidos com certeza{% if pix.provavel %} · {{ milhar(pix.provavel) }} quase certos (laranja){% endif %} — PIX ⇄ NFC-e</small></div>
     <div class="kpi k3"><span>PIX sem cupom certo</span><b>{{ milhar(pix.sem + pix.possiveis) }}</b>
       <small>{{ milhar(pix.sem) }} sem cupom · {{ milhar(pix.possiveis) }} com mais de um possível</small></div>
     {% if banco.credenciadora %}
@@ -543,10 +543,14 @@ body > .container-fluid:has(#eol){
         </div>
 
         {%- if cp %}
-        {% if cp.status == 'casou' %}{% set cu = cp.cupom %}
-        <div class="ca__bl">
+        {% if cp.status in ('casou', 'provavel') %}{% set cu = cp.cupom %}
+        <div class="ca__bl{{ ' ca__bl--amb' if cp.status == 'provavel' else '' }}">
           <h4><i class="bi bi-receipt"></i> Cupom do abastecimento
-            <span class="chip chip--ok"><i class="bi bi-check2"></i> {{ {'nome': 'pelo nome', 'hora': 'valor e hora', 'dia': 'valor no dia', 'extrato': 'Extrato Pix'}[cp.metodo] }}</span></h4>
+            {% if cp.status == 'casou' %}
+            <span class="chip chip--ok"><i class="bi bi-check2-all"></i> 100% reconhecido · {{ {'nome': 'pelo nome', 'hora': 'valor e hora', 'dia': 'único do valor no dia', 'extrato': 'Extrato Pix'}[cp.metodo] }}</span>
+            {% else %}{% set lo, hi = cp.janela %}
+            <span class="chip chip--amb" title="o banco manda os PIX na ordem em que entraram: este ficou entre os vizinhos já reconhecidos, e só este cupom do valor cai nessa janela"><i class="bi bi-check2"></i> quase certo · pela ordem{% if lo or hi %} ({{ lo.strftime('%H:%M') if lo else '…' }}–{{ hi.strftime('%H:%M') if hi else '…' }}){% endif %}</span>
+            {% endif %}</h4>
           <dl class="ca__g">
             <div><dt>NFC-e</dt><dd>{{ cu.numero }} · {{ cu.dh_emissao.strftime('%H:%M') }}</dd></div>
             <div><dt>Frentista</dt><dd>{{ cu.vendedor or '—' }}</dd></div>

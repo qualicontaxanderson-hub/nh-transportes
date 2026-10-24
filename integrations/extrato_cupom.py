@@ -111,9 +111,60 @@ def _dia_real(tx, d, fonte):
         tx['dia_pelo_cupom'] = fonte
 
 
+def _pela_ordem(pix, out, livres, usados):
+    """Os PIX vêm do banco na ordem em que entraram (o OFX do Sicoob, do mais
+    novo para o mais antigo: 540 de 540 em 16-21/10/2026, contra a hora do
+    Extrato Pix). Um PIX com vários cupons possíveis entrou entre os vizinhos
+    que já casaram: se só um dos candidatos cai nessa janela, é ele -- "quase
+    certo", não 100%. A direção sai dos próprios casados (a API pode não usar
+    a do OFX); ordem confusa -> não chuta.
+
+    Por data do banco: a lista vem ordenada por dia, e a ordem do banco só
+    vale dentro do mesmo dia."""
+    grupos = defaultdict(list)
+    for tx in pix:
+        grupos[tx.get('data_banco') or tx['data_transacao']].append(tx)
+
+    def hora_cupom(tx):
+        o = out.get(id(tx))
+        return o['cupom']['dh_emissao'] if o and o['cupom'] else None
+
+    for txs in grupos.values():
+        ancoras = [h for h in map(hora_cupom, txs) if h]
+        if len(ancoras) < 3:
+            continue
+        sobe = sum(1 for a, b in zip(ancoras, ancoras[1:]) if b > a)
+        desce = sum(1 for a, b in zip(ancoras, ancoras[1:]) if b < a)
+        if max(sobe, desce) < 0.9 * (sobe + desce):
+            continue                    # ordem não é a do relógio
+        novo_antes = desce > sobe       # do mais novo para o mais antigo
+        mudou = True
+        while mudou:
+            mudou = False
+            for i, tx in enumerate(txs):
+                if out[id(tx)]['status'] != 'possiveis':
+                    continue
+                antes = next((h for h in map(hora_cupom, reversed(txs[:i])) if h), None)
+                depois = next((h for h in map(hora_cupom, txs[i + 1:]) if h), None)
+                lo, hi = (depois, antes) if novo_antes else (antes, depois)
+                cs = [c for c in livres(tx)
+                      if (lo is None or c['dh_emissao'] >= lo - JANELA_HORA)
+                      and (hi is None or c['dh_emissao'] <= hi + JANELA_HORA)]
+                if len(cs) == 1:
+                    c = cs[0]
+                    usados.add(c['id'])
+                    _dia_real(tx, c['dh_emissao'].date(), 'cupom')
+                    out[id(tx)] = {'status': 'provavel', 'metodo': 'ordem', 'cupom': c,
+                                   'candidatos': [], 'minutos': None,
+                                   'janela': (lo, hi)}
+                    mudou = True
+
+
 def casar(pix, ini, fim, credenciadora=None):
     """pix: transações (formato do adapter) de PIX RECEBIDO.
 
+    status: 'casou' (100%), 'provavel' (pela ordem do banco, quase certo),
+    'possiveis' (vários, a pessoa escolhe) ou 'sem'.
     Devolve ({id(tx): {'status', 'metodo', 'cupom', 'candidatos', 'minutos'}},
              cupons_sem_pix). cupons_sem_pix só faz sentido para o banco que
     liquida o PIX do cupom (credenciadora) — para os outros volta [].
@@ -193,7 +244,6 @@ def casar(pix, ini, fim, credenciadora=None):
         if cs:
             liga(tx, preferido(cs, tx), 'hora')
     # 3) valor + dia: só um candidato casa; vários ficam para escolher
-    em_aberto = set()                   # cupons que são candidatos de algum PIX
     for tx in pix:
         if id(tx) in out:
             continue
@@ -201,9 +251,16 @@ def casar(pix, ini, fim, credenciadora=None):
         if _quando(tx) is None and len(cs) == 1:
             liga(tx, cs[0], 'dia')
         else:
-            em_aberto.update(c['id'] for c in cs)
             out[id(tx)] = {'status': 'possiveis' if cs else 'sem', 'metodo': None, 'cupom': None,
                            'candidatos': cs[:3], 'minutos': None}
+
+    # 4) ordem do banco: o PIX sem hora fica entre os vizinhos que já casaram.
+    _pela_ordem(pix, out, livres, usados)
+
+    em_aberto = set()                   # cupons que são candidatos de algum PIX
+    for tx in pix:
+        if out[id(tx)]['status'] == 'possiveis':
+            em_aberto.update(c['id'] for c in livres(tx))
 
     # "Cupom PIX sem PIX" é só o que nenhum PIX do período pode ter pago — o
     # cupom que é candidato de um PIX com vários possíveis não entra.

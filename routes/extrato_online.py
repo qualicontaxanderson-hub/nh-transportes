@@ -326,6 +326,7 @@ def _consultar(banco, ini, fim, hoje):
             'tempos': {'banco': t1 - t0, 'sistema': t2 - t1, 'cupons': t3 - t2},
             'pix': {'n': len(pix_in), 'total': sum(l['tx']['valor'] for l in pix_in),
                     'casou': sum(1 for c in cup if c.get('status') == 'casou'),
+                    'provavel': sum(1 for c in cup if c.get('status') == 'provavel'),
                     'possiveis': sum(1 for c in cup if c.get('status') == 'possiveis'),
                     'sem': sum(1 for c in cup if c.get('status') == 'sem'),
                     'cupons_sem_pix': sem_pix},
