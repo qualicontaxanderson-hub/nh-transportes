@@ -226,13 +226,34 @@ def json_(r, rotulo='banco'):
 # ---------------------------------------------------------------------------
 # Período e texto
 # ---------------------------------------------------------------------------
-def proximo_dia_util(d):
-    """Sábado/domingo -> a segunda seguinte; dia de semana -> o próprio dia.
+def dia_util(d):
+    """Seg-sex fora dos feriados nacionais (utils/feriados; municipal não entra)."""
+    from utils.feriados import nacionais
+    return d.weekday() < 5 and d not in nacionais(d.year)
 
-    O Sicoob lança o que entra no fim de semana com a data do próximo dia útil
-    (conta 10: nenhum lançamento em sáb/dom; seg 19/10/2026 = 423, sáb+dom+seg).
-    Feriado de dia de semana não entra aqui."""
-    return d + timedelta(days=7 - d.weekday()) if d.weekday() >= 5 else d
+
+def proximo_dia_util(d):
+    """O próprio dia, se útil; senão o próximo dia útil.
+
+    O Sicoob lança o que entra no fim de semana/feriado com a data do próximo
+    dia útil (conta 10: nenhum lançamento em sáb/dom; seg 19/10/2026 = 423,
+    sáb+dom+seg)."""
+    while not dia_util(d):
+        d += timedelta(days=1)
+    return d
+
+
+def dias_possiveis(d_banco, hoje):
+    """Em que dias pode ter entrado um lançamento que o Sicoob datou d_banco:
+    ele mesmo e os dias não úteis logo antes, nunca depois de hoje.
+    Seg 26/10 consultada no sábado 24 -> [24]; no domingo -> [24, 25];
+    na segunda -> [24, 25, 26]. Dia útil comum -> só ele."""
+    dias = [d_banco]
+    p = d_banco - timedelta(days=1)
+    while not dia_util(p):
+        dias.insert(0, p)
+        p -= timedelta(days=1)
+    return [d for d in dias if d <= hoje] or [d_banco]
 
 
 def validar_periodo(inicio, fim, incluir_hoje=False):

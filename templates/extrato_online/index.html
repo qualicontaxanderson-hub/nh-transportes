@@ -532,7 +532,7 @@ body > .container-fluid:has(#eol){
             <span class="ca__ic"><i class="bi {{ c.icone }}"></i></span>
             <div>
               <div class="ca__hora">{{ tx.hora or tx.data_transacao.strftime('%d/%m') }}</div>
-              <div class="ca__dia">{{ _sem[tx.data_transacao.weekday()]|lower }} {{ tx.data_transacao.strftime('%d/%m') }}{% if not tx.hora %} · sem hora{% elif tx.hora_fonte %} · hora do {{ tx.hora_fonte }}{% endif %}{% if tx.lancado_para %} · entrou no fim de semana, o banco lança nesta data{% endif %}</div>
+              <div class="ca__dia">{{ _sem[tx.data_transacao.weekday()]|lower }} {{ tx.data_transacao.strftime('%d/%m') }}{% if not tx.hora %} · sem hora{% elif tx.hora_fonte %} · hora do {{ tx.hora_fonte }}{% endif %}{% if tx.data_banco %}{% if tx.dias|length > 1 and not tx.dia_pelo_cupom %} · entrou entre {{ tx.dias[0].strftime('%d/%m') }} e {{ tx.dias[-1].strftime('%d/%m') }}{% elif tx.dia_pelo_cupom %} · dia pelo {{ tx.dia_pelo_cupom }}{% endif %} · banco lança {{ tx.data_banco.strftime('%d/%m') }}{% endif %}</div>
             </div>
             <div class="ca__v {{ 'pos' if tx.tipo == 'CREDIT' else 'neg' }}">{{ '' if tx.tipo == 'CREDIT' else '−' }}{{ tx.valor | fmtmoney }}</div>
           </div>

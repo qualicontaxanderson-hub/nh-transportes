@@ -98,6 +98,19 @@ def _quando(tx):
     return datetime.combine(tx['data_transacao'], datetime.min.time()).replace(hour=int(h), minute=int(m))
 
 
+def _dias(tx):
+    """Os dias em que o PIX pode ter entrado: tx['dias'] quando o banco lançou
+    em outro dia útil (fim de semana/feriado, ver banco_api.dias_possiveis)."""
+    return tx.get('dias') or [tx['data_transacao']]
+
+
+def _dia_real(tx, d, fonte):
+    """Vários dias possíveis e o cupom/Extrato Pix achado diz qual foi."""
+    if len(_dias(tx)) > 1:
+        tx['data_transacao'] = d
+        tx['dia_pelo_cupom'] = fonte
+
+
 def casar(pix, ini, fim, credenciadora=None):
     """pix: transações (formato do adapter) de PIX RECEBIDO.
 
@@ -105,6 +118,7 @@ def casar(pix, ini, fim, credenciadora=None):
              cupons_sem_pix). cupons_sem_pix só faz sentido para o banco que
     liquida o PIX do cupom (credenciadora) — para os outros volta [].
     """
+    ini = min([ini] + [_dias(tx)[0] for tx in pix])
     cupons = _cupons(ini, fim)
     usados, out = set(), {}
 
@@ -113,10 +127,11 @@ def casar(pix, ini, fim, credenciadora=None):
 
     def livres(tx):
         return [c for c in cupons if c['id'] not in usados and mesmo_valor(c, tx)
-                and c['dh_emissao'].date() == tx['data_transacao']]
+                and c['dh_emissao'].date() in _dias(tx)]
 
     def liga(tx, c, metodo):
         usados.add(c['id'])
+        _dia_real(tx, c['dh_emissao'].date(), 'cupom')
         q = _quando(tx)
         out[id(tx)] = {'status': 'casou', 'metodo': metodo, 'cupom': c, 'candidatos': [],
                        'minutos': (round((q - c['dh_emissao']).total_seconds() / 60) if q else None)}
@@ -141,7 +156,7 @@ def casar(pix, ini, fim, credenciadora=None):
             if tx.get('hora'):
                 continue
             nomes = set(_palavras(tx.get('quem')))
-            cs = [p for p in extrato if p['id'] not in presos and p['dt'].date() == tx['data_transacao']
+            cs = [p for p in extrato if p['id'] not in presos and p['dt'].date() in _dias(tx)
                   and abs(float(p['valor']) - float(tx['valor'])) < 0.005]
             pelo_nome = [p for p in cs if nomes and _palavras(p['pagador'])[:1]
                          and _palavras(p['pagador'])[0] in nomes]
@@ -151,6 +166,7 @@ def casar(pix, ini, fim, credenciadora=None):
                 continue                # ambíguo: não chuta a hora
             p = min(cs, key=lambda p: p['dt'])
             presos.add(p['id'])
+            _dia_real(tx, p['dt'].date(), 'Extrato Pix')
             tx['hora'] = p['dt'].strftime('%H:%M')
             tx['hora_fonte'] = 'Extrato Pix'
             c = por_id.get(p['vendas_xml_id'])

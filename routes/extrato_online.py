@@ -205,23 +205,31 @@ def _consultar_guardado(chave, ini, fim, hoje, novo=False):
 
 
 def _consultar(banco, ini, fim, hoje):
-    from integrations.banco_api import BancoAuthError, BancoError, SemCredencial, proximo_dia_util
+    from integrations.banco_api import (BancoAuthError, BancoError, SemCredencial,
+                                        dias_possiveis, proximo_dia_util)
     from integrations.extrato_cupom import casar as casar_cupons
     mod = banco['modulo']()
     t0 = time.monotonic()
     try:
         # Tela só MOSTRA: o dia de hoje pode entrar (ainda mudando no banco).
-        # No fim de semana o Sicoob já lança o que entra hoje com a data de
-        # segunda: pedido só até hoje, o PIX de hoje não aparecia.
+        # No fim de semana/feriado o Sicoob já lança o que entra hoje com a
+        # data do próximo dia útil: pedido só até hoje, o PIX de hoje não vinha.
         fim_banco = fim
         if fim == hoje and banco.get('fds_no_dia_util'):
             fim_banco = proximo_dia_util(hoje)
         api = mod.ler(ini, fim_banco, incluir_hoje=True)
-        for tx in api:
-            if tx['data_transacao'] > hoje:
-                tx['lancado_para'] = tx['data_transacao']
         t1 = time.monotonic()
-        r = mod.comparar(api, ini, fim)
+        r = mod.comparar(api, ini, fim)     # banco × OFX: pela data do banco
+        if banco.get('fds_no_dia_util'):
+            # Para a tela, o dia em que ENTROU. Um dia só possível (sábado
+            # consultado no sábado) -> é ele; vários (domingo, segunda) -> o
+            # cupom decide em extrato_cupom.casar.
+            for tx in api:
+                dias = dias_possiveis(tx['data_transacao'], hoje)
+                if dias != [tx['data_transacao']]:
+                    tx['data_banco'] = tx['data_transacao']
+                    tx['dias'] = dias
+                    tx['data_transacao'] = dias[0] if len(dias) == 1 else tx['data_banco']
     except SemCredencial as exc:
         return {'erro': f'Falta configurar o acesso ao banco: {exc}'}
     except BancoAuthError as exc:
