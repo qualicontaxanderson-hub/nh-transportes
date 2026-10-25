@@ -248,6 +248,7 @@ def ler(inicio, fim, sessao=None, incluir_hoje=False):
     api.validar_periodo(inicio, fim, incluir_hoje)
     sessao = sessao or abrir_sessao()
     txs = []
+    res = {}
     for ano, mes, di, df in _meses(inicio, fim):
         d = buscar_extrato_mes(sessao, ano, mes, di, df)
         res = d.get('resultado')
@@ -259,7 +260,24 @@ def ler(inicio, fim, sessao=None, incluir_hoje=False):
     fora = [t for t in txs if not inicio <= t['data_transacao'] <= fim]
     if fora:
         logger.warning('[sicoob] %d transações fora de %s..%s descartadas.', len(fora), inicio, fim)
-    return [t for t in txs if inicio <= t['data_transacao'] <= fim]
+    out = api.Extrato(t for t in txs if inicio <= t['data_transacao'] <= fim)
+    _saldo(out, res)
+    return out
+
+
+def _saldo(out, res):
+    """O saldo da conta AGORA, que a resposta do extrato traz junto
+    (resultado.saldoAtual). Sem o campo, a tela diz que o banco não informou
+    — e o log guarda o que veio, para achar o nome certo."""
+    bruto = res.get('saldoAtual')
+    try:
+        out.saldo = round(float(str(bruto).replace(',', '.')), 2) if bruto is not None else None
+    except ValueError:
+        out.saldo = None
+    out.saldo_quando = 'agora'
+    if out.saldo is None:
+        logger.warning('[sicoob] extrato sem saldoAtual; campos: %s',
+                       {k: v for k, v in res.items() if k != 'transacoes'})
 
 
 def comparar(api_txs, inicio, fim):

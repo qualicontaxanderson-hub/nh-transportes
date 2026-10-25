@@ -454,6 +454,10 @@ def _consultar(banco, ini, fim, hoje):
     cup = [l['cupom'] or {} for l in pix_in]
     return {'consultado': True, 'linhas': linhas, 'cards': cards, 'so_ofx': r['so_ofx'],
             'gravou': gravou,
+            # o saldo que o banco informou na mesma resposta (banco_api.Extrato)
+            'saldo_banco': {'valor': getattr(api, 'saldo', None),
+                            'quando': getattr(api, 'saldo_quando', ''),
+                            'obs': getattr(api, 'saldo_obs', '')},
             'inclui_hoje': fim >= hoje, 'so_hoje': so_hoje, 'por_dia': por_dia,
             'consultado_em': datetime.now().strftime('%H:%M'),
             'tempos': {'banco': t1 - t0, 'sistema': t2 - t1, 'cupons': t3 - t2},

@@ -51,6 +51,18 @@ class TransacaoInvalida(BancoError):
     """Transação num formato desconhecido — não se adivinha."""
 
 
+class Extrato(list):
+    """O que ler() devolve: a lista de lançamentos (quem só quer a lista não
+    percebe a diferença) e o SALDO que o banco informou na mesma resposta.
+
+    saldo: em reais, ou None quando o banco não mandou (ou não fechou a
+    conta). saldo_quando: 'agora' ou 'fim de dd/mm'. saldo_obs: aviso curto
+    para a tela quando o número não pôde ser conferido."""
+    saldo = None
+    saldo_quando = ''
+    saldo_obs = ''
+
+
 def _consulta_sefaz():
     """scripts/consulta_sefaz, como o routes/dfe_compras importa."""
     raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

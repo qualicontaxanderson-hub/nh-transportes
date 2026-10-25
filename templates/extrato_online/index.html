@@ -110,6 +110,13 @@ body > .container-fluid:has(#eol){
   #eol .caixa--ok .caixa__v{ color:var(--ok); }
   #eol .caixa--dif .caixa__v{ color:var(--ambar); }
   #eol .caixa__s{ font-size:.76rem; color:#3a4655; margin-top:.25rem; font-weight:600; }
+  #eol .saldo-banco{ display:flex; flex-wrap:wrap; align-items:baseline; gap:.15rem .6rem;
+    margin:.6rem 0 .1rem; padding:.45rem .65rem; border-radius:10px; background:rgba(255,255,255,.7); }
+  #eol .saldo-banco__r{ font-size:.64rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.04em; color:#3a4655; }
+  #eol .saldo-banco__v{ font-size:1.15rem; font-weight:800; color:#14253a; }
+  #eol .saldo-banco__v.neg{ color:#b42318; }
+  #eol .saldo-banco__o{ font-size:.72rem; font-weight:600; color:#6b7684; }
   #eol .cmp{ width:100%; margin-top:.7rem; border-collapse:separate; border-spacing:0;
     background:#fff; border:1px solid var(--borda); border-radius:10px; overflow:hidden;
     font-size:.8rem; font-variant-numeric:tabular-nums; }
@@ -407,6 +414,16 @@ body > .container-fluid:has(#eol){
       <div class="caixa__s">
         {% if rr.bateu %}o banco e o sistema têm os mesmos {{ milhar(rr.total) }} lançamentos, com os mesmos valores
         {% else %}{{ milhar(rr.faltam) }} só no banco · {{ milhar(rr.so_ofx) }} só no sistema{% endif %}
+      </div>
+      {% set sb = saldo_banco or {} %}
+      <div class="saldo-banco">
+        <span class="saldo-banco__r">Saldo no banco{% if sb.quando %} · {{ sb.quando }}{% endif %}</span>
+        {% if sb.valor is not none %}
+        <span class="saldo-banco__v {{ 'neg' if sb.valor < 0 else '' }}">{{ sb.valor | fmtmoney }}</span>
+        {% if sb.obs %}<span class="saldo-banco__o">{{ sb.obs }}</span>{% endif %}
+        {% else %}
+        <span class="saldo-banco__o">o banco não informou o saldo nesta consulta</span>
+        {% endif %}
       </div>
       <table class="cmp">
         <tr><th></th><th>Banco (API)</th><th>Sistema (OFX)</th></tr>

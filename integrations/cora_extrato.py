@@ -196,6 +196,35 @@ def _conferir_total(entradas, agg):
             f'nesta consulta.')
 
 
+def _centavos(bloco):
+    if isinstance(bloco, dict) and bloco.get('balance') is not None:
+        try:
+            return int(bloco['balance'])
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _saldo(out, topo, txs, fim):
+    """O saldo ao FIM do período, a partir do start/end.balance que a
+    resposta do extrato traz. Só vale se fecha a conta: saldo inicial +
+    lançamentos lidos = saldo final; senão o número não vai para a tela
+    como certo. Pediu-se um dia a mais depois do fim (fuso): o que caiu
+    nesse dia sai do saldo final."""
+    ini_c, fim_c = _centavos(topo.get('start')), _centavos(topo.get('end'))
+    if fim_c is None:
+        logger.warning('[cora] extrato sem end.balance; chaves: %s', sorted(topo))
+        return
+    sinal = lambda t: round(t['valor'] * 100) * (1 if t['tipo'] == 'CREDIT' else -1)
+    if ini_c is not None and ini_c + sum(sinal(t) for t in txs) != fim_c:
+        logger.warning('[cora] saldo não fecha: start %s + lançamentos %s != end %s',
+                       ini_c, sum(sinal(t) for t in txs), fim_c)
+        out.saldo_obs = 'o banco informou, mas não fecha com os lançamentos'
+    depois = sum(sinal(t) for t in txs if t['data_transacao'] > fim)
+    out.saldo = (fim_c - depois) / 100
+    out.saldo_quando = 'agora' if fim >= date.today() else f"fim de {fim:%d/%m}"
+
+
 # ---------------------------------------------------------------------------
 # Uma conta Cora: credenciais próprias, a mesma leitura
 # ---------------------------------------------------------------------------
@@ -242,9 +271,11 @@ class ContaCora:
         # dias em UTC ou em Brasília, e o PIX das 22h de Brasília já é o dia
         # seguinte em UTC. Pede-se a mais e filtra-se aqui, no horário de Brasília.
         pede_ini, pede_fim = inicio - timedelta(days=1), fim + timedelta(days=1)
-        entradas, vistos, agg = [], set(), None
+        entradas, vistos, agg, topo = [], set(), None, None
         for pagina in range(1, MAX_PAGINAS + 1):
             d = self.buscar_pagina(sessao, pede_ini, pede_fim, pagina)
+            if topo is None:
+                topo = d
             lote = d.get('entries') or []
             if not isinstance(lote, list):
                 raise TransacaoInvalida(f'entries não é lista: chaves {sorted(d)}')
@@ -265,7 +296,9 @@ class ContaCora:
         txs = [para_transacao(e) for e in entradas]
         if agg:
             _conferir_total(entradas, agg)
-        return [t for t in txs if inicio <= t['data_transacao'] <= fim]
+        out = api.Extrato(t for t in txs if inicio <= t['data_transacao'] <= fim)
+        _saldo(out, topo or {}, txs, fim)
+        return out
 
     def comparar(self, api_txs, inicio, fim):
         """API × OFX desta conta."""
