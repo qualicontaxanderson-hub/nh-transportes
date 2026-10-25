@@ -413,7 +413,7 @@ def _consultar(banco, ini, fim, hoje):
         # vizinhos —, e o período mostra só os seus dias.
         _dia_pelos_vizinhos(api)
         linhas, r = _so_do_periodo(linhas, r, ini, fim)
-        pix_in = [l for l in pix_in if l in linhas]
+        pix_in = [l for l in pix_in if any(l is m for m in linhas)]
         linhas.sort(key=lambda l: (l['tx']['data_transacao'], l['tx'].get('hora') or '',
                                    ordem.get(id(l['tx']), 0)))
     t3 = time.monotonic()
