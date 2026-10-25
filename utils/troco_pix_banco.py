@@ -12,6 +12,9 @@ sempre no MESMO documento (nenhum variou); 182 com o nome igual, 66 parecidos
 (digitação, nome incompleto) e 10 em que a chave é de OUTRA pessoa — o
 cadastro MARCELO ROSA DE OLIVEIRA tem como chave o CPF da ALVANIRA. Esses não
 podem ser "corrigidos": a tela só avisa.
+
+Nada aqui é decidido sozinho: a tela mostra a diferença e quem quiser troca
+o nome no botão "Atualizar nome" (só para os parecidos).
 """
 import re
 import unicodedata
@@ -40,30 +43,49 @@ def doc_formatado(d):
     return d
 
 
+def _conserta(txt):
+    """'ABÃ­LIO' -> 'ABÍLIO': parte dos OFX foi gravada com o UTF-8 lido
+    como Latin-1. Só troca se a volta der certo."""
+    if 'Ã' not in txt and 'Â' not in txt:
+        return txt
+    try:
+        return txt.encode('latin-1').decode('utf-8')
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return txt
+
+
 def nome_do_texto(descricao):
     """O nome do favorecido no texto do banco, em maiúsculas; None se o
     texto não tem o formato 'tipo - NOME - documento'."""
     m = _TEXTO.match(descricao or '')
     if not m:
         return None
-    nome = _RAIZ_MEI.sub('', m.group('nome')).strip()
+    nome = _RAIZ_MEI.sub('', _conserta(m.group('nome'))).strip()
     return re.sub(r'\s+', ' ', nome.upper()) or None
+
+
+# Sufixo de empresa não diz quem é: 'MENEZES E MENEZES' e 'MENESES E MENESES
+# TRANSPORTES LTDA' são a mesma.
+_SUFIXOS = re.compile(r'\b(LTDA|EIRELI|ME|EPP|MEI|S\.?A|UNIPESSOAL|TRANSPORTES?|LOGISTICA|E|DOS?|DAS?)\b')
+
+
+def _essencia(nome):
+    return re.sub(r'\s+', ' ', _SUFIXOS.sub(' ', sem_acento(nome))).strip()
 
 
 def comparar_nome(cliente, banco):
     """'igual' | 'parecido' | 'outra' — o cadastro × o banco.
 
-    Parecido: diferença de digitação/acento, nome incompleto, ou a chave do
-    cadastro é o próprio CPF/CNPJ que o banco mostrou (mesma pessoa/empresa,
-    outro nome). O resto é a chave de OUTRA pessoa.
+    Parecido: diferença de digitação/acento ou nome incompleto. O resto é
+    chave de OUTRA pessoa — mesmo quando a chave é um CPF/CNPJ: o cadastro
+    MARCELO ROSA DE OLIVEIRA tem o CPF da ALVANIRA como chave, e "atualizar"
+    trocaria o cliente pela pessoa que recebe.
     """
     a, b = sem_acento(cliente.get('nome_completo')), sem_acento(banco['nome'])
     if a == b:
         return 'igual'
-    if (cliente.get('tipo_chave_pix') in ('CPF', 'CNPJ')
-            and so_digitos(cliente.get('chave_pix')) == banco['doc']):
-        return 'parecido'
-    if a and (a in b or b in a or SequenceMatcher(None, a, b).ratio() >= 0.8):
+    ea, eb = _essencia(a), _essencia(b)
+    if ea and eb and (ea in eb or eb in ea or SequenceMatcher(None, ea, eb).ratio() >= 0.8):
         return 'parecido'
     return 'outra'
 
