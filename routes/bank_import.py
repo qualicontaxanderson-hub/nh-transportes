@@ -1252,7 +1252,7 @@ def _auto_ligar_transferencia(cursor, conn, dias=60):
                   FROM bank_transactions
                  WHERE status='pendente' AND account_id IN ({ph})
                    AND data_transacao >= CURDATE() - INTERVAL %s DAY
-                   AND (hash_dedup IS NULL OR hash_dedup NOT LIKE 'TRANSFER\_%%')""",
+                   AND (hash_dedup IS NULL OR LEFT(hash_dedup, 9) <> 'TRANSFER_')""",
             list(dono) + [dias])
         pend = cursor.fetchall()
 
