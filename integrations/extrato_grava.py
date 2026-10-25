@@ -26,6 +26,7 @@ Cada lançamento precisa de um id estável ('id_banco'): o Cora dá o seu
 import hashlib
 import logging
 from collections import defaultdict
+from datetime import date, timedelta
 
 from integrations.banco_api import prefixo_comum
 
@@ -45,6 +46,10 @@ CREATE TABLE IF NOT EXISTS `bank_api_ids` (
 """
 
 PREFIXO_HASH = 'api:'
+# Só INSERE lançamento destes últimos dias. Mais antigo, a API só reconhece o
+# que o OFX gravou: no histórico, um lançamento que falta no sistema pode ter
+# sido apagado de propósito (duplicado, espelho) — não se ressuscita.
+DIAS_GRAVA = 3
 
 
 _tabela_ok = False
@@ -101,7 +106,7 @@ def emparelhar(lado_a, lado_b, texto_a, texto_b, doc_a, doc_b):
     return pares, sobra
 
 
-def sincronizar(mod, api_txs, cursor, conn):
+def sincronizar(mod, api_txs, cursor, conn, hoje=None):
     """Grava no sistema o que a API trouxe e o sistema ainda não tem.
 
     mod: o adapter da conta (account_id, texto_como_ofx). api_txs: a saída de
@@ -111,7 +116,7 @@ def sincronizar(mod, api_txs, cursor, conn):
     conta = mod.account_id
     garantir_tabela(cursor)
     txs = [t for t in api_txs if t.get('id_banco')]
-    r = {'novos': 0, 'casados_ofx': 0, 'ja_tinha': 0}
+    r = {'novos': 0, 'casados_ofx': 0, 'ja_tinha': 0, 'antigos_fora': 0}
     if not txs:
         return r
 
@@ -145,6 +150,13 @@ def sincronizar(mod, api_txs, cursor, conn):
             "VALUES (%s, %s, %s, 'ofx')", (conta, a['id_banco'], b['id']))
     r['casados_ofx'] = len(pares)
     conn.commit()
+    desde = (hoje or date.today()) - timedelta(days=DIAS_GRAVA)
+    antigos = [a for a in sobra if a['data_transacao'] < desde]
+    if antigos:
+        r['antigos_fora'] = len(antigos)
+        logger.warning('[extrato_grava] conta %s: %d lançamento(s) de antes de %s só na API '
+                       '— não gravados', conta, len(antigos), desde)
+    sobra = [a for a in sobra if a['data_transacao'] >= desde]
     if not sobra:
         return r
 
