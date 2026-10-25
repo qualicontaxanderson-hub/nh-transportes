@@ -26,7 +26,6 @@ Só grava a conta cujo módulo sabe dar um id estável por lançamento (Cora:
 import hashlib
 import logging
 from collections import defaultdict
-from datetime import timedelta
 
 from integrations.banco_api import prefixo_comum
 
@@ -207,6 +206,3 @@ def ofx_reconhece_api(cursor, account_id, transactions, existing_hashes):
                     account_id, len(feitos))
     return feitos
 
-
-def dias_recentes(hoje, n=3):
-    return hoje - timedelta(days=n), hoje

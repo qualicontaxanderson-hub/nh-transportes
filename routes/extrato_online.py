@@ -1,11 +1,12 @@
 """
 Extrato On-Line — consulta o extrato direto na API do banco (Financeiro).
 
-SÓ LEITURA. Busca o período no banco e mostra, lançamento a lançamento, se
-ele JÁ ESTÁ no sistema (veio pelo OFX) ou se falta. Não grava nada em
-bank_transactions: a gravação pela API espera a comparação provar que dá
-para substituir o OFX sem duplicar e sem perder a conciliação automática
-(ver integrations/sicoob_extrato.py).
+Busca o período no banco e mostra, lançamento a lançamento, se ele JÁ ESTÁ
+no sistema ou se falta. Desde 24/10/2026 a conta com 'grava' (Cora NH e
+Prest) LANÇA no sistema o que falta — ao consultar e a cada 10 min
+(integrations/extrato_scheduler); o OFX continua entrando e reconhece o que
+a API já lançou (integrations/extrato_grava). O Sicoob segue só leitura: a
+API dele não dá id por lançamento.
 
 Mesma casca do /relatorios/conf_cartoes: filtro em cartão, régua de
 períodos, o período inteiro num painel e um card + um quadro por TIPO de
@@ -58,6 +59,8 @@ def _cora(conta):
     return carrega
 
 
+# 'grava': a API lança no sistema ao lado do OFX (integrations/extrato_grava) —
+# só conta cuja API dá um id estável por lançamento (Cora sim, Sicoob não).
 # 'cor': o contorno de tudo daquela conta na tela. 'credenciadora': o CNPJ que
 # o cupom grava quando o PIX é liquidado por este banco — é o que permite
 # dizer "cupom PIX sem PIX no banco".
@@ -66,9 +69,9 @@ BANCOS = {
                   'cor': '#00897B', 'credenciadora': '02038232000164',
                   'fds_no_dia_util': True},     # ver banco_api.proximo_dia_util
     'cora-nh': {'rotulo': 'CORA - NH', 'conta': '0001 / 3456427-0', 'modulo': _cora('posto'),
-                'cor': '#E8336D', 'credenciadora': None},
+                'cor': '#E8336D', 'credenciadora': None, 'grava': True},
     'cora-prest': {'rotulo': 'CORA - PREST', 'conta': '0001 / 27677832', 'modulo': _cora('prest'),
-                   'cor': '#8E24AA', 'credenciadora': None},
+                   'cor': '#8E24AA', 'credenciadora': None, 'grava': True},
 }
 
 # Resultado guardado por (banco, início, fim): período com hoje vale 1 min
@@ -238,6 +241,26 @@ def _consultar_guardado(chave, ini, fim, hoje, novo=False):
     return dict(res, do_cache=False)
 
 
+def _gravar(banco, mod, api):
+    """Conta que grava: o que a API trouxe e o sistema não tem entra agora
+    (integrations/extrato_grava). Falha aqui não impede a consulta."""
+    if not banco.get('grava'):
+        return None
+    from integrations.extrato_grava import sincronizar
+    from utils.db import get_db_connection
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        return sincronizar(mod, api, cur, conn)
+    except Exception:
+        conn.rollback()
+        logger.exception('[extrato-online] gravar pela API falhou (%s)', banco['rotulo'])
+        return {'erro': True}
+    finally:
+        cur.close()
+        conn.close()
+
+
 def _consultar(banco, ini, fim, hoje):
     from integrations.banco_api import (BancoAuthError, BancoError, SemCredencial,
                                         dias_possiveis, proximo_dia_util)
@@ -253,6 +276,7 @@ def _consultar(banco, ini, fim, hoje):
             fim_banco = proximo_dia_util(hoje)
         api = mod.ler(ini, fim_banco, incluir_hoje=True)
         t1 = time.monotonic()
+        gravou = _gravar(banco, mod, api)
         r = mod.comparar(api, ini, fim)     # banco × OFX: pela data do banco
         if banco.get('fds_no_dia_util'):
             # Para a tela, o dia em que ENTROU. Um dia só possível (sábado
@@ -355,6 +379,7 @@ def _consultar(banco, ini, fim, hoje):
         por_dia[d] = por_dia.get(d, 0.0) + l['sinal']
     cup = [l['cupom'] or {} for l in pix_in]
     return {'consultado': True, 'linhas': linhas, 'cards': cards, 'so_ofx': r['so_ofx'],
+            'gravou': gravou,
             'inclui_hoje': fim >= hoje, 'so_hoje': so_hoje, 'por_dia': por_dia,
             'consultado_em': datetime.now().strftime('%H:%M'),
             'tempos': {'banco': t1 - t0, 'sistema': t2 - t1, 'cupons': t3 - t2},

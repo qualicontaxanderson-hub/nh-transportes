@@ -526,6 +526,14 @@ def create_app():
     except Exception:
         app.logger.warning("[efi_sched] nao foi possivel iniciar o scheduler.", exc_info=True)
 
+    # Extrato On-Line gravando: a cada 10 min a API do banco (Cora) lanca no
+    # sistema o que o OFX so traria no dia seguinte. Falha aqui NAO derruba o app.
+    try:
+        from integrations.extrato_scheduler import iniciar_scheduler as iniciar_extrato
+        iniciar_extrato(app)
+    except Exception:
+        app.logger.warning("[extrato_sched] nao foi possivel iniciar o scheduler.", exc_info=True)
+
     # Leitura dos arquivos das operadoras de cartao (X7) que o NH-Robo deixa
     # no Dropbox. Falha aqui NAO derruba o app.
     try:
