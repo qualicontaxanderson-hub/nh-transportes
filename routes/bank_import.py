@@ -825,6 +825,18 @@ def _save_transactions(cursor, conn, account_id, transactions):
         hashes,
     )
     existing_hashes = {row['hash_dedup'] for row in cursor.fetchall()}
+    # 1b. O lançamento que a API do banco (Extrato On-Line) já gravou: o OFX
+    #     não insere de novo, passa à linha da API o seu hash/FITID (e o texto,
+    #     se pendente). Conta sem linha da API: nada muda.
+    try:
+        from integrations.extrato_grava import ofx_reconhece_api
+        via_api = ofx_reconhece_api(cursor, account_id, transactions, existing_hashes)
+        if via_api:
+            conn.commit()
+            existing_hashes |= set(via_api)
+    except Exception:
+        conn.rollback()
+        logger.exception("_save_transactions: reconhecer o que veio pela API falhou (conta %s)", account_id)
 
     # 2. Busca de mapeamento de fornecedores/formas/despesas em lote (por CNPJ)
     cnpj_list = list({tx['cnpj_cpf'] for tx in transactions if tx.get('cnpj_cpf')})

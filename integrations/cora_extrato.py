@@ -138,14 +138,32 @@ def para_transacao(e):
     }
 
 
-def texto_como_ofx(tx):
-    """O OFX do Cora grava 'Transf Pix enviada - NOME - 000.000.000-00'.
+# O começo do texto do OFX do Cora por (tipo do banco, sentido) — medido nos
+# OFX de ago-out/2026 das contas 3 e 4: 'Transf Pix enviada' (252),
+# 'Transf Pix recebida' (98), 'Boleto pago' (32), 'Transferência enviada' (33),
+# 'Pagamento recebido' (2). 'Pgto QR Code Pix' (71) também é PIX de saída e não
+# dá para separar pelo tipo: sai como 'Transf Pix enviada', e quando o OFX
+# chegar o texto dele substitui (bank_import._save_transactions).
+_PREFIXO_OFX = {
+    ('PIX', 'DEBIT'): 'Transf Pix enviada',
+    ('PIX', 'CREDIT'): 'Transf Pix recebida',
+    ('TRANSFER', 'DEBIT'): 'Transferência enviada',
+    ('TRANSFER', 'CREDIT'): 'Transferência recebida',
+    ('PAYMENT', 'DEBIT'): 'Boleto pago',
+    ('PAYMENT', 'CREDIT'): 'Pagamento recebido',
+}
 
-    PALPITE até a primeira consulta real: descrição + nome + documento, nessa
-    ordem. A tela mostra "texto diferente" quando não bate — é o que vai dizer
-    se o palpite estava certo.
-    """
-    return tx.get('descricao') or ''
+
+def texto_como_ofx(tx):
+    """O OFX do Cora grava 'Transf Pix enviada - Nome - 000.000.000-00':
+    o tipo, o nome e o documento de quem está do outro lado. É por esse texto
+    que as regras e memorizações casam, então a API grava igual. Tipo fora da
+    tabela: o texto do próprio banco."""
+    prefixo = _PREFIXO_OFX.get((tx.get('categoria_banco'), tx.get('tipo')))
+    nome = (tx.get('quem') or '').strip()
+    if not prefixo or not nome:
+        return tx.get('descricao') or ''
+    return ' - '.join(p for p in (prefixo, nome, tx.get('doc_pessoa')) if p)
 
 
 def mesmo_texto_do_ofx(tx, ofx):
