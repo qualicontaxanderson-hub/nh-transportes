@@ -262,6 +262,63 @@ def _gravar(banco, mod, api):
         conn.close()
 
 
+def _dia_pelos_vizinhos(api):
+    """O lançamento do fim de semana que o cupom não datou (PIX enviado,
+    tarifa, PIX sem cupom): o banco devolve na ordem em que entrou, então
+    entre dois vizinhos do MESMO dia ele é desse dia. Na ponta (antes do
+    primeiro datado ou depois do último) só quando o vizinho já é o primeiro
+    ou o último dia possível. A direção da lista sai dos próprios vizinhos
+    datados; ordem confusa -> não chuta."""
+    grupos = OrderedDict()
+    for tx in api:
+        if len(tx.get('dias') or []) > 1:
+            grupos.setdefault(tx['data_banco'], []).append(tx)
+    for txs in grupos.values():
+        datados = [tx['data_transacao'] for tx in txs if tx.get('dia_pelo_cupom')]
+        if not datados:
+            continue
+        com_direcao = len(set(datados)) > 1
+        if com_direcao:
+            if datados == sorted(datados, reverse=True):
+                txs = txs[::-1]                 # do mais antigo para o mais novo
+            elif datados != sorted(datados):
+                continue
+        dia = [tx['data_transacao'] if tx.get('dia_pelo_cupom') else None for tx in txs]
+        for i, tx in enumerate(txs):
+            if dia[i] is not None:
+                continue
+            antes = next((d for d in reversed(dia[:i]) if d), None)
+            depois = next((d for d in dia[i + 1:] if d), None)
+            if antes and depois:
+                if antes != depois:
+                    continue
+            elif not com_direcao:
+                continue                        # sem direção, a ponta é chute
+            elif depois and depois != tx['dias'][0]:
+                continue
+            elif antes and antes != tx['dias'][-1]:
+                continue
+            tx['data_transacao'] = antes or depois
+            tx['dia_pelo_cupom'] = 'ordem do banco'
+
+
+def _so_do_periodo(linhas, r, ini, fim):
+    """Deixa só o que entrou em [ini, fim]. O lançamento sem dia certo
+    ('entrou entre 24/10 e 25/10') fica se um dos dias possíveis cai no
+    período. O que só o sistema tem fica pela data do OFX. O quadro banco ×
+    sistema é refeito sobre o que ficou."""
+    def no_periodo(tx):
+        if len(tx.get('dias') or []) > 1 and not tx.get('dia_pelo_cupom'):
+            return any(ini <= d <= fim for d in tx['dias'])
+        return ini <= tx['data_transacao'] <= fim
+    linhas = [l for l in linhas if no_periodo(l['tx'])]
+    ficou = {id(l['tx']) for l in linhas}
+    r = dict(r, casados=[(a, o) for a, o in r['casados'] if id(a) in ficou],
+             so_api=[a for a in r['so_api'] if id(a) in ficou],
+             so_ofx=[o for o in r['so_ofx'] if ini <= o['data_transacao'] <= fim])
+    return linhas, r
+
+
 def _consultar(banco, ini, fim, hoje):
     from integrations.banco_api import (BancoAuthError, BancoError, SemCredencial,
                                         dias_possiveis, proximo_dia_util)
@@ -270,15 +327,16 @@ def _consultar(banco, ini, fim, hoje):
     t0 = time.monotonic()
     try:
         # Tela só MOSTRA: o dia de hoje pode entrar (ainda mudando no banco).
-        # No fim de semana/feriado o Sicoob já lança o que entra hoje com a
-        # data do próximo dia útil: pedido só até hoje, o PIX de hoje não vinha.
+        # No fim de semana/feriado o Sicoob lança o que entra com a data do
+        # próximo dia útil: pedido só até o fim, o sábado (datado segunda) não
+        # vinha. Pede até o próximo dia útil e depois separa pelo dia real.
         fim_banco = fim
-        if fim == hoje and banco.get('fds_no_dia_util'):
-            fim_banco = proximo_dia_util(hoje)
+        if banco.get('fds_no_dia_util'):
+            fim_banco = proximo_dia_util(fim)
         api = mod.ler(ini, fim_banco, incluir_hoje=True)
         t1 = time.monotonic()
         gravou = _gravar(banco, mod, api)
-        r = mod.comparar(api, ini, fim)     # banco × OFX: pela data do banco
+        r = mod.comparar(api, ini, fim_banco)   # banco × OFX: pela data do banco
         if banco.get('fds_no_dia_util'):
             # Para a tela, o dia em que ENTROU. Um dia só possível (sábado
             # consultado no sábado) -> é ele; vários (domingo, segunda) -> o
@@ -336,13 +394,28 @@ def _consultar(banco, ini, fim, hoje):
     sem_pix = []
     if pix_in:
         try:
-            casa, sem_pix = casar_cupons([l['tx'] for l in pix_in], ini, fim, banco.get('credenciadora'))
+            # Cupons de todos os dias em que esses PIX podem ter entrado: o
+            # domingo consultado como "Ontem" (sábado) ainda tem de achar o
+            # cupom de domingo, senão casa com um de sábado de mesmo valor.
+            fim_cupom = max([fim] + [d for l in pix_in for d in (l['tx'].get('dias') or [])])
+            casa, sem_pix = casar_cupons([l['tx'] for l in pix_in], ini, fim_cupom,
+                                         banco.get('credenciadora'))
             for l in pix_in:
                 l['cupom'] = casa.get(id(l['tx']))
+            sem_pix = [c for c in sem_pix if ini <= c['dh_emissao'].date() <= fim]
         except Exception:
             # O cupom é complemento: se a consulta das vendas falhar, o extrato
             # continua valendo e a tela mostra sem ele.
             logger.exception('[extrato-online] casamento PIX x cupom falhou')
+    if banco.get('fds_no_dia_util'):
+        # Sábado e domingo vêm juntos (datados segunda): cada lançamento fica
+        # no dia em que entrou — o cupom diz, ou a ordem do banco entre os
+        # vizinhos —, e o período mostra só os seus dias.
+        _dia_pelos_vizinhos(api)
+        linhas, r = _so_do_periodo(linhas, r, ini, fim)
+        pix_in = [l for l in pix_in if l in linhas]
+        linhas.sort(key=lambda l: (l['tx']['data_transacao'], l['tx'].get('hora') or '',
+                                   ordem.get(id(l['tx']), 0)))
     t3 = time.monotonic()
     logger.info('[extrato-online] %s %s..%s: banco %.1fs, sistema %.1fs, cupons %.1fs, %d lançamentos',
                 banco['rotulo'], ini, fim, t1 - t0, t2 - t1, t3 - t2, len(linhas))
