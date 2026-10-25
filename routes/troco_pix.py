@@ -409,6 +409,8 @@ def listar():
                     ba.apelido as banco_conta_apelido,
                     ba.banco_nome as banco_nome,
                     cp.enviado_em as pix_enviado_em,
+                    (SELECT MAX(e.estornado_em) FROM troco_pix_estornos e
+                         WHERE e.troco_pix_id = tp.id) as pix_estornado_em,
                     cp.favorecido as pix_favorecido,
                     cp.valor as pix_valor
                 FROM troco_pix tp
@@ -558,7 +560,9 @@ def visualizar(troco_pix_id):
                 f.nome as frentista_nome,
                 u1.username as criado_por_nome,
                 u2.username as atualizado_por_nome,
-                cp.enviado_em as pix_enviado_em
+                cp.enviado_em as pix_enviado_em,
+                (SELECT MAX(e.estornado_em) FROM troco_pix_estornos e
+                     WHERE e.troco_pix_id = tp.id) as pix_estornado_em
             FROM troco_pix tp
             LEFT JOIN clientes c ON tp.cliente_id = c.id
             LEFT JOIN troco_pix_clientes tpc ON tp.troco_pix_cliente_id = tpc.id
@@ -1595,7 +1599,9 @@ def pista():
                 c.razao_social as posto_nome,
                 tpc.nome_completo as cliente_pix_nome,
                 f.nome as frentista_nome,
-                cp.enviado_em as pix_enviado_em
+                cp.enviado_em as pix_enviado_em,
+                (SELECT MAX(e.estornado_em) FROM troco_pix_estornos e
+                     WHERE e.troco_pix_id = tp.id) as pix_estornado_em
             FROM troco_pix tp
             LEFT JOIN clientes c ON tp.cliente_id = c.id
             LEFT JOIN troco_pix_clientes tpc ON tp.troco_pix_cliente_id = tpc.id

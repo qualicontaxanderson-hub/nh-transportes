@@ -158,7 +158,11 @@ body > .container-fluid:has(#tpv){
     {% endif %}
     <div class="selos">
       {% if tem_pix %}
-        {% if transacao.get('pix_enviado_em') %}
+        {% if transacao.get('pix_estornado_em') and not transacao.bank_transaction_id
+              and not (transacao.get('pix_enviado_em') and transacao.pix_enviado_em > transacao.pix_estornado_em) %}
+        <span class="selo selo--nao"><i class="bi bi-arrow-counterclockwise"></i>
+          PIX estornado {{ transacao.pix_estornado_em.strftime('%d/%m às %H:%M') }} — mandar de novo</span>
+        {% elif transacao.get('pix_enviado_em') %}
         <span class="selo selo--env"><i class="bi bi-envelope-fill"></i>
           PIX enviado {{ transacao.pix_enviado_em.strftime('%d/%m às %H:%M') }}</span>
         {% else %}

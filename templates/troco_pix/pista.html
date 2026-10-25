@@ -103,6 +103,8 @@ body > .container-fluid:has(#tpp){
   #tpp .env--ok{ background:#eaf1f9; color:var(--blue); border-color:#bcd3ea;
     cursor:pointer; font-family:inherit; }
   #tpp .env--nao{ background:#fbe9e9; color:var(--danger); border-color:#f0c8c8; }
+  #tpp .estorno{ font-size:.72rem; font-weight:800; border-radius:99px;
+    padding:.2rem .55rem; background:var(--danger); color:#fff; }
   #tpp .hora{ font-size:.72rem; font-weight:800; border-radius:99px;
     padding:.2rem .55rem; background:var(--blue); color:#fff; }
   #tpp .hora[hidden]{ display:none; }
@@ -216,7 +218,12 @@ body > .container-fluid:has(#tpp){
       </div>
       <div class="pe">
         {% if tem %}
-        {% if t.pix_enviado_em %}
+        {% if t.pix_estornado_em and not t.bank_transaction_id
+              and not (t.pix_enviado_em and t.pix_enviado_em > t.pix_estornado_em) %}
+        <span class="estorno" title="O banco avisou que este PIX não foi efetuado">
+          <i class="bi bi-arrow-counterclockwise"></i>
+          estornado {{ t.pix_estornado_em.strftime('%H:%M') }}</span>
+        {% elif t.pix_enviado_em %}
         <button type="button" class="env env--ok"
                 title="PIX enviado em {{ t.pix_enviado_em.strftime('%d/%m/%Y às %H:%M') }}"
                 onclick="tppHora(this)" aria-label="PIX enviado — ver a hora">
@@ -285,7 +292,12 @@ body > .container-fluid:has(#tpp){
       </div>
       <div class="pe">
         {% if tem %}
-        {% if t.pix_enviado_em %}
+        {% if t.pix_estornado_em and not t.bank_transaction_id
+              and not (t.pix_enviado_em and t.pix_enviado_em > t.pix_estornado_em) %}
+        <span class="estorno" title="O banco avisou que este PIX não foi efetuado">
+          <i class="bi bi-arrow-counterclockwise"></i>
+          estornado {{ t.pix_estornado_em.strftime('%H:%M') }}</span>
+        {% elif t.pix_enviado_em %}
         <button type="button" class="env env--ok"
                 title="PIX enviado em {{ t.pix_enviado_em.strftime('%d/%m/%Y às %H:%M') }}"
                 onclick="tppHora(this)" aria-label="PIX enviado — ver a hora">

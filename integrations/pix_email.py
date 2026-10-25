@@ -97,8 +97,27 @@ def caixa_configurada():
 # Tabela (idempotente, padrão do resto do app)
 # ===========================================================================
 
+# O aviso de que o PIX NÃO saiu ("Sua transferência Pix foi estornada!"):
+# tabela à parte de propósito — a tela trata qualquer linha de
+# troco_pix_comprovantes como "o PIX saiu".
+DDL_ESTORNOS = """
+CREATE TABLE IF NOT EXISTS `troco_pix_estornos` (
+    `id`            INT AUTO_INCREMENT PRIMARY KEY,
+    `message_id`    VARCHAR(255) NOT NULL,
+    `estornado_em`  DATETIME NOT NULL COMMENT 'Hora do e-mail do banco = hora em que o PIX voltou',
+    `valor`         DECIMAL(10,2) NOT NULL,
+    `favorecido`    VARCHAR(200) NULL,
+    `assunto`       VARCHAR(255) NULL,
+    `troco_pix_id`  INT NULL COMMENT 'Solicitacao casada; NULL = ainda sem dono',
+    `criado_em`     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY `uq_message` (`message_id`),
+    KEY `ix_troco` (`troco_pix_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+
 def ensure_tables():
-    """Cria troco_pix_comprovantes se não existir."""
+    """Cria troco_pix_comprovantes e troco_pix_estornos se não existirem."""
     ddl = """
     CREATE TABLE IF NOT EXISTS `troco_pix_comprovantes` (
         `id`            INT AUTO_INCREMENT PRIMARY KEY,
@@ -119,6 +138,7 @@ def ensure_tables():
     cur = conn.cursor()
     try:
         cur.execute(ddl)
+        cur.execute(DDL_ESTORNOS)
         conn.commit()
     finally:
         cur.close()
@@ -208,6 +228,29 @@ _RE_ENVIO = re.compile(
     r"para\s+(?P<favorecido>.+?)\s+foi\s+efetuada",
     re.IGNORECASE | re.DOTALL,
 )
+
+
+# "Não foi possível realizar a sua transferência pix no valor de R$ 1172,54
+#  para Valdeir Ferreira Dos Santos. Por favor, acesse o aplicativo..."
+_RE_FALHA = re.compile(
+    r"n[ãa]o\s+foi\s+poss[íi]vel\s+realizar\s+a\s+sua\s+transfer[êe]ncia\s+pix\s+"
+    r"no\s+valor\s+de\s+R\$\s*(?P<valor>[\d.,]+)\s+"
+    r"para\s+(?P<favorecido>.+?)\.\s",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def parse_falha(texto):
+    """{'valor', 'favorecido'} do aviso de PIX que NÃO saiu, ou None."""
+    if not texto:
+        return None
+    m = _RE_FALHA.search(re.sub(r"\s+", " ", texto) + " ")
+    if not m:
+        return None
+    valor = num_br(m.group("valor"))
+    if not valor:
+        return None
+    return {"valor": valor, "favorecido": (m.group("favorecido") or "").strip()[:200]}
 
 
 def num_br(valor):
@@ -458,6 +501,44 @@ def casar(cur, valor, favorecido, quando, dias=None):
     return None
 
 
+def casar_estorno(cur, valor, favorecido, quando, dias=3):
+    """A solicitação cujo PIX voltou: mesmo valor e nome, a mais recente.
+    Sem a trava de "um aviso por solicitação" — o mesmo troco pode falhar
+    mais de uma vez antes de sair."""
+    fim = (quando or datetime.now()).date()
+    cur.execute("""
+        SELECT tp.id, tpc.nome_completo
+          FROM troco_pix tp
+          LEFT JOIN troco_pix_clientes tpc ON tpc.id = tp.troco_pix_cliente_id
+         WHERE tp.data BETWEEN %s AND %s
+           AND ABS(COALESCE(tp.troco_pix, 0) - %s) < 0.005
+         ORDER BY tp.data DESC, tp.id DESC
+    """, (fim - timedelta(days=dias), fim, valor))
+    melhor, melhor_id = 0, None
+    for row in cur.fetchall():
+        rid = row["id"] if isinstance(row, dict) else row[0]
+        nome = row["nome_completo"] if isinstance(row, dict) else row[1]
+        grau = _mesmo_nome(favorecido, nome)
+        if grau > melhor:
+            melhor, melhor_id = grau, rid
+    return melhor_id
+
+
+def _gravar_falha(cur, msg_id, assunto, quando, dados, dias):
+    """Grava o aviso de PIX estornado (idempotente pelo Message-ID).
+    Devolve 'repetido', 'casado' ou 'gravado'."""
+    cur.execute("SELECT id FROM troco_pix_estornos WHERE message_id=%s", (msg_id,))
+    if cur.fetchone():
+        return "repetido"
+    alvo = casar_estorno(cur, dados["valor"], dados["favorecido"], quando, dias)
+    cur.execute("""INSERT INTO troco_pix_estornos
+                     (message_id, estornado_em, valor, favorecido, assunto, troco_pix_id)
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                (msg_id, quando, dados["valor"], dados["favorecido"],
+                 (assunto or "")[:255], alvo))
+    return "casado" if alvo else "gravado"
+
+
 def casar_orfaos(cur, dias=None):
     """Tenta dar dono aos comprovantes que chegaram antes da solicitação.
 
@@ -509,6 +590,14 @@ def processar(dias=2, apenas_nao_lidos=True):
         for uid, msg_id, assunto, quando, texto in mensagens:
             resumo["lidos"] += 1
             dados = parse_envio(texto)
+            falha = None if dados else parse_falha(texto)
+            if falha and msg_id:
+                # O PIX NÃO saiu: a tela do troco mostra "estornado" em vez de
+                # deixar parecer que ninguém tentou.
+                r = _gravar_falha(cur, msg_id, assunto, quando, falha, dias)
+                resumo["estornos"] = resumo.get("estornos", 0) + (r != "repetido")
+                ok_uids.append(uid)
+                continue
             if not dados:
                 # Outro aviso qualquer do banco (PIX recebido, boleto, extrato).
                 resumo["ignorados"] += 1
@@ -538,6 +627,16 @@ def processar(dias=2, apenas_nao_lidos=True):
             ok_uids.append(uid)
 
         resumo["casados"] += casar_orfaos(cur, dias)
+        # aviso de estorno que chegou antes da solicitação ser lançada
+        cur.execute("""SELECT id, valor, favorecido, estornado_em FROM troco_pix_estornos
+                        WHERE troco_pix_id IS NULL
+                          AND estornado_em >= DATE_SUB(NOW(), INTERVAL %s DAY)""", (dias + 1,))
+        for row in list(cur.fetchall()):
+            alvo = casar_estorno(cur, float(row["valor"]), row["favorecido"],
+                                 row["estornado_em"], dias)
+            if alvo:
+                cur.execute("UPDATE troco_pix_estornos SET troco_pix_id=%s WHERE id=%s",
+                            (alvo, row["id"]))
         conn.commit()
     except Exception:
         if conn:
