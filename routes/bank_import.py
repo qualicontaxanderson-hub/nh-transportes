@@ -1734,6 +1734,10 @@ def index():
     cursor.execute("SELECT COUNT(*) AS total FROM bank_transactions")
     total = cursor.fetchone()['total']
 
+    # O que a importação automática da pasta fez (integrations/ofx_auto)
+    from integrations.ofx_auto import recentes as ofx_auto_recentes
+    auto_ofx = ofx_auto_recentes(cursor)
+
     cursor.close()
     conn.close()
 
@@ -1784,6 +1788,7 @@ def index():
         dropbox_oauth2=_dropbox_oauth2,
         dropbox_inbox=_dbx_inbox,
         dropbox_processed=_dbx_processed,
+        auto_ofx=auto_ofx,
     )
 
 

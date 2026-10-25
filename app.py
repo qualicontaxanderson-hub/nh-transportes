@@ -542,6 +542,14 @@ def create_app():
     except Exception:
         app.logger.warning("[cartao_arq] nao foi possivel iniciar o scheduler.", exc_info=True)
 
+    # Extrato OFX largado em /BANCOS/OFX/NOVO entra sozinho (a conta sai do
+    # numero dentro do arquivo). Falha aqui NAO derruba o app.
+    try:
+        from integrations.ofx_auto_scheduler import iniciar_scheduler as iniciar_ofx
+        iniciar_ofx(app)
+    except Exception:
+        app.logger.warning("[ofx_auto] nao foi possivel iniciar o scheduler.", exc_info=True)
+
     return app
 
 

@@ -250,6 +250,19 @@ body > .container-fluid:has(#bnc){
 {% endblock %}
 
 {% block content %}
+<style>
+  #bnc .auto-sub{ font-size:.82rem; color:#4a5565; margin-bottom:.4rem; }
+  #bnc .auto{ display:flex; justify-content:space-between; align-items:flex-start; gap:.75rem;
+    padding:.5rem .65rem; border-radius:10px; margin-top:.35rem; border:1px solid #e3e8ef; background:#fff; }
+  #bnc .auto__l{ display:flex; flex-direction:column; min-width:0; }
+  #bnc .auto__n{ font-weight:700; font-size:.86rem; overflow-wrap:anywhere; }
+  #bnc .auto__d, #bnc .auto__m{ font-size:.74rem; color:#5b6675; }
+  #bnc .auto__s{ font-size:.74rem; font-weight:800; white-space:nowrap; padding:.15rem .55rem;
+    border-radius:99px; background:#e4f4e8; color:#1c6b34; }
+  #bnc .auto--ja_importado .auto__s{ background:#e7ebf0; color:#3d4854; }
+  #bnc .auto--sem_conta .auto__s, #bnc .auto--erro .auto__s{ background:#fbe9e9; color:#b42318; }
+  @media (max-width:560px){ #bnc .auto{ flex-direction:column; } #bnc .auto__s{ white-space:normal; } }
+</style>
 <div class="container-fluid" id="bnc">
     <div class="topo">
       <div class="topo__l1">
@@ -277,6 +290,32 @@ body > .container-fluid:has(#bnc){
         <div class="r">Contas ativas</div><div class="v">{{ contas|length }}</div></div>
     </div>
 
+
+    <!-- A pasta entra sozinha: o que a importação automática fez -->
+    <div class="bloco">
+      <div class="bloco__c"><i class="bi bi-robot"></i> Importação automática da pasta</div>
+      <div class="bloco__b">
+        <div class="auto-sub">O OFX que cai em <b>{{ dropbox_inbox }}</b> entra sozinho a cada 10 minutos —
+          a conta sai do número dentro do arquivo. Últimos 7 dias:</div>
+        {% for a in auto_ofx %}
+        <div class="auto auto--{{ a.situacao }}">
+          <div class="auto__l">
+            <span class="auto__n">{{ a.arquivo }}</span>
+            <span class="auto__d">{{ a.criado_em.strftime('%d/%m %H:%M') }}{% if a.apelido %} · {{ a.apelido }}{% endif %}
+              {% if a.periodo_ini and a.periodo_fim %} · {{ a.periodo_ini.strftime('%d/%m') }} a {{ a.periodo_fim.strftime('%d/%m/%Y') }}{% endif %}</span>
+            {% if a.mensagem %}<span class="auto__m">{{ a.mensagem }}</span>{% endif %}
+          </div>
+          <span class="auto__s">
+            {% if a.situacao == 'importado' %}{{ a.inseridos }} novo{{ 's' if a.inseridos != 1 }}{% if a.duplicados %} · {{ a.duplicados }} já tinha{% endif %}
+            {% elif a.situacao == 'ja_importado' %}já importado
+            {% elif a.situacao == 'sem_conta' %}conta não achada — ficou na pasta
+            {% else %}não deu — ficou na pasta{% endif %}</span>
+        </div>
+        {% else %}
+        <div class="auto-sub">Nenhum arquivo entrou pela pasta nesses dias.</div>
+        {% endfor %}
+      </div>
+    </div>
 
     <!-- Caixa A: o arquivo já está na pasta automática -->
     <div class="bloco">
