@@ -935,6 +935,9 @@ def _save_transactions(cursor, conn, account_id, transactions):
     # 4a. Transferência entre as próprias contas: liga a saída à entrada que já
     #     está no sistema (as duas pendentes, um par só) — sem criar espelho
     _auto_ligar_transferencia(cursor, conn)
+    # 4a'. PIX enviado que voltou (estorno): liga a volta à saída e solta o
+    #     Troco PIX que a ligação automática tinha dado como pago
+    _auto_ligar_estorno(cursor, conn, account_id)
     # 4b. Auto-conciliação imediata por regras de descrição (para os que ficaram pendentes)
     _auto_conciliar_por_regras(cursor, conn, account_id)
     # 5. Auto-conciliação de despesas por CNPJ (cria lancamentos_despesas automaticamente)
@@ -1159,6 +1162,9 @@ def _auto_vincular_troco_pix(cursor, conn, account_id):
             [account_id] + datas,
         )
         ocupados = {r['bank_transaction_id'] for r in cursor.fetchall()}
+        # PIX que saiu e voltou (estorno de mesmo valor até 10 dias depois):
+        # o troco NÃO foi pago — esse débito não serve a troco nenhum.
+        ocupados |= _debitos_estornados(cursor, account_id, datas)
         # O documento em que os trocos do cliente JÁ caíram: liga mesmo com o
         # nome digitado errado ou a chave por telefone/e-mail (347 de 368).
         from utils.troco_pix_banco import do_banco
@@ -1307,6 +1313,175 @@ def _auto_ligar_transferencia(cursor, conn, dias=60):
     except Exception:
         conn.rollback()
         logger.exception("_auto_ligar_transferencia: falhou — fica para a tela")
+        return 0
+
+
+# A volta de um PIX ENVIADO: o crédito "Estorno Pix 05.482.271 0001-44"
+# (Sicoob), "DEVOLUCAO PIX-PIX_CRED ..." (Sicredi). Tarifa estornada não é PIX
+# que voltou. A devolução de um PIX RECEBIDO (débito) NÃO entra aqui: a
+# regra 34 já a lança como despesa DEVOLUÇÕES > PIX DEVOLUÇÃO.
+_RE_ESTORNO_PIX = re.compile(r'\b(ESTORN\w*|DEVOLUCAO|DEVOLVID\w*)\b')
+
+_DDL_ESTORNOS = """
+CREATE TABLE IF NOT EXISTS `bank_estornos` (
+    `id`          INT AUTO_INCREMENT PRIMARY KEY,
+    `original_id` INT NOT NULL COMMENT 'bank_transactions: o PIX que saiu',
+    `estorno_id`  INT NOT NULL COMMENT 'bank_transactions: a volta dele',
+    `criado_em`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY `uq_original` (`original_id`),
+    UNIQUE KEY `uq_estorno` (`estorno_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+"""
+_estornos_ok = False
+
+
+def _eh_estorno_pix(descricao):
+    t = _sem_acento_maiusculo(descricao)
+    return 'PIX' in t and 'TARIFA' not in t and bool(_RE_ESTORNO_PIX.search(t))
+
+
+def _doc_estorno(tx):
+    """Os dígitos do documento: do campo, ou do texto. CPF mascarado
+    ('***.191.686-**') sobra só o meio (6 dígitos) — basta para conferir."""
+    d = re.sub(r'\D', '', tx.get('cnpj_cpf') or '')
+    if len(d) >= 11:
+        return d
+    achados = re.findall(r'[\d.\-/ ]{6,}', tx.get('descricao') or '')
+    ds = [re.sub(r'\D', '', a) for a in achados]
+    ds = [x for x in ds if len(x) >= 6]
+    return max(ds, key=len) if ds else d
+
+
+def _mesmo_doc(a, b):
+    return bool(a and b and (a in b or b in a))
+
+
+def _debitos_estornados(cursor, account_id, datas):
+    """Débitos da conta, nesses dias, que têm um ESTORNO de PIX de mesmo valor
+    até 10 dias depois (mesmo documento, quando os dois têm)."""
+    if not datas:
+        return set()
+    ph = ','.join(['%s'] * len(datas))
+    cursor.execute(
+        f"""SELECT id, data_transacao, valor, descricao, cnpj_cpf FROM bank_transactions
+             WHERE account_id=%s AND tipo='DEBIT' AND data_transacao IN ({ph})""",
+        [account_id] + list(datas))
+    debitos = cursor.fetchall()
+    cursor.execute(
+        """SELECT id, data_transacao, valor, descricao, cnpj_cpf FROM bank_transactions
+            WHERE account_id=%s AND tipo='CREDIT' AND data_transacao BETWEEN %s AND %s""",
+        (account_id, min(datas), max(datas) + _dt.timedelta(days=10)))
+    voltas = [c for c in cursor.fetchall() if _eh_estorno_pix(c['descricao'])]
+    fora = set()
+    for d in debitos:
+        dd = _doc_estorno(d)
+        for c in voltas:
+            if (f"{float(c['valor']):.2f}" == f"{float(d['valor']):.2f}"
+                    and 0 <= (c['data_transacao'] - d['data_transacao']).days <= 10):
+                dc = _doc_estorno(c)
+                if not (dd and dc) or _mesmo_doc(dd, dc):
+                    fora.add(d['id'])
+    return fora
+
+
+def _auto_ligar_estorno(cursor, conn, account_id, dias=60):
+    """
+    PIX ENVIADO que voltou para a conta (estorno): liga a volta à saída, sem
+    ninguém clicar, quando não há dúvida:
+
+      * a volta é um CRÉDITO com texto de estorno/devolução de PIX;
+      * a saída é um DÉBITO da mesma conta, mesmo valor, até 10 dias antes,
+        com o mesmo documento (CPF/CNPJ; mascarado basta o meio);
+      * um par só dos dois lados.
+
+    Os dois ficam conciliados como 'estorno' (conciliado_por 'auto-estorno'),
+    sem fornecedor e sem forma: o dinheiro foi e voltou, não é pagamento nem
+    receita. O par fica em bank_estornos. Se a saída tinha sido ligada a um
+    Troco PIX pela ligação automática, o troco é SOLTO — volta a "falta
+    conciliar", porque ele não foi pago.
+
+    Só mexe no que a máquina fez: a volta pendente (ou 'auto'/'auto-regra') e
+    a saída pendente ou ligada por 'auto'/'auto-regra'/'auto-troco', sem
+    despesa lançada nem outro vínculo. O que alguém conciliou à mão (ex.: o
+    Estorno Pix de 21/10, devolução de fornecedor) fica como está.
+    """
+    global _estornos_ok
+    maquina = ('auto', 'auto-regra', 'auto-troco')
+    try:
+        if not _estornos_ok:
+            cursor.execute(_DDL_ESTORNOS)          # DDL faz COMMIT implícito
+            _estornos_ok = True
+        cursor.execute(
+            """SELECT id, data_transacao, valor, descricao, cnpj_cpf, status, conciliado_por
+                 FROM bank_transactions
+                WHERE account_id=%s AND tipo='CREDIT'
+                  AND data_transacao >= CURDATE() - INTERVAL %s DAY
+                  AND NOT EXISTS (SELECT 1 FROM bank_estornos e WHERE e.estorno_id=bank_transactions.id)""",
+            (account_id, dias))
+        voltas = [c for c in cursor.fetchall() if _eh_estorno_pix(c['descricao'])
+                  and (c['status'] == 'pendente' or c['conciliado_por'] in ('auto', 'auto-regra'))]
+        if not voltas:
+            return 0
+        cursor.execute(
+            """SELECT id, data_transacao, valor, descricao, cnpj_cpf, status, conciliado_por
+                 FROM bank_transactions
+                WHERE account_id=%s AND tipo='DEBIT'
+                  AND data_transacao BETWEEN %s AND %s
+                  AND NOT EXISTS (SELECT 1 FROM bank_estornos e WHERE e.original_id=bank_transactions.id)""",
+            (account_id, min(c['data_transacao'] for c in voltas) - _dt.timedelta(days=10),
+             max(c['data_transacao'] for c in voltas)))
+        saidas = [d for d in cursor.fetchall() if not _eh_estorno_pix(d['descricao'])]
+        pares = {}
+        for c in voltas:
+            dc = _doc_estorno(c)
+            pares[c['id']] = (c, [
+                d for d in saidas
+                if f"{float(d['valor']):.2f}" == f"{float(c['valor']):.2f}"
+                and 0 <= (c['data_transacao'] - d['data_transacao']).days <= 10
+                and _mesmo_doc(dc, _doc_estorno(d))])
+        disputa = Counter(d['id'] for _c, ds in pares.values() for d in ds)
+
+        agora = _dt.datetime.now()
+        n = 0
+        for c, ds in pares.values():
+            if len(ds) != 1 or disputa[ds[0]['id']] != 1:
+                continue
+            d = ds[0]
+            if not (d['status'] == 'pendente' or d['conciliado_por'] in maquina):
+                continue
+            # Despesa lançada, depósito, comprovação de caixa: vínculo que não
+            # é desta regra desfazer — fica para a tela.
+            cursor.execute(
+                """SELECT (SELECT COUNT(*) FROM lancamentos_despesas WHERE bank_transaction_id IN (%s, %s))
+                        + (SELECT COUNT(*) FROM deposito_bank_vinculos WHERE bank_transaction_id IN (%s, %s))
+                        + (SELECT COUNT(*) FROM lancamentos_caixa_comprovacao WHERE bank_transaction_id IN (%s, %s))
+                          AS n""",
+                (d['id'], c['id']) * 3)
+            if cursor.fetchone()['n']:
+                continue
+            cursor.execute(
+                "UPDATE troco_pix SET bank_transaction_id=NULL WHERE bank_transaction_id=%s",
+                (d['id'],))
+            soltos = cursor.rowcount
+            if soltos and d['conciliado_por'] != 'auto-troco':
+                conn.rollback()                 # troco ligado à mão: não é comigo
+                continue
+            cursor.execute(
+                """UPDATE bank_transactions
+                      SET status='conciliado', conciliado_em=%s, conciliado_por='auto-estorno',
+                          tipo_conciliacao='estorno', fornecedor_id=NULL, forma_recebimento_id=NULL
+                    WHERE id IN (%s, %s)""",
+                (agora, d['id'], c['id']))
+            cursor.execute("INSERT INTO bank_estornos (original_id, estorno_id) VALUES (%s, %s)",
+                           (d['id'], c['id']))
+            conn.commit()
+            n += 1
+            logger.info("_auto_ligar_estorno: conta %s, saída %s voltou em %s%s", account_id,
+                        d['id'], c['id'], f' (troco solto)' if soltos else '')
+        return n
+    except Exception:
+        conn.rollback()
+        logger.exception("_auto_ligar_estorno: falhou (conta %s) — fica para a tela", account_id)
         return 0
 
 
