@@ -932,6 +932,9 @@ def _save_transactions(cursor, conn, account_id, transactions):
     # 4. Troco PIX com certeza (mesmo dia, valor e favorecido, um só candidato) —
     #    antes das regras: é o vínculo mais certo que existe para esse débito
     _auto_vincular_troco_pix(cursor, conn, account_id)
+    # 4a. Transferência entre as próprias contas: liga a saída à entrada que já
+    #     está no sistema (as duas pendentes, um par só) — sem criar espelho
+    _auto_ligar_transferencia(cursor, conn)
     # 4b. Auto-conciliação imediata por regras de descrição (para os que ficaram pendentes)
     _auto_conciliar_por_regras(cursor, conn, account_id)
     # 5. Auto-conciliação de despesas por CNPJ (cria lancamentos_despesas automaticamente)
@@ -1207,6 +1210,103 @@ def _auto_vincular_troco_pix(cursor, conn, account_id):
     except Exception:
         conn.rollback()
         logger.exception("_auto_vincular_troco_pix: falhou (conta %s) — fica para a tela", account_id)
+        return 0
+
+
+def _auto_ligar_transferencia(cursor, conn, dias=60):
+    """
+    Liga sozinha a transferência entre as contas da casa (Sicoob -> Cora,
+    Prest -> NH...), quando não há dúvida:
+
+      * a SAÍDA traz o CNPJ do dono da conta que recebeu (no documento ou no
+        texto: "Pagamento Pix 33.503.987 0001-16");
+      * a ENTRADA, em outra conta da casa, traz o CNPJ do dono da que pagou;
+      * mesmo valor, até 3 dias de diferença (o Sicoob lança o sábado com a
+        data de segunda), as DUAS pendentes e UM par só dos dois lados.
+
+    Concilia os dois lados como transferência — conta_destino_id na saída,
+    conta_origem_id na entrada — e NÃO cria o crédito espelho TRANSFER_<id>
+    de _conciliar_transferencia: a entrada verdadeira já está no extrato.
+    Também não grava memorização (CNPJ -> conta destino): as quatro contas do
+    Posto têm o mesmo CNPJ, e a memorização apontaria uma só.
+
+    Medido em 25/10/2026 desde 01/07: 29 pares em que a regra acha o mesmo
+    destino que foi escolhido à mão, 8 em que à mão foi outra conta do Posto
+    (a entrada estava no Cora NH; esses ficam como estão), 7 com mais de um
+    par possível (ficam para a tela).
+
+    Olha todas as contas (não só a que importou): a outra metade pode ter
+    chegado antes, por outro extrato. conciliado_por = 'auto-transf'.
+    """
+    try:
+        cursor.execute(
+            """SELECT ba.id, cl.cnpj FROM bank_accounts ba
+                 JOIN clientes cl ON cl.id = ba.cliente_id""")
+        dono = {r['id']: re.sub(r'\D', '', r['cnpj'] or '') for r in cursor.fetchall()}
+        dono = {k: v for k, v in dono.items() if len(v) == 14}
+        if len(dono) < 2:
+            return 0
+        ph = ','.join(['%s'] * len(dono))
+        cursor.execute(
+            f"""SELECT id, account_id, data_transacao, tipo, valor, descricao, cnpj_cpf
+                  FROM bank_transactions
+                 WHERE status='pendente' AND account_id IN ({ph})
+                   AND data_transacao >= CURDATE() - INTERVAL %s DAY
+                   AND (hash_dedup IS NULL OR hash_dedup NOT LIKE 'TRANSFER\_%%')""",
+            list(dono) + [dias])
+        pend = cursor.fetchall()
+
+        def traz(tx, cnpj):
+            texto = re.sub(r'\D', '', tx['descricao'] or '')
+            return (re.sub(r'\D', '', tx['cnpj_cpf'] or '') == cnpj or cnpj in texto
+                    or (cnpj[:8] in texto and cnpj[8:12] in texto))
+
+        entradas = defaultdict(list)
+        for c in pend:
+            if c['tipo'] == 'CREDIT':
+                entradas[f"{float(c['valor']):.2f}"].append(c)
+        pares = {}
+        for d in pend:
+            if d['tipo'] != 'DEBIT':
+                continue
+            pares[d['id']] = (d, [
+                c for c in entradas[f"{float(d['valor']):.2f}"]
+                if c['account_id'] != d['account_id']
+                and abs((c['data_transacao'] - d['data_transacao']).days) <= 3
+                and traz(d, dono[c['account_id']]) and traz(c, dono[d['account_id']])])
+        disputa = Counter(c['id'] for _d, cs in pares.values() for c in cs)
+
+        agora = _dt.datetime.now()
+        n = 0
+        for d, cs in pares.values():
+            if len(cs) != 1 or disputa[cs[0]['id']] != 1:
+                continue
+            c = cs[0]
+            cursor.execute(
+                """UPDATE bank_transactions
+                      SET status='conciliado', conciliado_em=%s, conciliado_por='auto-transf',
+                          tipo_conciliacao='transferencia', conta_destino_id=%s
+                    WHERE id=%s AND status='pendente'""",
+                (agora, c['account_id'], d['id']))
+            if cursor.rowcount != 1:
+                continue
+            cursor.execute(
+                """UPDATE bank_transactions
+                      SET status='conciliado', conciliado_em=%s, conciliado_por='auto-transf',
+                          tipo_conciliacao='transferencia', conta_origem_id=%s
+                    WHERE id=%s AND status='pendente'""",
+                (agora, d['account_id'], c['id']))
+            if cursor.rowcount != 1:
+                conn.rollback()
+                return n
+            conn.commit()
+            n += 1
+        if n:
+            logger.info("_auto_ligar_transferencia: %d transferência(s) entre contas ligada(s)", n)
+        return n
+    except Exception:
+        conn.rollback()
+        logger.exception("_auto_ligar_transferencia: falhou — fica para a tela")
         return 0
 
 
