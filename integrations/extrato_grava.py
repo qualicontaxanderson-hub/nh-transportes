@@ -47,6 +47,17 @@ CREATE TABLE IF NOT EXISTS `bank_api_ids` (
 PREFIXO_HASH = 'api:'
 
 
+_tabela_ok = False
+
+
+def garantir_tabela(cursor):
+    """Uma vez por processo: DDL no MySQL faz COMMIT implícito."""
+    global _tabela_ok
+    if not _tabela_ok:
+        cursor.execute(DDL)
+        _tabela_ok = True
+
+
 def hash_api(account_id, api_id):
     """64 caracteres, como o hash do OFX (coluna VARCHAR(64) UNIQUE)."""
     h = hashlib.sha256(f'{account_id}|{api_id}'.encode('utf-8')).hexdigest()
@@ -98,7 +109,7 @@ def sincronizar(mod, api_txs, cursor, conn):
     {'novos', 'casados_ofx', 'ja_tinha'}.
     """
     conta = mod.account_id
-    cursor.execute(DDL)
+    garantir_tabela(cursor)
     txs = [t for t in api_txs if t.get('id_banco')]
     r = {'novos': 0, 'casados_ofx': 0, 'ja_tinha': 0}
     if not txs:
