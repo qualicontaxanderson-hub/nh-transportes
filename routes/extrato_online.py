@@ -5,8 +5,8 @@ Busca o período no banco e mostra, lançamento a lançamento, se ele JÁ ESTÁ
 no sistema ou se falta. Desde 24/10/2026 a conta com 'grava' (Cora NH e
 Prest) LANÇA no sistema o que falta — ao consultar e a cada 10 min
 (integrations/extrato_scheduler); o OFX continua entrando e reconhece o que
-a API já lançou (integrations/extrato_grava). O Sicoob segue só leitura: a
-API dele não dá id por lançamento.
+a API já lançou (integrations/extrato_grava). O Sicoob grava também, com o
+id montado em sicoob_extrato.id_sintetico.
 
 Mesma casca do /relatorios/conf_cartoes: filtro em cartão, régua de
 períodos, o período inteiro num painel e um card + um quadro por TIPO de
@@ -59,15 +59,16 @@ def _cora(conta):
     return carrega
 
 
-# 'grava': a API lança no sistema ao lado do OFX (integrations/extrato_grava) —
-# só conta cuja API dá um id estável por lançamento (Cora sim, Sicoob não).
+# 'grava': a API lança no sistema ao lado do OFX (integrations/extrato_grava);
+# o id estável do lançamento vem do banco (Cora) ou é montado (Sicoob).
 # 'cor': o contorno de tudo daquela conta na tela. 'credenciadora': o CNPJ que
 # o cupom grava quando o PIX é liquidado por este banco — é o que permite
 # dizer "cupom PIX sem PIX no banco".
 BANCOS = {
     'sicoob-nh': {'rotulo': 'SICOOB - NH', 'conta': '5024 / 148.186-0', 'modulo': _sicoob,
                   'cor': '#00897B', 'credenciadora': '02038232000164',
-                  'fds_no_dia_util': True},     # ver banco_api.proximo_dia_util
+                  'fds_no_dia_util': True,      # ver banco_api.proximo_dia_util
+                  'grava': True},
     'cora-nh': {'rotulo': 'CORA - NH', 'conta': '0001 / 3456427-0', 'modulo': _cora('posto'),
                 'cor': '#E8336D', 'credenciadora': None, 'grava': True},
     'cora-prest': {'rotulo': 'CORA - PREST', 'conta': '0001 / 27677832', 'modulo': _cora('prest'),

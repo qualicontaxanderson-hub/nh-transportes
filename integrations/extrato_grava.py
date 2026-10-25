@@ -20,8 +20,8 @@ bank_api_ids guarda (conta, id do lançamento na API) -> bank_transactions.id:
 Um par apagado à mão continua anotado de propósito: a API não ressuscita um
 lançamento que alguém removeu.
 
-Só grava a conta cujo módulo sabe dar um id estável por lançamento (Cora:
-'ent_...'). O Sicoob não tem id na API — fica para depois.
+Cada lançamento precisa de um id estável ('id_banco'): o Cora dá o seu
+('ent_...'); o Sicoob não dá, e sicoob_extrato.id_sintetico monta um.
 """
 import hashlib
 import logging
@@ -151,14 +151,17 @@ def sincronizar(mod, api_txs, cursor, conn):
     # 2. O resto entra pela rotina do OFX, com o texto do OFX
     from routes.bank_import import _save_transactions
     linhas = []
+    como_ofx = getattr(mod, 'linha_como_ofx', None)
     for a in sobra:
-        texto = mod.texto_como_ofx(a)
-        linhas.append({
-            'fitid': a['id_banco'], 'tipo': a['tipo'], 'data_transacao': a['data_transacao'],
-            'valor': a['valor'], 'descricao': texto, 'memo': texto,
-            'cnpj_cpf': _digitos(a.get('cnpj_cpf')) or None,
-            'hash_dedup': hash_api(conta, a['id_banco']),
-        })
+        if como_ofx:                # Sicoob: NAME cortado, MEMO e CNPJ do texto
+            linha = como_ofx(a)
+        else:                       # Cora: o OFX repete o texto no MEMO
+            texto = mod.texto_como_ofx(a)
+            linha = {'descricao': texto, 'memo': texto,
+                     'cnpj_cpf': _digitos(a.get('cnpj_cpf')) or None}
+        linhas.append(dict(linha, fitid=a['id_banco'], tipo=a['tipo'],
+                           data_transacao=a['data_transacao'], valor=a['valor'],
+                           hash_dedup=hash_api(conta, a['id_banco'])))
     _save_transactions(cursor, conn, conta, linhas)
     hs = [l['hash_dedup'] for l in linhas]
     ph = ','.join(['%s'] * len(hs))

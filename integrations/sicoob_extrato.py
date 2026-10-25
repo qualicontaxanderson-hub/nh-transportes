@@ -1,11 +1,21 @@
 """
-Extrato do Sicoob pela API (conta corrente, escopo cco_consulta) — SÓ LEITURA.
+Extrato do Sicoob pela API (conta corrente, escopo cco_consulta).
 
-NÃO GRAVA NADA. Busca o extrato na API, converte para o MESMO formato do
+Busca o extrato na API, converte para o MESMO formato do
 OFXParser.get_transactions() e COMPARA com o que o OFX já gravou em
-bank_transactions na conta do Sicoob (bank_accounts.id = 10).
+bank_transactions na conta do Sicoob (bank_accounts.id = 10). Desde
+24/10/2026 também GRAVA, ao lado do OFX (integrations/extrato_grava), com
+as duas soluções abaixo:
 
-Por que ainda não grava: o OFX dessa conta entra todo dia e está 100%
+  * id por lançamento: a API não dá; ler() monta um estável (id_sintetico):
+    o conteúdo inteiro do lançamento + quantas vezes esse MESMO conteúdo já
+    apareceu antes no dia, contando do mais antigo. O banco devolve do mais
+    novo para o mais antigo, então o que entra depois não muda o número dos
+    anteriores — e dois lançamentos de conteúdo idêntico são intercambiáveis.
+  * texto: linha_como_ofx() grava o NAME/MEMO como o OFX grava (NAME cortado
+    em 32), e quando o OFX chega o texto dele substitui.
+
+O que segue é o porquê de ter sido só leitura até aqui: o OFX dessa conta entra todo dia e está 100%
 conciliado (15.560 lançamentos desde 23/06/2026). Duas coisas impedem a API
 de entrar ao lado dele sem estragar isso:
 
@@ -46,6 +56,7 @@ ACCOUNT_ID = 10             # bank_accounts: SICOOB - NH, 5024 / 1481860
 COOPERATIVA = '5024'
 NUMERO_CONTA = 1481860      # 148.186-0, com o dígito
 ENV_CLIENT_ID = 'SICOOB_CLIENT_ID_POSTO'
+account_id = ACCOUNT_ID     # a mesma interface das contas Cora (extrato_grava)
 
 # Nomes antigos, para quem já importava daqui.
 SicoobError = BancoError
@@ -198,6 +209,32 @@ def hash_api(tx, repeticao):
     return hashlib.sha256(raw.encode('utf-8')).hexdigest()
 
 
+def id_sintetico(txs):
+    """Dá a cada lançamento um 'id_banco' estável entre consultas (ver o topo).
+    txs na ordem do banco (mais novo primeiro): conta do fim para o começo."""
+    vistos = {}
+    for t in reversed(txs):
+        base = (t['data_transacao'], t['tipo'], f"{t['valor']:.2f}", t['descricao'],
+                t['memo'], t['numero_documento'] or '')
+        n = vistos.get(base, 0)
+        vistos[base] = n + 1
+        t['id_banco'] = 'sic:' + hash_api(t, n)[:60]
+    return txs
+
+
+def linha_como_ofx(tx):
+    """NAME, MEMO e CNPJ como o OFX do Sicoob grava: NAME = o complemento
+    colado por espaço e cortado em 32 (sem complemento, a descrição inteira);
+    MEMO = a descrição; o CNPJ/CPF sai do próprio texto, como no OFXParser."""
+    from integrations.ofx_parser import _extract_cnpj_cpf
+    nome = texto_como_ofx(tx)
+    if partes_complemento(tx.get('memo')):
+        nome = nome[:32].rstrip()
+    memo = tx.get('descricao') or ''
+    cnpj, _tipo = _extract_cnpj_cpf(f'{nome} {memo}')
+    return {'descricao': nome, 'memo': memo, 'cnpj_cpf': cnpj}
+
+
 def _meses(inicio, fim):
     d = inicio
     while d <= fim:
@@ -218,6 +255,7 @@ def ler(inicio, fim, sessao=None, incluir_hoje=False):
             raise TransacaoInvalida(
                 f'resposta sem resultado.transacoes ({ano}-{mes:02d}): chaves {sorted(d)}')
         txs += [para_transacao(t) for t in res['transacoes']]
+    id_sintetico(txs)
     fora = [t for t in txs if not inicio <= t['data_transacao'] <= fim]
     if fora:
         logger.warning('[sicoob] %d transações fora de %s..%s descartadas.', len(fora), inicio, fim)

@@ -34,7 +34,7 @@ DIAS_ATRAS = 3
 
 def rodar(logger, hoje=None):
     """Uma passada por todas as contas que gravam. Devolve {chave: resumo}."""
-    from integrations.banco_api import SemCredencial
+    from integrations.banco_api import SemCredencial, proximo_dia_util
     from integrations.extrato_grava import sincronizar
     from routes.extrato_online import BANCOS
     hoje = hoje or date.today()
@@ -45,7 +45,10 @@ def rodar(logger, hoje=None):
         conn = cur = None
         try:
             mod = banco['modulo']()
-            api = mod.ler(hoje - timedelta(days=DIAS_ATRAS), hoje, incluir_hoje=True)
+            # Sicoob no fim de semana/feriado: o PIX de hoje vem com a data do
+            # próximo dia útil — pedido só até hoje, não viria.
+            fim = proximo_dia_util(hoje) if banco.get('fds_no_dia_util') else hoje
+            api = mod.ler(hoje - timedelta(days=DIAS_ATRAS), fim, incluir_hoje=True)
             conn = get_db_connection()
             cur = conn.cursor(dictionary=True)
             resumo[chave] = sincronizar(mod, api, cur, conn)
