@@ -16,12 +16,14 @@ do mais certo para o menos:
              de um fica como "possíveis", para a pessoa escolher.
 
 Cupom de PIX = bandeira "Outros" no XML (é como o PDV grava o PIX), fora o
-repasse do Baratão. Um cupom serve a um PIX só.
+repasse do Baratão. Um cupom serve a um PIX só. O cupom misto (R$ 0,01 no
+dinheiro + R$ 10,00 no PIX) casa também pela parte do PIX
+(cartao_cupom.parte_eletronica).
 """
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from utils.cartao_cupom import BARATAO_CNPJ, _palavras, _vendedor
+from utils.cartao_cupom import BARATAO_CNPJ, _palavras, _vendedor, mesmo_valor, parte_eletronica
 
 JANELA_HORA = timedelta(minutes=10)
 JANELA_NOME = timedelta(hours=2)
@@ -34,7 +36,7 @@ def _cupons(ini, fim):
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute("""
-            SELECT id, numero, serie, dh_emissao, valor_total, card_autorizacao,
+            SELECT id, chave, numero, serie, dh_emissao, valor_total, card_autorizacao,
                    card_credenciadora, vendedor_raw, cliente_nome, placa, km
               FROM vendas_xml
              WHERE dh_emissao >= %s AND dh_emissao < %s
@@ -43,7 +45,7 @@ def _cupons(ini, fim):
              ORDER BY dh_emissao""",
             (datetime.combine(ini, datetime.min.time()),
              datetime.combine(fim + timedelta(days=1), datetime.min.time()), BARATAO_CNPJ))
-        cupons = cur.fetchall()
+        cupons = parte_eletronica(cur, cur.fetchall())
         if cupons:
             ids = [c['id'] for c in cupons]
             itens = defaultdict(list)
@@ -190,11 +192,8 @@ def casar(pix, ini, fim, credenciadora=None):
     cupons = _cupons(ini, fim)
     usados, out = set(), {}
 
-    def mesmo_valor(c, tx):
-        return abs(float(c['valor_total']) - float(tx['valor'])) < 0.005
-
     def livres(tx):
-        return [c for c in cupons if c['id'] not in usados and mesmo_valor(c, tx)
+        return [c for c in cupons if c['id'] not in usados and mesmo_valor(c, tx['valor'])
                 and c['dh_emissao'].date() in _dias(tx)]
 
     def liga(tx, c, metodo):

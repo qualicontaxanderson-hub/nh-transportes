@@ -64,12 +64,51 @@ def _tipo(forma_pagamento):
 
 def _cupons(cur, ini, fim, extra=''):
     cur.execute(f"""
-        SELECT id, numero, serie, dh_emissao, valor_total, forma_pagamento,
+        SELECT id, chave, numero, serie, dh_emissao, valor_total, forma_pagamento,
                card_bandeira, card_autorizacao, cliente_doc
           FROM vendas_xml
          WHERE situacao = 'autorizada' AND dh_emissao >= %s AND dh_emissao < %s {extra}""",
         (ini, fim))
-    return cur.fetchall()
+    return parte_eletronica(cur, cur.fetchall())
+
+
+#: tPag que passa por maquininha ou banco (cartao, PIX, carteira, pagto eletronico)
+_TPAG_ELETR = ('03', '04', '17', '18', '20', '22')
+
+
+def parte_eletronica(cur, cupons):
+    """Cupom pago em duas formas (R$ 0,01 no dinheiro + R$ 10,00 no PIX): a
+    maquininha e o banco veem so a parte eletronica, nunca o total. Poe
+    c['valor_eletr'] no cupom misto com UMA forma eletronica, pelo vPag do XML
+    (integrations/vendas_pagamentos); nos outros fica None e o cupom casa so
+    pelo total, como sempre. Out/2026: 283 cupons (Dinheiro+Debito 234)."""
+    for c in cupons:
+        c['valor_eletr'] = None
+    chaves = [c['chave'] for c in cupons if c.get('chave')]
+    partes = defaultdict(list)
+    try:
+        for i in range(0, len(chaves), 500):
+            fatia = chaves[i:i + 500]
+            cur.execute(f"""
+                SELECT chave, tpag, tband, valor FROM vendas_xml_pagamentos
+                 WHERE valor > 0 AND chave IN ({','.join(['%s'] * len(fatia))})""", tuple(fatia))
+            for r in cur.fetchall():
+                r = r if isinstance(r, dict) else dict(zip(('chave', 'tpag', 'tband', 'valor'), r))
+                partes[r['chave']].append(r)
+    except Exception:
+        return cupons                   # tabela ainda nao existe: casa pelo total
+    for c in cupons:
+        ps = partes.get(c.get('chave'), [])
+        eletr = [p for p in ps if p['tpag'] in _TPAG_ELETR or p['tband']]
+        if len(ps) > 1 and len(eletr) == 1:
+            c['valor_eletr'] = float(eletr[0]['valor'])
+    return cupons
+
+
+def mesmo_valor(c, valor, tol=0.005):
+    """O total do cupom ou, no misto, a parte da maquininha/banco."""
+    return any(v is not None and abs(float(v) - float(valor)) < tol
+               for v in (c['valor_total'], c.get('valor_eletr')))
 
 
 def _casar_x7(cur, ini, fim, presos):
@@ -159,6 +198,8 @@ def _casar_sipag(cur, ini, fim, presos, op='SIPAG'):
     por_valor = defaultdict(list)
     for c in cupons:
         por_valor[round(float(c['valor_total']), 2)].append(c)
+        if c['valor_eletr'] is not None:     # misto: a maquininha passou so esta parte
+            por_valor[round(c['valor_eletr'], 2)].append(c)
     pares = []
     # 1a passada: com a bandeira; 2a: cupom sem bandeira no XML (lancamento
     # manual); 3a: cupom com bandeira "Outros" (o PDV ate ago/2026), janela
@@ -229,7 +270,7 @@ def _casar_pix(cur, ini, fim, presos, exato=True):
         # tem preferencia
         for p in pix:
             cs = [c for c in cupons if c['id'] not in presos
-                  and abs(float(c['valor_total']) - float(p['valor'])) < 0.01
+                  and mesmo_valor(c, p['valor'], 0.01)
                   and abs((c['dh_emissao'] - p['dt']).total_seconds()) <= 600]
             if cs:
                 c = min(cs, key=lambda c: (c['banco'] not in (None, p['banco']),
@@ -257,7 +298,7 @@ def _casar_pix(cur, ini, fim, presos, exato=True):
             continue
         nomes = set(_palavras(p['pagador']))
         cs = [c for c in cupons if c['id'] not in presos
-              and abs(float(c['valor_total']) - float(p['valor'])) < 0.01
+              and mesmo_valor(c, p['valor'], 0.01)
               and abs((c['dh_emissao'] - p['dt']).total_seconds()) <= 7200
               and _palavras(c['card_autorizacao'])[:1]
               and _palavras(c['card_autorizacao'])[0] in nomes]
