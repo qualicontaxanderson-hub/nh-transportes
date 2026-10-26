@@ -4,7 +4,9 @@
 {% block content %}
 {% set cancelada = (nota.situacao == 'cancelada') %}
 <div class="d-flex justify-content-between align-items-center mb-3" style="max-width:820px;margin:0 auto;">
-  <a href="/vendas" onclick="if(document.referrer){history.back();return false;}"
+  {# Aberto em aba nova ("abrir cupom" do Extrato On-Line): não há para onde
+     voltar nesta aba — fecha e a pessoa cai na aba de onde veio. #}
+  <a href="/vendas" onclick="if(history.length>1){history.back();}else{window.close();setTimeout(function(){location.href='/vendas';},300);}return false;"
      class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Voltar</a>
   <span class="badge {{ 'bg-danger' if cancelada else 'bg-success' }}">
     {{ 'CANCELADA' if cancelada else nota.situacao }}
