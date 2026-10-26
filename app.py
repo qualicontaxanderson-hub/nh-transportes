@@ -550,6 +550,14 @@ def create_app():
     except Exception:
         app.logger.warning("[ofx_auto] nao foi possivel iniciar o scheduler.", exc_info=True)
 
+    # Pagamento de cada cupom (forma por forma) lido do XML da nota, na pasta
+    # SAIDAS do Posto no Dropbox (so leitura). Falha aqui NAO derruba o app.
+    try:
+        from integrations.vendas_pagamentos_scheduler import iniciar_scheduler as iniciar_vpag
+        iniciar_vpag(app)
+    except Exception:
+        app.logger.warning("[vendas_pag] nao foi possivel iniciar o scheduler.", exc_info=True)
+
     return app
 
 
