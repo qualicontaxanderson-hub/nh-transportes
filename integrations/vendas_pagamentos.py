@@ -250,6 +250,9 @@ def situacao(cursor):
         cursor.execute("""SELECT MAX(lido_em) lido_em, COUNT(DISTINCT chave) notas
                             FROM vendas_xml_pagamentos""")
         r = cursor.fetchone()
-        return r if isinstance(r, dict) else {'lido_em': r[0], 'notas': r[1]}
+        r = dict(r) if isinstance(r, dict) else {'lido_em': r[0], 'notas': r[1]}
+        # O posto vende de madrugada, mas pouco: 6 h sem XML novo é parada.
+        r['parado'] = bool(r['lido_em'] and _agora() - r['lido_em'] > timedelta(hours=6))
+        return r
     except Exception:
         return None

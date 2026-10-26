@@ -27,6 +27,9 @@
     border-radius:8px; padding:.3rem .7rem; font-size:.78rem; font-weight:800;
     text-decoration:none; }
 
+  #vendas .vnd-pagxml{ font-size:.76rem; color:#5b6675; margin-bottom:.5rem; }
+  #vendas .vnd-pagxml--parado{ color:#b42318; font-weight:700; }
+
   /* Números em degradê */
   #vendas .nums{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem;
     margin-bottom:.7rem; }
@@ -258,6 +261,16 @@
       {% with ativa = 'vendas' %}{% include 'includes/abas_migracoes.html' %}{% endwith %}
     </div>
   </div>
+
+  {# Pagamento de cada cupom lido do XML (pasta SAIDAS do Posto, Qualicontax) #}
+  {% if pag_xml and pag_xml.lido_em %}
+  <div class="vnd-pagxml{{ ' vnd-pagxml--parado' if pag_xml.parado }}">
+    <i class="bi bi-filetype-xml"></i>
+    Pagamento por forma lido do XML: {{ '{:,}'.format(pag_xml.notas).replace(',', '.') }} notas ·
+    última leitura {{ pag_xml.lido_em.strftime('%d/%m %H:%M') }}
+    {% if pag_xml.parado %} — parado há mais de 6 horas: confira a pasta SAIDAS do Posto no Dropbox{% endif %}
+  </div>
+  {% endif %}
 
   {% if n_filtros %}
   <div class="vnd-eco">

@@ -242,6 +242,10 @@ def index():
                 pix_sem_cupom = cartao_cupom.pix_sem_cupom(conn, f['data_ini'], f['data_fim'])
         except Exception:
             pix_sem_cupom = []
+        # Pagamento forma por forma lido do XML (integrations/vendas_pagamentos):
+        # a tela mostra até quando, para a leitura não parar em silêncio.
+        from integrations.vendas_pagamentos import situacao as pag_xml_situacao
+        pag_xml = pag_xml_situacao(cur)
 
         # ---------- Itens das notas exibidas (1 query, sem N+1) — p/ cards mobile ----------
         itens_por_venda = {}
@@ -356,6 +360,7 @@ def index():
             paginas=_janela_paginas(pagina, total_paginas),
             qs_filtros=qs_filtros,
             pix_sem_cupom=pix_sem_cupom,
+            pag_xml=pag_xml,
         )
     finally:
         cur.close()
