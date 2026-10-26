@@ -55,6 +55,30 @@ CREATE TABLE IF NOT EXISTS `vendas_xml_pagamentos` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 """
 
+# O que o cupom impresso no posto mostra e vendas_xml não guarda: emitente,
+# autorização, QR Code oficial, o texto livre da nota e o de cada item. É o
+# que deixa o "abrir cupom" igual ao papel (templates/vendas/_detalhe_conteudo).
+DDL_DANFE = """
+CREATE TABLE IF NOT EXISTS `vendas_xml_danfe` (
+    `chave`          CHAR(44)      NOT NULL PRIMARY KEY,
+    `emit_nome`      VARCHAR(120)  NULL,
+    `emit_fantasia`  VARCHAR(80)   NULL,
+    `emit_endereco`  VARCHAR(250)  NULL,
+    `emit_ie`        VARCHAR(20)   NULL,
+    `emit_fone`      VARCHAR(20)   NULL,
+    `dh_autorizacao` DATETIME      NULL,
+    `qrcode`         VARCHAR(700)  NULL,
+    `url_consulta`   VARCHAR(150)  NULL,
+    `v_prod`         DECIMAL(14,2) NULL COMMENT 'soma dos itens (o VALOR TOTAL do cupom)',
+    `v_outro`        DECIMAL(14,2) NULL COMMENT 'acréscimo',
+    `v_desc`         DECIMAL(14,2) NULL,
+    `v_tot_trib`     DECIMAL(14,2) NULL,
+    `inf_cpl`        TEXT          NULL,
+    `inf_ad_prod`    TEXT          NULL COMMENT 'JSON {nItem: texto}',
+    `lido_em`        DATETIME      NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+"""
+
 # Mesmos rótulos do robô de vendas (tabela da NT, leiaute NF-e 4.00).
 _TPAG = {
     '01': 'Dinheiro', '02': 'Cheque', '03': 'Cartao Credito', '04': 'Cartao Debito',
@@ -76,6 +100,7 @@ def ensure_tables():
     cur = conn.cursor()
     try:
         cur.execute(DDL)
+        cur.execute(DDL_DANFE)
         conn.commit()
     finally:
         cur.close()
@@ -105,8 +130,44 @@ def _num(v):
         return 0.0
 
 
+def _dh(v):
+    """'2026-10-23T09:20:59-03:00' -> datetime sem fuso (hora do posto)."""
+    try:
+        return datetime.strptime((v or '')[:19], '%Y-%m-%dT%H:%M:%S')
+    except ValueError:
+        return None
+
+
+def _danfe(raiz, inf):
+    """Os dados do cupom impresso que vendas_xml não tem."""
+    import json
+    emit = inf.find('emit')
+    end = emit.find('enderEmit') if emit is not None else None
+    tot = inf.find('total/ICMSTot')
+    # o cupom do posto imprime logradouro, número, bairro, município e UF
+    endereco = ', '.join(p for p in (_txt(end, 'xLgr'), _txt(end, 'nro'), _txt(end, 'xBairro'),
+                                     _txt(end, 'xMun'), _txt(end, 'UF')) if p)
+    adprod = {d.get('nItem'): _txt(d, 'infAdProd') for d in inf.findall('det') if _txt(d, 'infAdProd')}
+    return {
+        'emit_nome': (_txt(emit, 'xNome') or '')[:120] or None,
+        'emit_fantasia': (_txt(emit, 'xFant') or '')[:80] or None,
+        'emit_endereco': endereco[:250] or None,
+        'emit_ie': _txt(emit, 'IE'),
+        'emit_fone': _txt(end, 'fone'),
+        'dh_autorizacao': _dh(_txt(raiz.find('.//protNFe/infProt'), 'dhRecbto')),
+        'qrcode': (_txt(raiz.find('.//infNFeSupl'), 'qrCode') or '')[:700] or None,
+        'url_consulta': (_txt(raiz.find('.//infNFeSupl'), 'urlChave') or '')[:150] or None,
+        'v_prod': _num(_txt(tot, 'vProd')) if tot is not None else None,
+        'v_outro': _num(_txt(tot, 'vOutro')) if tot is not None else None,
+        'v_desc': _num(_txt(tot, 'vDesc')) if tot is not None else None,
+        'v_tot_trib': _num(_txt(tot, 'vTotTrib')) if tot is not None else None,
+        'inf_cpl': _txt(inf.find('infAdic'), 'infCpl'),
+        'inf_ad_prod': json.dumps(adprod, ensure_ascii=False) if adprod else None,
+    }
+
+
 def ler_xml(conteudo):
-    """(chave, [linhas]) do XML da nota; (None, []) se não for nota.
+    """(chave, [linhas], danfe) do XML da nota; (None, [], None) se não for nota.
     Toda nota devolve ao menos uma linha — sem <detPag> vira uma linha vazia,
     para não ser baixada de novo a cada rodada."""
     raiz = ET.fromstring(conteudo)
@@ -115,10 +176,10 @@ def ler_xml(conteudo):
             el.tag = el.tag.split('}', 1)[1]
     inf = raiz.find('.//infNFe')
     if inf is None:
-        return None, []
+        return None, [], None
     chave = re.sub(r'\D', '', inf.get('Id') or '')[-44:]
     if len(chave) != 44:
-        return None, []
+        return None, [], None
     pag = inf.find('pag')
     linhas = []
     for i, dp in enumerate(pag.findall('detPag') if pag is not None else [], 1):
@@ -141,12 +202,23 @@ def ler_xml(conteudo):
                        'bandeira': None, 'credenciadora': None, 'autorizacao': None,
                        'integrado': None, 'troco': 0.0})
     linhas[0]['troco'] = _num(_txt(pag, 'vTroco'))
-    return chave, linhas
+    return chave, linhas, _danfe(raiz, inf)
 
 
-def gravar(cur, chave, linhas, quando=None):
+DANFE_COLS = ('emit_nome', 'emit_fantasia', 'emit_endereco', 'emit_ie', 'emit_fone',
+              'dh_autorizacao', 'qrcode', 'url_consulta', 'v_prod', 'v_outro', 'v_desc',
+              'v_tot_trib', 'inf_cpl', 'inf_ad_prod')
+SQL_DANFE = ("INSERT INTO vendas_xml_danfe (chave, %s, lido_em) VALUES (%s) "
+             "ON DUPLICATE KEY UPDATE %s, lido_em=VALUES(lido_em)") % (
+    ', '.join(DANFE_COLS), ', '.join(['%s'] * (len(DANFE_COLS) + 2)),
+    ', '.join('%s=VALUES(%s)' % (c, c) for c in DANFE_COLS))
+
+
+def gravar(cur, chave, linhas, danfe=None, quando=None):
     """Grava por cima (a mesma nota lida de novo dá o mesmo resultado)."""
     quando = quando or _agora()
+    if danfe:
+        cur.execute(SQL_DANFE, (chave,) + tuple(danfe[c] for c in DANFE_COLS) + (quando,))
     cur.execute("DELETE FROM vendas_xml_pagamentos WHERE chave = %s AND n > %s",
                 (chave, len(linhas)))
     for l in linhas:
@@ -230,9 +302,9 @@ def processar():
                     break
                 try:
                     _, resp = dbx.files_download('%s/%s' % (pasta, e.name))
-                    chave, linhas = ler_xml(resp.content)
+                    chave, linhas, danfe = ler_xml(resp.content)
                     if chave:
-                        gravar(cur, chave, linhas)
+                        gravar(cur, chave, linhas, danfe)
                         conn.commit()
                     lidos += 1
                 except Exception:

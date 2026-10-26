@@ -11,6 +11,29 @@
   .venda-doc-wrap .cupom .linha { display:flex; justify-content:space-between; gap:.5rem; }
   .venda-doc-wrap .cupom .item-nome { font-weight:700; }
 
+  /* ---- NFC-e no desenho do cupom impresso no posto ---- */
+  .venda-doc-wrap .nfce { max-width:380px; border-radius:.4rem; padding:1rem .9rem;
+      font-family:'Courier New',Courier,monospace; font-size:.74rem; line-height:1.25;
+      color:#000; font-weight:600; }
+  .venda-doc-wrap .nfce-topo { display:flex; gap:.6rem; align-items:flex-start;
+      border-bottom:1.5px solid #000; padding-bottom:.35rem; }
+  .venda-doc-wrap .nfce-logo { width:52px; height:auto; flex:none; margin-top:.15rem; }
+  .venda-doc-wrap .nfce-cab { border-bottom:1.5px solid #000; padding:.2rem 0; }
+  .venda-doc-wrap .nfce-l { display:flex; gap:.4rem; }
+  .venda-doc-wrap .nfce .c1 { width:5.2rem; flex:none; }
+  .venda-doc-wrap .nfce .c1--q { text-align:right; padding-right:.6rem; }
+  .venda-doc-wrap .nfce .c2 { width:2rem; text-align:center; flex:none; }
+  .venda-doc-wrap .nfce .c3 { width:4.5rem; flex:none; }
+  .venda-doc-wrap .nfce .c4 { flex:1; text-align:right; }
+  .venda-doc-wrap .nfce-desc { flex:1; }
+  .venda-doc-wrap .nfce-desc small { display:block; font-size:.62rem; overflow-wrap:anywhere; }
+  .venda-doc-wrap .nfce-item { padding:.25rem 0; }
+  .venda-doc-wrap .nfce-sep { border-top:1.5px solid #000; padding:.2rem 0; }
+  .venda-doc-wrap .nfce-big { font-size:.86rem; }
+  .venda-doc-wrap .nfce-peq { font-size:.64rem; }
+  .venda-doc-wrap .nfce-qr { display:flex; justify-content:center; margin:.4rem 0; }
+
+
   /* ---- DANFE (modelo 55) ---- */
   .venda-doc-wrap .danfe { background:#fff; border:1px solid #000; border-radius:.35rem;
       font-size:.8rem; box-shadow:0 4px 18px rgba(0,0,0,.08); overflow:hidden; }
@@ -134,89 +157,91 @@
 
 {% else %}
   {# ==================== CUPOM (modelo 65 e demais) ==================== #}
-  <div class="cupom">
-    <div class="c-center">
-      <div class="fw-bold">DOCUMENTO AUXILIAR NFC-e</div>
-      <div>Modelo {{ nota.modelo }} · Série {{ nota.serie }} · Nº {{ nota.numero }}</div>
-      {% if nota.dh_emissao %}<div>{{ nota.dh_emissao.strftime('%d/%m/%Y %H:%M:%S') }}</div>{% endif %}
-      {% if nota.cnpj_emitente %}<div>CNPJ {{ nota.cnpj_emitente }}</div>{% endif %}
-      {% if nota.nat_op %}<div>{{ nota.nat_op }}</div>{% endif %}
+  {# Igual ao DANFE NFC-e que o posto imprime. O que vendas_xml não guarda
+     (emitente, autorização, QR, textos livres, valor de cada forma) vem do
+     XML lido por integrations/vendas_pagamentos; sem ele, sai o que há. #}
+  {% set FORMA = {'01':'Dinheiro','02':'Cheque','03':'Cartão de Crédito','04':'Cartão de Débito',
+                  '05':'Crédito Loja','10':'Vale Alimentação','11':'Vale Refeição','12':'Vale Presente',
+                  '13':'Vale Combustível','15':'Boleto Bancário','16':'Depósito Bancário',
+                  '17':'Pagamento Instantâneo (PIX)','18':'Transferência bancária','19':'Fidelidade',
+                  '20':'PIX Estático','90':'Sem pagamento','99':'Outros'} %}
+  {% set d = danfe or {} %}
+  {% set cnpj = nota.cnpj_emitente or '' %}
+  {% set fone = d.emit_fone or '' %}
+  {% set acresc = danfe.v_outro if danfe and danfe.v_outro is not none else (nota.vlr_acrescimo or 0) %}
+  {% set desc = danfe.v_desc if danfe and danfe.v_desc is not none else (nota.vlr_desconto or 0) %}
+  {% set v_itens = danfe.v_prod if danfe and danfe.v_prod is not none else ((nota.valor_total or 0) - acresc + desc) %}
+  {% set ns_c = namespace(chave=[]) %}
+  {% for i in range(0, (nota.chave or '')|length, 4) %}{% set ns_c.chave = ns_c.chave + [nota.chave[i:i+4]] %}{% endfor %}
+  <div class="cupom nfce">
+    <div class="nfce-topo">
+      <img src="{{ url_for('static', filename='logo-nh.png') }}" alt="" class="nfce-logo">
+      <div>
+        {% if d.emit_fantasia %}<div>{{ d.emit_fantasia }}</div>{% endif %}
+        <div>{{ d.emit_nome ~ ' - ' if d.emit_nome }}CNPJ: {% if cnpj|length == 14 %}{{ cnpj[:2] }}.{{ cnpj[2:5] }}.{{ cnpj[5:8] }}/{{ cnpj[8:12] }}-{{ cnpj[12:] }}{% else %}{{ cnpj }}{% endif %}</div>
+        {% if d.emit_endereco %}<div>{{ d.emit_endereco }},</div>{% endif %}
+        {% if d.emit_ie %}<div>IE:{{ d.emit_ie }}{% if fone %} - Fone: {% if fone|length >= 10 %}({{ fone[:2] }}) {{ fone[2:-4] }}-{{ fone[-4:] }}{% else %}{{ fone }}{% endif %}{% endif %}</div>{% endif %}
+        <div>DOCUMENTO AUXILIAR DA NOTA FISCAL DE CONSUMIDOR ELETRÔNICA</div>
+      </div>
     </div>
-    <hr>
 
+    <div class="nfce-cab">
+      <div class="nfce-l"><span class="c1">CÓDIGO</span><span>DESCRIÇÃO</span></div>
+      <div class="nfce-l"><span class="c1 c1--q">QTDE</span><span class="c2">UN</span><span class="c3">VL UNIT</span><span class="c4">VL TOTAL</span></div>
+    </div>
     {% for it in itens %}
-      <div class="item-nome">{{ it.n_item }}. {{ it.produto_xml or '—' }}</div>
-      <div class="linha">
-        <span>Qtd {{ it.quantidade }} {{ it.unidade or '' }} × {{ (it.valor_unitario or 0) | formatar_moeda }}</span>
-        <span>{{ (it.valor_total or 0) | formatar_moeda }}</span>
+      <div class="nfce-item">
+        <div class="nfce-l"><span class="c1">{{ it.cprod or it.n_item }}</span>
+          <span class="nfce-desc">{{ it.produto_xml or '—' }}
+            {% set txt = (d.itens_txt or {}).get(it.n_item) %}
+            {% if txt %}{% for t in txt %}<small>{{ t }}</small>{% endfor %}
+            {% else %}
+              {% if nota.vendedor_raw %}<small>(ATD:{{ nota.vendedor_raw }})</small>{% endif %}
+              {% if it.vlr_acrescimo %}<small>ACRESCIMO: R$ {{ it.vlr_acrescimo | fmtmoney }}</small>{% endif %}
+            {% endif %}
+          </span></div>
+        <div class="nfce-l"><span class="c1 c1--q">{{ it.quantidade | fmtnum(3) }}</span><span class="c2">{{ it.unidade or '' }}</span>
+          <span class="c3">{{ it.valor_unitario | fmtmoney }}</span><span class="c4">{{ it.valor_total | fmtmoney }}</span></div>
       </div>
-      {% if it.cod_anp %}<div class="small text-muted">ANP {{ it.cod_anp }}</div>{% endif %}
-      {% if it.bico is not none or it.bomba is not none or it.tanque is not none %}
-      <div class="small text-muted">
-        {% if it.bico is not none %}Bico {{ it.bico }} {% endif %}
-        {% if it.bomba is not none %}Bomba {{ it.bomba }} {% endif %}
-        {% if it.tanque is not none %}Tanque {{ it.tanque }}{% endif %}
-      </div>
-      {% endif %}
-      {% if it.enc_ini is not none or it.enc_fin is not none %}
-      <div class="small text-muted">Encerrante {{ it.enc_ini }} → {{ it.enc_fin }}</div>
-      {% endif %}
-      {% if it.cprod or it.ncm or it.cfop or it.cst or it.icms_mono %}
-      <div class="small text-muted">
-        {% if it.cprod %}Cód {{ it.cprod }} {% endif %}
-        {% if it.ncm %}NCM {{ it.ncm }} {% endif %}
-        {% if it.cfop %}CFOP {{ it.cfop }} {% endif %}
-        {% if it.cst %}CST {{ it.cst }} {% endif %}
-        {% if it.icms_mono %}ICMS mono {{ it.icms_mono | formatar_moeda }}{% endif %}
-      </div>
-      {% endif %}
-      {% if it.vlr_desconto %}<div class="small text-muted">Desconto {{ it.vlr_desconto | formatar_moeda }}</div>{% endif %}
-      {% if it.vlr_acrescimo %}<div class="small text-muted">Acréscimo {{ it.vlr_acrescimo | formatar_moeda }}</div>{% endif %}
-      <hr>
     {% endfor %}
 
-    <div class="linha fw-bold"><span>TOTAL</span><span>{{ (nota.valor_total or 0) | formatar_moeda }}</span></div>
-    {% if nota.vlr_desconto %}<div class="linha"><span>Desconto</span><span>{{ nota.vlr_desconto | formatar_moeda }}</span></div>{% endif %}
-    {% if nota.vlr_acrescimo %}<div class="linha"><span>Acréscimo</span><span>{{ nota.vlr_acrescimo | formatar_moeda }}</span></div>{% endif %}
-    {% if nota.forma_pagamento %}<div class="linha"><span>{{ nota.forma_pagamento }}</span><span></span></div>{% endif %}
-    {% if nota.troco %}<div class="linha"><span>Troco</span><span>{{ nota.troco | formatar_moeda }}</span></div>{% endif %}
-    {% if nota.vlr_trib_aprox %}<div class="linha"><span>Trib. aprox (Lei 12.741)</span><span>{{ nota.vlr_trib_aprox | formatar_moeda }}</span></div>{% endif %}
-    {% if nota.trib_fed %}<div class="linha"><span>Trib. federal</span><span>{{ nota.trib_fed | formatar_moeda }}</span></div>{% endif %}
-    {% if nota.trib_est %}<div class="linha"><span>Trib. estadual</span><span>{{ nota.trib_est | formatar_moeda }}</span></div>{% endif %}
-    {% if nota.trib_mun %}<div class="linha"><span>Trib. municipal</span><span>{{ nota.trib_mun | formatar_moeda }}</span></div>{% endif %}
-    <hr>
-
-    {% if nota.card_bandeira or nota.card_autorizacao or nota.card_credenciadora or nota.tef_terminal or nota.tef_sequencia %}
-    <div class="c-center small text-muted">— PAGAMENTO ELETRÔNICO —</div>
-    {% if nota.card_bandeira %}<div class="linha"><span>Bandeira</span><span>{{ nota.card_bandeira }}</span></div>{% endif %}
-    {% if nota.card_credenciadora %}<div class="linha"><span>Credenciadora</span><span>{{ nota.card_credenciadora }}</span></div>{% endif %}
-    {% if nota.card_autorizacao %}<div class="linha"><span>Autorização</span><span>{{ nota.card_autorizacao }}</span></div>{% endif %}
-    {% if nota.card_integrado is not none %}<div class="linha"><span>Integrado</span><span>{{ 'Sim' if nota.card_integrado else 'Não' }}</span></div>{% endif %}
-    {% if nota.tef_terminal %}<div class="linha"><span>Terminal TEF</span><span>{{ nota.tef_terminal }}</span></div>{% endif %}
-    {% if nota.tef_sequencia %}<div class="linha"><span>Sequência TEF</span><span>{{ nota.tef_sequencia }}</span></div>{% endif %}
-    <hr>
-    {% endif %}
-
-    {% if nota.cliente_nome or nota.cliente_doc or nota.cli_logradouro %}
-    <div class="c-center small text-muted">— CLIENTE —</div>
-    {% if nota.cliente_nome %}<div>{{ nota.cliente_nome }}</div>{% endif %}
-    {% if nota.cliente_doc %}<div>Doc {{ nota.cliente_doc }}</div>{% endif %}
-    {% if nota.cli_logradouro %}<div>{{ nota.cli_logradouro }}{% if nota.cli_bairro %}, {{ nota.cli_bairro }}{% endif %}</div>{% endif %}
-    {% if nota.cli_municipio or nota.cli_uf %}<div>{{ nota.cli_municipio or '' }}{% if nota.cli_uf %}/{{ nota.cli_uf }}{% endif %}</div>{% endif %}
-    {% if nota.cli_cep %}<div>CEP {{ nota.cli_cep }}</div>{% endif %}
-    <hr>
-    {% endif %}
-
-    {% if nota.placa or nota.km is not none %}
-    <div class="linha">
-      {% if nota.placa %}<span>Placa {{ nota.placa }}</span>{% else %}<span></span>{% endif %}
-      {% if nota.km is not none %}<span>KM {{ nota.km }}</span>{% endif %}
+    <div class="nfce-sep">
+      <div class="linha"><span>QTD TOTAL DE ITENS</span><span>{{ itens|length }}</span></div>
+      <div class="linha"><span>VALOR TOTAL R$</span><span>{{ v_itens | fmtmoney }}</span></div>
     </div>
-    {% endif %}
-    {% if nota.vendedor_raw %}<div class="c-center small">Vendedor: {{ nota.vendedor_raw }}</div>{% endif %}
-    {% if nota.protocolo %}<div class="c-center small text-muted mt-2">Protocolo {{ nota.protocolo }}</div>{% endif %}
-    {% if nota.chave %}<div class="c-center small text-muted" style="word-break:break-all">Chave {{ nota.chave }}</div>{% endif %}
+    <div class="nfce-sep">
+      {% if acresc %}<div class="linha"><span>ACRÉSCIMO</span><span>{{ acresc | fmtmoney }}</span></div>{% endif %}
+      {% if desc %}<div class="linha"><span>DESCONTO</span><span>{{ desc | fmtmoney }}</span></div>{% endif %}
+      {% if acresc or desc %}<div class="linha nfce-big"><span>VALOR A PAGAR R$</span><span>{{ (nota.valor_total or 0) | fmtmoney }}</span></div>{% endif %}
+      <div class="linha nfce-big"><span>FORMA PAGAMENTO</span><span>VALOR PAGO R$</span></div>
+      {% if pagamentos %}
+        {% for p in pagamentos %}<div class="linha"><span>{{ FORMA.get(p.tpag, p.forma) }}</span><span>{{ p.valor | fmtmoney }}</span></div>{% endfor %}
+      {% elif nota.forma_pagamento %}
+        {% set formas = nota.forma_pagamento.split('+') %}
+        {% for f in formas %}<div class="linha"><span>{{ f.replace('Cartao Debito','Cartão de Débito').replace('Cartao Credito','Cartão de Crédito') }}</span><span>{{ (nota.valor_total | fmtmoney) if formas|length == 1 else '' }}</span></div>{% endfor %}
+      {% endif %}
+      <div class="linha"><span>Troco R$</span><span>{{ (nota.troco or 0) | fmtmoney }}</span></div>
+      <div class="c-center nfce-peq mt-1">Consulte pela Chave de Acesso em:<br>{{ d.url_consulta or 'www.sefaz.go.gov.br/nfce/consulta' }}</div>
+      <div class="c-center nfce-peq">{{ ns_c.chave|join(' ') }}</div>
+    </div>
+
+    <div class="nfce-sep c-center">
+      {% if nota.cliente_doc %}
+      <div>CONSUMIDOR - {{ 'CNPJ' if nota.cliente_doc|length == 14 else 'CPF' }} {{ nota.cliente_doc }}{% if nota.cliente_nome %} - {{ nota.cliente_nome }}{% endif %}</div>
+      {% if nota.cli_logradouro %}<div>{{ nota.cli_logradouro }}{% if nota.cli_bairro %}, {{ nota.cli_bairro }}{% endif %}{% if nota.cli_municipio %}, {{ nota.cli_municipio }}{% endif %}{% if nota.cli_uf %}, {{ nota.cli_uf }}{% endif %}</div>{% endif %}
+      {% else %}<div>CONSUMIDOR NÃO IDENTIFICADO</div>{% endif %}
+      <div class="mt-1">NFC-e n°{{ '%09d' | format(nota.numero or 0) }}&nbsp;&nbsp;Série:{{ nota.serie }}&nbsp;&nbsp;{{ nota.dh_emissao.strftime('%d/%m/%Y %H:%M:%S') if nota.dh_emissao }}</div>
+      {% if nota.protocolo %}<div>Protocolo de Autorização: {{ nota.protocolo }}</div>{% endif %}
+      {% if d.dh_autorizacao %}<div>Data de autorização: {{ d.dh_autorizacao.strftime('%d/%m/%Y %H:%M:%S') }}</div>{% endif %}
+      {% if d.qr_svg %}<div class="nfce-qr">{{ d.qr_svg }}</div>{% endif %}
+      {% if d.inf_cpl %}{% for t in d.inf_cpl.split('|') %}<div>{{ t }}</div>{% endfor %}{% endif %}
+      {% if d.v_tot_trib %}<div class="nfce-peq mt-1">Tributos Totais Incidentes (Lei Federal 12.741/12): R$ {{ d.v_tot_trib | fmtmoney }}</div>
+      {% elif nota.vlr_trib_aprox %}<div class="nfce-peq mt-1">Tributos Totais Incidentes (Lei Federal 12.741/12): R$ {{ nota.vlr_trib_aprox | fmtmoney }}</div>{% endif %}
+    </div>
   </div>
+  {% if not danfe %}
+  <div class="c-center small text-muted mt-2">XML desta nota ainda não lido: o cupom sai só com o que o robô de vendas mandou.</div>
+  {% endif %}
 {% endif %}
 </div>
 

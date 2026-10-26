@@ -367,6 +367,42 @@ def index():
         conn.close()
 
 
+def _do_xml(cur, chave):
+    """O que o cupom impresso mostra e vendas_xml não guarda, lido do XML
+    (integrations/vendas_pagamentos): emitente, autorização, QR Code, textos
+    livres e o pagamento forma por forma. Nota ainda não lida -> (None, [])
+    e o cupom sai com o que vendas_xml tem."""
+    import json
+    from markupsafe import Markup
+    try:
+        cur.execute("SELECT * FROM vendas_xml_danfe WHERE chave = %s", (chave,))
+        danfe = cur.fetchone()
+        cur.execute("SELECT * FROM vendas_xml_pagamentos WHERE chave = %s AND tpag IS NOT NULL ORDER BY n",
+                    (chave,))
+        pagamentos = cur.fetchall()
+    except Exception:
+        return None, []
+    if danfe:
+        danfe['itens_txt'] = {}
+        try:
+            danfe['itens_txt'] = {int(k): (v or '').split('|')
+                                  for k, v in json.loads(danfe['inf_ad_prod'] or '{}').items()}
+        except (ValueError, TypeError):
+            pass
+        danfe['qr_svg'] = None
+        if danfe['qrcode']:
+            try:
+                import io
+                import segno
+                buf = io.BytesIO()
+                segno.make(danfe['qrcode'], error='m').save(buf, kind='svg', scale=3, border=0,
+                                                            xmldecl=False)
+                danfe['qr_svg'] = Markup(buf.getvalue().decode('utf-8'))
+            except Exception:
+                pass
+    return danfe, pagamentos
+
+
 @vendas_bp.route('/<int:venda_id>', methods=['GET'])
 @login_required
 def detalhe(venda_id):
@@ -387,9 +423,10 @@ def detalhe(venda_id):
             (venda_id,),
         )
         itens = cur.fetchall()
+        danfe, pagamentos = _do_xml(cur, nota['chave'])
         template = ('vendas/_detalhe_conteudo.html'
                     if request.args.get('partial') else 'vendas/detalhe.html')
-        return render_template(template, nota=nota, itens=itens)
+        return render_template(template, nota=nota, itens=itens, danfe=danfe, pagamentos=pagamentos)
     finally:
         cur.close()
         conn.close()

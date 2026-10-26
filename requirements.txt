@@ -21,4 +21,7 @@ APScheduler==3.10.4
 reportlab==5.0.0
 pillow==12.3.0
 
+# QR Code do cupom NFC-e (vendas/_detalhe_conteudo). Puro Python, sem dependencias.
+segno==1.6.1
+
 # Force rebuild 2026-01-29T16:02 - Ensure troco_pix blueprint loads
