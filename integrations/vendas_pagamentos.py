@@ -16,6 +16,10 @@ Aqui SÓ SE LÊ essa pasta: nada é gravado, movido nem apagado lá — ela é d
 Qualicontax. O que se grava é a tabela vendas_xml_pagamentos (uma linha por
 <detPag>), ligada a vendas_xml pela chave. vendas_xml não muda.
 
+O robô novo manda o XML inteiro junto da nota e /api/vendas grava aqui na hora
+(mesmo ler_xml/gravar); a pasta do Qualicontax fica de reserva para o que o
+robô não trouxe.
+
 Pasta: env VENDAS_XML_DROPBOX_DIR; sem ela tenta '/Aplicativos/...' e
 '/Apps/...' (o nome da pasta de aplicativos depende do idioma da conta).
 """
@@ -236,8 +240,9 @@ def gravar(cur, chave, linhas, danfe=None, quando=None):
 
 
 def ja_lidas(cur, aamm):
-    """Chaves do mês (AAMM, posições 3-6 da chave) que já têm pagamento."""
-    cur.execute("SELECT DISTINCT chave FROM vendas_xml_pagamentos WHERE SUBSTRING(chave, 3, 4) = %s",
+    """Chaves do mês (AAMM, posições 3-6 da chave) já lidas de um XML inteiro,
+    pelo robô (POST /api/vendas com 'xml') ou por esta pasta."""
+    cur.execute("SELECT chave FROM vendas_xml_danfe WHERE SUBSTRING(chave, 3, 4) = %s",
                 (aamm,))
     return {r[0] if not isinstance(r, dict) else r['chave'] for r in cur.fetchall()}
 

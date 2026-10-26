@@ -22,6 +22,7 @@ from flask import Blueprint, request, current_app, jsonify
 from extensions import csrf
 from utils.db import get_db_connection
 from integrations.vendas_produto import aplicar_depara_venda
+from integrations import vendas_pagamentos
 
 vendas_api_bp = Blueprint('vendas_api', __name__, url_prefix='')
 
@@ -211,6 +212,19 @@ def receber_vendas():
                 except Exception as e_resolv:
                     current_app.logger.warning(
                         "[api/vendas] resolver produto_id falhou p/ chave=%s: %s", chave, e_resolv)
+
+                # O robô novo manda o XML inteiro: dele sai o valor de cada
+                # forma de pagamento e o cupom do posto (vendas_pagamentos).
+                # Robô antigo não manda; falha aqui NAO derruba a nota.
+                if nota.get('xml'):
+                    try:
+                        ch_x, linhas, danfe = vendas_pagamentos.ler_xml(
+                            str(nota['xml']).encode('utf-8'))
+                        if ch_x == chave:
+                            vendas_pagamentos.gravar(cur, chave, linhas, danfe)
+                    except Exception as e_pag:
+                        current_app.logger.warning(
+                            "[api/vendas] pagamento do XML falhou p/ chave=%s: %s", chave, e_pag)
 
                 conn.commit()
                 ok.append(chave)
