@@ -200,7 +200,7 @@
               {% if it.vlr_acrescimo %}<small>ACRESCIMO: R$ {{ it.vlr_acrescimo | fmtmoney }}</small>{% endif %}
             {% endif %}
           </span></div>
-        <div class="nfce-l"><span class="c1 c1--q">{{ it.quantidade | fmtnum(3) }}</span><span class="c2">{{ it.unidade or '' }}</span>
+        <div class="nfce-l"><span class="c1 c1--q">{{ it.quantidade | fmtnum(3 if (it.unidade or '')|upper in ('L', 'LT', 'KG', 'M3') else 2) }}</span><span class="c2">{{ it.unidade or '' }}</span>
           <span class="c3">{{ it.valor_unitario | fmtmoney }}</span><span class="c4">{{ it.valor_total | fmtmoney }}</span></div>
       </div>
     {% endfor %}
