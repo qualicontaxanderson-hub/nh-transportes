@@ -117,7 +117,8 @@ def _receb_per(cur, hoje, ini_dia, fim_dia, ini_mes, fim_mes):
 def _partes_combo(cur, rows):
     """{chave: [(classe, valor), ...]} dos cupons Combo cujo XML ja foi lido
     (vendas_xml_pagamentos). Cada detPag e classificado com a mesma regra da
-    nota; o troco (vTroco, so na linha 1) sai do Dinheiro, senao do Cheque.
+    nota; o troco (vTroco, so na linha 1) sai do Dinheiro, senao do Cheque,
+    senao da maior parte (cartao passado a mais).
     Se as partes nao fecham com o total da nota, o cupom fica Combo."""
     vt = {r['chave']: _f(r['vt']) for r in rows if '+' in (r['forma_pagamento'] or '')}
     nota = {r['chave']: r for r in rows if r['chave'] in vt}
@@ -140,7 +141,8 @@ def _partes_combo(cur, rows):
         troco = sum(_f(p['troco']) for p in ps)
         if troco > 0:
             alvo = next((f for f in fatias if f[0] == 'Dinheiro'), None) \
-                or next((f for f in fatias if f[0] == 'Cheque'), None)
+                or next((f for f in fatias if f[0] == 'Cheque'), None) \
+                or max(fatias, key=lambda f: f[1], default=None)
             if alvo is None or alvo[1] < troco:
                 continue
             alvo[1] -= troco
