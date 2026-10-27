@@ -1303,7 +1303,7 @@ function estoque(){
 // ---------- 5 AO VIVO ----------
 const CCH = {'PIX APP':['#dcfce7','#166534'],'PIX Manual':['#dcfce7','#166534'],'Dinheiro':['#fef3c7','#92400e'],'Prazo':['#ffedd5','#c2410c'],
   'Crédito Manual':['#ede9fe','#5b21b6'],'Crédito APP':['#ede9fe','#5b21b6'],'Débito Manual':['#dbeafe','#1e40af'],'Débito APP':['#dbeafe','#1e40af'],
-  'Cheque':['#e2e8f0','#334155'],'Combo':['#fce7f3','#9d174d'],'Transferência':['#ccfbf1','#115e59'],'Operadora':['#fee2e2','#991b1b']};
+  'Cheque':['#e2e8f0','#334155'],'Combo':['#fce7f3','#9d174d'],'Transferência':['#ccfbf1','#115e59'],'Operadora':['#fee2e2','#991b1b'],'X7':['#e0e7ff','#3730a3']};
 const PCOR2 = {'S-500':'#5A6675','S-10':'#2B7FC4','ETANOL':'#2E9E5B','GASOLINA':'#E0A02E','ARLA':'#12A0A0'};
 function vivoDesenha(v){
   if (!v.length) { document.getElementById('l-grade').innerHTML = '<div class="rola">sem vendas ainda</div>'; return; }
@@ -1314,7 +1314,7 @@ function vivoDesenha(v){
     return `<div class="q${i == 0 ? ' nova' : ''}" style="--k:${cor ? cor[1] : '#94a3b8'}"><div class="h"><span>${x.hora}</span><span>nº ${x.numero}</span></div>
       <div class="p">${x.produto.replace('DIESEL ', '')} <small>${x.litros ? L(x.litros) + ' L' : ''}${x.extra ? ' +' + x.extra : ''}</small></div>
       <div class="v">${R(x.valor)}${x.acr ? ` <small>+${N(x.acr)}</small>` : ''}</div>
-      <div class="f"><span class="vd">${x.vendedor.split(' ')[0]}</span><span class="chip" style="--cb:${c[0]};--cc:${c[1]}">${x.classe}</span></div></div>`; }).join('');
+      <div class="f"><span class="vd">${x.vendedor.split(' ')[0]}</span><span class="chip" style="--cb:${c[0]};--cc:${c[1]}">${x.classe == 'Operadora' ? 'Baratão' : x.classe}</span></div></div>`; }).join('');
 }
 
 function vivo(){
@@ -1332,6 +1332,7 @@ const FAM = [
   ['Combo', ['Combo'], '#be185d', 'bi-layers-fill'],
   ['Transferência', ['Transferência'], '#0f766e', 'bi-bank2'],
   ['Baratão', ['Operadora'], '#991b1b', 'bi-building'],
+  ['X7', ['X7'], '#3730a3', 'bi-truck'],
 ];
 // valor curto pro detalhe app/manual: no mes e no ano passa do milhao
 const LC = v => v >= 1e6 ? (v / 1e6).toLocaleString('pt-BR', {maximumFractionDigits: 2}) + ' mi'

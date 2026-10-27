@@ -30,6 +30,15 @@ PROD = {2: ('Gasolina', '#BA7517'), 1: ('Etanol', '#639922'),
         4: ('S-500', '#185FA5'), 5: ('S-10', '#534AB7')}
 PROD_IDS = (1, 2, 4, 5)
 CLIENTE_POSTO = 1          # Posto NH: o unico com leitura de tanque e descarga
+X7_CNPJ = '45179094000146'  # X7 Bank (Cartao Frota): vem como credenciadora, bandeira 'Outros'
+
+
+def _classe(forma, bandeira, credenciadora, autorizacao, tef, cliente_doc):
+    """classificar_recebimento, com a X7 separada (so no painel: la ela cairia
+    em PIX pela bandeira 'Outros'; a regra geral segue intocada)."""
+    if (credenciadora or '').strip() == X7_CNPJ:
+        return 'X7'
+    return classificar_recebimento(forma, bandeira, credenciadora, autorizacao, tef, cliente_doc)
 
 
 def _f(v):
@@ -88,7 +97,7 @@ def _receb_per(cur, hoje, ini_dia, fim_dia, ini_mes, fim_mes):
     notas = {'dia': 0, 'mes': 0, 'ano': 0}
     desde = None
     for r in rows:
-        cls = classificar_recebimento(
+        cls = _classe(
             r['forma_pagamento'], r['card_bandeira'], r['card_credenciadora'],
             r['card_autorizacao'], r['tef_terminal'], r['cliente_doc'])
         vt = _f(r['vt'])
@@ -135,7 +144,7 @@ def _partes_combo(cur, rows):
     out = {}
     for ch, ps in pags.items():
         r = nota[ch]
-        fatias = [[classificar_recebimento(
+        fatias = [[_classe(
             p['forma'], p['bandeira'], p['credenciadora'], p['autorizacao'],
             r['tef_terminal'], r['cliente_doc']), _f(p['valor'])] for p in ps if _f(p['valor']) > 0]
         troco = sum(_f(p['troco']) for p in ps)
@@ -406,7 +415,7 @@ def ultimas_vendas(cur, n=20):
             unidade=it.get('unidade') or '', extra=max(0, len(its) - 1),
             valor=_f(x['valor_total']), acr=_f(x['vlr_acrescimo']), vendedor=x['vendedor'],
             cliente=x['cliente_nome'] or '',
-            classe=classificar_recebimento(x['forma_pagamento'], x['card_bandeira'], x['card_credenciadora'],
+            classe=_classe(x['forma_pagamento'], x['card_bandeira'], x['card_credenciadora'],
                                            x['card_autorizacao'], x['tef_terminal'], x['cliente_doc'])))
     return saida
 
