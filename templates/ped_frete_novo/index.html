@@ -925,6 +925,8 @@ body > .container-fluid:has(#pfn){
             <button type="button" class="bd__b" onclick="pfnAbreMoverCarga(this)">
               <i class="bi bi-calendar-event"></i> Mudar dia ou caminhão</button>
             {% endif %}
+            <button type="button" class="bd__b" onclick="pfnAbreTrocaMot(this)">
+              <i class="bi bi-person-fill-gear"></i> Trocar motorista</button>
             <button type="button" class="bd__b bd__b--sim"
                     onclick="pfnPainelBordo(this, 'fechar')">
               <i class="bi bi-lock-fill"></i> Fechar carga</button>
@@ -963,6 +965,18 @@ body > .container-fluid:has(#pfn){
             <button type="button" class="bd__b" onclick="pfnFechaMover(this)">✕</button>
           </div>
           {% endif %}
+          {# Mesmo caminhao, mesmo dia, mesmo pedido: so muda quem dirige. #}
+          <div class="mv mvm" hidden>
+            <span class="mv__t">Quem vai dirigir esta carga:</span>
+            <button type="button" class="esc esc--w tem mv__mot" data-lista="motoristas"
+                    data-valor="{{ v.motorista_id or 0 }}"
+                    onclick="pfnEscolher(this, 'Quem vai dirigir')">{{ v.motorista or '— escolha —' }}</button>
+            <button type="button" class="bd__b bd__b--sim"
+                    onclick="pfnTrocaMot(this, '{{ v.data.isoformat() }}',
+                             {{ v.veiculo_id }}, {{ v.motorista_id or 0 }},
+                             {{ v.pedido_id or 0 }})">Trocar motorista</button>
+            <button type="button" class="bd__b" onclick="pfnFechaMover(this)">✕</button>
+          </div>
           {% endif %}
 
           {#- O formulario vem SEMPRE, escondido. Na carga fechada ele e a
@@ -2495,6 +2509,25 @@ function pfnMoverCarga(botao, dataOrigem, vidOrigem, midOrigem, pedOrigem){
     origem_data: dataOrigem, origem_veiculo_id: vidOrigem,
     origem_motorista_id: midOrigem, origem_pedido_id: pedOrigem || 0,
     data: data, veiculo_id: vid, motorista_id: mid
+  });
+}
+
+// Trocar so o motorista: o painel mora no cartao, como o de mover a carga.
+function pfnAbreTrocaMot(botao){
+  var cx = botao.closest('.fechou');
+  cx = cx ? cx.nextElementSibling : null;
+  while (cx && !cx.classList.contains('mvm')) cx = cx.nextElementSibling;
+  if (cx) cx.hidden = !cx.hidden;
+}
+function pfnTrocaMot(botao, data, vid, mid, ped){
+  var cx = botao.closest('.mv');
+  var esc = cx ? cx.querySelector('.mv__mot') : null;
+  var novo = parseInt((esc && esc.getAttribute('data-valor')) || '0', 10);
+  if (!novo){ alert('Escolha o motorista.'); return; }
+  if (novo === mid){ alert('Esse já é o motorista da carga.'); return; }
+  pfnEnvia(botao, '/ped-frete-novo/trocar-motorista', {
+    data: data, veiculo_id: vid, motorista_id: mid, pedido_id: ped || 0,
+    novo_motorista_id: novo
   });
 }
 

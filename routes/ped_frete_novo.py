@@ -1973,6 +1973,106 @@ def mover_carga():
                 pass
 
 
+@bp.route('/ped-frete-novo/trocar-motorista', methods=['POST'])
+@login_required
+def trocar_motorista():
+    """O mesmo caminhao, o mesmo dia, o mesmo pedido -- outro motorista.
+
+    Pelo "Mudar dia ou caminhao" a troca so saia como mudanca de carga: a chave
+    da carga e dia + caminhao + motorista, e o motorista novo ganhava um pedido
+    novo, deixando o de origem vazio. Aqui o pedido fica e muda so quem dirige.
+
+    A comissao vai com o motorista: a folha soma fretes.comissao_motorista de
+    cada um, e 8 dos 15 motoristas ativos nao recebem comissao (paga_comissao).
+    Comissao e lucro sao refeitos pela conta de _calcular_frete.
+    """
+    dados = request.get_json(silent=True) or {}
+    try:
+        vid = int(dados.get('veiculo_id') or 0)
+        mid = int(dados.get('motorista_id') or 0)
+        novo = int(dados.get('novo_motorista_id') or 0)
+        ped = int(dados.get('pedido_id') or 0) or None
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'erro': 'dados inválidos'}), 400
+    dia = _data_ou_none(dados.get('data'))
+    if not dia or not vid:
+        return jsonify({'ok': False, 'erro': 'informe a carga'}), 400
+    if not novo:
+        return jsonify({'ok': False, 'erro': 'escolha o motorista novo'}), 400
+    if novo == mid:
+        return jsonify({'ok': False, 'erro': 'esse já é o motorista da carga'}), 400
+
+    _ensure_tabela()
+    conn = cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT nome, paga_comissao FROM motoristas WHERE id = %s", (novo,))
+        mot = cursor.fetchone()
+        if not mot:
+            return jsonify({'ok': False, 'erro': 'motorista não encontrado'}), 404
+        paga = bool(mot.get('paga_comissao', 1))
+        if _carga_esta_fechada(cursor, dia, vid, mid, ped):
+            return jsonify({'ok': False,
+                            'erro': 'a carga está fechada — reabra antes '
+                                    'de trocar o motorista'}), 409
+
+        # A viagem: com o pedido, so ela (o caminhao pode ter saido duas vezes).
+        cursor.execute("""SELECT f.id, f.valor_total_frete, f.comissao_cte,
+                                 COALESCE(f.quantidade_manual, q.valor) AS litros
+                            FROM fretes f
+                            LEFT JOIN quantidades q ON q.id = f.quantidade_id
+                           WHERE f.data_frete=%s AND f.veiculos_id=%s
+                             AND COALESCE(f.motoristas_id,0)=%s
+                             AND f.pedido_id <=> %s""", (dia, vid, mid, ped))
+        fretes = cursor.fetchall()
+        if not fretes:
+            return jsonify({'ok': False, 'erro': 'essa carga não tem fretes'}), 404
+
+        for fr in fretes:
+            valor = _f(fr['valor_total_frete'])
+            tem_frete = valor > 0
+            comissao = (round(_f(fr['litros']) * _COMISSAO_POR_LITRO, 2)
+                        if (paga and tem_frete) else 0.0)
+            lucro = round(valor - comissao - _f(fr['comissao_cte']), 2) if tem_frete else 0.0
+            cursor.execute("""UPDATE fretes SET motoristas_id=%s, comissao_motorista=%s,
+                                     lucro=%s, updated_at=NOW() WHERE id=%s""",
+                           (novo, comissao, lucro, fr['id']))
+        if ped:
+            cursor.execute("UPDATE pedidos SET motorista_id=%s WHERE id=%s", (novo, ped))
+            # "Ja tinha carga a bordo" responde pela carga (dia + caminhao +
+            # motorista, sem o pedido): so acompanha se esta e a unica viagem
+            # do caminhao com esse motorista no dia.
+            cursor.execute("""SELECT COUNT(*) AS n FROM pedidos
+                               WHERE data_pedido=%s AND veiculo_id=%s
+                                 AND COALESCE(motorista_id,0)=%s""", (dia, vid, mid))
+            if not int((cursor.fetchone() or {}).get('n') or 0):
+                cursor.execute("""UPDATE frete_saldo_bordo SET carga_motorista_id=%s
+                                   WHERE carga_data=%s AND carga_veiculo_id=%s
+                                     AND carga_motorista_id=%s""", (novo, dia, vid, mid))
+        conn.commit()
+        return jsonify({'ok': True, 'motorista': mot['nome'], 'fretes': len(fretes)})
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.getLogger(__name__).exception("[ped_frete_novo] trocar_motorista")
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @bp.route('/ped-frete-novo/lancar', methods=['POST'])
 @login_required
 def lancar():
