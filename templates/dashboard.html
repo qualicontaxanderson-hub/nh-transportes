@@ -1348,7 +1348,7 @@ function receb(per = 'dia'){
   document.getElementById('r-big').textContent = R(tot);
   const des = (D.receb_per || {}).desde, perTxt = per == 'ano'
       ? (des && des > `${Y}-01-01` ? `desde ${des.slice(8)}/${des.slice(5, 7)}` : `${Y} até ${Dd}/${M}`) : periodoTxt(per);
-  document.getElementById('r-sub').innerHTML = `<b>${I(r.reduce((s, x) => s + x.n, 0))}</b> notas · ${fam.length} formas · ${perTxt}`;
+  document.getElementById('r-sub').innerHTML = `<b>${I(rp && rp.notas != null ? rp.notas : r.reduce((s, x) => s + x.n, 0))}</b> notas · ${fam.length} formas · ${perTxt}`;
   if (!fam.length) { document.getElementById('r-bd').innerHTML = '<div class="fm fraco"><div class="fm-s">nenhuma venda no período</div></div>'; return; }
   const mx = fam[0].v;
   let h = `<div class="stack">${fam.map(f => `<i style="--k:${f.cor};width:${f.v / tot * 100}%"></i>`).join('')}</div>`;

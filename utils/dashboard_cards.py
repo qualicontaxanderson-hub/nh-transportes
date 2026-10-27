@@ -78,31 +78,74 @@ def _receb_per(cur, hoje, ini_dia, fim_dia, ini_mes, fim_mes):
     card de hoje (routes/bases, classificar_recebimento), uma leitura so."""
     ini_ano = hoje.strftime('%Y-01-01 00:00:00')
     cur.execute(
-        "SELECT dh_emissao, forma_pagamento, card_bandeira, card_credenciadora, "
+        "SELECT chave, dh_emissao, forma_pagamento, card_bandeira, card_credenciadora, "
         "card_autorizacao, tef_terminal, cliente_doc, COALESCE(valor_total,0) AS vt "
         "FROM vendas_xml WHERE situacao <> 'cancelada' "
         "AND dh_emissao >= %s AND dh_emissao < %s", (ini_ano, fim_dia))
+    rows = cur.fetchall()
+    partes = _partes_combo(cur, rows)
     per = {k: {} for k in ('dia', 'mes', 'ano')}
+    notas = {'dia': 0, 'mes': 0, 'ano': 0}
     desde = None
-    for r in cur.fetchall():
+    for r in rows:
         cls = classificar_recebimento(
             r['forma_pagamento'], r['card_bandeira'], r['card_credenciadora'],
             r['card_autorizacao'], r['tef_terminal'], r['cliente_doc'])
         vt = _f(r['vt'])
+        # Combo com o XML lido vira as suas partes (valor real de cada forma).
+        fatias = partes.get(r['chave']) if cls == 'Combo' else None
+        fatias = fatias or [(cls, vt)]
         dh = str(r['dh_emissao'])
         if desde is None or dh < desde:
             desde = dh
         for k, ini in (('ano', ini_ano), ('mes', ini_mes), ('dia', ini_dia)):
             if dh >= ini:
-                d = per[k].setdefault(cls, [0, 0.0])
-                d[0] += 1
-                d[1] += vt
+                notas[k] += 1
+                for c in {c for c, _ in fatias}:
+                    per[k].setdefault(c, [0, 0.0])[0] += 1
+                for c, v in fatias:
+                    per[k][c][1] += v
     out = {'desde': desde[:10] if desde else None}
     for k, por in per.items():
         tot = sum(v[1] for v in por.values())
-        out[k] = {'total': tot, 'linhas': sorted(
+        out[k] = {'total': tot, 'notas': notas[k], 'linhas': sorted(
             ({'classe': c, 'n': v[0], 'valor': v[1]} for c, v in por.items()),
             key=lambda x: -x['valor'])}
+    return out
+
+
+def _partes_combo(cur, rows):
+    """{chave: [(classe, valor), ...]} dos cupons Combo cujo XML ja foi lido
+    (vendas_xml_pagamentos). Cada detPag e classificado com a mesma regra da
+    nota; o troco (vTroco, so na linha 1) sai do Dinheiro, senao do Cheque.
+    Se as partes nao fecham com o total da nota, o cupom fica Combo."""
+    vt = {r['chave']: _f(r['vt']) for r in rows if '+' in (r['forma_pagamento'] or '')}
+    nota = {r['chave']: r for r in rows if r['chave'] in vt}
+    chaves = list(vt)
+    pags = defaultdict(list)
+    for i in range(0, len(chaves), 500):
+        lote = chaves[i:i + 500]
+        cur.execute(
+            "SELECT chave, n, forma, valor, bandeira, credenciadora, autorizacao, troco "
+            "FROM vendas_xml_pagamentos WHERE chave IN (%s) ORDER BY chave, n"
+            % ','.join(['%s'] * len(lote)), lote)
+        for p in cur.fetchall():
+            pags[p['chave']].append(p)
+    out = {}
+    for ch, ps in pags.items():
+        r = nota[ch]
+        fatias = [[classificar_recebimento(
+            p['forma'], p['bandeira'], p['credenciadora'], p['autorizacao'],
+            r['tef_terminal'], r['cliente_doc']), _f(p['valor'])] for p in ps if _f(p['valor']) > 0]
+        troco = sum(_f(p['troco']) for p in ps)
+        if troco > 0:
+            alvo = next((f for f in fatias if f[0] == 'Dinheiro'), None) \
+                or next((f for f in fatias if f[0] == 'Cheque'), None)
+            if alvo is None or alvo[1] < troco:
+                continue
+            alvo[1] -= troco
+        if fatias and abs(sum(f[1] for f in fatias) - vt[ch]) <= 0.05:
+            out[ch] = [(c, v) for c, v in fatias if v > 0]
     return out
 
 
