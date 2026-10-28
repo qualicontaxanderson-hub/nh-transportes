@@ -32,6 +32,42 @@ body > .container-fluid:has(#ccz){
     cursor:pointer; display:inline-flex; gap:.3rem; align-items:center; }
   #ccz .topo__acoes button:hover{ background:rgba(255,255,255,.26); }
 
+  /* Conferir um dia de deposito */
+  #ccz .cdia{ background:#fff; border:1px solid var(--borda); border-radius:13px;
+    padding:.65rem .8rem; margin-bottom:.7rem; }
+  #ccz .cdia__top{ display:flex; gap:.45rem; align-items:center; flex-wrap:wrap; }
+  #ccz .cdia__top > b{ color:var(--blue-deep); font-size:.9rem; margin-right:.2rem; }
+  #ccz .cdia__top input{ border:1px solid var(--borda); border-radius:9px;
+    padding:.38rem .5rem; font-size:.84rem; font-family:inherit; }
+  #ccz .cdia__obs{ font-size:.72rem; color:var(--muted); margin-left:auto; }
+  #ccz .cdia__k{ display:flex; gap:.5rem; flex-wrap:wrap; margin:.7rem 0 .2rem; }
+  #ccz .cdia__k div{ flex:1; min-width:9rem; border-radius:10px; padding:.45rem .7rem; color:#fff; }
+  #ccz .cdia__k small{ display:block; font-size:.62rem; font-weight:800; text-transform:uppercase; opacity:.9; }
+  #ccz .cdia__k b{ font-size:1.1rem; }
+  #ccz .cdia__k span{ display:block; font-size:.7rem; opacity:.92; }
+  #ccz .cdia table{ width:100%; border-collapse:collapse; margin-top:.5rem; font-size:.8rem; }
+  #ccz .cdia th{ font-size:.62rem; text-transform:uppercase; color:var(--muted); text-align:right;
+    padding:.3rem .45rem; border-bottom:2px solid var(--borda); white-space:nowrap; }
+  #ccz .cdia td{ padding:.38rem .45rem; border-bottom:1px solid var(--linha); text-align:right; white-space:nowrap; }
+  #ccz .cdia th:first-child, #ccz .cdia td:first-child{ text-align:left; }
+  #ccz .cdia tr.g td{ background:#f3f6fa; font-weight:800; font-size:.7rem; color:#334155;
+    text-transform:uppercase; letter-spacing:.04em; text-align:left; }
+  #ccz .cdia tr.t td{ font-weight:800; border-top:2px solid var(--borda); }
+  #ccz .cdia tr.l{ cursor:pointer; }
+  #ccz .cdia tr.l:hover td{ background:#f8fafc; }
+  #ccz .cdia .s-ok{ color:var(--ok); font-weight:700; }
+  #ccz .cdia .s-am{ color:var(--ambar); font-weight:700; }
+  #ccz .cdia .s-er{ color:var(--danger); font-weight:700; }
+  #ccz .cdia .pq{ white-space:normal; text-align:left; font-size:.76rem; border-radius:6px;
+    padding:.35rem .6rem; background:#fef2f2; border-left:4px solid var(--danger); }
+  #ccz .cdia .pq.am{ background:#fffbeb; border-color:#d97706; }
+  #ccz .cdia .det{ white-space:normal; text-align:left; background:#fafbfd; }
+  #ccz .cdia .det table{ margin:.2rem 0 .4rem; font-size:.74rem; }
+  #ccz .cdia .det h6{ font-size:.68rem; font-weight:800; text-transform:uppercase;
+    color:var(--muted); margin:.4rem 0 0; }
+  #ccz .cdia .nada{ margin-top:.6rem; }
+  @media (max-width:760px){ #ccz .cdia__obs{ margin-left:0; } #ccz .cdia__wrap{ overflow-x:auto; } }
+
   #ccz .migalha{ font-size:.72rem; color:var(--muted); margin-bottom:.5rem; }
   #ccz .migalha a{ color:var(--blue-deep); text-decoration:none; font-weight:700; }
 
@@ -397,6 +433,21 @@ body > .container-fluid:has(#ccz){
       <button type="button" data-bs-toggle="modal" data-bs-target="#modalVinculos">
         <i class="bi bi-link-45deg"></i> Vinculações</button>
     </div>
+  </div>
+
+  {#- Conferir um dia de deposito: o que cada planilha pagou x o que caiu no
+      banco, cartao a cartao, e a causa de cada diferenca. Vem por fetch de
+      /conf_cartoes/dia (cartao_arquivo.conferir_dia); nao mexe no resto. -#}
+  <div class="cdia" id="cdia">
+    <div class="cdia__top">
+      <b><i class="bi bi-calendar-check"></i> Conferir um dia de depósito</b>
+      <input type="date" id="cdia-data" value="">
+      <button type="button" class="bt bt--sim" id="cdia-ir"><i class="bi bi-search"></i> Conferir</button>
+      <button type="button" class="bt" data-cdia="-1">Ontem</button>
+      <button type="button" class="bt" data-cdia="0">Hoje</button>
+      <span class="cdia__obs">o que cada planilha (SIPAG, X7, Baratão) pagou nesse dia × o que caiu no banco, cartão por cartão</span>
+    </div>
+    <div id="cdia-out"></div>
   </div>
 
   <form method="get" id="form-filtros" class="filtro">
@@ -1563,6 +1614,118 @@ body > .container-fluid:has(#ccz){
 {% endblock %}
 
 {% block scripts %}
+<script>
+// Conferir um dia de deposito (cartao_arquivo.conferir_dia)
+(function () {
+  var inp = document.getElementById('cdia-data');
+  var out = document.getElementById('cdia-out');
+  if (!inp || !out) return;
+  var URL_DIA = "{{ url_for('conf_cartoes.conf_cartoes_dia') }}";
+  function iso(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  if (!inp.value) { var o = new Date(); o.setDate(o.getDate() - 1); inp.value = iso(o); }
+  function br(v) { return (v == null) ? '—' : Number(v).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
+  var ST = {
+    ok: ['s-ok', 'bi-check-circle-fill', 'bate'],
+    centavos: ['s-ok', 'bi-check-circle', 'centavos'],
+    falta_planilha: ['s-am', 'bi-hourglass-split', 'planilha não chegou'],
+    falta_extrato: ['s-am', 'bi-hourglass-split', 'extrato não chegou'],
+    arquivo_erro: ['s-er', 'bi-x-circle', 'arquivo com erro'],
+    trocado: ['s-er', 'bi-arrow-left-right', 'cartão trocado'],
+    explicado: ['s-er', 'bi-info-circle', 'diferença explicada'],
+    sem_explicacao: ['s-er', 'bi-exclamation-triangle-fill', 'sem explicação']
+  };
+  function rotulo(l) {
+    var t = (l.tipo || '').toLowerCase().replace('debito', 'débito').replace('credito', 'crédito');
+    return l.op === 'SIPAG' ? esc(l.nome) + ' <span style="color:var(--muted)">' + t + '</span>' : esc(l.nome);
+  }
+  function det(l, i) {
+    var p = l.planilha, h = '<tr id="cdia-d' + i + '" hidden><td colspan="9" class="det">';
+    h += '<h6>Lançamentos do banco (' + l.banco.length + ')</h6>';
+    h += l.banco.length ? '<table>' + l.banco.map(function (b) {
+      return '<tr><td>' + esc(b.conta) + ' · ' + esc(b.desc) + '</td><td>' + br(b.valor) + '</td></tr>'; }).join('') + '</table>'
+      : '<div style="color:var(--muted)">nenhum crédito desse cartão no dia</div>';
+    if (p) {
+      if (p.dias_abastecimento) h += '<div style="color:var(--muted)">pagamento dos abastecimentos de ' + p.dias_abastecimento.join(', ') + '</div>';
+      h += '<h6>Vendas que a planilha diz que foram pagas (' + p.vendas.length + ')</h6><table>'
+        + '<tr><th>Venda</th><th>Descrição</th><th>Vendido</th><th>Taxa</th><th>Líquido</th></tr>'
+        + p.vendas.map(function (v) {
+          return '<tr><td>' + esc(v.dt) + '</td><td style="text-align:left">' + esc(v.desc) + '</td><td>' + br(v.vendido)
+            + '</td><td>' + br(v.taxa) + '</td><td>' + br(v.liquido) + '</td></tr>'; }).join('') + '</table>';
+    }
+    return h + '</td></tr>';
+  }
+  function mostra(j) {
+    if (!j.ok) { out.innerHTML = '<div class="nada">' + esc(j.erro || 'erro') + '</div>'; return; }
+    if (!j.linhas.length) {
+      out.innerHTML = '<div class="nada">Nenhum pagamento de cartão em ' + esc(j.data_br)
+        + ', nem na planilha nem no banco (fim de semana ou feriado?).</div>';
+      return;
+    }
+    var c = j.contagem, n = function (k) { return c[k] || 0; };
+    var nOk = n('ok') + n('centavos'), nAg = n('falta_planilha') + n('falta_extrato');
+    var nEr = j.linhas.length - nOk - nAg, t = j.totais;
+    var h = '<div class="cdia__k">'
+      + '<div style="background:#334155"><small>' + esc(j.data_br) + '</small><b>' + br(t.banco) + '</b><span>caiu no banco em cartões</span></div>'
+      + '<div style="background:#146c43"><small>Batem</small><b>' + nOk + '</b><span>cartões ao centavo</span></div>'
+      + '<div style="background:#b45309"><small>Aguardando</small><b>' + nAg + '</b><span>planilha ou extrato ainda não chegou</span></div>'
+      + '<div style="background:#a32d2d"><small>Com diferença</small><b>' + nEr + '</b><span>a causa está escrita embaixo</span></div></div>';
+    h += '<div class="cdia__wrap"><table><tr><th>Cartão</th><th>Vendas</th><th>Vendido</th><th>Taxa</th><th>Descontos</th>'
+      + '<th>Planilha pagou</th><th>Caiu no banco</th><th>Diferença</th><th>Situação</th></tr>';
+    var grupo = null;
+    j.linhas.forEach(function (l, i) {
+      if (l.operadora !== grupo) { grupo = l.operadora; h += '<tr class="g"><td colspan="9">' + esc(grupo) + '</td></tr>'; }
+      var p = l.planilha || {}, s = ST[l.status] || ['', '', l.status];
+      var d0 = Math.abs(l.dif) < 0.005;
+      h += '<tr class="l" data-i="' + i + '" title="clique para ver as vendas e os lançamentos"><td><i class="bi bi-chevron-right" style="font-size:.7rem"></i> ' + rotulo(l) + '</td>'
+        + '<td>' + (l.planilha ? p.n : '—') + '</td><td>' + (l.planilha ? br(p.vendido) : '—') + '</td>'
+        + '<td>' + (l.planilha ? br(p.taxa) : '—') + '</td><td>' + (l.planilha ? br(p.abatimentos) : '—') + '</td>'
+        + '<td><b>' + (l.planilha ? br(l.v_planilha) : '—') + '</b></td><td><b>' + br(l.v_banco) + '</b></td>'
+        + '<td class="' + (d0 || l.status === 'centavos' ? 's-ok' : (/^falta_/.test(l.status) ? 's-am' : 's-er')) + '">' + (d0 ? '0,00' : br(l.dif)) + '</td>'
+        + '<td><span class="' + s[0] + '"><i class="bi ' + s[1] + '"></i> ' + s[2] + '</span></td></tr>';
+      if (l.porque && l.status !== 'centavos') {
+        var am = (l.status === 'falta_planilha' || l.status === 'falta_extrato');
+        h += '<tr><td colspan="9"><div class="pq' + (am ? ' am' : '') + '">' + esc(l.porque) + '</div></td></tr>';
+      }
+      h += det(l, i);
+    });
+    var dt = t.banco - t.planilha;
+    h += '<tr class="t"><td>Total do dia</td><td>' + t.n + '</td><td>' + br(t.vendido) + '</td><td>' + br(t.taxa) + '</td><td>' + br(t.abatimentos)
+      + '</td><td>' + br(t.planilha) + '</td><td>' + br(t.banco) + '</td><td class="' + (Math.abs(dt) < 0.005 ? 's-ok' : 's-er') + '">'
+      + br(dt) + '</td><td></td></tr></table></div>';
+    if (j.soltos.length) {
+      h += '<div class="pq am" style="margin-top:.6rem"><b>Créditos de cartão no extrato desse dia que não estão ligados a nenhum cartão:</b><br>'
+        + j.soltos.map(function (s) { return esc(s.conta) + ' · ' + esc(s.desc) + ' · <b>' + br(s.valor) + '</b>'
+          + (s.explica ? ' (é o que falta em ' + esc(s.explica) + ')' : ''); }).join('<br>') + '</div>';
+    }
+    h += '<div style="font-size:.7rem;color:var(--muted);margin-top:.4rem">Planilhas: SIPAG pagou até ' + esc(j.cobertura.SIPAG || '—')
+      + ' · X7 até ' + esc(j.cobertura.X7 || '—') + ' · Baratão até ' + esc(j.cobertura.BARATAO || '—')
+      + ' · extrato até ' + esc(j.ult_extrato || '—') + '. Clique numa linha para ver as vendas e os lançamentos.</div>';
+    out.innerHTML = h;
+  }
+  function vai() {
+    if (!inp.value) return;
+    out.innerHTML = '<div class="nada"><span class="spinner-border spinner-border-sm"></span> conferindo…</div>';
+    fetch(URL_DIA + '?data=' + inp.value, {credentials: 'same-origin'})
+      .then(function (r) { return r.json(); })
+      .then(mostra)
+      .catch(function (e) { out.innerHTML = '<div class="nada">Não deu para conferir: ' + esc(e) + '</div>'; });
+  }
+  document.getElementById('cdia-ir').addEventListener('click', vai);
+  inp.addEventListener('change', vai);
+  document.querySelectorAll('#cdia [data-cdia]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var d = new Date(); d.setDate(d.getDate() + parseInt(b.dataset.cdia, 10)); inp.value = iso(d); vai();
+    });
+  });
+  out.addEventListener('click', function (e) {
+    var tr = e.target.closest('tr.l');
+    if (!tr) return;
+    var d = document.getElementById('cdia-d' + tr.dataset.i);
+    if (d) d.hidden = !d.hidden;
+  });
+})();
+</script>
 <script>
 // aba Operadora: abre e fecha as vendas de cada pagamento
 document.addEventListener('click', function (e) {

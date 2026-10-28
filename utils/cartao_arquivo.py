@@ -2150,9 +2150,11 @@ def _cobertura(cur):
     cob['BARATAO'] = m.date() if isinstance(m, datetime) else m
     imp = {}
     for op in ('SIPAG', 'X7', 'BARATAO'):
+        # da SIPAG, quem diz o que foi pago e o relatorio de recebidas
         cur.execute("""
             SELECT arquivo, importado_em, erro FROM cartao_arquivo_importacoes
-             WHERE operadora=%s ORDER BY id DESC LIMIT 10""", (op,))
+             WHERE operadora=%s AND (%s <> 'SIPAG' OR arquivo LIKE '%%recebidas%%')
+             ORDER BY id DESC LIMIT 10""", (op, op))
         rs = cur.fetchall()
         falhas = 0
         for r in rs:
