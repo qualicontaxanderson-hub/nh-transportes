@@ -47,8 +47,10 @@ _log = logging.getLogger(__name__)
 #: Prefixo do nome do arquivo -> operadora. O nome e a unica coisa que o
 #: Miguel controla, entao e por ele que se decide quem le o arquivo.
 OPERADORAS = {
+    # "Gestao_X7Bank.xlsx" e o nome que o portal da X7 da a lista de pagamentos
     'X7': {'nome': 'X7 BANK', 'bandeira_like': 'X7%', 'tipo': 'CREDITO',
-           'extensoes': ('.xls', '.xlsx', '.html', '.htm')},
+           'extensoes': ('.xls', '.xlsx', '.html', '.htm'),
+           'prefixos': ('X7', 'GESTAO_X7BANK', 'GESTAO X7BANK')},
     # A taxa do Baratao mora aqui, e nao na bandeira: preencher a bandeira
     # mudaria tambem a conferencia pelo caixa. Os 2% comecaram em fev/2026 --
     # a conferencia so cobra a taxa a partir do primeiro cupom que a teve.
@@ -142,6 +144,8 @@ def ler_x7(conteudo):
     vem depois de "DT. Previsao" e lote, a que vem depois de "Cod.Transacao"
     e venda. Linha de uma celula so e o estabelecimento.
     """
+    if isinstance(conteudo, bytes) and conteudo[:2] == b'PK':
+        return _ler_x7_xlsx(conteudo)
     texto = _decodificar(conteudo)
     linhas = []
     for tr in re.findall(r'<tr[^>]*>(.*?)</tr>', texto, re.S | re.I):
@@ -222,6 +226,146 @@ def ler_x7(conteudo):
         raise ValueError('nenhum lote encontrado: nao parece o relatorio '
                          '"Recebiveis Sinteticos" da X7')
     return lotes, vendas
+
+
+def _ler_x7_xlsx(conteudo):
+    """(lotes, []) da LISTA DE PAGAMENTOS que o portal da X7 exporta em .xlsx
+    desde 19/10/2026 ("Gestao_X7Bank.xlsx": Posto, DT. Previsao/Pag, Qtd.,
+    Valor Bruto, Descontos, Cashback, Taxas, ..., Valor Liquido, Status).
+
+    Ela nao traz as vendas, entao o lote nao tem as vendas para se identificar:
+    quem o acha de novo e gravar(), pelos valores (lote['por_valor']). A data
+    e a da previsao enquanto "A Pagar" e a do pagamento depois de "Pago" --
+    o mesmo lote muda de dia (21/10 A Pagar -> 22/10 Pago).
+
+    O .xlsx de UMA venda (Cod.Transacao, Nfe, ...) nao diz quando foi paga:
+    e recusado com o motivo, para nao entrar venda sem pagamento."""
+    import openpyxl
+    wb = openpyxl.load_workbook(io.BytesIO(conteudo), read_only=True, data_only=True)
+    try:
+        linhas = [list(r) for r in wb.active.iter_rows(values_only=True)]
+    finally:
+        wb.close()
+
+    def txt(c):
+        return _sem_acento(str(c)).strip().lower() if c is not None else ''
+
+    def valor(c):
+        if c is None or c == '':
+            return 0.0
+        if isinstance(c, (int, float)):
+            return float(c)
+        return _num(str(c))
+
+    cab = None
+    for i, r in enumerate(linhas):
+        t = [txt(c) for c in r]
+        if t and t[0].startswith('cod.transa'):
+            raise ValueError('arquivo de UMA venda da X7 (sem a data do pagamento): baixe a '
+                             'lista de pagamentos do portal (Posto / DT. Previsao/Pag)')
+        if t and t[0] == 'posto' and len(t) > 1 and t[1].startswith('dt. previs'):
+            cab = (i, t)
+            break
+    if not cab:
+        raise ValueError('nao parece a lista de pagamentos da X7 (falta o cabecalho '
+                         '"Posto / DT. Previsao/Pag")')
+    i0, t = cab
+    col = {nome: t.index(nome) for nome in ('qtd.', 'valor bruto', 'descontos',
+                                            'valor liquido', 'status') if nome in t}
+    if len(col) < 5:
+        raise ValueError('lista de pagamentos da X7 sem as colunas esperadas: %s' % t)
+    lotes = []
+    for r in linhas[i0 + 1:]:
+        if not r or r[0] is None or txt(r[0]) == 'totais':
+            continue
+        try:
+            d = _data(str(r[1])) if not isinstance(r[1], (date, datetime)) else (
+                r[1].date() if isinstance(r[1], datetime) else r[1])
+        except ValueError:
+            continue
+        if not d:
+            continue
+        bruto = round(valor(r[col['valor bruto']]), 2)
+        desc = round(valor(r[col['descontos']]), 2)
+        liq = round(valor(r[col['valor liquido']]), 2)
+        status = str(r[col['status']] or '').strip()
+        lotes.append({
+            'estabelecimento': str(r[0]).strip(), 'dt_previsao': d,
+            'dt_liquidacao': d if txt(status).startswith('pago') else None,
+            'qtd': int(valor(r[col['qtd.']])), 'bruto': bruto, 'descontos': desc,
+            # A coluna Taxas vem em centavos (277 = 2,77) ou em texto, conforme
+            # o dia; o que nunca falha e a conta do proprio lote.
+            'taxas': round(bruto - desc - liq, 2), 'liquido': liq,
+            'status': status, 'chave': None, 'por_valor': True,
+        })
+    if not lotes:
+        raise ValueError('lista de pagamentos da X7 sem nenhum pagamento')
+    return lotes, []
+
+
+def _lote_por_valor(cur, operadora, l, usados):
+    """O id do lote ja gravado que e este (lista .xlsx, sem vendas): mesma
+    quantidade, bruto e liquido, ate 7 dias de distancia -- o lote do .xls
+    antigo (chave pelas vendas) e o da previsao que virou pagamento."""
+    cur.execute("""
+        SELECT id FROM cartao_arquivo_lotes
+         WHERE operadora=%s AND qtd=%s AND bruto=%s AND liquido=%s
+           AND ABS(DATEDIFF(COALESCE(dt_liquidacao, dt_previsao), %s)) <= 7
+         ORDER BY ABS(DATEDIFF(COALESCE(dt_liquidacao, dt_previsao), %s)), id""",
+        (operadora, l['qtd'], l['bruto'], l['liquido'], l['dt_previsao'], l['dt_previsao']))
+    for (i,) in cur.fetchall():
+        if i not in usados:
+            return i
+    return None
+
+
+def _x7_depois_da_lista(cur, operadora, arquivo, lotes, usados):
+    """Depois de gravar a lista .xlsx (que nao traz as vendas):
+
+    1. A previsao antiga que a lista refez some. O .xls de 17/10 previa
+       19/10 como UM lote de 269,86; a lista pagou DOIS (148,93 + 120,94).
+       Lote ainda nao pago, dentro das datas da lista e que ela nao trouxe,
+       e previsao velha -- deixa-lo contaria o dia em dobro.
+    2. A venda que ja estava gravada (do .xls) ganha a data do pagamento:
+       a do lote pago cujo bruto e a soma de `qtd` vendas ainda sem
+       pagamento, de ate 45 dias antes. O desconto do lote e repartido pelo
+       bruto, como no .xls."""
+    datas = [l['dt_previsao'] for l in lotes]
+    ini, fim = min(datas), max(datas)
+    cur.execute("""
+        SELECT id FROM cartao_arquivo_lotes
+         WHERE operadora=%s AND dt_liquidacao IS NULL
+           AND dt_previsao BETWEEN %s AND %s""", (operadora, ini, fim))
+    velhos = [i for (i,) in cur.fetchall() if i not in usados]
+    if velhos:
+        _log.info('[cartao_arq] %s: %d previsao(oes) antiga(s) da X7 refeita(s) pela lista',
+                  arquivo, len(velhos))
+        cur.execute("DELETE FROM cartao_arquivo_lotes WHERE id IN (%s)"
+                    % ','.join(['%s'] * len(velhos)), velhos)
+    for l in sorted(lotes, key=lambda x: x['dt_previsao']):
+        d = l['dt_liquidacao']
+        if not d or not l['qtd']:
+            continue
+        cur.execute("""
+            SELECT id, bruto FROM cartao_arquivo_vendas
+             WHERE operadora=%s AND dt_liquidacao IS NULL
+               AND dt_operacao >= %s AND dt_operacao < %s
+             ORDER BY dt_operacao""",
+            (operadora, d - timedelta(days=45), d + timedelta(days=1)))
+        cands = [(i, float(b)) for i, b in cur.fetchall()][:12]
+        achou = next((c for c in combinations(cands, l['qtd'])
+                      if abs(sum(b for _, b in c) - l['bruto']) < _TOL), None)
+        if not achou:
+            continue
+        resto = round(l['descontos'], 2)
+        for k, (i, b) in enumerate(achou):
+            parte = resto if k == len(achou) - 1 else (
+                round(l['descontos'] * b / l['bruto'], 2) if l['bruto'] else 0.0)
+            resto = round(resto - parte, 2)
+            cur.execute("""
+                UPDATE cartao_arquivo_vendas
+                   SET dt_liquidacao=%s, dt_previsao=%s, desconto_lote=%s, status=%s
+                 WHERE id=%s""", (d, l['dt_previsao'], parte, l['status'][:80], i))
 
 
 def ler_baratao(conteudo):
@@ -373,7 +517,25 @@ def gravar(conn, operadora, arquivo, lotes, vendas):
     cada vez), entao o mesmo lote chega de novo com o status atualizado --
     "A Pagar" vira "Pago", a liquidacao aparece. Chave natural, nunca duplica."""
     cur = conn.cursor()
+    usados = set()
     for l in lotes:
+        if l.get('por_valor'):
+            # Lista .xlsx: o lote sem vendas e achado pelos valores. Achou:
+            # atualiza o pagamento; nao achou: lote novo, com chave pelos
+            # valores e pela previsao em que apareceu primeiro.
+            i = _lote_por_valor(cur, operadora, l, usados)
+            l['_id'] = i
+            if i:
+                usados.add(i)
+                cur.execute("""
+                    UPDATE cartao_arquivo_lotes
+                       SET dt_liquidacao=COALESCE(%s, dt_liquidacao),
+                           status=%s, arquivo=%s
+                     WHERE id=%s""", (l['dt_liquidacao'], l['status'][:80], arquivo[:200], i))
+                continue
+            base = 'xlsx|%s|%s|%s|%s|%d' % (l['dt_previsao'], l['qtd'], l['bruto'],
+                                            l['liquido'], len(usados))
+            l['chave'] = hashlib.sha1(base.encode('utf-8')).hexdigest()
         cur.execute("""
             INSERT INTO cartao_arquivo_lotes
                 (operadora, chave, estabelecimento, dt_previsao, dt_liquidacao, qtd,
@@ -387,6 +549,11 @@ def gravar(conn, operadora, arquivo, lotes, vendas):
             (operadora, l['chave'], l['estabelecimento'], l['dt_previsao'], l['dt_liquidacao'],
              l['qtd'], l['bruto'], l['descontos'], l['taxas'], l['liquido'],
              l['status'][:80], arquivo[:200]))
+        if l.get('por_valor') and cur.lastrowid:
+            usados.add(cur.lastrowid)
+            l['_id'] = cur.lastrowid
+    if any(l.get('por_valor') for l in lotes):
+        _x7_depois_da_lista(cur, operadora, arquivo, lotes, usados)
     for v in vendas:
         cur.execute("""
             INSERT INTO cartao_arquivo_vendas
