@@ -50,7 +50,7 @@ bp = Blueprint('prazo', __name__)
 # A venda migrada comeca aqui. Antes disso nao existe nota no banco, entao
 # nao da pra reconstituir saldo anterior — e a tela diz isso em vez de fingir
 # que o cliente comecou do zero.
-_INICIO_VENDA = date(2026, 5, 26)
+_INICIO_VENDA = date(2026, 1, 1)
 
 # O que o SGA grava quando a venda e fiado. Sao varias grafias porque a base
 # mudou de nome ao longo do tempo; todas convivem hoje.
