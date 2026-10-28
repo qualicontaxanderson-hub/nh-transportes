@@ -2006,3 +2006,348 @@ def _sicredi_antes(cur, sb, sf, ate, onde, params):
     except Exception:
         return []                       # tabela ainda nao existe
     return cur.fetchall()
+
+
+# ── Conferir um dia de deposito ───────────────────────────────────────────────
+#
+# A tela pergunta por UM dia de deposito: o que cada planilha (SIPAG, X7,
+# Baratao) diz que pagou naquele dia x o que caiu no banco, cartao a cartao.
+# Quando nao bate, procura a causa na ordem da mais comum para a mais rara e
+# escreve em portugues; so le, nao grava nada.
+
+#: Ate quantos dias para cada lado se procura o dinheiro que "caiu em outro dia".
+_VIZINHO_DIAS = 4
+
+
+def _planilha_dia(cur, op, b, dia):
+    """{n, vendido, taxa, abatimentos, liquido, vendas: [...]} do que a planilha
+    da operadora diz que pagou em `dia` para a bandeira; None se nada."""
+    vendas = []
+    if op == 'SIPAG':
+        sb, sf = _sipag_da_bandeira(b.get('nome'), b.get('tipo'))
+        if not sb or not sf:
+            return None
+        cur.execute("""
+            SELECT dt_transacao, nsu, bruto, desconto_pago, liquido_pago, cartao,
+                   autorizacao, tipo_cartao
+              FROM cartao_sipag_transacoes
+             WHERE bandeira=%s AND forma=%s AND dt_pagamento=%s
+             ORDER BY dt_transacao""", (sb, sf, dia))
+        for r in cur.fetchall():
+            abat = r['nsu'] == '0'
+            vendas.append({
+                'dt': r['dt_transacao'], 'abat': abat,
+                'vendido': 0.0 if abat else float(r['bruto'] or 0),
+                'taxa': float(r['desconto_pago'] or 0),
+                'liquido': float(r['liquido_pago'] or 0),
+                'desc': ('abatimento (aluguel/estorno)' if abat else ' · '.join(x for x in (
+                    (r['tipo_cartao'] or '').strip(),
+                    ('final %s' % r['cartao'][-4:]) if r['cartao'] else '',
+                    ('aut. %s' % r['autorizacao']) if r['autorizacao'] else '') if x))})
+        # o Sicredi, antes de a SIPAG assumir a bandeira
+        try:
+            cur.execute("""
+                SELECT dt_transacao, bruto, taxa, liquido, cartao, produto
+                  FROM cartao_sicredi_transacoes
+                 WHERE bandeira=%s AND forma=%s AND status='Aprovada' AND dt_pagamento=%s
+                 ORDER BY dt_transacao""", (sb, sf, dia))
+            for r in cur.fetchall():
+                vendas.append({
+                    'dt': r['dt_transacao'], 'abat': False,
+                    'vendido': float(r['bruto'] or 0), 'taxa': float(r['taxa'] or 0),
+                    'liquido': float(r['liquido'] or 0),
+                    'desc': ' · '.join(x for x in (
+                        'Sicredi', r['produto'] or '',
+                        ('final %s' % r['cartao'][-4:]) if r['cartao'] else '') if x)})
+        except Exception:
+            pass                        # tabela do Sicredi ainda nao existe
+    elif op == 'X7':
+        cur.execute("""
+            SELECT dt_operacao, bruto, desconto_lote, taxa_pct, cliente, nfe
+              FROM cartao_arquivo_vendas
+             WHERE operadora='X7' AND dt_liquidacao=%s ORDER BY dt_operacao""", (dia,))
+        for r in cur.fetchall():
+            vd = float(r['bruto'] or 0) - float(r['desconto_lote'] or 0)
+            tx = round(vd * float(r['taxa_pct'] or 0) / 100, 2)
+            vendas.append({'dt': r['dt_operacao'], 'abat': False, 'vendido': vd,
+                           'taxa': tx, 'liquido': vd - tx,
+                           'desc': ' · '.join(x for x in (
+                               r['cliente'], ('NF-e %s' % r['nfe']) if r['nfe'] else '') if x)})
+        # o liquido que vale e o do lote (a taxa da X7 e arredondada no lote)
+        cur.execute("""
+            SELECT SUM(qtd) AS n, SUM(bruto - descontos) AS vd, SUM(taxas) AS tx,
+                   SUM(liquido) AS lq, COUNT(*) AS lotes
+              FROM cartao_arquivo_lotes WHERE operadora='X7' AND dt_liquidacao=%s""", (dia,))
+        lt = cur.fetchone() or {}
+        if not lt.get('lotes'):
+            return None
+        return {'n': int(lt['n'] or 0), 'vendido': round(float(lt['vd'] or 0), 2),
+                'taxa': round(float(lt['tx'] or 0), 2), 'abatimentos': 0.0,
+                'liquido': round(float(lt['lq'] or 0), 2), 'vendas': vendas}
+    if not vendas:
+        return None
+    return {'n': sum(1 for v in vendas if not v['abat']),
+            'vendido': round(sum(v['vendido'] for v in vendas), 2),
+            'taxa': round(sum(v['taxa'] for v in vendas if not v['abat']), 2),
+            'abatimentos': round(sum(v['liquido'] for v in vendas if v['abat']), 2),
+            'liquido': round(sum(v['liquido'] for v in vendas), 2),
+            'vendas': vendas}
+
+
+def _baratao_dia(cur, fs, dia):
+    """O que "a planilha pagou" do Baratao em `dia`. Ele paga um PIX por dia de
+    abastecimento, entao sao os dias de abastecimento cujo PIX caiu nele -- o
+    mesmo _casar_pix da Auditoria."""
+    janela = timedelta(days=_JANELA_PIX * 2)
+    cur.execute("""
+        SELECT DATE(dt_abastecimento) AS d, SUM(repasse) AS v
+          FROM cartao_baratao_cupons
+         WHERE dt_abastecimento >= %s AND dt_abastecimento < %s
+         GROUP BY DATE(dt_abastecimento)""", (dia - janela, dia + timedelta(days=1)))
+    dias = {r['d']: round(float(r['v'] or 0), 2) for r in cur.fetchall()}
+    pix = []
+    if fs:
+        ph = ','.join(['%s'] * len(fs))
+        cur.execute(f"""
+            SELECT id, data_transacao AS d, valor AS v FROM bank_transactions
+             WHERE tipo='CREDIT' AND forma_recebimento_id IN ({ph})
+               AND data_transacao BETWEEN %s AND %s ORDER BY data_transacao, id""",
+            list(fs) + [dia - janela, dia + timedelta(days=_JANELA_PIX)])
+        pix = [{'id': r['id'], 'd': r['d'], 'v': round(float(r['v']), 2)} for r in cur.fetchall()]
+    casados = _casar_pix(dias, pix)
+    pagos = sorted(d for d, ps in casados.items() if any(p['d'] == dia for p in ps))
+    if not pagos:
+        return None
+    cur.execute("""
+        SELECT dt_abastecimento, cupom, produto, litros, frentista,
+               bruto - desconto AS venda, taxa, repasse
+          FROM cartao_baratao_cupons
+         WHERE dt_abastecimento >= %s AND dt_abastecimento < %s
+         ORDER BY dt_abastecimento""", (min(pagos), max(pagos) + timedelta(days=1)))
+    vendas = [{'dt': r['dt_abastecimento'], 'abat': False,
+               'vendido': float(r['venda'] or 0), 'taxa': float(r['taxa'] or 0),
+               'liquido': float(r['repasse'] or 0),
+               'desc': ' · '.join(x for x in (
+                   r['produto'], ('%s L' % _fmt_br(r['litros'], 0)) if r['litros'] else '',
+                   r['frentista'], 'cupom %s' % (r['cupom'] or '')[-8:]) if x)}
+              for r in cur.fetchall() if r['dt_abastecimento'].date() in pagos]
+    return {'n': len(vendas), 'vendido': round(sum(v['vendido'] for v in vendas), 2),
+            'taxa': round(sum(v['taxa'] for v in vendas), 2), 'abatimentos': 0.0,
+            'liquido': round(sum(dias[d] for d in pagos), 2), 'vendas': vendas,
+            'dias_abastecimento': pagos}
+
+
+def _cobertura(cur):
+    """Ate que dia cada planilha chegou, e a ultima importacao de cada uma
+    (com o erro, e quantas falharam seguidas)."""
+    cob = {}
+    cur.execute("SELECT MAX(dt_pagamento) AS m FROM cartao_sipag_transacoes")
+    cob['SIPAG'] = (cur.fetchone() or {}).get('m')
+    cur.execute("SELECT MAX(dt_liquidacao) AS m FROM cartao_arquivo_lotes WHERE operadora='X7'")
+    cob['X7'] = (cur.fetchone() or {}).get('m')
+    cur.execute("SELECT MAX(dt_abastecimento) AS m FROM cartao_baratao_cupons")
+    m = (cur.fetchone() or {}).get('m')
+    cob['BARATAO'] = m.date() if isinstance(m, datetime) else m
+    imp = {}
+    for op in ('SIPAG', 'X7', 'BARATAO'):
+        cur.execute("""
+            SELECT arquivo, importado_em, erro FROM cartao_arquivo_importacoes
+             WHERE operadora=%s ORDER BY id DESC LIMIT 10""", (op,))
+        rs = cur.fetchall()
+        falhas = 0
+        for r in rs:
+            if not r['erro']:
+                break
+            falhas += 1
+        imp[op] = {'ultima': rs[0] if rs else None, 'falhas': falhas,
+                   'primeira_falha': rs[falhas - 1] if falhas else None}
+    return cob, imp
+
+
+def _quando(dt):
+    return dt.strftime('%d/%m %H:%M') if dt else '—'
+
+
+def conferir_dia(conn, dia, bandeiras):
+    """A conferencia de UM dia de deposito, cartao a cartao.
+
+    bandeiras: as do cadastro, com 'vinculos' (routes.conf_cartoes._get_bandeiras).
+    Cada linha traz a planilha, o banco, a diferenca, o status e o "porque"
+    em texto; 'soltos' sao creditos de cartao do dia sem cartao ligado."""
+    ensure_tables(conn)
+    ensure_tables_sipag(conn)
+    cur = conn.cursor(dictionary=True)
+    try:
+        cob, imp = _cobertura(cur)
+        todas_formas = sorted({v['forma_recebimento_id'] for b in bandeiras
+                               for v in b.get('vinculos', [])})
+        _, ult_extrato = _ate_onde(conn, todas_formas)
+        linhas = []
+        for b in bandeiras:
+            op = _operadora_de(b.get('nome'), b.get('tipo'))
+            if not op:
+                continue
+            fs = [v['forma_recebimento_id'] for v in b.get('vinculos', [])]
+            banco = []
+            if fs:
+                ph = ','.join(['%s'] * len(fs))
+                cur.execute(f"""
+                    SELECT bt.id, bt.valor, bt.descricao,
+                           COALESCE(NULLIF(ba.apelido,''), ba.banco_nome) AS conta
+                      FROM bank_transactions bt JOIN bank_accounts ba ON ba.id = bt.account_id
+                     WHERE bt.tipo='CREDIT' AND bt.forma_recebimento_id IN ({ph})
+                       AND bt.data_transacao=%s ORDER BY bt.id""", list(fs) + [dia])
+                banco = [{'id': r['id'], 'valor': float(r['valor']), 'desc': r['descricao'] or '',
+                          'conta': r['conta'] or ''} for r in cur.fetchall()]
+            pl = _baratao_dia(cur, fs, dia) if op == 'BARATAO' else _planilha_dia(cur, op, b, dia)
+            if not pl and not banco:
+                continue
+            v_pl = pl['liquido'] if pl else 0.0
+            v_banco = round(sum(x['valor'] for x in banco), 2)
+            linhas.append({
+                'bandeira_id': b['id'], 'nome': b['nome'], 'tipo': (b.get('tipo') or '').upper(),
+                'op': op, 'operadora': OPERADORAS[op]['nome'], 'formas': fs,
+                'planilha': pl, 'banco': banco, 'v_planilha': round(v_pl, 2),
+                'v_banco': v_banco, 'dif': round(v_banco - v_pl, 2), 'porque': ''})
+
+        # 1) o que se explica sozinho: bate, centavos, falta arquivo, falta extrato
+        for ln in linhas:
+            op, dif = ln['op'], ln['dif']
+            cb, im = cob.get(op), imp.get(op) or {}
+            if abs(dif) < _TOL:
+                ln['status'] = 'ok'
+            elif abs(dif) < _TOL_CENTAVOS and ln['planilha'] and ln['banco']:
+                ln['status'] = 'centavos'
+                ln['porque'] = 'Diferença de %s: arredondamento de centavos.' % _fmt_br(abs(dif))
+            elif not ln['planilha'] and (not cb or dia > cb) and im.get('falhas'):
+                pf = im['primeira_falha']
+                ln['status'] = 'arquivo_erro'
+                ln['porque'] = (
+                    'A planilha da %s não entrou: %d arquivo(s) seguido(s) deram erro na '
+                    'importação, desde "%s" (%s). Erro: %s. A última planilha que entrou '
+                    'cobre até %s.' % (ln['operadora'], im['falhas'], pf['arquivo'],
+                                       _quando(pf['importado_em']), pf['erro'],
+                                       cb.strftime('%d/%m/%Y') if cb else '—'))
+            elif not ln['planilha'] and (not cb or dia > cb):
+                u = im.get('ultima') or {}
+                ln['status'] = 'falta_planilha'
+                ln['porque'] = (
+                    'A planilha da %s ainda não chegou para esse dia: a última que entrou '
+                    '("%s", em %s) cobre até %s. O dinheiro caiu; a conferência fecha quando '
+                    'o arquivo novo chegar.' % (ln['operadora'], u.get('arquivo') or '—',
+                                                _quando(u.get('importado_em')),
+                                                cb.strftime('%d/%m/%Y') if cb else '—'))
+            elif ln['planilha'] and not ln['banco'] and ult_extrato and dia > ult_extrato:
+                ln['status'] = 'falta_extrato'
+                ln['porque'] = ('O extrato do banco ainda não chegou até esse dia (último '
+                                'lançamento em %s).' % ult_extrato.strftime('%d/%m/%Y'))
+            else:
+                ln['status'] = 'diverge'
+
+        # 2) cartao trocado: na mesma operadora, um a mais e outro a menos
+        div = [l for l in linhas if l['status'] == 'diverge']
+        for a in div:
+            for c in div:
+                if c is a or c['op'] != a['op'] or a['status'] != 'diverge' \
+                        or c['status'] != 'diverge':
+                    continue
+                if abs(a['dif'] + c['dif']) < _TOL_CENTAVOS:
+                    for x, y in ((a, c), (c, a)):
+                        x['status'] = 'trocado'
+                        x['porque'] = (
+                            'Cartão trocado: %s tem %s a %s e %s tem o mesmo valor a %s. O '
+                            'dinheiro caiu, mas o lançamento do extrato foi ligado ao cartão '
+                            'errado.' % ('%s %s' % (x['nome'], x['tipo'].lower()),
+                                         _fmt_br(abs(x['dif'])), 'mais' if x['dif'] > 0 else 'menos',
+                                         '%s %s' % (y['nome'], y['tipo'].lower()),
+                                         'mais' if y['dif'] > 0 else 'menos'))
+
+        # 3) credito de cartao no extrato do dia que nao esta ligado a cartao nenhum
+        cur.execute("""
+            SELECT bt.id, bt.valor, bt.descricao, bt.forma_recebimento_id AS f,
+                   COALESCE(NULLIF(ba.apelido,''), ba.banco_nome) AS conta
+              FROM bank_transactions bt JOIN bank_accounts ba ON ba.id = bt.account_id
+             WHERE bt.tipo='CREDIT' AND bt.data_transacao=%s
+               AND (bt.descricao LIKE 'SIPAG%%' OR bt.descricao LIKE '%%X7%%'
+                    OR bt.descricao LIKE '%%BARAT%%'
+                    OR bt.cnpj_cpf LIKE '%%41524064%%' OR bt.cnpj_cpf LIKE '%%45179094%%'
+                    OR bt.cnpj_cpf LIKE '%%41.524.064%%' OR bt.cnpj_cpf LIKE '%%45.179.094%%')""",
+            (dia,))
+        soltos = [{'id': r['id'], 'valor': float(r['valor']), 'desc': r['descricao'] or '',
+                   'conta': r['conta'] or '', 'explica': None}
+                  for r in cur.fetchall() if r['f'] not in todas_formas]
+
+        # 4) o resto: outro dia, abatimento, credito solto -- ou sem explicacao
+        for ln in linhas:
+            if ln['status'] != 'diverge':
+                continue
+            dif, motivos, fs = ln['dif'], [], ln['formas']
+            if fs and dif < 0:
+                ph = ','.join(['%s'] * len(fs))
+                cur.execute(f"""
+                    SELECT data_transacao AS d, SUM(valor) AS v FROM bank_transactions
+                     WHERE tipo='CREDIT' AND forma_recebimento_id IN ({ph})
+                       AND data_transacao BETWEEN %s AND %s AND data_transacao <> %s
+                     GROUP BY data_transacao ORDER BY ABS(DATEDIFF(data_transacao, %s))""",
+                    list(fs) + [dia - timedelta(days=_VIZINHO_DIAS),
+                                dia + timedelta(days=_VIZINHO_DIAS), dia, dia])
+                for r in cur.fetchall():
+                    if abs(float(r['v']) - abs(dif)) < _TOL_CENTAVOS:
+                        motivos.append('caiu em outro dia: %s entrou no banco em %s'
+                                       % (_fmt_br(abs(dif)), r['d'].strftime('%d/%m')))
+                        break
+            pl = ln['planilha'] or {}
+            if pl.get('abatimentos') and abs(dif + pl['abatimentos']) < _TOL_CENTAVOS:
+                motivos.append('o banco pagou sem o desconto de %s que está na planilha '
+                               '(aluguel de maquininha ou estorno)' % _fmt_br(abs(pl['abatimentos'])))
+            for s in soltos:
+                if dif < 0 and not s['explica'] and abs(s['valor'] - abs(dif)) < _TOL_CENTAVOS:
+                    motivos.append('há um crédito de %s no extrato (%s, "%s") que não está '
+                                   'ligado a nenhum cartão: é ele que falta aqui'
+                                   % (_fmt_br(s['valor']), s['conta'], s['desc'][:60]))
+                    s['explica'] = '%s %s' % (ln['nome'], ln['tipo'].lower())
+                    break
+            if motivos:
+                ln['status'] = 'explicado'
+                ln['porque'] = 'Diferença de %s: %s.' % (_fmt_br(abs(dif)), '; '.join(motivos))
+            else:
+                ln['status'] = 'sem_explicacao'
+                if not ln['banco']:
+                    txt = ('a planilha diz que a %s pagou %s e nada caiu no banco nesse dia '
+                           'para esse cartão' % (ln['operadora'], _fmt_br(ln['v_planilha'])))
+                elif not ln['planilha']:
+                    txt = ('caiu %s no banco e a planilha da %s não tem pagamento desse '
+                           'cartão nesse dia' % (_fmt_br(ln['v_banco']), ln['operadora']))
+                else:
+                    txt = 'o banco tem %s %s do que a planilha' % (
+                        _fmt_br(abs(dif)), 'a mais' if dif > 0 else 'a menos')
+                ln['porque'] = ('Diferença sem causa conhecida: %s. Abra as vendas da planilha '
+                                'e os lançamentos do banco para comparar.' % txt)
+
+        ordem = {'SIPAG': 0, 'X7': 1, 'BARATAO': 2}
+        linhas.sort(key=lambda l: (ordem.get(l['op'], 9), l['tipo'] != 'DEBITO', l['nome']))
+        for ln in linhas:
+            pl = ln['planilha']
+            if pl:
+                for v in pl['vendas']:
+                    v['dt'] = v['dt'].strftime('%d/%m %H:%M') if v.get('dt') else ''
+                if pl.get('dias_abastecimento'):
+                    pl['dias_abastecimento'] = [d.strftime('%d/%m') for d in pl['dias_abastecimento']]
+        cont = defaultdict(int)
+        for ln in linhas:
+            cont[ln['status']] += 1
+
+        def soma(campo):
+            return round(sum((l['planilha'] or {}).get(campo, 0) for l in linhas), 2)
+        return {
+            'data': dia.isoformat(), 'data_br': dia.strftime('%d/%m/%Y'),
+            'linhas': linhas, 'soltos': soltos, 'contagem': dict(cont),
+            'totais': {'planilha': round(sum(l['v_planilha'] for l in linhas), 2),
+                       'banco': round(sum(l['v_banco'] for l in linhas), 2),
+                       'n': int(soma('n')), 'vendido': soma('vendido'),
+                       'taxa': soma('taxa'), 'abatimentos': soma('abatimentos')},
+            'cobertura': {k: (v.strftime('%d/%m/%Y') if v else None) for k, v in cob.items()},
+            'ult_extrato': ult_extrato.strftime('%d/%m/%Y') if ult_extrato else None,
+        }
+    finally:
+        cur.close()

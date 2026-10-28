@@ -1850,6 +1850,29 @@ def ajuste_del():
         conn.close()
 
 
+@bp.route('/conf_cartoes/dia', methods=['GET'])
+@login_required
+@admin_required
+def conf_cartoes_dia():
+    """Um dia de deposito: o que cada planilha pagou x o que caiu no banco,
+    cartao a cartao, com a causa de cada diferenca (cartao_arquivo.conferir_dia).
+    So le; a caixa "Conferir um dia" do topo da tela chama por aqui."""
+    try:
+        dia = datetime.strptime(request.args.get('data', ''), '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'ok': False, 'erro': 'data inválida'}), 400
+    conn = get_db_connection()
+    try:
+        out = cartao_arquivo.conferir_dia(conn, dia, _get_bandeiras(conn))
+    except Exception as e:
+        _logger.exception("conf_cartoes: conferir dia falhou")
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        conn.close()
+    out['ok'] = True
+    return jsonify(out)
+
+
 @bp.route('/conf_cartoes/vendas', methods=['GET'])
 @login_required
 @admin_required
