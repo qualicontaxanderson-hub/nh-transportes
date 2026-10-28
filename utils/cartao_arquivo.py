@@ -366,6 +366,94 @@ def _x7_depois_da_lista(cur, operadora, arquivo, lotes, usados):
                 UPDATE cartao_arquivo_vendas
                    SET dt_liquidacao=%s, dt_previsao=%s, desconto_lote=%s, status=%s
                  WHERE id=%s""", (d, l['dt_previsao'], parte, l['status'][:80], i))
+    x7_vendas_pelo_cupom(cur, operadora, arquivo, lotes)
+
+
+# CNPJ da X7 no cartao do cupom (card_credenciadora da NF-e/NFC-e)
+_X7_CNPJ = '45179094000146'
+
+
+def x7_vendas_pelo_cupom(cur, operadora, arquivo, lotes, gravar=True):
+    """3. O pagamento da lista que nao tem venda nenhuma gravada ganha a venda
+    pelo CUPOM FISCAL: o cupom X7 autorizado, de ate 10 dias antes, ainda sem
+    venda, cujo valor e o bruto MENOS o desconto do lote (o que o cliente
+    pagou). So quando UMA combinacao de `qtd` cupons fecha -- duas, nao grava.
+    A venda leva o numero do cupom na NF-e, e o casamento por NF-e
+    (cartao_cupom) a liga ao cupom como as do .xls.
+
+    Devolve [(lote, cupons ou None, motivo)] -- com gravar=False so mede."""
+    out = []
+    # o dia de cada pagamento: a liquidacao, ou a previsao enquanto A Pagar
+    por_dia = defaultdict(list)
+    for l in lotes:
+        if l['qtd']:
+            por_dia[(l['dt_liquidacao'], None if l['dt_liquidacao'] else l['dt_previsao'])].append(l)
+    usados = set()
+    for (liq, prev), ls in sorted(por_dia.items(), key=lambda x: x[0][0] or x[0][1]):
+        if liq:
+            cur.execute("SELECT COUNT(*), COALESCE(SUM(bruto),0) FROM cartao_arquivo_vendas "
+                        "WHERE operadora=%s AND dt_liquidacao=%s", (operadora, liq))
+        else:
+            cur.execute("SELECT COUNT(*), COALESCE(SUM(bruto),0) FROM cartao_arquivo_vendas "
+                        "WHERE operadora=%s AND dt_liquidacao IS NULL AND dt_previsao=%s",
+                        (operadora, prev))
+        n, soma = cur.fetchone()
+        if n:
+            # o dia ja tem as vendas (do .xls ou de uma lista anterior);
+            # parte delas e ambiguo demais para completar
+            motivo = ('ja tem venda' if abs(float(soma) - sum(l['bruto'] for l in ls)) < _TOL
+                      else 'dia com parte das vendas')
+            out.extend((l, None, motivo) for l in ls)
+            continue
+        dia = liq or prev
+        cur.execute("""
+            SELECT x.id, x.numero, x.dh_emissao, x.valor_total, x.cliente_nome
+              FROM vendas_xml x
+             WHERE x.situacao='autorizada' AND x.card_credenciadora=%s
+               AND x.dh_emissao >= %s AND x.dh_emissao < %s
+               AND NOT EXISTS (SELECT 1 FROM cartao_cupom_vinculo v WHERE v.vendas_xml_id=x.id)
+               AND NOT EXISTS (SELECT 1 FROM cartao_arquivo_vendas a
+                                WHERE a.operadora=%s AND a.nfe=CAST(x.numero AS CHAR))
+             ORDER BY x.dh_emissao""",
+            (_X7_CNPJ, dia - timedelta(days=10), dia + timedelta(days=1), operadora))
+        cupons = [c for c in cur.fetchall() if c[0] not in usados][:12]
+        for l in ls:
+            alvo = round(l['bruto'] - l['descontos'], 2)
+            achou = []
+            for comb in combinations([c for c in cupons if c[0] not in usados], l['qtd']):
+                if abs(sum(float(c[3]) for c in comb) - alvo) < 0.005:
+                    achou.append(comb)
+                    if len(achou) > 1:
+                        break
+            if len(achou) != 1:
+                out.append((l, None, 'nenhum cupom com %.2f' % alvo if not achou
+                            else 'mais de um cupom com %.2f' % alvo))
+                continue
+            comb = achou[0]
+            usados.update(c[0] for c in comb)
+            out.append((l, comb, 'casado'))
+            if not gravar:
+                continue
+            # o desconto e o liquido do lote, repartidos pelo valor do cupom
+            resto_d, resto_l = round(l['descontos'], 2), round(l['liquido'], 2)
+            for k, (cid, num, dh, val, cli) in enumerate(comb):
+                ult = k == len(comb) - 1
+                parte = resto_d if ult else round(l['descontos'] * float(val) / alvo, 2)
+                liq_v = resto_l if ult else round(l['liquido'] * float(val) / alvo, 2)
+                resto_d, resto_l = round(resto_d - parte, 2), round(resto_l - liq_v, 2)
+                cur.execute("""
+                    INSERT IGNORE INTO cartao_arquivo_vendas
+                        (operadora, cod_transacao, parcela, estabelecimento, dt_previsao,
+                         nfe, dt_operacao, dt_liquidacao, cliente, bruto, desconto,
+                         taxa_pct, liquido_est, desconto_lote, forma_pagamento, status, arquivo)
+                    VALUES (%s,%s,'',%s,%s,%s,%s,%s,%s,%s,0,0,%s,%s,%s,%s,%s)""",
+                    (operadora, 'CUPOM-%s' % num, l['estabelecimento'][:120], l['dt_previsao'],
+                     str(num), dh, l['dt_liquidacao'], (cli or '')[:160],
+                     round(float(val) + parte, 2), liq_v, parte, 'pelo cupom fiscal',
+                     l['status'][:80], arquivo[:200]))
+            _log.info('[cartao_arq] %s: pagamento X7 %s de %.2f casado com o(s) cupom(ns) %s',
+                      arquivo, dia, l['bruto'], ', '.join(str(c[1]) for c in comb))
+    return out
 
 
 def ler_baratao(conteudo):
