@@ -132,6 +132,38 @@ def _nome(descricao):
     return n.strip() or (descricao or '').strip()
 
 
+# Formas de recebimento que SÃO o PIX de venda: alocado a elas, o PIX segue
+# livre para o caixa. Qualquer outro destino trava.
+_FORMAS_VENDA = ('RECEBIMENTO PIX',)
+
+
+def _alocacao(conn, ids):
+    """{bank_transaction_id: 'onde já está'} dos PIX que a Conciliação do
+    Banco já destinou a outra coisa que não a venda."""
+    if not ids:
+        return {}
+    cur = conn.cursor(dictionary=True)
+    try:
+        ph = ','.join(['%s'] * len(ids))
+        cur.execute(f"""
+            SELECT bt.id, bt.tipo_conciliacao, bt.fornecedor_id, fr.nome AS forma
+              FROM bank_transactions bt
+              LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
+             WHERE bt.id IN ({ph}) AND bt.status = 'conciliado'""", ids)
+        out = {}
+        for r in cur.fetchall():
+            forma = (r['forma'] or '').strip()
+            if r['tipo_conciliacao'] == 'transferencia':
+                out[r['id']] = 'Já alocado no Banco: transferência entre contas'
+            elif r['tipo_conciliacao'] == 'devolucao_fornecedor' or r['fornecedor_id']:
+                out[r['id']] = 'Já alocado no Banco: devolução de fornecedor'
+            elif forma and pix_consulta._sem_acento(forma) not in _FORMAS_VENDA:
+                out[r['id']] = 'Já alocado no Banco: %s' % forma
+        return out
+    finally:
+        cur.close()
+
+
 def pix_do_dia(conn, cliente_id, dia, lancamento_id=None):
     """A lista do dia para o fechamento: {contas, pix, fora, manuais, salvo}.
 
@@ -192,13 +224,15 @@ def pix_do_dia(conn, cliente_id, dia, lancamento_id=None):
                             'usuario': r['usuario_nome']} for r in cur.fetchall()]
     finally:
         cur.close()
+    alocado = _alocacao(conn, [p['id'] for p in pix])
     for p in pix:
         s = sugestao(p['_texto'], p['nome'])
-        p['cartao'] = None
-        if s and s.startswith('Pagamento d'):
-            # Baratão/X7 é pagamento de CARTÃO, não PIX de venda: aparece em
-            # cinza e travado, nunca entra na soma (pedido do usuário, 29/10)
-            p['cartao'] = s
+        # TRAVADO (cinza, o Melke vê mas não usa): o PIX que já tem outro
+        # destino -- alocado no Banco a algo que não é venda (devolução,
+        # transferência, cliente a prazo...) ou pagamento de cartão
+        # (Baratão/X7). Nunca entra na soma (pedido do usuário, 29/10/2026).
+        p['travado'] = alocado.get(p['id']) or (s if s and s.startswith('Pagamento d') else None)
+        if p['travado']:
             fora.pop(p['id'], None)
         elif s and not salvo:
             fora[p['id']] = s + ' (sugestão)'

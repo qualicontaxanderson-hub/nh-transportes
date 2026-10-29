@@ -42,9 +42,9 @@
   .pxl-px .tag{ font-size:.68rem; border-radius:4px; padding:1px 6px; background:#e0e7ff; color:#3730a3; font-weight:600; margin-left:6px; }
   .pxl-px.off{ background:#fef2f2; } .pxl-px.off .v{ color:#b91c1c; text-decoration:line-through; }
   .pxl-px.junto{ opacity:.55; }
-  /* pagamento de cartão (Baratão, X7): cinza e travado, nunca entra */
-  .pxl-px.cartao{ background:#f3f4f6; color:#9ca3af; }
-  .pxl-px.cartao .v{ color:#9ca3af; }
+  /* travado: já tem outro destino (cartão, devolução, transferência...) */
+  .pxl-px.travado{ background:#f3f4f6; color:#9ca3af; }
+  .pxl-px.travado .v{ color:#9ca3af; }
   .pxl-px .trava{ width:50px; text-align:center; color:#9ca3af; font-size:1.1rem; }
   .pxl-px .cart{ grid-column:2 / -1; font-size:.72rem; color:#6b7280; margin-top:-2px; }
   .pxl-px .motivo{ grid-column:2 / -1; font-size:.75rem; color:#b91c1c; margin-top:-2px; }
@@ -148,7 +148,7 @@
     return e;
   }
 
-  const venda = () => D.pix.filter(p => !p.cartao);
+  const venda = () => D.pix.filter(p => !p.travado);
   function totais() {
     const dia = venda().reduce((a, p) => a + p.valor, 0);
     const f = venda().filter(p => p.id in fora).reduce((a, p) => a + p.valor, 0);
@@ -183,7 +183,7 @@
     const t = totais(), nf = Object.keys(fora).length, nm = manuais.filter(x => !x.junto).length;
     let h = `Soma dos ${venda().length} PIX do dia (${brl(t.dia)})`;
     const nc = D.pix.length - venda().length;
-    if (nc) h += ` · ${nc} de cartão (Baratão/X7) não entra`;
+    if (nc) h += ` · ${nc} já com outro destino (em cinza) não entra`;
     if (nf) h += ` <span class="red">− ${nf} fora do cálculo: ${brl(t.fora)}</span>`;
     if (nm) h += ` + ${nm} manual(is): ${brl(t.manual)}`;
     if (!governa) {
@@ -229,15 +229,15 @@
     const juntos = new Set(manuais.filter(x => x.junto).map(x => x.junto));
     $('#pxl-bancos').innerHTML = D.contas.map(c => {
       const todos = D.pix.filter(p => p.conta == c.id), mans = manuais.filter(m => m.conta == c.id);
-      const usa = todos.filter(p => !p.cartao && !(p.id in fora)).reduce((a, p) => a + p.valor, 0)
+      const usa = todos.filter(p => !p.travado && !(p.id in fora)).reduce((a, p) => a + p.valor, 0)
                 + mans.filter(m => !m.junto).reduce((a, m) => a + m.valor, 0);
       const ps = todos.filter(passa);
       const linhas = ps.map(p => {
-        if (p.cartao) return `<div class="pxl-px cartao" title="Pagamento de cartão: não é PIX de venda">
+        if (p.travado) return `<div class="pxl-px travado" title="Já tem outro destino: não entra no caixa">
           <span class="trava"><i class="bi bi-lock-fill"></i></span>
           <span class="v">${brl(p.valor)}</span><span class="h"></span>
           <span class="n">${esc(p.nome)}</span>
-          <div class="cart"><i class="bi bi-credit-card"></i> ${esc(p.cartao)} · não entra no caixa</div></div>`;
+          <div class="cart"><i class="bi bi-lock"></i> ${esc(p.travado)} · não entra no caixa</div></div>`;
         const off = p.id in fora;
         return `<div class="pxl-px ${off ? 'off' : ''}">
           <button type="button" class="pxl-sw ${off ? 'off' : ''}" data-sw="${p.id}" title="${off ? 'Fora do cálculo: clique para usar' : 'No cálculo: clique para tirar'}"></button>
