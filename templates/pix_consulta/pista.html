@@ -55,7 +55,7 @@
       {% for f in frentistas %}<option value="{{ f.id }}">{{ f.nome }}</option>{% endfor %}
     </select>
     <label for="pxp-valor">Valor do PIX</label>
-    <input id="pxp-valor" inputmode="decimal" placeholder="1.500,00" autocomplete="off">
+    <input id="pxp-valor" inputmode="numeric" placeholder="0,00" autocomplete="off">
     <label for="pxp-quem">Nome ou CPF/CNPJ do pagador</label>
     <input id="pxp-quem" placeholder="cleyton  ou  903.681" autocomplete="off">
     <button class="btn-g" id="pxp-buscar"><i class="bi bi-search"></i> Consultar</button>
@@ -94,6 +94,14 @@
     $('#pxp-frent').classList.remove('falta');
     try { localStorage.setItem('pxp_frentista', $('#pxp-frent').value); } catch (e) {}
   };
+
+  // Valor como na maquininha: os números entram pelos centavos
+  // (50 → 0,50 · 100 → 1,00 · 100000 → 1.000,00).
+  const vEl = $('#pxp-valor');
+  vEl.addEventListener('input', () => {
+    const d = vEl.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 11);
+    vEl.value = d ? (parseInt(d, 10) / 100).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '';
+  });
 
   function vendedor(p) {
     if (p.vendedor) return `Vendedor: ${esc(p.vendedor)} · cupom ${esc(p.cupom)}`;
@@ -151,12 +159,24 @@
   }
 
   // ── comprovante (o mesmo da PIX Consulta) ──
+  // Texto para o WhatsApp: *negrito*, _itálico_ e ```mono``` são do próprio WhatsApp.
   function texto(p) {
-    return `✅ PIX CONFIRMADO — POSTO NH\n\n` +
-      `Valor: ${brl(p.valor)}\nPagador: ${p.nome}\n` + (p.doc ? `CPF/CNPJ: ${p.doc}\n` : '') +
-      `Recebido em: ${p.dia}${p.hora ? ', ' + p.hora : ''}\nConta: ${p.conta}\n` +
-      (p.vendedor ? `Vendedor: ${p.vendedor} (cupom ${p.cupom})\n` : '') + '\n' +
-      `Consultado por: ${p.consultado_por}\nEm: ${p.consultado_em}\n\nProtocolo: ${p.protocolo}`;
+    const L = [
+      '✅ *PIX CONFIRMADO*',
+      '⛽ *Posto Novo Horizonte*',
+      '_Conferido no extrato do banco_',
+      '━━━━━━━━━━━━━━━',
+      `💰 *Valor:* ${brl(p.valor)}`,
+      `👤 *Pagador:* ${p.nome}`,
+    ];
+    if (p.doc) L.push(`🪪 *CPF/CNPJ:* ${p.doc}`);
+    L.push(`🕒 *Recebido:* ${p.dia}${p.hora ? ', ' + p.hora : ''}`, `🏦 *Conta:* ${p.conta}`);
+    if (p.vendedor) L.push(`🧾 *Cupom:* ${p.cupom} · vendedor ${p.vendedor}`);
+    L.push('━━━━━━━━━━━━━━━',
+      `🔎 Consultado por *${p.consultado_por}*`, `📅 ${p.consultado_em}`, '',
+      '🔐 *Protocolo:* ```' + p.protocolo + '```', '',
+      '_Guarde o protocolo: com ele o posto confirma este PIX a qualquer momento._');
+    return L.join('\n');
   }
   function desenhar(p) {
     const c = $('#pxp-cv'), g = c.getContext('2d'), W = c.width;
