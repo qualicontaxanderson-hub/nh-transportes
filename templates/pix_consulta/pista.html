@@ -16,7 +16,17 @@
   #pxp label{ display:block; font-size:.72rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin:10px 0 4px; }
   #pxp label:first-child{ margin-top:0; }
   #pxp select, #pxp input{ width:100%; padding:11px 12px; border:1px solid #cbd5e1; border-radius:10px; font-size:17px; background:#fff; }
-  #pxp .quem.falta{ border-color:#dc2626; box-shadow:0 0 0 3px rgba(220,38,38,.15); }
+  /* quem consulta: botões em vez da lista do celular */
+  #pxp .esc{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  #pxp .fr{ border:1px solid #cbd5e1; background:#fff; border-radius:10px; padding:11px 8px;
+            font-weight:600; font-size:.95rem; color:#1e293b; line-height:1.2; }
+  #pxp .fr:active{ background:#eff6ff; }
+  #pxp .sel{ display:flex; align-items:center; gap:8px; background:#eff6ff; border:1px solid #bfdbfe;
+             border-radius:10px; padding:11px 12px; color:#1e3a8a; font-size:1rem; }
+  #pxp .sel[hidden]{ display:none; }
+  #pxp .sel b{ flex:1; }
+  #pxp .sel button{ border:0; background:none; color:#1e40af; font-weight:600; text-decoration:underline; padding:0; }
+  #pxp .quem.falta .esc{ outline:2px solid #dc2626; outline-offset:4px; border-radius:10px; }
   #pxp .btn-g{ width:100%; margin-top:14px; background:#1e40af; color:#fff; border:0; border-radius:10px;
                padding:13px; font-size:1.05rem; font-weight:700; }
   #pxp .btn-g:disabled{ opacity:.6; }
@@ -49,11 +59,17 @@
   <div class="sub">Hoje, {{ hoje }} · Sicoob NH</div>
 
   <div class="box">
-    <label for="pxp-frent">Quem está consultando</label>
-    <select id="pxp-frent" class="quem">
-      <option value="">— escolha —</option>
-      {% for f in frentistas %}<option value="{{ f.id }}">{{ f.nome }}</option>{% endfor %}
-    </select>
+    <label>Quem está consultando</label>
+    <input type="hidden" id="pxp-frent">
+    <div class="quem" id="pxp-quem-box">
+      <div class="esc" id="pxp-esc">
+        {% for f in frentistas %}<button type="button" class="fr" data-id="{{ f.id }}" title="{{ f.nome }}">{{ f.nome.split()[:2]|join(' ')|title }}</button>{% endfor %}
+      </div>
+      <div class="sel" id="pxp-sel" hidden>
+        <i class="bi bi-person-check-fill"></i> <b id="pxp-sel-nome"></b>
+        <button type="button" id="pxp-trocar">trocar</button>
+      </div>
+    </div>
     <label for="pxp-valor">Valor do PIX</label>
     <input id="pxp-valor" inputmode="numeric" placeholder="0,00" autocomplete="off">
     <label for="pxp-quem">Nome ou CPF/CNPJ do pagador</label>
@@ -89,11 +105,17 @@
   function toast(t) { const e = $('#pxp-toast'); e.textContent = t; e.style.display = 'block'; setTimeout(() => e.style.display = 'none', 2200); }
 
   // o frentista fica lembrado neste aparelho (só conveniência)
-  try { const f = localStorage.getItem('pxp_frentista'); if (f) $('#pxp-frent').value = f; } catch (e) {}
-  $('#pxp-frent').onchange = () => {
-    $('#pxp-frent').classList.remove('falta');
-    try { localStorage.setItem('pxp_frentista', $('#pxp-frent').value); } catch (e) {}
-  };
+  function escolher(id) {
+    const b = id && document.querySelector(`#pxp-esc .fr[data-id="${id}"]`);
+    $('#pxp-frent').value = b ? id : '';
+    $('#pxp-esc').hidden = !!b;
+    $('#pxp-sel').hidden = !b;
+    if (b) { $('#pxp-sel-nome').textContent = b.textContent; $('#pxp-quem-box').classList.remove('falta'); }
+    try { localStorage.setItem('pxp_frentista', b ? id : ''); } catch (e) {}
+  }
+  $('#pxp-esc').onclick = e => { const b = e.target.closest('.fr'); if (b) escolher(b.dataset.id); };
+  $('#pxp-trocar').onclick = () => escolher('');
+  try { escolher(localStorage.getItem('pxp_frentista') || ''); } catch (e) { escolher(''); }
 
   // Valor como na maquininha: os números entram pelos centavos
   // (50 → 0,50 · 100 → 1,00 · 100000 → 1.000,00).
@@ -138,7 +160,7 @@
   async function gerar(id, botao) {
     const frentista_id = $('#pxp-frent').value;
     if (!frentista_id) {
-      $('#pxp-frent').classList.add('falta'); $('#pxp-frent').focus();
+      $('#pxp-quem-box').classList.add('falta'); $('#pxp-quem-box').scrollIntoView({behavior: 'smooth', block: 'center'});
       return toast('Escolha quem está consultando');
     }
     botao.disabled = true;
