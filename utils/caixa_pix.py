@@ -101,11 +101,13 @@ def garantir_tabelas(conn):
 def sugestao(texto, nome=''):
     """O motivo sugerido para tirar o PIX do cálculo, ou None."""
     t = pix_consulta._sem_acento('%s %s' % (texto or '', nome or ''))
-    if 'BARATAO' in t or BARATAO_CNPJ in t:
+    # o CNPJ vem cru ou pontuado ('33.503.987 0001-16'): compara só os dígitos
+    dig = pix_consulta._digitos(t)
+    if 'BARATAO' in t or BARATAO_CNPJ in dig:
         return 'Pagamento do Baratão (entra na Conferência de Cartões)'
-    if X7_CNPJ in t or 'X7 B' in t:
+    if X7_CNPJ in dig or 'X7 B' in t:
         return 'Pagamento do cartão X7 (entra na Conferência de Cartões)'
-    if any(c in t for c in CNPJS_GRUPO) or any(n in t for n in _NOMES_GRUPO):
+    if any(c in dig for c in CNPJS_GRUPO) or any(n in t for n in _NOMES_GRUPO):
         return 'Transferência entre contas/empresas do grupo'
     return None
 

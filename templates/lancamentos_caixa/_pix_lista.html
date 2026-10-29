@@ -1,0 +1,312 @@
+{#- PIX do Fechamento de Caixa (29/10/2026) — utils/caixa_pix.
+
+    O campo "Recebimentos PIX" passa a vir da lista dos PIX do dia nas contas
+    do cliente: todos ligados, e o que não entra é desligado com o MOTIVO.
+    PIX que o extrato ainda não trouxe (OFX do Santander) entra à mão.
+
+    Fechamento NOVO: o campo se preenche sozinho com a lista (e as sugestões
+    já desligadas). Fechamento SALVO: o valor gravado nunca muda sozinho; a
+    lista mostra a diferença e só troca quando o usuário confirma.
+-#}
+<style>
+  .pxl-sub{ font-size:.72rem; color:#64748b; margin-top:2px; }
+  .pxl-sub .red{ color:#b91c1c; } .pxl-sub .am{ color:#b45309; font-weight:600; }
+  #pxl-modal,.pxl-caixa{ position:fixed; inset:0; background:rgba(15,23,42,.55); display:none;
+    align-items:flex-start; justify-content:center; padding:16px; overflow:auto; z-index:1080; }
+  .pxl-caixa{ align-items:center; z-index:1090; background:rgba(15,23,42,.4); }
+  #pxl-modal.on,.pxl-caixa.on{ display:flex; }
+  .pxl-box{ background:#fff; border-radius:14px; max-width:880px; width:100%; padding:14px 16px; }
+  .pxl-box h2{ margin:0 0 10px; font-size:1.05rem; color:#1e3a8a; font-weight:800; display:flex;
+    justify-content:space-between; align-items:center; gap:8px; }
+  .pxl-res{ display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+  .pxl-k{ flex:1; min-width:140px; border-radius:10px; padding:7px 12px; background:#f1f5f9; font-size:.75rem; color:#475569; }
+  .pxl-k b{ display:block; font-size:1.05rem; color:#1e293b; }
+  .pxl-k.red{ background:#fef2f2 } .pxl-k.red b{ color:#b91c1c }
+  .pxl-k.ok{ background:#f0fdf4 } .pxl-k.ok b{ color:#15803d }
+  .pxl-k.man{ background:#eef2ff } .pxl-k.man b{ color:#3730a3 }
+  .pxl-busca{ display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap; }
+  .pxl-busca input{ flex:1; min-width:120px; padding:6px 9px; border:1px solid #cbd5e1; border-radius:6px; font-size:.85rem; }
+  .pxl-banco{ border:1px solid #e2e8f0; border-radius:10px; margin-bottom:10px; overflow:hidden; }
+  .pxl-bh{ display:flex; align-items:center; gap:10px; padding:7px 12px; background:#f8fafc;
+    border-bottom:1px solid #e2e8f0; flex-wrap:wrap; font-size:.85rem; }
+  .pxl-bh b{ flex:1; } .pxl-bh .tot{ font-weight:800; color:#15803d; }
+  .pxl-vazio{ padding:9px 12px; color:#64748b; font-size:.8rem; }
+  .pxl-lista{ max-height:44vh; overflow:auto; }
+  .pxl-px{ display:grid; grid-template-columns:54px 100px 46px 1fr; gap:10px; align-items:center;
+    padding:5px 12px; border-bottom:1px solid #f1f5f9; font-size:.84rem; }
+  .pxl-px:last-child{ border-bottom:0; }
+  .pxl-px .v{ font-weight:800; color:#15803d; text-align:right; font-variant-numeric:tabular-nums; }
+  .pxl-px .h{ color:#64748b; font-size:.75rem; font-variant-numeric:tabular-nums; }
+  .pxl-px .n{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pxl-px .n small{ color:#64748b; }
+  .pxl-px .tag{ font-size:.68rem; border-radius:4px; padding:1px 6px; background:#e0e7ff; color:#3730a3; font-weight:600; margin-left:6px; }
+  .pxl-px.off{ background:#fef2f2; } .pxl-px.off .v{ color:#b91c1c; text-decoration:line-through; }
+  .pxl-px.junto{ opacity:.55; }
+  .pxl-px .motivo{ grid-column:2 / -1; font-size:.75rem; color:#b91c1c; margin-top:-2px; }
+  .pxl-px .motivo a,.pxl-px .acao a{ color:#1e40af; cursor:pointer; margin-left:6px; text-decoration:underline; }
+  .pxl-px .acao{ grid-column:2 / -1; font-size:.75rem; color:#b45309; margin-top:-2px; }
+  .pxl-sw{ position:relative; width:50px; height:26px; border-radius:13px; background:#22c55e; border:0; cursor:pointer; padding:0; }
+  .pxl-sw::after{ content:''; position:absolute; top:3px; left:27px; width:20px; height:20px; border-radius:50%;
+    background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.3); transition:left .15s; }
+  .pxl-sw.off{ background:#9ca3af; } .pxl-sw.off::after{ left:3px; }
+  .pxl-sw.del{ background:#e0e7ff; color:#3730a3; width:50px; font-size:.7rem; font-weight:700; }
+  .pxl-sw.del::after{ display:none; }
+  .pxl-cbox{ background:#fff; border-radius:12px; max-width:440px; width:100%; padding:16px; }
+  .pxl-cbox h3{ margin:0 0 4px; font-size:1rem; font-weight:800; }
+  .pxl-cbox label{ font-size:.72rem; font-weight:700; color:#64748b; display:block; margin:10px 0 4px; text-transform:uppercase; }
+  .pxl-cbox input,.pxl-cbox select{ width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:6px; }
+  .pxl-chips{ display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .pxl-chip{ border:1px solid #cbd5e1; background:#fff; border-radius:14px; padding:3px 10px; font-size:.75rem; cursor:pointer; }
+  .pxl-acoes{ display:flex; justify-content:flex-end; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:center; }
+  .pxl-fora{ border:1px solid #fecaca; border-radius:10px; margin-top:4px; }
+  .pxl-fora h4{ margin:0; padding:6px 12px; font-size:.8rem; color:#b91c1c; border-bottom:1px solid #fecaca; font-weight:800; }
+  .pxl-fora table{ width:100%; font-size:.78rem; } .pxl-fora td{ padding:5px 12px; border-bottom:1px solid #fef2f2; }
+</style>
+
+<div id="pxl-modal"><div class="pxl-box">
+  <h2><span><i class="bi bi-qr-code"></i> PIX recebidos em <span id="pxl-dia"></span></span>
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="pxl-fechar">Fechar</button></h2>
+  <div class="pxl-res">
+    <div class="pxl-k">PIX no dia<b id="pxl-r-dia"></b></div>
+    <div class="pxl-k red">Fora do cálculo<b id="pxl-r-fora"></b></div>
+    <div class="pxl-k man">Lançados à mão<b id="pxl-r-man"></b></div>
+    <div class="pxl-k ok">Vai para o caixa<b id="pxl-r-usa"></b></div>
+  </div>
+  <div class="pxl-busca">
+    <input id="pxl-b-valor" inputmode="decimal" placeholder="Valor (ex.: 1.500,00)">
+    <input id="pxl-b-hora" placeholder="Horário (ex.: 10 ou 10:4)">
+    <input id="pxl-b-nome" placeholder="Nome, CPF/CNPJ ou vendedor">
+  </div>
+  <div id="pxl-bancos"></div>
+  <div class="pxl-fora" id="pxl-fora" style="display:none"><h4><i class="bi bi-slash-circle"></i> Fora do cálculo</h4><table id="pxl-fora-t"></table></div>
+  <div class="pxl-acoes">
+    <span class="pxl-sub" id="pxl-aviso"></span>
+    <button type="button" class="btn btn-success btn-sm" id="pxl-confirmar"><i class="bi bi-check2"></i> Confirmar e usar no caixa</button>
+  </div>
+</div></div>
+
+<div class="pxl-caixa" id="pxl-cx-motivo"><div class="pxl-cbox">
+  <h3 style="color:#b91c1c"><i class="bi bi-toggle-off"></i> Tirar do cálculo</h3>
+  <div id="pxl-cx-quem" class="pxl-sub" style="font-size:.85rem"></div>
+  <label>Por quê? (obrigatório)</label>
+  <input id="pxl-cx-txt" placeholder="ex.: depósito da PREST">
+  <div class="pxl-chips" id="pxl-cx-chips"></div>
+  <div class="pxl-acoes"><button type="button" class="btn btn-outline-secondary btn-sm" id="pxl-cx-cancelar">Cancelar</button>
+    <button type="button" class="btn btn-danger btn-sm" id="pxl-cx-ok" disabled>Tirar do cálculo</button></div>
+</div></div>
+
+<div class="pxl-caixa" id="pxl-cx-manual"><div class="pxl-cbox">
+  <h3 style="color:#1e3a8a"><i class="bi bi-plus-circle"></i> Lançar PIX manual</h3>
+  <div class="pxl-sub" style="font-size:.8rem">Para o PIX que o extrato do banco ainda não trouxe. Quando o extrato chegar, a lista avisa se achar o mesmo PIX, para juntar e não contar duas vezes.</div>
+  <label>Banco</label><select id="pxl-mn-banco"></select>
+  <label>Valor</label><input id="pxl-mn-valor" inputmode="decimal" placeholder="1.500,00">
+  <label>De quem / descrição (obrigatório)</label><input id="pxl-mn-nome" placeholder="ex.: Transportadora X">
+  <div class="pxl-acoes"><button type="button" class="btn btn-outline-secondary btn-sm" id="pxl-mn-cancelar">Cancelar</button>
+    <button type="button" class="btn btn-primary btn-sm" id="pxl-mn-ok">Lançar</button></div>
+</div></div>
+
+<script>
+(function () {
+  const URL_PIX = '{{ url_for("lancamentos_caixa.api_pix_dia") }}';
+  const LANC_ID = {{ lancamento.id if edit_mode and lancamento else 'null' }};
+  const EU = {{ ((current_user.nome_completo or current_user.username) if current_user else '')|tojson }};
+  const MOTIVOS = ['Transferência entre contas', 'Depósito da PREST', 'Estorno de combustível',
+                   'Recebimento de cliente a prazo', 'Pagamento de cartão'];
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  const brl = v => Number(v).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+  const num = v => Number(v).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  const valorDe = s => { s = (s || '').replace(/R\$|\s/g, ''); if (!s) return null;
+    if (s.includes(',') || /^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+    const v = parseFloat(s); return isNaN(v) ? null : v; };
+  const semAc = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+
+  // estado: a lista do banco, o que está fora (id -> motivo), os manuais
+  let D = null, fora = {}, manuais = [], seq = 1, governa = false, alvo = null;
+
+  function campo() { return document.querySelector('input[data-comprovacao-forma="PIX"]'); }
+  function sub() {
+    let e = document.getElementById('pxl-campo-sub');
+    const c = campo(); if (!c) return null;
+    if (!e) {
+      const row = c.parentElement;
+      const wrap = document.createElement('div');
+      wrap.style.display = 'flex'; wrap.style.gap = '6px';
+      c.parentNode.insertBefore(wrap, c); wrap.appendChild(c);
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn btn-primary btn-sm'; b.style.whiteSpace = 'nowrap';
+      b.innerHTML = '<i class="bi bi-list-check"></i> Ver PIX'; b.id = 'pxl-abrir';
+      b.onclick = abrir; wrap.appendChild(b);
+      e = document.createElement('div'); e.className = 'pxl-sub'; e.id = 'pxl-campo-sub';
+      row.appendChild(e);
+    }
+    return e;
+  }
+
+  function totais() {
+    const dia = D.pix.reduce((a, p) => a + p.valor, 0);
+    const f = D.pix.filter(p => p.id in fora).reduce((a, p) => a + p.valor, 0);
+    const m = manuais.filter(x => !x.junto).reduce((a, x) => a + x.valor, 0);
+    return {dia: +dia.toFixed(2), fora: +f.toFixed(2), manual: +m.toFixed(2), usado: +(dia - f + m).toFixed(2)};
+  }
+  function nomeConta(id) { const c = D.contas.find(c => c.id == id); return c ? c.apelido : 'Conta ' + id; }
+
+  // o PIX do extrato que parece o manual (mesma conta e valor, ainda solto)
+  function parecido(m) {
+    const juntos = new Set(manuais.filter(x => x.junto).map(x => x.junto));
+    return D.pix.find(p => p.conta == m.conta && Math.abs(p.valor - m.valor) < 0.005 && !(p.id in fora) && !juntos.has(p.id));
+  }
+
+  function aplica() {
+    // o campo passa a ser o da lista; o detalhe vai junto no salvar
+    const t = totais(), c = campo();
+    if (!c) return;
+    c.value = num(t.usado); c.readOnly = true; c.style.background = '#f0fdf4';
+    const det = {
+      fora: Object.entries(fora).map(([id, motivo]) => { const p = D.pix.find(x => x.id == id);
+        return p ? {id: p.id, conta: p.conta, valor: p.valor, nome: p.nome, motivo: motivo.replace(' (sugestão)', '') + (motivo.endsWith('(sugestão)') ? ' (sugestão aceita)' : '')} : null; }).filter(Boolean),
+      manuais: manuais.map(m => ({conta: m.conta, valor: m.valor, nome: m.nome, junto: m.junto || null, usuario: m.usuario})),
+      totais: t};
+    $('#pix-detalhe').value = JSON.stringify(det);
+    governa = true;
+    if (typeof calcularTotais === 'function') calcularTotais();
+    escreveSub();
+  }
+  function escreveSub() {
+    const e = sub(); if (!e || !D) return;
+    const t = totais(), nf = Object.keys(fora).length, nm = manuais.filter(x => !x.junto).length;
+    let h = `Soma dos ${D.pix.length} PIX do dia (${brl(t.dia)})`;
+    if (nf) h += ` <span class="red">− ${nf} fora do cálculo: ${brl(t.fora)}</span>`;
+    if (nm) h += ` + ${nm} manual(is): ${brl(t.manual)}`;
+    if (!governa) {
+      const atual = valorDe(campo().value) || 0;
+      h = `<span class="am"><i class="bi bi-exclamation-triangle"></i> Valor digitado: a lista dá ${brl(t.usado)}` +
+          (Math.abs(atual - t.usado) >= 0.005 ? ` (diferença de ${brl(atual - t.usado)})` : ' (igual)') +
+          '. Abra "Ver PIX" e confirme para usar a lista.</span>';
+    }
+    e.innerHTML = h;
+  }
+
+  async function carregar() {
+    const cli = $('#cliente_id') && $('#cliente_id').value, dia = $('#data') && $('#data').value;
+    if (!cli || !dia || !campo()) return;
+    try {
+      const q = new URLSearchParams({cliente_id: cli, data: dia});
+      if (LANC_ID) q.set('lancamento_id', LANC_ID);
+      const r = await fetch(URL_PIX + '?' + q);
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.erro || r.status);
+      if (!j.contas.length) {                              // cliente sem conta: campo manual, como antes
+        D = null; governa = false; $('#pix-detalhe').value = '';
+        const c = campo(); c.readOnly = false; c.style.background = '';
+        const s = document.getElementById('pxl-campo-sub'); if (s) s.innerHTML = '';
+        return;
+      }
+      D = j; fora = Object.assign({}, j.fora); seq = 1;
+      manuais = j.manuais.map(m => Object.assign({}, m, {id: m.id || 'm' + seq++}));
+      sub();
+      // fechamento novo: a lista manda. Salvo: o valor gravado não muda sozinho.
+      if (!LANC_ID) aplica(); else { governa = false; escreveSub(); }
+    } catch (e) {
+      const s = sub(); if (s) s.innerHTML = '<span class="red">Não deu para carregar os PIX: ' + esc(e.message) + '</span>';
+    }
+  }
+
+  function desenha() {
+    const bv = valorDe($('#pxl-b-valor').value), bh = $('#pxl-b-hora').value.trim(), bn = semAc($('#pxl-b-nome').value.trim());
+    const bnd = bn.replace(/\D/g, '');
+    const passa = p => (bv === null || Math.abs(p.valor - bv) < 0.005)
+      && (!bh || (p.hora || '').includes(bh))
+      && (!bn || semAc(p.nome + ' ' + (p.vendedor || '')).includes(bn) || (bnd.length >= 4 && (p.doc || '').replace(/\D/g, '').includes(bnd)));
+    const juntos = new Set(manuais.filter(x => x.junto).map(x => x.junto));
+    $('#pxl-bancos').innerHTML = D.contas.map(c => {
+      const todos = D.pix.filter(p => p.conta == c.id), mans = manuais.filter(m => m.conta == c.id);
+      const usa = todos.filter(p => !(p.id in fora)).reduce((a, p) => a + p.valor, 0)
+                + mans.filter(m => !m.junto).reduce((a, m) => a + m.valor, 0);
+      const ps = todos.filter(passa);
+      const linhas = ps.map(p => {
+        const off = p.id in fora;
+        return `<div class="pxl-px ${off ? 'off' : ''}">
+          <button type="button" class="pxl-sw ${off ? 'off' : ''}" data-sw="${p.id}" title="${off ? 'Fora do cálculo: clique para usar' : 'No cálculo: clique para tirar'}"></button>
+          <span class="v">${brl(p.valor)}</span><span class="h">${esc(p.hora || '')}</span>
+          <span class="n" title="${esc(p.nome)}">${esc(p.nome)}${p.vendedor ? ' <small>· ' + esc(p.vendedor) + '</small>' : ''}${juntos.has(p.id) ? '<span class="tag">era manual</span>' : ''}</span>
+          ${off ? `<div class="motivo"><i class="bi bi-chat-left-text"></i> ${esc(fora[p.id])}<a data-ed="${p.id}">mudar</a></div>` : ''}</div>`;
+      }).join('') + mans.map(m => {
+        const par = !m.junto && parecido(m);
+        return `<div class="pxl-px ${m.junto ? 'junto' : ''}">
+          <button type="button" class="pxl-sw del" data-del="${m.id}" title="Apagar o lançamento manual">apagar</button>
+          <span class="v">${brl(m.valor)}</span><span class="h"></span>
+          <span class="n">${esc(m.nome)} <span class="tag">manual${m.usuario ? ' · ' + esc(m.usuario) : ''}</span></span>
+          ${m.junto ? '<div class="acao" style="color:#64748b"><i class="bi bi-link-45deg"></i> juntado ao PIX do extrato: conta uma vez só</div>'
+            : par ? `<div class="acao"><i class="bi bi-exclamation-triangle"></i> O extrato trouxe ${brl(par.valor)} de ${esc(par.nome)}: parece este manual.<a data-junta="${m.id}" data-com="${par.id}">juntar</a></div>` : ''}</div>`;
+      }).join('');
+      return `<div class="pxl-banco"><div class="pxl-bh"><b>${esc(c.apelido)}</b><span class="pxl-sub">${todos.length} PIX</span>
+          <span class="tot">${brl(usa)}</span>
+          <button type="button" class="btn btn-outline-primary btn-sm py-0" data-manual="${c.id}"><i class="bi bi-plus"></i> Lançar PIX manual</button></div>
+        ${linhas ? `<div class="pxl-lista">${linhas}</div>` : '<div class="pxl-vazio">Nenhum PIX' + (todos.length ? ' nessa busca.' : ' nesse dia.') + '</div>'}</div>`;
+    }).join('');
+    const t = totais();
+    $('#pxl-r-dia').textContent = brl(t.dia) + ' (' + D.pix.length + ')';
+    $('#pxl-r-fora').textContent = brl(t.fora) + ' (' + Object.keys(fora).length + ')';
+    $('#pxl-r-man').textContent = brl(t.manual) + ' (' + manuais.filter(x => !x.junto).length + ')';
+    $('#pxl-r-usa').textContent = brl(t.usado);
+    const ids = Object.keys(fora);
+    $('#pxl-fora').style.display = ids.length ? '' : 'none';
+    $('#pxl-fora-t').innerHTML = ids.map(id => { const p = D.pix.find(x => x.id == id); if (!p) return '';
+      return `<tr><td><b style="color:#b91c1c">${brl(p.valor)}</b></td><td>${esc(nomeConta(p.conta))}</td><td>${esc(p.nome)}</td><td>${esc(fora[id])}</td></tr>`; }).join('');
+    const atual = valorDe(campo().value) || 0;
+    $('#pxl-aviso').innerHTML = LANC_ID && !governa && Math.abs(atual - t.usado) >= 0.005
+      ? `<span class="am">O fechamento está com ${brl(atual)}. Confirmar troca para ${brl(t.usado)}.</span>` : '';
+  }
+
+  function abrir() {
+    if (!D) { carregar().then(() => D && abrir()); return; }
+    const d = $('#data').value.split('-');
+    $('#pxl-dia').textContent = d.reverse().join('/');
+    $('#pxl-modal').classList.add('on'); desenha();
+  }
+  $('#pxl-fechar').onclick = () => $('#pxl-modal').classList.remove('on');
+  $('#pxl-confirmar').onclick = () => { aplica(); $('#pxl-modal').classList.remove('on'); };
+  ['#pxl-b-valor', '#pxl-b-hora', '#pxl-b-nome'].forEach(s => $(s).addEventListener('input', desenha));
+
+  function pedeMotivo(p) {
+    alvo = p;
+    $('#pxl-cx-quem').innerHTML = `<b style="color:#b91c1c">${brl(p.valor)}</b> · ${esc(p.nome)} · ${esc(nomeConta(p.conta))}`;
+    $('#pxl-cx-txt').value = (fora[p.id] || '').replace(' (sugestão)', '');
+    $('#pxl-cx-ok').disabled = !$('#pxl-cx-txt').value.trim();
+    $('#pxl-cx-chips').innerHTML = MOTIVOS.map(m => `<span class="pxl-chip">${esc(m)}</span>`).join('');
+    $('#pxl-cx-motivo').classList.add('on'); $('#pxl-cx-txt').focus();
+  }
+  $('#pxl-bancos').addEventListener('click', e => {
+    const sw = e.target.closest('[data-sw]');
+    if (sw) { const p = D.pix.find(x => x.id == sw.dataset.sw);
+      if (p.id in fora) { delete fora[p.id]; desenha(); } else pedeMotivo(p); return; }
+    const ed = e.target.closest('[data-ed]');
+    if (ed) { pedeMotivo(D.pix.find(x => x.id == ed.dataset.ed)); return; }
+    const del = e.target.closest('[data-del]');
+    if (del) { if (confirm('Apagar este PIX manual?')) { manuais = manuais.filter(m => m.id != del.dataset.del); desenha(); } return; }
+    const jn = e.target.closest('[data-junta]');
+    if (jn) { const m = manuais.find(x => x.id == jn.dataset.junta); m.junto = Number(jn.dataset.com); desenha(); return; }
+    const mn = e.target.closest('[data-manual]');
+    if (mn) { $('#pxl-mn-banco').innerHTML = D.contas.map(c => `<option value="${c.id}">${esc(c.apelido)}</option>`).join('');
+      $('#pxl-mn-banco').value = mn.dataset.manual; $('#pxl-mn-valor').value = ''; $('#pxl-mn-nome').value = '';
+      $('#pxl-cx-manual').classList.add('on'); $('#pxl-mn-valor').focus(); }
+  });
+  $('#pxl-cx-txt').oninput = () => $('#pxl-cx-ok').disabled = !$('#pxl-cx-txt').value.trim();
+  $('#pxl-cx-chips').onclick = e => { const c = e.target.closest('.pxl-chip'); if (!c) return; $('#pxl-cx-txt').value = c.textContent; $('#pxl-cx-ok').disabled = false; };
+  $('#pxl-cx-cancelar').onclick = () => $('#pxl-cx-motivo').classList.remove('on');
+  $('#pxl-cx-ok').onclick = () => { fora[alvo.id] = $('#pxl-cx-txt').value.trim(); $('#pxl-cx-motivo').classList.remove('on'); desenha(); };
+  $('#pxl-mn-cancelar').onclick = () => $('#pxl-cx-manual').classList.remove('on');
+  $('#pxl-mn-ok').onclick = () => {
+    const v = valorDe($('#pxl-mn-valor').value), n = $('#pxl-mn-nome').value.trim();
+    if (!(v > 0) || !n) { alert('Preencha o valor e de quem é o PIX.'); return; }
+    manuais.push({id: 'm' + (seq++) + 'n', conta: Number($('#pxl-mn-banco').value), valor: v, nome: n, usuario: EU, junto: null});
+    $('#pxl-cx-manual').classList.remove('on'); desenha();
+  };
+
+  // recarrega quando muda o cliente ou a data; no início, depois que o
+  // formulário montou os campos (e, na edição, preencheu os valores salvos)
+  ['#cliente_id', '#data'].forEach(s => { const el = $(s); if (el) el.addEventListener('change', () => { governa = false; carregar(); }); });
+  document.addEventListener('DOMContentLoaded', () => setTimeout(carregar, LANC_ID ? 1800 : 300));
+})();
+</script>

@@ -152,6 +152,7 @@
         <input type="hidden" name="sobras_funcionarios" id="sobras-json">
         <input type="hidden" name="perdas_funcionarios" id="perdas-json">
         <input type="hidden" name="vales_funcionarios" id="vales-json">
+        <input type="hidden" name="pix_detalhe" id="pix-detalhe">
         <input type="hidden" name="_rf_data_inicio" value="{{ return_filtros.data_inicio if return_filtros else '' }}">
         <input type="hidden" name="_rf_data_fim" value="{{ return_filtros.data_fim if return_filtros else '' }}">
         <input type="hidden" name="_rf_cliente_id" value="{{ return_filtros.cliente_id if return_filtros else '' }}">
@@ -1700,5 +1701,8 @@ async function excluirDeposito(depositoId, tipo) {
         </div>
     </div>
 </div>
+
+{# PIX do dia nas contas do cliente, com o que fica fora do cálculo #}
+{% include 'lancamentos_caixa/_pix_lista.html' %}
 
 {% endblock %}
