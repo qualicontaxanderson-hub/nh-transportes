@@ -416,7 +416,7 @@ def api_candidatos(comprovacao_id):
         cur.execute(
             """
             SELECT lcc.id, lcc.valor, lcc.bank_transaction_id,
-                   lc.data AS data_caixa,
+                   lc.data AS data_caixa, lcc.data_deposito,
                    lc.cliente_id,
                    fpc.tipo AS forma_tipo
               FROM lancamentos_caixa_comprovacao lcc
@@ -431,7 +431,9 @@ def api_candidatos(comprovacao_id):
             return jsonify([])
 
         valor      = float(dep['valor'] or 0)
-        data_ref   = dep['data_caixa']
+        # A janela gira em torno da data do depósito (quando informada);
+        # o caixa pode levar mais de uma semana para ser depositado.
+        data_ref   = dep.get('data_deposito') or dep['data_caixa']
         cliente_id = dep.get('cliente_id')
         if hasattr(data_ref, 'isoformat'):
             data_ref = data_ref.isoformat()
