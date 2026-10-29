@@ -102,9 +102,16 @@ def consultas_do_dia():
 
 
 # ── Pista: só o dia, com o frentista; o 2o pedido só diz quem já consultou ──
-# Quem entra na tela da Pista. Por enquanto só ADMIN (29/10/2026); para
-# liberar, acrescentar 'SUPERVISOR', 'GERENTE' e 'PISTA' aqui e no menu.
-NIVEIS_PISTA = {'ADMIN', 'ADMINISTRADOR'}
+# Quem entra na tela da Pista. Pronto para SUPERVISOR e PISTA, mas DESLIGADO
+# até o treinamento (29/10/2026): para liberar, LIBERAR_PISTA = True. A mesma
+# chave põe o item no menu deles (navbar, pix_pista_liberada).
+LIBERAR_PISTA = False
+NIVEIS_PISTA = {'ADMIN', 'ADMINISTRADOR'} | ({'SUPERVISOR', 'PISTA'} if LIBERAR_PISTA else set())
+
+
+@bp.app_context_processor
+def _menu_pista():
+    return {'pix_pista_liberada': LIBERAR_PISTA}
 
 
 def pista_required(f):
