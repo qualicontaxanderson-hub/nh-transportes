@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 
 ACCOUNT_ID = 10             # SICOOB - NH: a chave PIX do posto
 CONTA_ROTULO = 'Sicoob · NH GTBA'
+# o CNPJ que o cupom grava quando o PIX é liquidado pelo Sicoob
+CREDENCIADORA = '02038232000164'
 # Os créditos que são PIX recebido no extrato do Sicoob: PIX de outro banco e
 # a transferência de outra cooperativa Sicoob (sai do app como PIX).
 _FILTRO_PIX = "(bt.memo LIKE 'PIX RECEBIDO%%' OR bt.memo LIKE 'CRED.TRANSF%%')"
@@ -180,19 +182,51 @@ def _hora(dt):
     return dt.strftime('%H:%M') if dt else None
 
 
+def _com_vendedor(pixs, dia):
+    """O vendedor do cupom fiscal que cada PIX pagou -- o mesmo casamento do
+    Extrato On-Line (integrations/extrato_cupom: Extrato Pix, nome na
+    autorização, valor no dia, ordem do banco). Só leitura, em memória. Tem
+    de ser o DIA INTEIRO: um PIX que tem dois cupons de mesmo valor só se
+    resolve quando os vizinhos já casaram."""
+    for p in pixs:
+        p.update(vendedor=None, cupom=None, cupom_hora=None, possiveis=[])
+    if not pixs:
+        return
+    try:
+        from integrations.extrato_cupom import casar
+        txs = [{'valor': p['valor'], 'data_transacao': dia, 'dias': [dia],
+                'quem': p['nome'], 'hora': p.get('_hora_banco')} for p in pixs]
+        casa, _ = casar(txs, dia, dia, CREDENCIADORA)
+        for p, tx in zip(pixs, txs):
+            r = casa.get(id(tx)) or {}
+            c = r.get('cupom')
+            if c:
+                p.update(vendedor=c.get('vendedor') or None, cupom=c.get('numero'),
+                         cupom_hora=c['dh_emissao'].strftime('%H:%M'))
+            elif r.get('status') == 'possiveis':
+                p['possiveis'] = sorted({c.get('vendedor') or '?' for c in r.get('candidatos') or []})
+    except Exception:
+        # o vendedor é complemento: sem ele, a consulta segue
+        logger.exception('[pix_consulta] casamento PIX x cupom falhou')
+
+
 def buscar(conn, dia, valor=None, quem=None):
     """Os PIX recebidos no DIA (o dia em que o sistema viu; sem anotação, o do
-    extrato), filtrados por valor exato e por nome/documento."""
+    extrato), com o vendedor do cupom, filtrados por valor exato e por
+    nome/documento."""
+    pixs = _do_dia(conn, dia)
+    _com_vendedor(pixs, dia)
+    return [p for p in pixs
+            if (valor is None or abs(p['valor'] - valor) < 0.005) and casa(p, quem)]
+
+
+def _do_dia(conn, dia):
     cur = conn.cursor(dictionary=True)
     try:
         garantir_tabelas(cur)
         # O Sicoob lança o PIX do fim de semana com a data de segunda: a
         # janela do extrato vai alguns dias para a frente.
         params = [ACCOUNT_ID, dia - timedelta(days=1), dia + timedelta(days=4)]
-        filtro_valor = ''
-        if valor is not None:
-            filtro_valor = ' AND bt.valor = %s'
-            params.append(valor)
         cur.execute(f"""
             SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao,
                    i.nome, i.doc, i.hora_banco, i.visto_em, i.leitura_anterior,
@@ -204,17 +238,10 @@ def buscar(conn, dia, valor=None, quem=None):
                                  WHERE i2.bank_transaction_id = bt.id)
               LEFT JOIN pix_consulta_protocolos p ON p.bank_transaction_id = bt.id
              WHERE bt.account_id = %s AND bt.tipo = 'CREDIT' AND {_FILTRO_PIX}
-               AND bt.data_transacao BETWEEN %s AND %s{filtro_valor}
+               AND bt.data_transacao BETWEEN %s AND %s
              ORDER BY COALESCE(i.visto_em, bt.data_transacao), bt.id""", params)
-        out = []
-        for r in cur.fetchall():
-            dia_pix = r['visto_em'].date() if r['visto_em'] else r['data_transacao']
-            if dia_pix != dia:
-                continue
-            pix = _formatar(r)
-            if casa(pix, quem):
-                out.append(pix)
-        return out
+        return [_formatar(r) for r in cur.fetchall()
+                if (r['visto_em'].date() if r['visto_em'] else r['data_transacao']) == dia]
     finally:
         cur.close()
 
@@ -242,6 +269,8 @@ def _formatar(r):
         'consultado_em': r['consultado_em'].strftime('%d/%m/%Y %H:%M') if r.get('consultado_em') else None,
         'origem': r.get('origem'),
         'reenvios': r.get('reenvios') or 0,
+        '_hora_banco': r.get('hora_banco'),
+        '_dia': dia,
     }
 
 
@@ -264,9 +293,14 @@ def um(conn, bt_id=None, protocolo=None):
              WHERE {cond} AND bt.account_id = %s AND bt.tipo = 'CREDIT' AND {_FILTRO_PIX}""",
             (arg, ACCOUNT_ID))
         r = cur.fetchone()
-        return _formatar(r) if r else None
     finally:
         cur.close()
+    if not r:
+        return None
+    pix = _formatar(r)
+    # o vendedor sai do casamento do dia inteiro (ver _com_vendedor)
+    dia = next((p for p in buscar(conn, pix['_dia']) if p['id'] == pix['id']), None)
+    return dia or pix
 
 
 # ── protocolo ────────────────────────────────────────────────────────────────

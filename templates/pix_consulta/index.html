@@ -21,6 +21,26 @@
   #pxc .btn-p.sec{ background:#fff; color:#1e40af; border:1px solid #1e40af; }
   #pxc .btn-p.mini{ padding:4px 10px; font-size:.8rem; }
   #pxc .res{ margin-top:12px; display:flex; flex-direction:column; gap:8px; }
+  /* Modelo D (aprovado 29/10/2026): cards médios, faixa lateral de status */
+  #pxc .resumo{ display:flex; gap:8px; margin:12px 0 8px; flex-wrap:wrap; }
+  #pxc .k{ border-radius:10px; padding:6px 12px; background:#f1f5f9; font-size:.75rem; color:#475569; }
+  #pxc .k b{ display:block; font-size:1rem; color:#1e293b; }
+  #pxc .filtros{ display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; }
+  #pxc .chip{ border:1px solid #cbd5e1; background:#fff; border-radius:16px; padding:3px 11px; font-size:.78rem; cursor:pointer; }
+  #pxc .chip.on{ background:#1e293b; color:#fff; border-color:#1e293b; }
+  #pxc .gd{ display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:8px; }
+  #pxc .cd{ display:flex; border:1px solid var(--borda); border-radius:10px; overflow:hidden; cursor:pointer; background:#fff; }
+  #pxc .cd:hover{ border-color:#1e40af; box-shadow:0 2px 8px rgba(30,64,175,.12); }
+  #pxc .cd .lado{ width:5px; background:#cbd5e1; flex:none; }
+  #pxc .cd.feito .lado{ background:#16a34a; }
+  #pxc .cd .c{ padding:7px 10px; flex:1; min-width:0; }
+  #pxc .cd .l1{ display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+  #pxc .cd .v{ font-size:1rem; font-weight:800; color:var(--ok); font-variant-numeric:tabular-nums; }
+  #pxc .cd .h{ font-size:.72rem; color:var(--muted); white-space:nowrap; }
+  #pxc .cd .n{ font-size:.8rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #pxc .cd .s{ font-size:.72rem; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #pxc .cd .s.vend{ color:#1e3a8a; }
+  #pxc .cd .s .okc{ color:#15803d; }
   #pxc .pix{ border:1px solid var(--borda); border-radius:10px; padding:9px 12px; display:flex;
              gap:12px; align-items:center; flex-wrap:wrap; }
   #pxc .pix .v{ font-size:1.15rem; font-weight:800; color:var(--ok); min-width:105px; }
@@ -68,7 +88,11 @@
       <div class="campo"><label>Nome ou CPF/CNPJ</label><input id="pxc-quem" placeholder="cleyton  ou  ***.903.681-**"></div>
       <button class="btn-p" id="pxc-buscar"><i class="bi bi-search"></i> Buscar</button>
     </div>
-    <div class="res" id="pxc-res"><div class="vazio">Sem valor e nome, mostra todos os PIX do dia.</div></div>
+    <div class="resumo" id="pxc-resumo"></div>
+    <div class="filtros" id="pxc-filtros">
+      <span class="chip on" data-f="todos">Todos</span><span class="chip" data-f="nao">Não consultados</span><span class="chip" data-f="sim">Consultados</span>
+    </div>
+    <div class="gd" id="pxc-res"><div class="vazio">Carregando…</div></div>
   </div>
 
   <div class="box">
@@ -93,7 +117,7 @@
   <div class="mgrid">
     <div>
       <b>Imagem</b>
-      <canvas id="pxc-cv" width="720" height="1010"></canvas>
+      <canvas id="pxc-cv" width="720" height="1100"></canvas>
       <div class="acoes">
         <button class="btn btn-primary btn-sm" id="pxc-cimg"><i class="bi bi-clipboard"></i> Copiar imagem</button>
         <button class="btn btn-outline-primary btn-sm" id="pxc-share"><i class="bi bi-share"></i> Compartilhar / Baixar</button>
@@ -128,26 +152,53 @@
     return j;
   }
 
+  // O vendedor vem do cupom fiscal que o PIX pagou (o mesmo casamento do
+  // Extrato On-Line). Com dois cupons possíveis, mostra os dois vendedores.
+  function vendedor(p) {
+    if (p.vendedor) return `<i class="bi bi-person-badge"></i> ${esc(p.vendedor)} · cupom ${esc(p.cupom)} (${esc(p.cupom_hora)})`;
+    if (p.possiveis && p.possiveis.length) return `<i class="bi bi-question-circle"></i> ${esc(p.possiveis.join(' ou '))}`;
+    return '<i class="bi bi-dash-circle"></i> sem cupom';
+  }
   function linha(p) {
     cache[p.id] = p;
     const st = p.protocolo
-      ? `<span class="selo ok"><i class="bi bi-check2"></i> ${esc(p.protocolo)} · ${esc(p.consultado_por)} · ${esc(p.consultado_em)}</span>`
-      : '<span class="selo">não consultado</span>';
-    const det = [p.doc, p.hora ? 'entrou ' + p.hora : ''].filter(Boolean).join(' · ');
-    return `<div class="pix"><div class="v">${brl(p.valor)}</div>
-      <div class="q"><b>${esc(p.nome)}</b><span>${esc(p.dia)}${det ? ' · ' + esc(det) : ''}</span></div>
-      ${st}<button class="btn-p ${p.protocolo ? 'sec' : ''}" data-id="${p.id}">${p.protocolo ? 'Reenviar' : 'Gerar comprovante'}</button></div>`;
+      ? `<i class="bi bi-check2 okc"></i> ${esc(p.consultado_por)} · ${esc(p.protocolo)}`
+      : esc(p.doc || 'não consultado');
+    const h = p.hora ? '<i class="bi bi-clock"></i> ' + esc(p.hora.replace('entre ', '').replace(' e ', '–')) : esc(p.dia);
+    return `<div class="cd ${p.protocolo ? 'feito' : ''}" data-id="${p.id}" title="${p.protocolo ? 'Reenviar o comprovante' : 'Gerar comprovante'}">
+      <div class="lado"></div><div class="c">
+      <div class="l1"><span class="v">${brl(p.valor)}</span><span class="h">${h}</span></div>
+      <div class="n" title="${esc(p.nome)}">${esc(p.nome)}</div>
+      <div class="s vend">${vendedor(p)}</div>
+      <div class="s">${st}</div></div></div>`;
+  }
+
+  let lista = [], filtro = 'todos';
+  function desenha() {
+    const ps = lista.filter(p => filtro === 'todos' || (filtro === 'sim') === !!p.protocolo);
+    $('#pxc-res').innerHTML = ps.length ? ps.map(linha).join('')
+      : (lista.length ? '<div class="vazio">Nenhum nesse filtro.</div>'
+         : '<div class="aviso"><b>Nenhum PIX com esse valor e nome nesse dia.</b> O PIX leva até 10 minutos para aparecer. Confira o valor e tente de novo.</div>');
+    const tot = lista.reduce((a, p) => a + p.valor, 0), nf = lista.filter(p => p.protocolo).length;
+    const busca = $('#pxc-valor').value || $('#pxc-quem').value;
+    $('#pxc-resumo').innerHTML = `<div class="k">PIX ${busca ? 'achados' : 'no dia'}<b>${lista.length}</b></div>` +
+      `<div class="k">Total<b>${brl(tot)}</b></div><div class="k">Consultados<b style="color:#15803d">${nf}</b></div>` +
+      `<div class="k">Não consultados<b>${lista.length - nf}</b></div>`;
   }
 
   async function buscar() {
     const q = new URLSearchParams({dia: $('#pxc-dia').value, valor: $('#pxc-valor').value, quem: $('#pxc-quem').value});
     $('#pxc-res').innerHTML = '<div class="vazio">Buscando…</div>';
     try {
-      const j = await pega(BASE + '/buscar?' + q);
-      $('#pxc-res').innerHTML = j.pix.length ? j.pix.map(linha).join('')
-        : '<div class="aviso"><b>Nenhum PIX com esse valor e nome nesse dia.</b> O PIX leva até 10 minutos para aparecer. Confira o valor e tente de novo.</div>';
+      lista = (await pega(BASE + '/buscar?' + q)).pix;
+      desenha();
     } catch (e) { $('#pxc-res').innerHTML = `<div class="aviso">${esc(e.message)}</div>`; }
   }
+  $('#pxc-filtros').onclick = e => {
+    const c = e.target.closest('.chip'); if (!c) return;
+    document.querySelectorAll('#pxc-filtros .chip').forEach(x => x.classList.toggle('on', x === c));
+    filtro = c.dataset.f; desenha();
+  };
 
   async function gerar(id) {
     try {
@@ -173,7 +224,8 @@
   function texto(p) {
     return `✅ PIX CONFIRMADO — POSTO NH\n\n` +
       `Valor: ${brl(p.valor)}\nPagador: ${p.nome}\n` + (p.doc ? `CPF/CNPJ: ${p.doc}\n` : '') +
-      `Recebido em: ${p.dia}${p.hora ? ', ' + p.hora : ''}\nConta: ${p.conta}\n\n` +
+      `Recebido em: ${p.dia}${p.hora ? ', ' + p.hora : ''}\nConta: ${p.conta}\n` +
+      (p.vendedor ? `Vendedor: ${p.vendedor} (cupom ${p.cupom})\n` : '') + '\n' +
       `Consultado por: ${p.consultado_por}\nEm: ${p.consultado_em}\n\nProtocolo: ${p.protocolo}`;
   }
   function desenhar(p) {
@@ -187,7 +239,8 @@
     g.fillStyle = '#15803d'; g.font = 'bold 72px Segoe UI, Arial'; g.textAlign = 'center';
     g.fillText(brl(p.valor), W / 2, 280); g.textAlign = 'left';
     const linhas = [['Pagador', p.nome], ['CPF/CNPJ', p.doc || '—'], ['Recebido em', p.dia + (p.hora ? ', ' + p.hora : '')],
-                    ['Conta', p.conta], ['Consultado por', p.consultado_por], ['Em', p.consultado_em]];
+                    ['Conta', p.conta], ['Vendedor', p.vendedor ? p.vendedor + '  (cupom ' + p.cupom + ')' : '—'],
+                    ['Consultado por', p.consultado_por], ['Em', p.consultado_em]];
     let y = 360;
     g.strokeStyle = '#e2e8f0'; g.lineWidth = 2;
     for (const [k, v] of linhas) {
@@ -220,7 +273,7 @@
   });
 
   document.getElementById('pxc').addEventListener('click', e => {
-    const b = e.target.closest('button[data-id]');
+    const b = e.target.closest('[data-id]');
     if (b) gerar(Number(b.dataset.id));
   });
   $('#pxc-buscar').onclick = buscar;
