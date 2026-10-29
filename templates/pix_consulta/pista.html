@@ -104,18 +104,19 @@
 
   function toast(t) { const e = $('#pxp-toast'); e.textContent = t; e.style.display = 'block'; setTimeout(() => e.style.display = 'none', 2200); }
 
-  // o frentista fica lembrado neste aparelho (só conveniência)
   function escolher(id) {
     const b = id && document.querySelector(`#pxp-esc .fr[data-id="${id}"]`);
     $('#pxp-frent').value = b ? id : '';
     $('#pxp-esc').hidden = !!b;
     $('#pxp-sel').hidden = !b;
     if (b) { $('#pxp-sel-nome').textContent = b.textContent; $('#pxp-quem-box').classList.remove('falta'); }
-    try { localStorage.setItem('pxp_frentista', b ? id : ''); } catch (e) {}
   }
+  // Sem memória de propósito: o celular da pista passa de mão em mão, então
+  // toda vez que a tela abre o frentista escolhe quem é.
   $('#pxp-esc').onclick = e => { const b = e.target.closest('.fr'); if (b) escolher(b.dataset.id); };
   $('#pxp-trocar').onclick = () => escolher('');
-  try { escolher(localStorage.getItem('pxp_frentista') || ''); } catch (e) { escolher(''); }
+  try { localStorage.removeItem('pxp_frentista'); } catch (e) {}
+  escolher('');
 
   // Valor como na maquininha: os números entram pelos centavos
   // (50 → 0,50 · 100 → 1,00 · 100000 → 1.000,00).
