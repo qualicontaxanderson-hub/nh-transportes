@@ -1,6 +1,7 @@
 """PIX Consulta — confirmar que um PIX caiu no banco e emitir o comprovante
-com protocolo (utils/pix_consulta). Fase 1: só ADMIN (29/10/2026); depois
-Gerente/Supervisor e a versão da Pista (só o dia, com o frentista)."""
+com protocolo (utils/pix_consulta). Liberado em 29/10/2026: a consulta
+completa (todos os dias, reenvio) para Admin/Supervisor/Gerente; a da Pista
+(só o dia, com o frentista) para esses e a Pista."""
 import re
 from datetime import datetime
 from functools import wraps
@@ -10,10 +11,29 @@ from flask_login import current_user, login_required
 
 from utils import pix_consulta
 from utils.db import get_db_connection
-from utils.decorators import admin_required
 from utils.fuso import hoje_brasilia
 
 bp = Blueprint('pix_consulta', __name__, url_prefix='/banco/pix-consulta')
+
+
+# Quem usa cada tela
+NIVEIS_CONSULTA = {'ADMIN', 'ADMINISTRADOR', 'SUPERVISOR', 'GERENTE'}
+NIVEIS_PISTA = NIVEIS_CONSULTA | {'PISTA'}
+
+
+def _so(niveis):
+    def deco(f):
+        @wraps(f)
+        def dentro(*args, **kwargs):
+            nivel = (getattr(current_user, 'nivel', '') or '').strip().upper()
+            if nivel not in niveis:
+                if request.method == 'GET' and request.path.endswith('/'):   # a página
+                    flash('Acesso negado.', 'danger')
+                    return redirect(url_for('index'))
+                return jsonify({'erro': 'acesso negado'}), 403
+            return f(*args, **kwargs)
+        return dentro
+    return deco
 
 
 def _valor(s):
@@ -38,14 +58,14 @@ def _dia(s):
 
 @bp.route('/')
 @login_required
-@admin_required
+@_so(NIVEIS_CONSULTA)
 def index():
     return render_template('pix_consulta/index.html', hoje=hoje_brasilia().isoformat())
 
 
 @bp.route('/buscar')
 @login_required
-@admin_required
+@_so(NIVEIS_CONSULTA)
 def buscar():
     conn = get_db_connection()
     try:
@@ -59,7 +79,7 @@ def buscar():
 
 @bp.route('/protocolo', methods=['POST'])
 @login_required
-@admin_required
+@_so(NIVEIS_CONSULTA)
 def protocolo():
     dados = request.get_json(silent=True) or {}
     try:
@@ -80,7 +100,7 @@ def protocolo():
 
 @bp.route('/protocolo/<codigo>')
 @login_required
-@admin_required
+@_so(NIVEIS_CONSULTA)
 def achar_protocolo(codigo):
     conn = get_db_connection()
     try:
@@ -92,7 +112,7 @@ def achar_protocolo(codigo):
 
 @bp.route('/hoje')
 @login_required
-@admin_required
+@_so(NIVEIS_CONSULTA)
 def consultas_do_dia():
     conn = get_db_connection()
     try:
@@ -102,31 +122,6 @@ def consultas_do_dia():
 
 
 # ── Pista: só o dia, com o frentista; o 2o pedido só diz quem já consultou ──
-# Quem entra na tela da Pista. Pronto para SUPERVISOR e PISTA, mas DESLIGADO
-# até o treinamento (29/10/2026): para liberar, LIBERAR_PISTA = True. A mesma
-# chave põe o item no menu deles (navbar, pix_pista_liberada).
-LIBERAR_PISTA = False
-NIVEIS_PISTA = {'ADMIN', 'ADMINISTRADOR'} | ({'SUPERVISOR', 'PISTA'} if LIBERAR_PISTA else set())
-
-
-@bp.app_context_processor
-def _menu_pista():
-    return {'pix_pista_liberada': LIBERAR_PISTA}
-
-
-def pista_required(f):
-    @wraps(f)
-    def dentro(*args, **kwargs):
-        nivel = (getattr(current_user, 'nivel', '') or '').strip().upper()
-        if nivel not in NIVEIS_PISTA:
-            if request.path.endswith('/pista/'):
-                flash('Acesso negado.', 'danger')
-                return redirect(url_for('index'))
-            return jsonify({'erro': 'acesso negado'}), 403
-        return f(*args, **kwargs)
-    return dentro
-
-
 def _frentistas(conn):
     """Os mesmos do Troco PIX Pista: ativos e ainda na casa hoje."""
     cur = conn.cursor(dictionary=True)
@@ -141,7 +136,7 @@ def _frentistas(conn):
 
 @bp.route('/pista/')
 @login_required
-@pista_required
+@_so(NIVEIS_PISTA)
 def pista():
     conn = get_db_connection()
     try:
@@ -154,7 +149,7 @@ def pista():
 
 @bp.route('/pista/buscar')
 @login_required
-@pista_required
+@_so(NIVEIS_PISTA)
 def pista_buscar():
     valor = _valor(request.args.get('valor'))
     quem = (request.args.get('quem') or '').strip()
@@ -171,7 +166,7 @@ def pista_buscar():
 
 @bp.route('/pista/protocolo', methods=['POST'])
 @login_required
-@pista_required
+@_so(NIVEIS_PISTA)
 def pista_protocolo():
     dados = request.get_json(silent=True) or {}
     try:

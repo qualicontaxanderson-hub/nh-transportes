@@ -84,7 +84,7 @@
     <h2><i class="bi bi-search"></i> Confirmar um PIX <small>Sicoob NH · valor exato + um nome ou o CPF/CNPJ</small></h2>
     <div class="campos">
       <div class="campo" style="max-width:170px"><label>Dia</label><input type="date" id="pxc-dia" value="{{ hoje }}"></div>
-      <div class="campo" style="max-width:150px"><label>Valor</label><input id="pxc-valor" inputmode="decimal" placeholder="1.500,00"></div>
+      <div class="campo" style="max-width:150px"><label>Valor</label><input id="pxc-valor" inputmode="numeric" placeholder="0,00" autocomplete="off"></div>
       <div class="campo"><label>Nome ou CPF/CNPJ</label><input id="pxc-quem" placeholder="cleyton  ou  ***.903.681-**"></div>
       <button class="btn-p" id="pxc-buscar"><i class="bi bi-search"></i> Buscar</button>
     </div>
@@ -221,12 +221,25 @@
   }
 
   // ── comprovante ──
+  // Texto para o WhatsApp (o mesmo da PIX Consulta Pista): *negrito*,
+  // _itálico_ e ```mono``` são do próprio WhatsApp.
   function texto(p) {
-    return `✅ PIX CONFIRMADO — POSTO NH\n\n` +
-      `Valor: ${brl(p.valor)}\nPagador: ${p.nome}\n` + (p.doc ? `CPF/CNPJ: ${p.doc}\n` : '') +
-      `Recebido em: ${p.dia}${p.hora ? ', ' + p.hora : ''}\nConta: ${p.conta}\n` +
-      (p.vendedor ? `Vendedor: ${p.vendedor} (cupom ${p.cupom})\n` : '') + '\n' +
-      `Consultado por: ${p.consultado_por}\nEm: ${p.consultado_em}\n\nProtocolo: ${p.protocolo}`;
+    const L = [
+      '✅ *PIX CONFIRMADO*',
+      '⛽ *Posto Novo Horizonte*',
+      '_Conferido no extrato do banco_',
+      '━━━━━━━━━━━━━━━',
+      `💰 *Valor:* ${brl(p.valor)}`,
+      `👤 *Pagador:* ${p.nome}`,
+    ];
+    if (p.doc) L.push(`🪪 *CPF/CNPJ:* ${p.doc}`);
+    L.push(`🕒 *Recebido:* ${p.dia}${p.hora ? ', ' + p.hora : ''}`, `🏦 *Conta:* ${p.conta}`);
+    if (p.vendedor) L.push(`🧾 *Cupom:* ${p.cupom} · vendedor ${p.vendedor}`);
+    L.push('━━━━━━━━━━━━━━━',
+      `🔎 Consultado por *${p.consultado_por}*`, `📅 ${p.consultado_em}`, '',
+      '🔐 *Protocolo:* ```' + p.protocolo + '```', '',
+      '_Guarde o protocolo: com ele o posto confirma este PIX a qualquer momento._');
+    return L.join('\n');
   }
   function desenhar(p) {
     const c = $('#pxc-cv'), g = c.getContext('2d'), W = c.width;
@@ -275,6 +288,12 @@
   document.getElementById('pxc').addEventListener('click', e => {
     const b = e.target.closest('[data-id]');
     if (b) gerar(Number(b.dataset.id));
+  });
+  // Valor como na maquininha: os números entram pelos centavos
+  // (50 → 0,50 · 100 → 1,00 · 100000 → 1.000,00).
+  $('#pxc-valor').addEventListener('input', e => {
+    const el = e.target, d = el.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 11);
+    el.value = d ? (parseInt(d, 10) / 100).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '';
   });
   $('#pxc-buscar').onclick = buscar;
   ['#pxc-valor', '#pxc-quem'].forEach(s => $(s).addEventListener('keydown', e => { if (e.key === 'Enter') buscar(); }));

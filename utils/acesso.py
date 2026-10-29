@@ -56,6 +56,8 @@ NIVEIS = {
             '/troco_pix/visualizar',
             '/troco_pix/clientes',
             '/troco_pix/cliente',
+            # PIX Consulta da Pista (29/10/2026): so a tela do dia, nao a completa
+            '/banco/pix-consulta/pista',
         ),
     },
     'SUPERVISOR': {
@@ -71,6 +73,7 @@ NIVEIS = {
             '/posto',
             '/lancamentos_caixa',
             '/troco_pix',
+            '/banco/pix-consulta',
         ),
     },
     'GERENTE': {
@@ -78,6 +81,7 @@ NIVEIS = {
         'rotas': (
             '/descargas',
             '/troco_pix',
+            '/banco/pix-consulta',
         ),
     },
 }

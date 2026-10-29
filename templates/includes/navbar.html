@@ -24,13 +24,11 @@
             <i class="bi bi-fuel-pump-fill"></i> Troco PIX Pista
           </a>
         </li>
-        {% if pix_pista_liberada %}
         <li class="nav-item">
           <a class="nav-link text-white" href="/banco/pix-consulta/pista/" style="font-weight:600;">
             <i class="bi bi-patch-check-fill"></i> PIX Consulta
           </a>
         </li>
-        {% endif %}
 
         {% elif nivel_usuario == 'SUPERVISOR' %}
         <!-- Menu específico para SUPERVISOR (9 seções permitidas) -->
@@ -61,9 +59,8 @@
             <li><a class="dropdown-item" href="/lancamentos_caixa/"><i class="bi bi-calculator" style="color: #ff9800;"></i> Fechamento de Caixa</a></li>
             <li><a class="dropdown-item" href="/troco_pix/"><i class="bi bi-currency-exchange" style="color: #17a2b8;"></i> Troco PIX</a></li>
             <li><a class="dropdown-item" href="/troco_pix/pista"><i class="bi bi-fuel-pump-fill" style="color: #20c997;"></i> Troco PIX Pista</a></li>
-            {% if pix_pista_liberada %}
+            <li><a class="dropdown-item" href="/banco/pix-consulta/"><i class="bi bi-patch-check-fill" style="color: #15803d;"></i> PIX Consulta</a></li>
             <li><a class="dropdown-item" href="/banco/pix-consulta/pista/"><i class="bi bi-phone" style="color: #15803d;"></i> PIX Consulta Pista</a></li>
-            {% endif %}
           </ul>
         </li>
 
@@ -82,6 +79,16 @@
         <li class="nav-item">
           <a class="nav-link text-white" href="/troco_pix/pista" style="font-weight:600;">
             <i class="bi bi-fuel-pump-fill"></i> Troco PIX Pista
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link text-white" href="/banco/pix-consulta/" style="font-weight:600;">
+            <i class="bi bi-patch-check-fill"></i> PIX Consulta
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link text-white" href="/banco/pix-consulta/pista/" style="font-weight:600;">
+            <i class="bi bi-phone"></i> PIX Consulta Pista
           </a>
         </li>
 
@@ -162,7 +169,7 @@
             {% endif %}
             <li><a class="dropdown-item" href="/troco_pix/"><i class="bi bi-currency-exchange" style="color: #17a2b8;"></i> Troco PIX</a></li>
             <li><a class="dropdown-item" href="/troco_pix/pista"><i class="bi bi-fuel-pump-fill" style="color: #20c997;"></i> Troco PIX Pista</a></li>
-            {#- PIX Consulta (29/10/2026): so ADMIN por enquanto; depois Gerente, Supervisor e Pista. -#}
+            {#- PIX Consulta (liberado 29/10/2026): Admin/Supervisor/Gerente; a Pista so na PIX Consulta Pista. -#}
             {% if nivel_usuario == 'ADMIN' %}
             <li><a class="dropdown-item" href="/banco/pix-consulta/"><i class="bi bi-patch-check-fill" style="color: #15803d;"></i> PIX Consulta</a></li>
             <li><a class="dropdown-item" href="/banco/pix-consulta/pista/"><i class="bi bi-phone" style="color: #15803d;"></i> PIX Consulta Pista</a></li>
