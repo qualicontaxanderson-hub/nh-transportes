@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}PIX Consulta - NH Transportes{% endblock %}
+
+{% block styles %}
+{% with esc = '#pxc' %}{% include 'includes/abas_banco_css.html' %}{% endwith %}
+<style>
+  /* PIX Consulta — prévia aprovada em 29/10/2026 (preview-pix-consulta.html) */
+  #pxc{ --azul:#1e3a8a; --ok:#15803d; --muted:#64748b; --borda:#e2e8f0; color:#1e293b; }
+  #pxc .box{ background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.08);
+             padding:14px 16px; margin-bottom:12px; }
+  #pxc h2{ margin:0 0 10px; font-size:1.02rem; color:var(--azul); font-weight:800;
+           display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  #pxc h2 small{ font-size:.75rem; color:var(--muted); font-weight:500; }
+  #pxc .campos{ display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+  #pxc .campo{ display:flex; flex-direction:column; gap:4px; flex:1; min-width:140px; }
+  #pxc .campo label{ font-size:.68rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin:0; }
+  #pxc .campo input{ padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:15px; }
+  #pxc .btn-p{ background:#1e40af; color:#fff; border:0; border-radius:8px; padding:9px 15px;
+               font-weight:600; font-size:.9rem; cursor:pointer; white-space:nowrap; }
+  #pxc .btn-p.sec{ background:#fff; color:#1e40af; border:1px solid #1e40af; }
+  #pxc .btn-p.mini{ padding:4px 10px; font-size:.8rem; }
+  #pxc .res{ margin-top:12px; display:flex; flex-direction:column; gap:8px; }
+  #pxc .pix{ border:1px solid var(--borda); border-radius:10px; padding:9px 12px; display:flex;
+             gap:12px; align-items:center; flex-wrap:wrap; }
+  #pxc .pix .v{ font-size:1.15rem; font-weight:800; color:var(--ok); min-width:105px; }
+  #pxc .pix .q{ flex:1; min-width:180px; }
+  #pxc .pix .q b{ display:block; }
+  #pxc .pix .q span{ color:var(--muted); font-size:.78rem; }
+  #pxc .selo{ font-size:.75rem; border-radius:6px; padding:4px 8px; background:#f1f5f9; color:#475569; }
+  #pxc .selo.ok{ background:#dcfce7; color:#166534; }
+  #pxc .aviso{ background:#fffbeb; border-left:4px solid #d97706; border-radius:6px; padding:9px 12px; }
+  #pxc .vazio{ color:var(--muted); padding:6px 2px; font-size:.85rem; }
+  #pxc table{ width:100%; border-collapse:collapse; font-size:.82rem; }
+  #pxc th{ font-size:.66rem; text-transform:uppercase; color:var(--muted); text-align:left;
+           padding:6px; border-bottom:2px solid var(--borda); }
+  #pxc td{ padding:6px; border-bottom:1px solid #eef2f7; }
+  #pxc-modal{ position:fixed; inset:0; background:rgba(15,23,42,.55); display:none;
+              align-items:flex-start; justify-content:center; padding:16px; overflow:auto; z-index:1060; }
+  #pxc-modal.on{ display:flex; }
+  #pxc-modal .mbox{ background:#fff; border-radius:14px; max-width:760px; width:100%; padding:14px 16px; }
+  #pxc-modal .mgrid{ display:flex; gap:16px; flex-wrap:wrap; }
+  #pxc-modal .mgrid > div{ flex:1; min-width:260px; }
+  #pxc-modal canvas{ width:100%; max-width:360px; border:1px solid #e2e8f0; border-radius:10px; display:block; }
+  #pxc-modal textarea{ width:100%; height:250px; font-family:Consolas,monospace; font-size:13px;
+                       border:1px solid #cbd5e1; border-radius:8px; padding:8px; }
+  #pxc-modal .acoes{ display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  #pxc-toast{ position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#1e293b;
+              color:#fff; padding:8px 16px; border-radius:8px; display:none; z-index:1070; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid" id="pxc">
+
+  <div id="pxc-topo">
+    <div class="topo__l1">
+      <a class="voltar" href="{{ url_for('bank_import.index') }}"><i class="bi bi-chevron-left"></i> Banco</a>
+      <h3>PIX Consulta</h3>
+    </div>
+    <div class="abas">
+      {% with ativa = 'pix_consulta' %}{% include 'includes/abas_banco.html' %}{% endwith %}
+    </div>
+  </div>
+
+  <div class="box">
+    <h2><i class="bi bi-search"></i> Confirmar um PIX <small>Sicoob NH · valor exato + um nome ou o CPF/CNPJ</small></h2>
+    <div class="campos">
+      <div class="campo" style="max-width:170px"><label>Dia</label><input type="date" id="pxc-dia" value="{{ hoje }}"></div>
+      <div class="campo" style="max-width:150px"><label>Valor</label><input id="pxc-valor" inputmode="decimal" placeholder="1.500,00"></div>
+      <div class="campo"><label>Nome ou CPF/CNPJ</label><input id="pxc-quem" placeholder="cleyton  ou  ***.903.681-**"></div>
+      <button class="btn-p" id="pxc-buscar"><i class="bi bi-search"></i> Buscar</button>
+    </div>
+    <div class="res" id="pxc-res"><div class="vazio">Sem valor e nome, mostra todos os PIX do dia.</div></div>
+  </div>
+
+  <div class="box">
+    <h2><i class="bi bi-upc-scan"></i> Achar um protocolo <small>para reenviar</small></h2>
+    <div class="campos">
+      <div class="campo"><label>Protocolo</label><input id="pxc-prot" placeholder="NH-7K4P-Q9M2" style="text-transform:uppercase"></div>
+      <button class="btn-p" id="pxc-prot-btn">Abrir</button>
+    </div>
+    <div class="res" id="pxc-prot-res"></div>
+  </div>
+
+  <div class="box">
+    <h2><i class="bi bi-clock-history"></i> Consultas do dia</h2>
+    <div id="pxc-log" class="vazio">Carregando…</div>
+  </div>
+</div>
+
+<div id="pxc-modal"><div class="mbox">
+  <h2 style="display:flex;justify-content:space-between;align-items:center;font-size:1rem;color:#1e3a8a;font-weight:800">
+    <span><i class="bi bi-patch-check-fill" style="color:#15803d"></i> Comprovante</span>
+    <button class="btn btn-outline-primary btn-sm" id="pxc-fechar">Fechar</button></h2>
+  <div class="mgrid">
+    <div>
+      <b>Imagem</b>
+      <canvas id="pxc-cv" width="720" height="1010"></canvas>
+      <div class="acoes">
+        <button class="btn btn-primary btn-sm" id="pxc-cimg"><i class="bi bi-clipboard"></i> Copiar imagem</button>
+        <button class="btn btn-outline-primary btn-sm" id="pxc-share"><i class="bi bi-share"></i> Compartilhar / Baixar</button>
+      </div>
+    </div>
+    <div>
+      <b>Texto</b>
+      <textarea id="pxc-txt" readonly></textarea>
+      <div class="acoes"><button class="btn btn-primary btn-sm" id="pxc-ctxt"><i class="bi bi-clipboard"></i> Copiar texto</button></div>
+    </div>
+  </div>
+</div></div>
+<div id="pxc-toast"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const BASE = '{{ url_for("pix_consulta.index") }}'.replace(/\/$/, '');
+  const LOGO = new Image(); LOGO.src = '{{ url_for("static", filename="logo-nh.png") }}';
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  const brl = v => Number(v).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+  const cache = {};
+  let atual = null;
+
+  function toast(t) { const e = $('#pxc-toast'); e.textContent = t; e.style.display = 'block'; setTimeout(() => e.style.display = 'none', 2000); }
+  async function pega(url, opts) {
+    const r = await fetch(url, opts);
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.erro || ('erro ' + r.status));
+    return j;
+  }
+
+  function linha(p) {
+    cache[p.id] = p;
+    const st = p.protocolo
+      ? `<span class="selo ok"><i class="bi bi-check2"></i> ${esc(p.protocolo)} · ${esc(p.consultado_por)} · ${esc(p.consultado_em)}</span>`
+      : '<span class="selo">não consultado</span>';
+    const det = [p.doc, p.hora ? 'entrou ' + p.hora : ''].filter(Boolean).join(' · ');
+    return `<div class="pix"><div class="v">${brl(p.valor)}</div>
+      <div class="q"><b>${esc(p.nome)}</b><span>${esc(p.dia)}${det ? ' · ' + esc(det) : ''}</span></div>
+      ${st}<button class="btn-p ${p.protocolo ? 'sec' : ''}" data-id="${p.id}">${p.protocolo ? 'Reenviar' : 'Gerar comprovante'}</button></div>`;
+  }
+
+  async function buscar() {
+    const q = new URLSearchParams({dia: $('#pxc-dia').value, valor: $('#pxc-valor').value, quem: $('#pxc-quem').value});
+    $('#pxc-res').innerHTML = '<div class="vazio">Buscando…</div>';
+    try {
+      const j = await pega(BASE + '/buscar?' + q);
+      $('#pxc-res').innerHTML = j.pix.length ? j.pix.map(linha).join('')
+        : '<div class="aviso"><b>Nenhum PIX com esse valor e nome nesse dia.</b> O PIX leva até 10 minutos para aparecer. Confira o valor e tente de novo.</div>';
+    } catch (e) { $('#pxc-res').innerHTML = `<div class="aviso">${esc(e.message)}</div>`; }
+  }
+
+  async function gerar(id) {
+    try {
+      const j = await pega(BASE + '/protocolo', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id})});
+      abrir(j.pix);
+      buscar(); log();
+    } catch (e) { toast(e.message); }
+  }
+
+  async function log() {
+    try {
+      const j = await pega(BASE + '/hoje?dia=' + encodeURIComponent($('#pxc-dia').value));
+      j.pix.forEach(p => cache[p.id] = p);
+      $('#pxc-log').innerHTML = j.pix.length ? '<table><tr><th>Hora</th><th>Protocolo</th><th>Valor</th><th>Pagador</th><th>Consultado por</th><th></th></tr>' +
+        j.pix.map(p => `<tr><td>${esc((p.consultado_em || '').slice(11))}</td><td><b>${esc(p.protocolo)}</b></td><td>${brl(p.valor)}</td>
+          <td>${esc(p.nome)}</td><td>${esc(p.consultado_por)}</td>
+          <td><button class="btn-p sec mini" data-id="${p.id}">Reenviar</button></td></tr>`).join('') + '</table>'
+        : 'Nenhuma consulta nesse dia.';
+    } catch (e) { $('#pxc-log').textContent = e.message; }
+  }
+
+  // ── comprovante ──
+  function texto(p) {
+    return `✅ PIX CONFIRMADO — POSTO NH\n\n` +
+      `Valor: ${brl(p.valor)}\nPagador: ${p.nome}\n` + (p.doc ? `CPF/CNPJ: ${p.doc}\n` : '') +
+      `Recebido em: ${p.dia}${p.hora ? ', ' + p.hora : ''}\nConta: ${p.conta}\n\n` +
+      `Consultado por: ${p.consultado_por}\nEm: ${p.consultado_em}\n\nProtocolo: ${p.protocolo}`;
+  }
+  function desenhar(p) {
+    const c = $('#pxc-cv'), g = c.getContext('2d'), W = c.width;
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, c.height);
+    g.fillStyle = '#1e3a8a'; g.fillRect(0, 0, W, 170);
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(100, 85, 70, 0, 7); g.fill();
+    if (LOGO.naturalWidth) { const lh = 120, lw = LOGO.naturalWidth * lh / LOGO.naturalHeight; g.drawImage(LOGO, 100 - lw / 2, 85 - lh / 2, lw, lh); }
+    g.fillStyle = '#fff'; g.font = 'bold 38px Segoe UI, Arial'; g.fillText('PIX CONFIRMADO', 195, 78);
+    g.font = '24px Segoe UI, Arial'; g.fillText('Posto NH · conferido no extrato', 195, 118);
+    g.fillStyle = '#15803d'; g.font = 'bold 72px Segoe UI, Arial'; g.textAlign = 'center';
+    g.fillText(brl(p.valor), W / 2, 280); g.textAlign = 'left';
+    const linhas = [['Pagador', p.nome], ['CPF/CNPJ', p.doc || '—'], ['Recebido em', p.dia + (p.hora ? ', ' + p.hora : '')],
+                    ['Conta', p.conta], ['Consultado por', p.consultado_por], ['Em', p.consultado_em]];
+    let y = 360;
+    g.strokeStyle = '#e2e8f0'; g.lineWidth = 2;
+    for (const [k, v] of linhas) {
+      g.fillStyle = '#64748b'; g.font = '22px Segoe UI, Arial'; g.fillText(k.toUpperCase(), 50, y);
+      g.fillStyle = '#0f172a'; g.font = 'bold 28px Segoe UI, Arial'; g.fillText(String(v || ''), 50, y + 36, W - 100);
+      g.beginPath(); g.moveTo(50, y + 58); g.lineTo(W - 50, y + 58); g.stroke(); y += 88;
+    }
+    g.fillStyle = '#f1f5f9'; g.fillRect(40, y + 6, W - 80, 110);
+    g.fillStyle = '#64748b'; g.font = '22px Segoe UI, Arial'; g.textAlign = 'center';
+    g.fillText('PROTOCOLO', W / 2, y + 44);
+    g.fillStyle = '#1e3a8a'; g.font = 'bold 44px Consolas, monospace'; g.fillText(p.protocolo, W / 2, y + 96);
+    g.textAlign = 'left';
+  }
+  function abrir(p) {
+    atual = p;
+    LOGO.complete ? desenhar(p) : (LOGO.onload = () => desenhar(p));
+    $('#pxc-txt').value = texto(p);
+    $('#pxc-modal').classList.add('on');
+  }
+
+  $('#pxc-fechar').onclick = () => $('#pxc-modal').classList.remove('on');
+  $('#pxc-ctxt').onclick = () => navigator.clipboard.writeText($('#pxc-txt').value)
+    .then(() => toast('Texto copiado'), () => { $('#pxc-txt').select(); document.execCommand('copy'); toast('Texto copiado'); });
+  $('#pxc-cimg').onclick = () => $('#pxc-cv').toBlob(b => navigator.clipboard.write([new ClipboardItem({'image/png': b})])
+    .then(() => toast('Imagem copiada: cole no WhatsApp'), () => toast('Este navegador não copia imagem: use Compartilhar / Baixar')));
+  $('#pxc-share').onclick = () => $('#pxc-cv').toBlob(b => {
+    const file = new File([b], 'pix-' + atual.protocolo + '.png', {type: 'image/png'});
+    if (navigator.canShare && navigator.canShare({files: [file]})) return navigator.share({files: [file]});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = file.name; a.click();
+  });
+
+  document.getElementById('pxc').addEventListener('click', e => {
+    const b = e.target.closest('button[data-id]');
+    if (b) gerar(Number(b.dataset.id));
+  });
+  $('#pxc-buscar').onclick = buscar;
+  ['#pxc-valor', '#pxc-quem'].forEach(s => $(s).addEventListener('keydown', e => { if (e.key === 'Enter') buscar(); }));
+  $('#pxc-dia').addEventListener('change', () => { buscar(); log(); });
+  $('#pxc-prot-btn').onclick = async () => {
+    const t = $('#pxc-prot').value.trim().toUpperCase();
+    if (!t) return;
+    try {
+      const j = await pega(BASE + '/protocolo/' + encodeURIComponent(t));
+      $('#pxc-prot-res').innerHTML = j.pix ? linha(j.pix) : '<div class="aviso">Protocolo não encontrado.</div>';
+    } catch (e) { $('#pxc-prot-res').innerHTML = `<div class="aviso">${esc(e.message)}</div>`; }
+  };
+  buscar(); log();
+})();
+</script>
+{% endblock %}

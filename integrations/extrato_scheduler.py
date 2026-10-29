@@ -37,6 +37,7 @@ def rodar(logger, hoje=None):
     from integrations.banco_api import SemCredencial, proximo_dia_util
     from integrations.extrato_grava import sincronizar
     from routes.extrato_online import BANCOS
+    from utils import pix_consulta
     hoje = hoje or date.today()
     resumo = {}
     for chave, banco in BANCOS.items():
@@ -52,6 +53,13 @@ def rodar(logger, hoje=None):
             conn = get_db_connection()
             cur = conn.cursor(dictionary=True)
             resumo[chave] = sincronizar(mod, api, cur, conn)
+            if mod.account_id == pix_consulta.ACCOUNT_ID:
+                # PIX Consulta: nome inteiro, documento e quando apareceu.
+                # Separado: se falhar, o extrato já está gravado.
+                try:
+                    pix_consulta.anotar(conn, mod.account_id, api)
+                except Exception:
+                    logger.exception("[extrato_sched] %s: anotar PIX Consulta falhou", chave)
         except SemCredencial:
             resumo[chave] = 'sem credencial'
         except Exception:
