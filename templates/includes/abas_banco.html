@@ -14,7 +14,6 @@
       ('resumo',         'Resumo',         'bank_import.index'),
       ('conciliar',      'Conciliação',    'bank_import.conciliar'),
       ('extrato_online', 'Extrato On-Line', 'extrato_online.index'),
-      ('pix_consulta',   'PIX Consulta',   'pix_consulta.index'),
       ('recebimentos',   'Recebimentos',   'financeiro.recebimento'),
       ('pagamentos',     'Pagamentos',     'financeiro.pagamentos'),
       ('transferencias', 'Transferências', 'financeiro.transferencias'),
@@ -22,8 +21,8 @@
       ('contas',         'Contas',         'bank_import.gerenciar_contas'),
       ('regras',         'Regras',         'conciliacao_regras.lista'),
       ('memorias',       'Memorizações',   'conciliacao_regras.memorias')] %}
-{#- Extrato On-Line (23/10/2026) e PIX Consulta (29/10/2026): só ADMIN por enquanto. -#}
-{%- if chave not in ('extrato_online', 'pix_consulta') or (current_user.nivel or '')|trim|upper in ('ADMIN', 'ADMINISTRADOR') %}
+{#- Extrato On-Line: só ADMIN por enquanto (23/10/2026). -#}
+{%- if chave != 'extrato_online' or (current_user.nivel or '')|trim|upper in ('ADMIN', 'ADMINISTRADOR') %}
 <a class="aba{{ ' on' if ativa == chave }}" href="{{ url_for(destino) }}">{{ rotulo }}</a>
 {%- endif %}
 {%- endfor %}
