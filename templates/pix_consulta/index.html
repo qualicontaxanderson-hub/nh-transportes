@@ -190,7 +190,9 @@
     const q = new URLSearchParams({dia: $('#pxc-dia').value, valor: $('#pxc-valor').value, quem: $('#pxc-quem').value});
     $('#pxc-res').innerHTML = '<div class="vazio">Buscando…</div>';
     try {
-      lista = (await pega(BASE + '/buscar?' + q)).pix;
+      // o servidor manda em ordem de chegada (o casamento com o cupom precisa
+      // dela); a tela mostra o mais novo primeiro
+      lista = (await pega(BASE + '/buscar?' + q)).pix.reverse();
       desenha();
     } catch (e) { $('#pxc-res').innerHTML = `<div class="aviso">${esc(e.message)}</div>`; }
   }
