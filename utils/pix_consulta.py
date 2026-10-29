@@ -97,8 +97,21 @@ def garantir_tabelas(cur):
 
 
 # ── anotação, a cada leitura do Sicoob ───────────────────────────────────────
+_ROTULOS = ('TRANSFERENCIA PIX', 'RECEBIMENTO PIX')
+
+
 def _nome_da_api(t):
+    """O nome de quem pagou. Na transferência de outra cooperativa Sicoob o
+    complemento vem 'REM.: CLEYTON JOSE DOS SANTOS|@Transferência Pix|@CLEYTON
+    JOSE DOS SANTOS|@***.903.681-**|@' e o 'quem' do adapter pega o rótulo
+    "Transferência Pix" -- o nome é o do REM. (29/10/2026)."""
     nome = (t.get('quem') or '').strip()
+    if not nome or _sem_acento(nome) in _ROTULOS:
+        from integrations.sicoob_extrato import _parece_documento, partes_complemento
+        partes = partes_complemento(t.get('memo'))
+        cands = [re.sub(r'^REM\.?:\s*', '', p, flags=re.I).strip() for p in partes]
+        nome = next((c for c in cands if c and _sem_acento(c) not in _ROTULOS
+                     and not _parece_documento(c)), nome)
     return re.sub(r'^REM\.?:\s*', '', nome, flags=re.I)[:160] or None
 
 
