@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 import json
 
+from utils import caixa_pix
+
 _logger = logging.getLogger(__name__)
 
 # Module-level flag so _ensure_caixa_formas_tipos() only hits the DB once per
@@ -604,6 +606,11 @@ def novo():
         
         _ensure_comprovacao_data_deposito(conn)
         _ensure_caixa_formas_tipos()
+        # PIX do fechamento: as tabelas antes da gravação (DDL faz commit)
+        try:
+            caixa_pix.garantir_tabelas(conn)
+        except Exception:
+            _logger.exception('[caixa_pix] tabelas')
 
         if request.method == 'POST':
             # Get main data
@@ -736,6 +743,11 @@ def novo():
                         """, (lancamento_id, int(vale['funcionario_id']), 
                               float(valor), vale.get('observacao', '')))
             
+            # PIX do fechamento: o que saiu do cálculo (com o motivo) e o
+            # lançado à mão. Mesma transação do caixa.
+            caixa_pix.gravar(cursor, lancamento_id, request.form.get('pix_detalhe'),
+                             getattr(current_user, 'nome_completo', None) or current_user.username)
+
             conn.commit()
             flash('Lançamento de caixa cadastrado com sucesso!', 'success')
             return redirect(url_for('lancamentos_caixa.lista'))
@@ -1058,6 +1070,8 @@ def excluir(id):
         # Delete receitas
         cursor.execute("DELETE FROM lancamentos_caixa_receitas WHERE lancamento_caixa_id = %s", (id,))
         
+        caixa_pix.apagar(cursor, id)
+
         # Delete lancamento
         cursor.execute("DELETE FROM lancamentos_caixa WHERE id = %s", (id,))
         
@@ -1100,6 +1114,11 @@ def editar(id):
         
         _ensure_comprovacao_data_deposito(conn)
         _ensure_caixa_formas_tipos()
+        # PIX do fechamento: as tabelas antes da gravação (DDL faz commit)
+        try:
+            caixa_pix.garantir_tabelas(conn)
+        except Exception:
+            _logger.exception('[caixa_pix] tabelas')
 
         if request.method == 'POST':
             # Get main data
@@ -1299,6 +1318,11 @@ def editar(id):
                         """, (id, int(vale['funcionario_id']), 
                               float(valor), vale.get('observacao', '')))
             
+            # PIX do fechamento: o que saiu do cálculo (com o motivo) e o
+            # lançado à mão. Mesma transação do caixa.
+            caixa_pix.gravar(cursor, id, request.form.get('pix_detalhe'),
+                             getattr(current_user, 'nome_completo', None) or current_user.username)
+
             conn.commit()
             flash('Lançamento de caixa atualizado com sucesso!', 'success')
             _rf = {
@@ -1840,5 +1864,29 @@ def deletar_deposito_cheque(lancamento_id, deposito_id):
     finally:
         if cursor is not None:
             cursor.close()
+        if conn is not None:
+            conn.close()
+
+
+@bp.route('/api/pix_dia', methods=['GET'])
+@login_required
+@supervisor_or_admin_required
+def api_pix_dia():
+    """Os PIX recebidos no dia nas contas do cliente, para o campo
+    Recebimentos PIX do fechamento (utils/caixa_pix)."""
+    conn = None
+    try:
+        cliente_id = int(request.args.get('cliente_id') or 0)
+        dia = datetime.strptime(request.args.get('data') or '', '%Y-%m-%d').date()
+        lancamento_id = request.args.get('lancamento_id', type=int)
+    except ValueError:
+        return jsonify({'erro': 'cliente ou data inválidos'}), 400
+    try:
+        conn = get_db_connection()
+        return jsonify(caixa_pix.pix_do_dia(conn, cliente_id, dia, lancamento_id))
+    except Exception as e:
+        _logger.exception('[caixa_pix] pix_dia')
+        return jsonify({'erro': str(e)}), 500
+    finally:
         if conn is not None:
             conn.close()
