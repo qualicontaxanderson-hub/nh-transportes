@@ -192,11 +192,16 @@ def pix_do_dia(conn, cliente_id, dia, lancamento_id=None):
                             'usuario': r['usuario_nome']} for r in cur.fetchall()]
     finally:
         cur.close()
-    if not salvo:
-        for p in pix:
-            s = sugestao(p['_texto'], p['nome'])
-            if s:
-                fora[p['id']] = s + ' (sugestão)'
+    for p in pix:
+        s = sugestao(p['_texto'], p['nome'])
+        p['cartao'] = None
+        if s and s.startswith('Pagamento d'):
+            # Baratão/X7 é pagamento de CARTÃO, não PIX de venda: aparece em
+            # cinza e travado, nunca entra na soma (pedido do usuário, 29/10)
+            p['cartao'] = s
+            fora.pop(p['id'], None)
+        elif s and not salvo:
+            fora[p['id']] = s + ' (sugestão)'
     for p in pix:
         p.pop('_texto', None)
     return {'contas': contas, 'pix': pix, 'fora': fora, 'manuais': manuais, 'salvo': salvo}
