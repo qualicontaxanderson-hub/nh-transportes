@@ -324,7 +324,9 @@ def _novo_protocolo():
 
 def emitir(conn, bt_id, usuario_id, usuario_nome, origem='admin', frentista=None):
     """O protocolo do PIX: cria na 1a vez; depois devolve o MESMO e conta o
-    reenvio. Devolve (pix, novo: bool) ou (None, False) se não é PIX recebido."""
+    reenvio. Devolve (pix, novo: bool) ou (None, False) se não é PIX recebido.
+    Na Pista (origem='pista') não há reenvio: o 2o pedido não conta nada e a
+    rota só diz quem já consultou."""
     if not um(conn, bt_id=bt_id):
         return None, False
     cur = conn.cursor()
@@ -344,6 +346,8 @@ def emitir(conn, bt_id, usuario_id, usuario_nome, origem='admin', frentista=None
                 break
             except Exception as exc:
                 msg = str(exc)
+                if 'uq_bt' in msg and origem == 'pista':
+                    break
                 if 'uq_bt' in msg:          # o PIX já tem protocolo: é reenvio
                     cur.execute("""UPDATE pix_consulta_protocolos
                                       SET reenvios = reenvios + 1, ultimo_reenvio = %s
@@ -370,3 +374,17 @@ def de_hoje(conn, dia):
     finally:
         cur.close()
     return [p for p in (um(conn, bt_id=i) for i in ids) if p]
+
+
+# ── Pista ────────────────────────────────────────────────────────────────────
+def para_pista(p):
+    """O que a Pista vê de um PIX. Já consultado: só quem e a que horas --
+    sem protocolo e sem comprovante (o reenvio é do Admin/Gerente/Supervisor)."""
+    base = {k: p.get(k) for k in ('id', 'valor', 'nome', 'doc', 'dia', 'hora',
+                                  'vendedor', 'cupom', 'cupom_hora', 'possiveis')}
+    if p.get('protocolo'):
+        base.update(ja=True, consultado_por=p.get('consultado_por'),
+                    consultado_hora=(p.get('consultado_em') or '')[11:16])
+    else:
+        base['ja'] = False
+    return base

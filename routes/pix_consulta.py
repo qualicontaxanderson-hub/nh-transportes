@@ -3,8 +3,9 @@ com protocolo (utils/pix_consulta). Fase 1: só ADMIN (29/10/2026); depois
 Gerente/Supervisor e a versão da Pista (só o dia, com o frentista)."""
 import re
 from datetime import datetime
+from functools import wraps
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from utils import pix_consulta
@@ -96,5 +97,100 @@ def consultas_do_dia():
     conn = get_db_connection()
     try:
         return jsonify({'pix': pix_consulta.de_hoje(conn, _dia(request.args.get('dia')))})
+    finally:
+        conn.close()
+
+
+# ── Pista: só o dia, com o frentista; o 2o pedido só diz quem já consultou ──
+# Quem entra na tela da Pista. Por enquanto só ADMIN (29/10/2026); para
+# liberar, acrescentar 'SUPERVISOR', 'GERENTE' e 'PISTA' aqui e no menu.
+NIVEIS_PISTA = {'ADMIN', 'ADMINISTRADOR'}
+
+
+def pista_required(f):
+    @wraps(f)
+    def dentro(*args, **kwargs):
+        nivel = (getattr(current_user, 'nivel', '') or '').strip().upper()
+        if nivel not in NIVEIS_PISTA:
+            if request.path.endswith('/pista/'):
+                flash('Acesso negado.', 'danger')
+                return redirect(url_for('index'))
+            return jsonify({'erro': 'acesso negado'}), 403
+        return f(*args, **kwargs)
+    return dentro
+
+
+def _frentistas(conn):
+    """Os mesmos do Troco PIX Pista: ativos e ainda na casa hoje."""
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""SELECT id, nome FROM funcionarios
+                        WHERE ativo = 1 AND (data_saida IS NULL OR data_saida >= %s)
+                        ORDER BY nome""", (hoje_brasilia(),))
+        return cur.fetchall()
+    finally:
+        cur.close()
+
+
+@bp.route('/pista/')
+@login_required
+@pista_required
+def pista():
+    conn = get_db_connection()
+    try:
+        frentistas = _frentistas(conn)
+    finally:
+        conn.close()
+    return render_template('pix_consulta/pista.html', frentistas=frentistas,
+                           hoje=hoje_brasilia().strftime('%d/%m/%Y'))
+
+
+@bp.route('/pista/buscar')
+@login_required
+@pista_required
+def pista_buscar():
+    valor = _valor(request.args.get('valor'))
+    quem = (request.args.get('quem') or '').strip()
+    # a Pista não navega na lista do dia: precisa do valor e de um nome/documento
+    if valor is None or len(quem) < 3:
+        return jsonify({'erro': 'Digite o valor e um nome (ou CPF/CNPJ) do pagador.'}), 400
+    conn = get_db_connection()
+    try:
+        pix = pix_consulta.buscar(conn, hoje_brasilia(), valor, quem)
+        return jsonify({'pix': [pix_consulta.para_pista(p) for p in pix]})
+    finally:
+        conn.close()
+
+
+@bp.route('/pista/protocolo', methods=['POST'])
+@login_required
+@pista_required
+def pista_protocolo():
+    dados = request.get_json(silent=True) or {}
+    try:
+        bt_id = int(dados.get('id'))
+        frentista_id = int(dados.get('frentista_id'))
+    except (TypeError, ValueError):
+        return jsonify({'erro': 'Escolha quem está consultando.'}), 400
+    conn = get_db_connection()
+    try:
+        frentista = next((f['nome'] for f in _frentistas(conn) if f['id'] == frentista_id), None)
+        if not frentista:
+            return jsonify({'erro': 'Escolha quem está consultando.'}), 400
+        pix = pix_consulta.um(conn, bt_id=bt_id)
+        if not pix or pix['_dia'] != hoje_brasilia():
+            return jsonify({'erro': 'PIX não encontrado hoje.'}), 404
+        if not pix.get('protocolo'):
+            pix, novo = pix_consulta.emitir(
+                conn, bt_id, current_user.id,
+                getattr(current_user, 'nome_completo', None) or current_user.username,
+                'pista', frentista)
+        else:
+            novo = False
+        if not novo:
+            # alguém consultou antes (ou no mesmo instante): sem protocolo
+            return jsonify({'ja': pix_consulta.para_pista(pix)}), 409
+        pix = {k: v for k, v in pix.items() if not k.startswith('_')}
+        return jsonify({'pix': pix})
     finally:
         conn.close()
