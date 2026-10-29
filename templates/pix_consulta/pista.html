@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}PIX Consulta Pista - NH Transportes{% endblock %}
+
+{#- A tela do frentista (29/10/2026): só o dia de hoje, escolhe quem está
+    consultando, valor + nome/CPF obrigatórios. O PIX que já foi consultado
+    mostra só por quem e a que horas: sem protocolo e sem comprovante (o
+    reenvio é do Admin/Gerente/Supervisor, na PIX Consulta). -#}
+{% block styles %}
+<style>
+  #pxp{ --azul:#1e3a8a; --ok:#15803d; --muted:#64748b; --borda:#e2e8f0; color:#1e293b;
+        max-width:560px; margin:0 auto; padding:12px 4px 40px; }
+  #pxp h3{ font-size:1.25rem; font-weight:800; color:var(--azul); margin:0 0 2px; }
+  #pxp .sub{ color:var(--muted); font-size:.85rem; margin-bottom:12px; }
+  #pxp .box{ background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:14px; margin-bottom:12px; }
+  #pxp label{ display:block; font-size:.72rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin:10px 0 4px; }
+  #pxp label:first-child{ margin-top:0; }
+  #pxp select, #pxp input{ width:100%; padding:11px 12px; border:1px solid #cbd5e1; border-radius:10px; font-size:17px; background:#fff; }
+  #pxp .quem.falta{ border-color:#dc2626; box-shadow:0 0 0 3px rgba(220,38,38,.15); }
+  #pxp .btn-g{ width:100%; margin-top:14px; background:#1e40af; color:#fff; border:0; border-radius:10px;
+               padding:13px; font-size:1.05rem; font-weight:700; }
+  #pxp .btn-g:disabled{ opacity:.6; }
+  #pxp .res{ display:flex; flex-direction:column; gap:10px; }
+  #pxp .cd{ border:1px solid var(--borda); border-left:6px solid #16a34a; border-radius:12px; padding:12px; background:#fff; }
+  #pxp .cd .v{ font-size:1.5rem; font-weight:800; color:var(--ok); }
+  #pxp .cd .n{ font-weight:700; font-size:1rem; }
+  #pxp .cd .s{ color:var(--muted); font-size:.85rem; }
+  #pxp .cd .btn-g{ margin-top:10px; background:#15803d; }
+  #pxp .cd.ja{ border-left-color:#94a3b8; background:#f8fafc; }
+  #pxp .cd.ja .v{ color:#64748b; }
+  #pxp .jaf{ margin-top:8px; background:#fef3c7; color:#92400e; border-radius:8px; padding:8px 10px; font-weight:600; }
+  #pxp .aviso{ background:#fffbeb; border-left:4px solid #d97706; border-radius:8px; padding:10px 12px; }
+  #pxp .erro{ background:#fef2f2; border-left:4px solid #dc2626; border-radius:8px; padding:10px 12px; }
+  #pxp-modal{ position:fixed; inset:0; background:rgba(15,23,42,.6); display:none; align-items:flex-start;
+              justify-content:center; padding:12px; overflow:auto; z-index:1060; }
+  #pxp-modal.on{ display:flex; }
+  #pxp-modal .mbox{ background:#fff; border-radius:14px; max-width:420px; width:100%; padding:14px; }
+  #pxp-modal canvas{ width:100%; border:1px solid #e2e8f0; border-radius:10px; display:block; }
+  #pxp-modal .acoes{ display:flex; flex-direction:column; gap:8px; margin-top:10px; }
+  #pxp-modal .acoes button{ padding:12px; border-radius:10px; font-weight:700; font-size:1rem; }
+  #pxp-toast{ position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#1e293b;
+              color:#fff; padding:9px 16px; border-radius:8px; display:none; z-index:1070; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="pxp">
+  <h3><i class="bi bi-patch-check-fill" style="color:#15803d"></i> PIX Consulta</h3>
+  <div class="sub">Hoje, {{ hoje }} · Sicoob NH</div>
+
+  <div class="box">
+    <label for="pxp-frent">Quem está consultando</label>
+    <select id="pxp-frent" class="quem">
+      <option value="">— escolha —</option>
+      {% for f in frentistas %}<option value="{{ f.id }}">{{ f.nome }}</option>{% endfor %}
+    </select>
+    <label for="pxp-valor">Valor do PIX</label>
+    <input id="pxp-valor" inputmode="decimal" placeholder="1.500,00" autocomplete="off">
+    <label for="pxp-quem">Nome ou CPF/CNPJ do pagador</label>
+    <input id="pxp-quem" placeholder="cleyton  ou  903.681" autocomplete="off">
+    <button class="btn-g" id="pxp-buscar"><i class="bi bi-search"></i> Consultar</button>
+  </div>
+
+  <div class="res" id="pxp-res"></div>
+</div>
+
+<div id="pxp-modal"><div class="mbox">
+  <canvas id="pxp-cv" width="720" height="1100"></canvas>
+  <div class="acoes">
+    <button class="btn btn-primary" id="pxp-share"><i class="bi bi-share"></i> Mandar a imagem</button>
+    <button class="btn btn-outline-primary" id="pxp-cimg"><i class="bi bi-clipboard"></i> Copiar imagem</button>
+    <button class="btn btn-outline-primary" id="pxp-ctxt"><i class="bi bi-chat-left-text"></i> Copiar texto</button>
+    <button class="btn btn-secondary" id="pxp-fechar">Fechar</button>
+  </div>
+</div></div>
+<div id="pxp-toast"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const BASE = '{{ url_for("pix_consulta.pista") }}'.replace(/\/$/, '');
+  const LOGO = new Image(); LOGO.src = '{{ url_for("static", filename="logo-nh.png") }}';
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  const brl = v => Number(v).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+  let atual = null, lista = [];
+
+  function toast(t) { const e = $('#pxp-toast'); e.textContent = t; e.style.display = 'block'; setTimeout(() => e.style.display = 'none', 2200); }
+
+  // o frentista fica lembrado neste aparelho (só conveniência)
+  try { const f = localStorage.getItem('pxp_frentista'); if (f) $('#pxp-frent').value = f; } catch (e) {}
+  $('#pxp-frent').onchange = () => {
+    $('#pxp-frent').classList.remove('falta');
+    try { localStorage.setItem('pxp_frentista', $('#pxp-frent').value); } catch (e) {}
+  };
+
+  function vendedor(p) {
+    if (p.vendedor) return `Vendedor: ${esc(p.vendedor)} · cupom ${esc(p.cupom)}`;
+    if (p.possiveis && p.possiveis.length) return `Vendedor: ${esc(p.possiveis.join(' ou '))}`;
+    return '';
+  }
+  function card(p) {
+    const vend = vendedor(p);
+    const topo = `<div class="v">${brl(p.valor)}</div><div class="n">${esc(p.nome)}</div>
+      <div class="s">${esc(p.doc || '')}${p.doc && p.hora ? ' · ' : ''}${esc(p.hora || '')}</div>` +
+      (vend ? `<div class="s">${vend}</div>` : '');
+    if (p.ja) return `<div class="cd ja">${topo}<div class="jaf"><i class="bi bi-exclamation-circle"></i>
+      Já consultado por ${esc(p.consultado_por)} às ${esc(p.consultado_hora)}</div></div>`;
+    return `<div class="cd">${topo}<button class="btn-g" data-id="${p.id}">
+      <i class="bi bi-patch-check"></i> Gerar comprovante</button></div>`;
+  }
+  function desenha() {
+    $('#pxp-res').innerHTML = lista.length ? lista.map(card).join('')
+      : '<div class="aviso"><b>Não achei esse PIX hoje.</b><br>O PIX leva até 10 minutos para aparecer. Confira o valor e o nome e tente de novo.</div>';
+  }
+
+  async function buscar() {
+    const q = new URLSearchParams({valor: $('#pxp-valor').value, quem: $('#pxp-quem').value});
+    const b = $('#pxp-buscar'); b.disabled = true;
+    $('#pxp-res').innerHTML = '<div class="s" style="color:#64748b">Consultando…</div>';
+    try {
+      const r = await fetch(BASE + '/buscar?' + q), j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.erro || ('erro ' + r.status));
+      lista = j.pix; desenha();
+    } catch (e) { $('#pxp-res').innerHTML = `<div class="erro">${esc(e.message)}</div>`; }
+    b.disabled = false;
+  }
+
+  async function gerar(id, botao) {
+    const frentista_id = $('#pxp-frent').value;
+    if (!frentista_id) {
+      $('#pxp-frent').classList.add('falta'); $('#pxp-frent').focus();
+      return toast('Escolha quem está consultando');
+    }
+    botao.disabled = true;
+    try {
+      const r = await fetch(BASE + '/protocolo', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                                                  body: JSON.stringify({id, frentista_id: Number(frentista_id)})});
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 409 && j.ja) {
+        // alguém consultou antes: vira o aviso, sem comprovante
+        lista = lista.map(p => p.id === id ? j.ja : p); desenha(); return;
+      }
+      if (!r.ok) throw new Error(j.erro || ('erro ' + r.status));
+      abrir(j.pix);
+      lista = lista.map(p => p.id === id ? {...p, ja: true, consultado_por: j.pix.consultado_por,
+                                            consultado_hora: (j.pix.consultado_em || '').slice(11, 16)} : p);
+      desenha();
+    } catch (e) { toast(e.message); botao.disabled = false; }
+  }
+
+  // ── comprovante (o mesmo da PIX Consulta) ──
+  function texto(p) {
+    return `✅ PIX CONFIRMADO — POSTO NH\n\n` +
+      `Valor: ${brl(p.valor)}\nPagador: ${p.nome}\n` + (p.doc ? `CPF/CNPJ: ${p.doc}\n` : '') +
+      `Recebido em: ${p.dia}${p.hora ? ', ' + p.hora : ''}\nConta: ${p.conta}\n` +
+      (p.vendedor ? `Vendedor: ${p.vendedor} (cupom ${p.cupom})\n` : '') + '\n' +
+      `Consultado por: ${p.consultado_por}\nEm: ${p.consultado_em}\n\nProtocolo: ${p.protocolo}`;
+  }
+  function desenhar(p) {
+    const c = $('#pxp-cv'), g = c.getContext('2d'), W = c.width;
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, c.height);
+    g.fillStyle = '#1e3a8a'; g.fillRect(0, 0, W, 170);
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(100, 85, 70, 0, 7); g.fill();
+    if (LOGO.naturalWidth) { const lh = 120, lw = LOGO.naturalWidth * lh / LOGO.naturalHeight; g.drawImage(LOGO, 100 - lw / 2, 85 - lh / 2, lw, lh); }
+    g.fillStyle = '#fff'; g.font = 'bold 38px Segoe UI, Arial'; g.fillText('PIX CONFIRMADO', 195, 78);
+    g.font = '24px Segoe UI, Arial'; g.fillText('Posto NH · conferido no extrato', 195, 118);
+    g.fillStyle = '#15803d'; g.font = 'bold 72px Segoe UI, Arial'; g.textAlign = 'center';
+    g.fillText(brl(p.valor), W / 2, 280); g.textAlign = 'left';
+    const linhas = [['Pagador', p.nome], ['CPF/CNPJ', p.doc || '—'], ['Recebido em', p.dia + (p.hora ? ', ' + p.hora : '')],
+                    ['Conta', p.conta], ['Vendedor', p.vendedor ? p.vendedor + '  (cupom ' + p.cupom + ')' : '—'],
+                    ['Consultado por', p.consultado_por], ['Em', p.consultado_em]];
+    let y = 360;
+    g.strokeStyle = '#e2e8f0'; g.lineWidth = 2;
+    for (const [k, v] of linhas) {
+      g.fillStyle = '#64748b'; g.font = '22px Segoe UI, Arial'; g.fillText(k.toUpperCase(), 50, y);
+      g.fillStyle = '#0f172a'; g.font = 'bold 28px Segoe UI, Arial'; g.fillText(String(v || ''), 50, y + 36, W - 100);
+      g.beginPath(); g.moveTo(50, y + 58); g.lineTo(W - 50, y + 58); g.stroke(); y += 88;
+    }
+    g.fillStyle = '#f1f5f9'; g.fillRect(40, y + 6, W - 80, 110);
+    g.fillStyle = '#64748b'; g.font = '22px Segoe UI, Arial'; g.textAlign = 'center';
+    g.fillText('PROTOCOLO', W / 2, y + 44);
+    g.fillStyle = '#1e3a8a'; g.font = 'bold 44px Consolas, monospace'; g.fillText(p.protocolo, W / 2, y + 96);
+    g.textAlign = 'left';
+  }
+  function abrir(p) {
+    atual = p;
+    LOGO.complete ? desenhar(p) : (LOGO.onload = () => desenhar(p));
+    $('#pxp-modal').classList.add('on');
+  }
+
+  $('#pxp-fechar').onclick = () => $('#pxp-modal').classList.remove('on');
+  $('#pxp-ctxt').onclick = () => navigator.clipboard.writeText(texto(atual))
+    .then(() => toast('Texto copiado'), () => toast('Não consegui copiar o texto'));
+  $('#pxp-cimg').onclick = () => $('#pxp-cv').toBlob(b => navigator.clipboard.write([new ClipboardItem({'image/png': b})])
+    .then(() => toast('Imagem copiada: cole no WhatsApp'), () => toast('Este aparelho não copia imagem: use Mandar a imagem')));
+  $('#pxp-share').onclick = () => $('#pxp-cv').toBlob(b => {
+    const file = new File([b], 'pix-' + atual.protocolo + '.png', {type: 'image/png'});
+    if (navigator.canShare && navigator.canShare({files: [file]})) return navigator.share({files: [file]});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = file.name; a.click();
+  });
+
+  $('#pxp-res').addEventListener('click', e => {
+    const b = e.target.closest('button[data-id]');
+    if (b) gerar(Number(b.dataset.id), b);
+  });
+  $('#pxp-buscar').onclick = buscar;
+  ['#pxp-valor', '#pxp-quem'].forEach(s => $(s).addEventListener('keydown', e => { if (e.key === 'Enter') buscar(); }));
+})();
+</script>
+{% endblock %}
