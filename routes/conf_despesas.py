@@ -17,7 +17,7 @@ from calendar import monthrange
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
-from flask import Blueprint, render_template, request
+from flask import Blueprint, jsonify, render_template, request
 from flask_login import login_required
 
 from routes.auth import admin_required
@@ -1342,6 +1342,14 @@ def conf_despesas():
             blocks, grand_by_month, grand_total = _build_category_matrix(
                 lancamentos, months
             )
+            # Marca o que saiu de lancamentos_despesas: so essas linhas abrem
+            # a lista de lancamentos ao clicar. O que e injetado depois
+            # (folha, fretes, taxas de cartao) nao tem lancamento para abrir.
+            for _b in blocks:
+                for _r in _b['rows']:
+                    _r['drill'] = True
+                    for _sc in _r['subcats']:
+                        _sc['drill'] = True
 
             # ── Adiciona custo de pessoal (lancamentosfuncionarios_v2) ──────
             func_rows = _fetch_func_lancamentos(conn, months, empresa_ids)
@@ -1612,3 +1620,68 @@ def conf_despesas():
         custo_por_litro_by_month=custo_por_litro_by_month,
         custo_por_litro_acum=custo_por_litro_acum,
     )
+
+@bp.route('/conf_despesas/lancamentos', methods=['GET'])
+@login_required
+@admin_required
+def conf_despesas_lancamentos():
+    """Os lancamentos de despesa que formam uma celula da matriz (ou o ACUM)."""
+    args = request.args
+    try:
+        ini = datetime.strptime(args.get('data_inicio', ''), '%Y-%m-%d').date()
+        fim = datetime.strptime(args.get('data_fim', ''), '%Y-%m-%d').date()
+        titulo_id = int(args.get('titulo_id'))
+        categoria_id = int(args.get('categoria_id'))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'erro': 'filtro invalido'}), 400
+    mes = args.get('mes', '')
+    if mes:
+        try:
+            ano, m = int(mes[:4]), int(mes[4:6])
+        except ValueError:
+            return jsonify({'ok': False, 'erro': 'mes invalido'}), 400
+        ini = max(ini, date(ano, m, 1))
+        fim = min(fim, date(ano, m, monthrange(ano, m)[1]))
+    sub = args.get('subcategoria_id', '')
+    empresa_ids = [e for e in args.getlist('empresa_ids[]') if e]
+
+    where = ['ld.data BETWEEN %s AND %s', 'ld.titulo_id = %s', 'ld.categoria_id = %s']
+    params = [ini, fim, titulo_id, categoria_id]
+    if sub:
+        where.append('ld.subcategoria_id = %s')
+        params.append(int(sub))
+    if empresa_ids:
+        where.append('ld.cliente_id IN (%s)' % ','.join(['%s'] * len(empresa_ids)))
+        params.extend(empresa_ids)
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("""
+            SELECT ld.id, ld.data, ld.valor, ld.fornecedor, ld.observacao,
+                   s.nome AS subcategoria, cl.razao_social AS empresa,
+                   ba.apelido AS banco, bt.descricao AS banco_texto
+              FROM lancamentos_despesas ld
+              LEFT JOIN subcategorias_despesas s ON s.id = ld.subcategoria_id
+              LEFT JOIN clientes cl ON cl.id = ld.cliente_id
+              LEFT JOIN bank_transactions bt ON bt.id = ld.bank_transaction_id
+              LEFT JOIN bank_accounts ba ON ba.id = bt.account_id
+             WHERE """ + ' AND '.join(where) + """
+             ORDER BY ld.data, ld.id
+        """, params)
+        linhas = [{
+            'id': r['id'],
+            'data': r['data'].strftime('%d/%m/%Y') if r['data'] else '',
+            'valor': float(r['valor'] or 0),
+            'fornecedor': r['fornecedor'] or '',
+            'observacao': r['observacao'] or '',
+            'subcategoria': r['subcategoria'] or '',
+            'empresa': r['empresa'] or '',
+            'banco': r['banco'] or '',
+            'banco_texto': r['banco_texto'] or '',
+        } for r in cur.fetchall()]
+        cur.close()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'lancamentos': linhas,
+                    'total': round(sum(l['valor'] for l in linhas), 2)})

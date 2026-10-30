@@ -399,6 +399,11 @@ def editar(id):
     """Edit lancamento"""
     conn = None
     cursor = None
+    # `next`: de onde a pessoa veio (ex.: a Conferencia de Despesas). So
+    # caminho interno, pra nao virar redirecionamento para fora do site.
+    nxt = request.args.get('next') or ''
+    if not nxt.startswith('/') or nxt.startswith('//'):
+        nxt = ''
     
     if request.method == 'POST':
         try:
@@ -418,7 +423,7 @@ def editar(id):
             if not is_valid:
                 for error in errors:
                     flash(error, 'danger')
-                return redirect(url_for('lancamentos_despesas.editar', id=id))
+                return redirect(url_for('lancamentos_despesas.editar', id=id, next=nxt or None))
             
             # Parse valor
             valor_decimal = parse_brazilian_currency(valor)
@@ -447,13 +452,13 @@ def editar(id):
             conn.commit()
             
             flash('Lançamento atualizado com sucesso!', 'success')
-            return redirect(url_for('lancamentos_despesas.lista'))
+            return redirect(nxt or url_for('lancamentos_despesas.lista'))
             
         except Exception as e:
             if conn:
                 conn.rollback()
             flash(f'Erro ao atualizar lançamento: {str(e)}', 'danger')
-            return redirect(url_for('lancamentos_despesas.editar', id=id))
+            return redirect(url_for('lancamentos_despesas.editar', id=id, next=nxt or None))
         finally:
             if cursor:
                 cursor.close()
@@ -520,7 +525,8 @@ def editar(id):
                              clientes=clientes,
                              titulos=titulos,
                              categorias=categorias,
-                             subcategorias=subcategorias)
+                             subcategorias=subcategorias,
+                             voltar=nxt)
     except Exception as e:
         flash(f'Erro ao carregar lançamento: {str(e)}', 'danger')
         return redirect(url_for('lancamentos_despesas.lista'))

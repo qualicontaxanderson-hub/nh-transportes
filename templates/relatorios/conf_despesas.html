@@ -292,11 +292,15 @@
           <td class="col-desc ps-3">{{ row.categoria_nome }}</td>
           {% for m in months %}
             {% set v = row.by_month.get(m.key, 0) %}
-            <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+            <td class="text-end {% if v == 0 %}val-zero{% elif row.drill %}cel-drill{% endif %}"
+                {% if row.drill and v != 0 %}data-tit="{{ block.titulo_id }}" data-cat="{{ row.categoria_id }}"
+                data-mes="{{ m.key }}" data-v="{{ v }}" data-nome="{{ row.categoria_nome }} · {{ m.label }}"{% endif %}>
               {% if v != 0 %}{{ v | formatar_moeda }}{% else %}—{% endif %}
             </td>
           {% endfor %}
-          <td class="text-end col-acum">{{ row.total | formatar_moeda }}</td>
+          <td class="text-end col-acum {% if row.drill %}cel-drill{% endif %}"
+              {% if row.drill %}data-tit="{{ block.titulo_id }}" data-cat="{{ row.categoria_id }}"
+              data-mes="" data-v="{{ row.total }}" data-nome="{{ row.categoria_nome }} · período"{% endif %}>{{ row.total | formatar_moeda }}</td>
         </tr>
         {# Sub-category rows (if any) #}
         {% for sc in row.subcats %}
@@ -338,7 +342,10 @@
             <td class="col-desc" style="padding-left:2.2rem;">↳ {{ sc.subcat_nome }}</td>
             {% for m in months %}
               {% set v = sc.by_month.get(m.key, 0) %}
-              <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+              <td class="text-end {% if v == 0 %}val-zero{% elif sc.drill %}cel-drill{% endif %}"
+                  {% if sc.drill and v != 0 %}data-tit="{{ block.titulo_id }}" data-cat="{{ row.categoria_id }}"
+                  data-sub="{{ sc.subcat_id }}" data-mes="{{ m.key }}" data-v="{{ v }}"
+                  data-nome="{{ row.categoria_nome }} › {{ sc.subcat_nome }} · {{ m.label }}"{% endif %}>
                 {% if sc.is_litros %}
                   {% if v != 0 %}{{ v | fmtnum(0) }} L{% else %}—{% endif %}
                 {% else %}
@@ -420,9 +427,106 @@
   {% endif %}
 
 </div>
+{# ── gaveta: os lançamentos de uma célula ── #}
+<div class="modal fade" id="cdModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title fw-bold" id="cdTitulo"></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body p-2" id="cdCorpo"></div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
+<style>
+td.cel-drill { cursor: pointer; }
+td.cel-drill:hover { background: #e8f0fb !important; text-decoration: underline; }
+#cdCorpo table { width: 100%; font-size: .8rem; border-collapse: collapse; }
+#cdCorpo th { color: #6b7684; font-weight: 700; padding: .35rem .4rem; border-bottom: 1px solid #dee3ea; }
+#cdCorpo td { padding: .4rem; border-top: 1px dashed #eef1f5; vertical-align: top; }
+#cdCorpo tr.cd-l { cursor: pointer; }
+#cdCorpo tr.cd-l:hover { background: #f3f7fc; }
+#cdCorpo small { color: #6b7684; }
+</style>
+<script>
+(function () {
+  var EMP = {{ empresa_ids | tojson }};
+  var INI = {{ data_inicio | tojson }}, FIM = {{ data_fim | tojson }};
+  var modal = null;
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function brl(v) { return Number(v || 0).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}); }
+  function mostra(tit, html) {
+    document.getElementById('cdTitulo').innerHTML = tit;
+    document.getElementById('cdCorpo').innerHTML = html;
+    if (!modal) modal = new bootstrap.Modal(document.getElementById('cdModal'));
+    modal.show();
+  }
+  document.querySelectorAll('td.cel-drill[data-cat]').forEach(function (td) {
+    td.addEventListener('click', function () {
+      var nome = td.getAttribute('data-nome');
+      var cel = Number(td.getAttribute('data-v'));
+      var q = new URLSearchParams();
+      q.set('data_inicio', INI); q.set('data_fim', FIM);
+      q.set('titulo_id', td.getAttribute('data-tit'));
+      q.set('categoria_id', td.getAttribute('data-cat'));
+      q.set('mes', td.getAttribute('data-mes') || '');
+      if (td.getAttribute('data-sub')) q.set('subcategoria_id', td.getAttribute('data-sub'));
+      EMP.forEach(function (e) { q.append('empresa_ids[]', e); });
+      mostra(esc(nome), '<div class="p-3 text-muted">carregando...</div>');
+      fetch('{{ url_for("conf_despesas.conf_despesas_lancamentos") }}?' + q.toString(),
+            {credentials: 'same-origin'})
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d || !d.ok) throw new Error((d && d.erro) || 'falhou');
+          // volta para ESTA tela, com os mesmos filtros, depois de salvar
+          var volta = encodeURIComponent(location.pathname + location.search);
+          var h = '';
+          if (!d.lancamentos.length) {
+            h = '<div class="p-3 text-muted">Nenhum lançamento de despesa nessa célula.</div>';
+          } else {
+            h = '<table><thead><tr><th>Data</th><th>Fornecedor / observação</th>'
+              + '<th>Empresa</th><th class="text-end">Valor</th><th></th></tr></thead><tbody>';
+            d.lancamentos.forEach(function (l) {
+              var obs = (l.observacao && l.observacao !== l.fornecedor) ? '<br><small>' + esc(l.observacao) + '</small>' : '';
+              var sub = l.subcategoria ? '<br><small>↳ ' + esc(l.subcategoria) + '</small>' : '';
+              var bco = l.banco ? '<br><small><i class="bi bi-bank"></i> ' + esc(l.banco) + '</small>' : '';
+              var url = '/lancamentos_despesas/editar/' + l.id + '?next=' + volta;
+              h += '<tr class="cd-l" onclick="location.href=\'' + url + '\'">'
+                 + '<td style="white-space:nowrap">' + esc(l.data) + '</td>'
+                 + '<td><b>' + esc(l.fornecedor || '—') + '</b>' + obs + sub + bco + '</td>'
+                 + '<td><small>' + esc(l.empresa) + '</small></td>'
+                 + '<td class="text-end fw-bold" style="white-space:nowrap">' + brl(l.valor) + '</td>'
+                 + '<td class="text-end"><a class="btn btn-sm btn-outline-primary py-0" href="' + url + '">'
+                 + '<i class="bi bi-pencil"></i> Editar</a></td></tr>';
+            });
+            h += '</tbody></table>'
+               + '<div class="text-end fw-bold mt-2 me-1">Total: ' + brl(d.total)
+               + ' · ' + d.lancamentos.length + ' lançamento(s)</div>';
+          }
+          // a célula pode ter valor que não é lançamento (aluguel do caixa,
+          // frete, folha); avisa em vez de deixar a diferença sem explicação
+          var dif = Math.round((cel - d.total) * 100) / 100;
+          if (Math.abs(dif) >= 0.01) {
+            h += '<div class="alert alert-warning py-1 px-2 mt-2 mb-0 small">'
+               + brl(dif) + ' desta célula não vem de lançamento de despesa '
+               + '(caixa, fretes ou folha) e por isso não aparece na lista.</div>';
+          }
+          mostra(esc(nome), h);
+        })
+        .catch(function (e) {
+          mostra(esc(nome), '<div class="p-3 text-danger">Erro: ' + esc(e.message) + '</div>');
+        });
+    });
+  });
+})();
+</script>
 <script>
 (function () {
   const inp_ini = document.querySelector('[name="data_inicio"]');
