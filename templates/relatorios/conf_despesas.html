@@ -53,6 +53,11 @@
   letter-spacing: .04em;
 }
 .tbl-matrix thead tr th.col-desc { text-align: left; background: #343a40; }
+/* meses sempre visiveis: a caixa da tabela rola por dentro e o cabecalho
+   gruda no topo dela (sticky so funciona dentro do proprio container) */
+.tbl-scroll { max-height: calc(100vh - 70px); overflow: auto; }
+.tbl-matrix thead tr th { position: sticky; top: 0; z-index: 3; }
+.tbl-matrix thead tr th.col-desc { z-index: 4; }
 /* titulo block header */
 .row-titulo-hdr td {
   background: #1D63A5;
@@ -260,7 +265,7 @@
 
   {% else %}
   <!-- ── Matrix table ──────────────────────────────────────────────────────── -->
-  <div class="table-responsive mb-4" style="overflow-x:auto;">
+  <div class="table-responsive tbl-scroll mb-4">
     <table class="tbl-matrix">
       <!-- Column headers -->
       <thead>
