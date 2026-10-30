@@ -302,8 +302,9 @@ def gerar_placa(placa, resumo, linhas, de, ate, usuario='', logo=None,
     pinta = []
     for i, l in enumerate(linhas, start=1):
         corpo_linhas.append([
-            _data_br(l['dia']),
+            _data_br(l['dia']) + (' ' + l['hora'] if l.get('hora') else ''),
             str(l['numero'] or '—'),
+            (l.get('frentista') or '—')[:24],
             _num(l['litros'], 1),
             _moeda(l['preco']) if l['preco'] else '—',
             _moeda(l['valor']),
@@ -313,10 +314,10 @@ def gerar_placa(placa, resumo, linhas, de, ate, usuario='', logo=None,
             _num(l['km_litro'], 2) if l['km_litro'] else '—',
         ])
         if l['descartada']:
-            pinta.append(('TEXTCOLOR', (6, i), (6, i), ALERTA))
+            pinta.append(('TEXTCOLOR', (7, i), (7, i), ALERTA))
             pinta.append(('BACKGROUND', (0, i), (-1, i),
                           colors.HexColor('#fffaf2')))
-    corpo_linhas.append(['TOTAL', '', _num(litros, 1), '', _moeda(valor), '',
+    corpo_linhas.append(['TOTAL', '', '', _num(litros, 1), '', _moeda(valor), '',
                          _num(rodou), _num(resumo.get('km_litro'), 2)
                          if resumo.get('km_litro') else ''])
     pinta.extend([
@@ -325,13 +326,14 @@ def gerar_placa(placa, resumo, linhas, de, ate, usuario='', logo=None,
         ('LINEABOVE', (0, -1), (-1, -1), 0.8, LINHA),
     ])
 
-    larg = [22 * mm, 20 * mm, 20 * mm, 20 * mm, 28 * mm, 26 * mm, 24 * mm,
-            UTIL - 22 * mm - 20 * mm - 20 * mm - 20 * mm - 28 * mm - 26 * mm - 24 * mm]
+    larg = [26 * mm, 13 * mm, 36 * mm, 16 * mm, 13 * mm, 21 * mm, 21 * mm, 17 * mm,
+            UTIL - 26 * mm - 13 * mm - 36 * mm - 16 * mm - 13 * mm - 21 * mm - 21 * mm - 17 * mm]
     corpo.append(_tabela(
-        ['DATA', 'NOTA', 'LITROS', 'R$/L', 'VALOR', 'HODÔMETRO', 'RODOU',
-         'KM/L'],
+        ['DATA', 'CUPOM', 'FRENTISTA', 'LITROS', 'R$/L', 'VALOR', 'HODÔMETRO',
+         'RODOU', 'KM/L'],
         corpo_linhas, larg,
-        ['LEFT', 'LEFT', 'RIGHT', 'RIGHT', 'RIGHT', 'RIGHT', 'RIGHT', 'RIGHT'],
+        ['LEFT', 'LEFT', 'LEFT', 'RIGHT', 'RIGHT', 'RIGHT', 'RIGHT', 'RIGHT',
+         'RIGHT'],
         pinta))
     corpo.append(Spacer(1, 3 * mm))
     if descartadas:

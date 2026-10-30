@@ -505,6 +505,9 @@ body > .container-fluid:has(#prz){
              href="{{ url_for('prazo.placa_pdf', placa=p.placa,
                               de=de.isoformat(), ate=ate.isoformat()) }}">
             <i class="bi bi-file-earmark-pdf"></i> PDF desta placa</a>
+          <button type="button" class="bt" data-placa="{{ p.placa }}"
+                  onclick="event.stopPropagation(); przCupons(this)">
+            <i class="bi bi-receipt"></i> Cupons</button>
           <span class="dir" style="color:var(--muted);font-weight:700">
             {{ p.pct }}% do custo do período</span>
         </div>
@@ -934,6 +937,59 @@ function przVincula(botao){
       alert('Não deu pra salvar: ' + e.message);
     });
   };
+}
+
+// ─── os cupons de uma placa, com quem abasteceu ───────────────────────
+function przCupons(botao){
+  var placa = botao.getAttribute('data-placa');
+  var tit = 'Cupons · ' + przEscapa(placa);
+  przMostra(tit, '<div style="padding:1rem;color:#6b7684">carregando...</div>');
+
+  fetch('/prazo/cupons?placa=' + encodeURIComponent(placa)
+        + '&de=' + PRZ_DE + '&ate=' + PRZ_ATE, {credentials: 'same-origin'})
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (!d || !d.ok) throw new Error((d && d.erro) || 'falhou');
+    if (!d.cupons.length){
+      przMostra(tit, '<div style="padding:1rem;color:#6b7684">Nenhum cupom no período.</div>');
+      return;
+    }
+    var th = 'padding:.3rem;color:#6b7684', td = 'padding:.3rem';
+    var h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.76rem">'
+          + '<thead><tr>'
+          + '<th style="text-align:left;' + th + '">Data</th>'
+          + '<th style="text-align:left;' + th + '">Cupom</th>'
+          + '<th style="text-align:left;' + th + '">Frentista</th>'
+          + '<th style="text-align:right;' + th + '">Litros</th>'
+          + '<th style="text-align:right;' + th + '">Valor</th>'
+          + '<th style="text-align:right;' + th + '">Km</th>'
+          + '</tr></thead><tbody>';
+    // o mais novo primeiro, como nas outras listas
+    for (var i = d.cupons.length - 1; i >= 0; i--){
+      var n = d.cupons[i];
+      h += '<tr style="border-top:1px dashed #f2f5f8">'
+         + '<td style="' + td + ';white-space:nowrap">' + przEscapa(n.dia.slice(0, 5))
+         + ' <small style="color:#6b7684">' + przEscapa(n.hora) + '</small></td>'
+         + '<td style="' + td + '">' + przEscapa(n.numero) + '</td>'
+         + '<td style="' + td + ';font-weight:700">' + przEscapa(n.frentista || '—') + '</td>'
+         + '<td style="' + td + ';text-align:right">'
+         + n.litros.toLocaleString('pt-BR', {maximumFractionDigits: 1}) + '</td>'
+         + '<td style="' + td + ';text-align:right;font-weight:800;white-space:nowrap">'
+         + n.valor.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}) + '</td>'
+         + '<td style="' + td + ';text-align:right">'
+         + (n.km ? n.km.toLocaleString('pt-BR') : '—') + '</td></tr>';
+    }
+    h += '</tbody></table></div>'
+       + '<div style="margin-top:.7rem;font-weight:800;text-align:right">Total: '
+       + d.total.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})
+       + ' · ' + d.cupons.length + ' cupom(ns)</div>'
+       + '<div style="margin-top:.9rem"><button type="button" class="bt" onclick="przFecha()">Fechar</button></div>';
+    przMostra(tit, h);
+  })
+  .catch(function(e){
+    przMostra(tit, '<div style="padding:1rem;color:#a32d2d">Erro: '
+      + przEscapa(e.message) + '</div>');
+  });
 }
 
 // ─── as notas de um cliente ───────────────────────────────────────────

@@ -462,7 +462,7 @@ def _frota_detalhe(cur, placa, de, ate):
     placa = re.sub(r'[^A-Z0-9]', '', (placa or '').upper())
     cur.execute("""
         SELECT v.id, DATE(v.dh_emissao) AS dia, v.dh_emissao, v.numero,
-               v.cliente_nome, v.cliente_doc, v.km, v.valor_total,
+               v.cliente_nome, v.cliente_doc, v.km, v.valor_total, v.vendedor_raw,
                (SELECT SUM(i.quantidade) FROM vendas_xml_itens i
                  WHERE i.venda_id = v.id AND i.eh_combustivel = 1) AS litros
           FROM vendas_xml v
@@ -489,7 +489,10 @@ def _frota_detalhe(cur, placa, de, ate):
                 descartada = True
         linhas.append({
             'dia': r['dia'],
+            'hora': r['dh_emissao'].strftime('%H:%M') if r['dh_emissao'] else '',
             'numero': r['numero'],
+            # quem abasteceu = o vendedor do cupom (o frentista logado no PDV)
+            'frentista': ' '.join((r['vendedor_raw'] or '').split()).title(),
             'litros': litros,
             'valor': _f(r['valor_total']),
             'preco': round(_f(r['valor_total']) / litros, 3) if litros else None,
@@ -754,6 +757,37 @@ def notas():
                         'total': round(sum(x['valor'] for x in linhas), 2)})
     except Exception as exc:
         logging.getLogger(__name__).exception('[prazo] falha listando notas de %s', doc)
+        return jsonify({'ok': False, 'erro': str(exc)}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@bp.route('/prazo/cupons', methods=['GET'])
+@login_required
+def cupons():
+    """Os cupons de uma placa no periodo, com quem abasteceu — a gaveta da Frota."""
+    de, ate = _periodo_da_url()
+    placa = re.sub(r'[^A-Z0-9]', '', (request.args.get('placa') or '').upper())
+    if not placa:
+        return jsonify({'ok': False, 'erro': 'sem placa'}), 400
+    conn = cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        linhas = _frota_detalhe(cur, placa, de, ate)
+        saida = [{
+            'dia': l['dia'].strftime('%d/%m/%Y') if l['dia'] else '',
+            'hora': l['hora'], 'numero': l['numero'], 'frentista': l['frentista'],
+            'litros': l['litros'], 'valor': l['valor'], 'km': l['km'] or 0,
+            'km_litro': l['km_litro'], 'descartada': l['descartada'],
+        } for l in linhas]
+        return jsonify({'ok': True, 'cupons': saida,
+                        'total': round(sum(x['valor'] for x in saida), 2)})
+    except Exception as exc:
+        logging.getLogger(__name__).exception('[prazo] falha listando cupons de %s', placa)
         return jsonify({'ok': False, 'erro': str(exc)}), 500
     finally:
         if cur:
