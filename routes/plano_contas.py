@@ -2,7 +2,7 @@ import logging
 import re
 import unicodedata
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required
 
 from utils.db import get_db_connection
@@ -152,6 +152,36 @@ def _ensure_tables():
                 "ALTER TABLE plano_contas_contas "
                 "ADD COLUMN tipo_grupo VARCHAR(30) NOT NULL DEFAULT 'OUTROS' "
                 "COMMENT 'Classificação: ATIVO, PASSIVO, RECEITAS, DESPESAS, CUSTOS, OUTROS'"
+            )
+            conn.commit()
+
+        # 6. Contas-título (sintéticas) — só organizam a tela em cards; ficam
+        #    fora de plano_contas_contas para não aparecerem como opção de
+        #    lançamento nas outras telas.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS plano_contas_titulos (
+                id            INT AUTO_INCREMENT PRIMARY KEY,
+                grupo_id      INT          NOT NULL,
+                classificacao VARCHAR(30)  NOT NULL,
+                nome          VARCHAR(120) NOT NULL,
+                UNIQUE KEY uq_pct (grupo_id, classificacao),
+                CONSTRAINT fk_pct_grupo FOREIGN KEY (grupo_id)
+                    REFERENCES plano_contas_grupos(id) ON DELETE CASCADE
+            ) COMMENT='Contas-título (sintéticas) do plano: só organizam a tela, não recebem lançamento'
+        """)
+        conn.commit()
+
+        # 7. Classificação do contador na conta (ex.: 1-1-01-02-02)
+        cursor.execute("""
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME   = 'plano_contas_contas'
+              AND COLUMN_NAME  = 'classificacao'
+        """)
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(
+                "ALTER TABLE plano_contas_contas ADD COLUMN classificacao VARCHAR(30) NULL "
+                "COMMENT 'Classificação do contador, ex.: 1-1-01-02-02'"
             )
             conn.commit()
 
@@ -362,6 +392,100 @@ def clonar(id):
 
 # ─── Grupo: detalhe (contas) ─────────────────────────────────────────────────
 
+# Onde uma conta do plano pode estar ligada. (tabela, coluna, como descrever)
+# Conta ligada em qualquer um destes lugares está "em uso": não sai pela tela.
+_USOS = [
+    ("categoria_despesa_contas", "conta_contabil_id",
+     """SELECT CONCAT('Categoria de despesa ', c.nome, ' (', COALESCE(cl.nome_fantasia, cl.razao_social), ')')
+          FROM categoria_despesa_contas x JOIN categorias_despesas c ON c.id = x.categoria_id
+          LEFT JOIN clientes cl ON cl.id = x.cliente_id WHERE x.conta_contabil_id = %s"""),
+    ("categorias_despesas", "conta_contabil_id",
+     "SELECT CONCAT('Categoria de despesa ', nome) FROM categorias_despesas WHERE conta_contabil_id = %s"),
+    ("fornecedor_empresas", "conta_contabil_id",
+     """SELECT CONCAT('Fornecedor ', f.razao_social, ' (', COALESCE(cl.nome_fantasia, cl.razao_social), ')')
+          FROM fornecedor_empresas x JOIN fornecedores f ON f.id = x.fornecedor_id
+          LEFT JOIN clientes cl ON cl.id = x.cliente_id WHERE x.conta_contabil_id = %s"""),
+    ("formas_recebimento", "conta_contabil_id",
+     "SELECT CONCAT('Forma de recebimento ', nome) FROM formas_recebimento WHERE conta_contabil_id = %s"),
+    ("formas_recebimento_empresas", "conta_contabil_id",
+     """SELECT CONCAT('Forma de recebimento ', f.nome, ' (', COALESCE(cl.nome_fantasia, cl.razao_social), ')')
+          FROM formas_recebimento_empresas x JOIN formas_recebimento f ON f.id = x.forma_recebimento_id
+          LEFT JOIN clientes cl ON cl.id = x.cliente_id WHERE x.conta_contabil_id = %s"""),
+    ("produto", "conta_contabil_id",
+     "SELECT CONCAT('Produto ', nome) FROM produto WHERE conta_contabil_id = %s"),
+    ("produto_empresas", "conta_contabil_id",
+     """SELECT CONCAT('Produto ', p.nome, ' (', COALESCE(cl.nome_fantasia, cl.razao_social), ')')
+          FROM produto_empresas x JOIN produto p ON p.id = x.produto_id
+          LEFT JOIN clientes cl ON cl.id = x.cliente_id WHERE x.conta_contabil_id = %s"""),
+    ("bank_accounts", "plano_contas_conta_id",
+     "SELECT CONCAT('Conta bancária ', apelido) FROM bank_accounts WHERE plano_contas_conta_id = %s"),
+    ("bank_accounts", "conta_coligada_debito_id",
+     "SELECT CONCAT('Coligada (débito) da conta ', apelido) FROM bank_accounts WHERE conta_coligada_debito_id = %s"),
+    ("bank_accounts", "conta_coligada_credito_id",
+     "SELECT CONCAT('Coligada (crédito) da conta ', apelido) FROM bank_accounts WHERE conta_coligada_credito_id = %s"),
+    ("bank_account_coligadas", "conta_debito_id",
+     """SELECT CONCAT('Coligada (débito) da conta ', b.apelido) FROM bank_account_coligadas x
+          JOIN bank_accounts b ON b.id = x.bank_account_id WHERE x.conta_debito_id = %s"""),
+    ("bank_account_coligadas", "conta_credito_id",
+     """SELECT CONCAT('Coligada (crédito) da conta ', b.apelido) FROM bank_account_coligadas x
+          JOIN bank_accounts b ON b.id = x.bank_account_id WHERE x.conta_credito_id = %s"""),
+]
+
+
+def _ids_em_uso(cursor):
+    """Ids de plano_contas_contas ligados em algum lugar (_USOS). Tabela que
+    não existe neste banco é pulada."""
+    ids = set()
+    for tabela, coluna, _ in _USOS:
+        try:
+            cursor.execute(f"SELECT DISTINCT {coluna} FROM {tabela} WHERE {coluna} IS NOT NULL")
+            ids.update(r[0] if not isinstance(r, dict) else r[coluna] for r in cursor.fetchall())
+        except Exception:
+            logging.getLogger(__name__).debug('_ids_em_uso: %s.%s indisponível', tabela, coluna, exc_info=True)
+    return ids
+
+
+def _onde_usada(cursor, conta_id):
+    saida = []
+    for tabela, coluna, sql in _USOS:
+        try:
+            cursor.execute(sql, (conta_id,))
+            saida += [list(r.values())[0] if isinstance(r, dict) else r[0] for r in cursor.fetchall()]
+        except Exception:
+            logging.getLogger(__name__).debug('_onde_usada: %s.%s indisponível', tabela, coluna, exc_info=True)
+    return saida
+
+
+_ORDEM_TIPOS = ['ATIVO', 'PASSIVO', 'RECEITAS', 'CUSTOS', 'DESPESAS', 'OUTROS']
+
+
+def _cards(contas, titulos, em_uso):
+    """Agrupa as contas em cards pelo título de 4º nível da classificação
+    (1-1-01-02 = Banco Conta Movimento); o de 3º nível vai em cima, menor.
+    Conta sem classificação cai num card "Outras contas" do seu tipo."""
+    cards = {}
+    for c in contas:
+        c['em_uso'] = c['id'] in em_uso
+        cls = (c.get('classificacao') or '').split('-')
+        tipo = c.get('tipo_grupo') or 'OUTROS'
+        if len(cls) >= 5:
+            chave = '-'.join(cls[:4])
+            card = cards.setdefault(chave, {
+                'chave': chave, 'tipo': tipo,
+                'titulo': titulos.get(chave) or chave,
+                'acima': titulos.get('-'.join(cls[:3]), ''),
+                'contas': []})
+        else:
+            card = cards.setdefault('~' + tipo, {
+                'chave': '~' + tipo, 'tipo': tipo, 'titulo': 'Outras contas',
+                'acima': 'Sem classificação', 'contas': []})
+        card['contas'].append(c)
+    for card in cards.values():
+        card['contas'].sort(key=lambda c: (c.get('classificacao') or '', c['codigo']))
+    return sorted(cards.values(), key=lambda k: (_ORDEM_TIPOS.index(k['tipo']) if k['tipo'] in _ORDEM_TIPOS else 99,
+                                                 k['chave']))
+
+
 @bp.route('/<int:id>/contas')
 @login_required
 @admin_required
@@ -369,44 +493,140 @@ def detalhe(id):
     _ensure_tables()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM plano_contas_grupos WHERE id = %s", (id,))
-    grupo = cursor.fetchone()
-    if not grupo:
+    try:
+        cursor.execute("SELECT * FROM plano_contas_grupos WHERE id = %s", (id,))
+        grupo = cursor.fetchone()
+        if not grupo:
+            flash('Grupo não encontrado.', 'danger')
+            return redirect(url_for('plano_contas.lista'))
+        cursor.execute("SELECT * FROM plano_contas_contas WHERE grupo_id = %s ORDER BY codigo", (id,))
+        contas = cursor.fetchall()
+        cursor.execute("SELECT classificacao, nome FROM plano_contas_titulos WHERE grupo_id = %s", (id,))
+        titulos = {r['classificacao']: r['nome'] for r in cursor.fetchall()}
+        em_uso = _ids_em_uso(cursor)
+        cursor.execute("SELECT id, codigo, nome FROM plano_contas_grupos WHERE ativo = 1 ORDER BY codigo")
+        grupos = cursor.fetchall()
+        cursor.execute("""SELECT COALESCE(nome_fantasia, razao_social) AS nome FROM clientes
+                           WHERE grupo_contabil_id = %s ORDER BY id""", (id,))
+        empresas = [r['nome'] for r in cursor.fetchall()]
+    finally:
         cursor.close()
         conn.close()
-        flash('Grupo não encontrado.', 'danger')
-        return redirect(url_for('plano_contas.lista'))
 
-    _ORDEM_TIPOS = ['ATIVO', 'PASSIVO', 'RECEITAS', 'CUSTOS', 'DESPESAS', 'OUTROS']
-
-    cursor.execute(
-        """SELECT * FROM plano_contas_contas
-           WHERE grupo_id = %s
-           ORDER BY tipo_grupo, codigo""",
-        (id,),
-    )
-    contas = cursor.fetchall()
-    cursor.close()
-    conn.close()
-
-    # Organiza em dicionário ordenado por tipo
-    from collections import OrderedDict
-    contas_por_tipo = OrderedDict()
-    for tipo in _ORDEM_TIPOS:
-        contas_por_tipo[tipo] = []
+    cards = _cards(contas, titulos, em_uso)
+    por_tipo = {t: 0 for t in _ORDEM_TIPOS}
     for c in contas:
-        tipo = c.get('tipo_grupo') or 'OUTROS'
-        if tipo not in contas_por_tipo:
-            contas_por_tipo[tipo] = []
-        contas_por_tipo[tipo].append(c)
-    # Remove tipos sem contas
-    contas_por_tipo = OrderedDict(
-        (k, v) for k, v in contas_por_tipo.items() if v
-    )
-
+        por_tipo[c.get('tipo_grupo') or 'OUTROS'] = por_tipo.get(c.get('tipo_grupo') or 'OUTROS', 0) + 1
+    # "Fica dentro de": os títulos de 4º nível, para a gaveta de nova conta/editar
+    pais = sorted(((k, v, titulos.get('-'.join(k.split('-')[:3]), '')) for k, v in titulos.items()
+                   if k.count('-') == 3), key=lambda x: x[0])
     return render_template('plano_contas/detalhe.html',
-                           grupo=grupo, contas=contas,
-                           contas_por_tipo=contas_por_tipo)
+                           grupo=grupo, grupos=grupos, empresas=empresas, contas=contas,
+                           cards=cards, por_tipo=por_tipo, ordem_tipos=_ORDEM_TIPOS, pais=pais,
+                           n_em_uso=sum(1 for c in contas if c['em_uso']))
+
+
+@bp.route('/contas/<int:conta_id>/uso')
+@login_required
+@admin_required
+def uso_conta(conta_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        return jsonify(ok=True, usos=_onde_usada(cursor, conta_id))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@bp.route('/<int:grupo_id>/contas/salvar', methods=['POST'])
+@login_required
+@admin_required
+def salvar_conta(grupo_id):
+    """Nova conta ou edição, pela gaveta da tela (JSON). Mesmas regras de
+    nova_conta/editar_conta: código só dígitos e ponto, único no grupo."""
+    d = request.get_json(silent=True) or {}
+    conta_id = d.get('id') or None
+    codigo = (d.get('codigo') or '').strip()
+    nome = (d.get('nome') or '').strip()
+    descricao = (d.get('descricao') or '').strip() or None
+    tipo_grupo = (d.get('tipo_grupo') or 'OUTROS').strip().upper()
+    pai = (d.get('pai') or '').strip()
+    ativo = 0 if d.get('ativo') is False else 1
+    if not codigo or not nome:
+        return jsonify(ok=False, erro='Código e nome são obrigatórios.'), 400
+    if not _validar_codigo_conta(codigo):
+        return jsonify(ok=False, erro='Código inválido — use só dígitos e ponto (ex.: 11220).'), 400
+    if tipo_grupo not in _ORDEM_TIPOS:
+        return jsonify(ok=False, erro='Tipo inválido.'), 400
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        if conta_id:
+            cursor.execute("SELECT * FROM plano_contas_contas WHERE id = %s AND grupo_id = %s", (conta_id, grupo_id))
+            atual = cursor.fetchone()
+            if not atual:
+                return jsonify(ok=False, erro='Conta não encontrada.'), 404
+        if _codigo_conta_duplicado(cursor, grupo_id, codigo, excluir_id=conta_id):
+            return jsonify(ok=False, erro=f'Já existe uma conta com o código {codigo} neste plano.'), 400
+        # Classificação: mudou o "fica dentro de" (ou é nova) -> próximo número sob o título
+        classificacao = atual['classificacao'] if conta_id else None
+        if pai and (not classificacao or not classificacao.startswith(pai + '-')):
+            cursor.execute("SELECT classificacao FROM plano_contas_contas WHERE grupo_id = %s AND classificacao LIKE %s",
+                           (grupo_id, pai + '-%'))
+            seq = [int(r['classificacao'].rsplit('-', 1)[1]) for r in cursor.fetchall()
+                   if r['classificacao'].rsplit('-', 1)[1].isdigit()]
+            classificacao = f"{pai}-{(max(seq) + 1 if seq else 1):02d}"
+        if conta_id:
+            cursor.execute("""UPDATE plano_contas_contas
+                                 SET codigo=%s, nome=%s, descricao=%s, tipo_grupo=%s, ativo=%s, classificacao=%s
+                               WHERE id=%s""",
+                           (codigo, nome, descricao, tipo_grupo, ativo, classificacao, conta_id))
+        else:
+            cursor.execute("""INSERT INTO plano_contas_contas (grupo_id, codigo, nome, descricao, tipo_grupo, classificacao)
+                              VALUES (%s, %s, %s, %s, %s, %s)""",
+                           (grupo_id, codigo, nome, descricao, tipo_grupo, classificacao))
+            conta_id = cursor.lastrowid
+        conn.commit()
+        return jsonify(ok=True, id=conta_id)
+    except Exception as e:
+        conn.rollback()
+        logging.getLogger(__name__).exception('salvar_conta')
+        return jsonify(ok=False, erro=f'Erro ao salvar: {e}'), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@bp.route('/<int:grupo_id>/contas/excluir-lote', methods=['POST'])
+@login_required
+@admin_required
+def excluir_lote(grupo_id):
+    """Exclui (de verdade) as contas marcadas que NÃO estão em uso. A trava
+    é conferida aqui de novo — a tela só ajuda."""
+    ids = [int(i) for i in (request.get_json(silent=True) or {}).get('ids', []) if str(i).isdigit()]
+    if not ids:
+        return jsonify(ok=False, erro='Nenhuma conta marcada.'), 400
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        em_uso = _ids_em_uso(cursor)
+        livres = [i for i in ids if i not in em_uso]
+        n = 0
+        if livres:
+            ph = ','.join(['%s'] * len(livres))
+            cursor.execute(f"DELETE FROM plano_contas_contas WHERE grupo_id = %s AND id IN ({ph})",
+                           [grupo_id] + livres)
+            n = cursor.rowcount
+            conn.commit()
+        return jsonify(ok=True, excluidas=n, bloqueadas=len(ids) - len(livres))
+    except Exception as e:
+        conn.rollback()
+        logging.getLogger(__name__).exception('excluir_lote')
+        return jsonify(ok=False, erro=f'Erro ao excluir: {e}'), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 
 # ─── Conta: nova / editar / excluir ─────────────────────────────────────────
@@ -563,6 +783,9 @@ def excluir_conta(conta_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
+        if conta_id in _ids_em_uso(cursor):
+            flash('Esta conta está em uso (categoria, fornecedor, banco...) e não pode ser excluída.', 'warning')
+            return redirect(url_for('plano_contas.detalhe', id=grupo_id))
         cursor.execute("DELETE FROM plano_contas_contas WHERE id = %s", (conta_id,))
         conn.commit()
         flash('Conta excluída com sucesso!', 'success')
