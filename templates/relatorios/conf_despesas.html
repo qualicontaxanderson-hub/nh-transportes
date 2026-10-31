@@ -123,6 +123,47 @@
   font-size: .84rem;
 }
 .row-custo-litro .col-acum { background: #b8dde4 !important; }
+/* ── visual novo (31/10/2026) ── */
+.cd-topo { background: linear-gradient(135deg, #1D63A5, #154070); color: #fff; border-radius: 14px;
+  padding: 12px 18px; display: flex; flex-wrap: wrap; gap: 12px 22px; align-items: center; margin-bottom: 10px; }
+.cd-topo h1 { margin: 0; font-size: 18px; font-weight: 700; display: flex; gap: 8px; align-items: center; }
+.cd-topo .sub { font-size: 12px; opacity: .8; }
+.cd-topo .nums { display: flex; gap: 22px; margin-left: auto; flex-wrap: wrap; }
+.cd-topo .num small { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; opacity: .75; }
+.cd-topo .num b { font-size: 17px; }
+.cd-topo .novo { background: rgba(255,255,255,.15); color: #fff; border: 1px solid rgba(255,255,255,.35);
+  border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; text-decoration: none; }
+.cd-filtros { background: #fff; border-radius: 12px; padding: 10px 14px; margin-bottom: 10px;
+  display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+.cd-filtros .lbl { font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; }
+.cd-filtros .sep { width: 1px; height: 22px; background: #e5e7eb; }
+.cd-filtros input[type=date] { border: 1px solid #e5e7eb; border-radius: 8px; padding: 3px 8px; font-size: 12px; }
+.cd-chip { border: 1px solid #e5e7eb; background: #fff; border-radius: 99px; padding: 4px 11px; font-size: 12px; color: #1f2937; }
+.cd-chip.on { background: #1D63A5; border-color: #1D63A5; color: #fff; }
+.cd-chip:hover:not(.on) { background: #f3f6fb; }
+
+.tbl-scroll { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.tbl-matrix { font-size: .76rem; border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
+.tbl-matrix th, .tbl-matrix td { border: 0; border-bottom: 1px solid #eef1f5; padding: .3rem .5rem; }
+.tbl-matrix thead tr th { background: #273449; color: #e5e7eb; font-weight: 600; letter-spacing: .05em; }
+.tbl-matrix thead tr th.col-desc { background: #273449; }
+.tbl-matrix thead tr th.col-acum { background: #a16207 !important; color: #fff; }
+.tbl-matrix td.col-desc { background: inherit; }
+.row-titulo-hdr td { background: #e8f0fa; color: #154070; border-top: 2px solid #1D63A5; font-size: .76rem; }
+.row-titulo-hdr td.col-desc { background: #e8f0fa; }
+.row-cat td { font-weight: 600; }
+.row-cat td.col-desc, .row-subcat td.col-desc, .row-mot td.col-desc, .row-mot-leaf td.col-desc { background: #fff; }
+.row-subcat td { background: #f9fafb; color: #4b5563; }
+.row-subcat td.col-desc { background: #f9fafb; padding-left: 2rem !important; }
+.row-block-total td { background: #f1f5f9; color: #0f172a; border-top: 1px solid #cbd5e1; }
+.row-block-total .col-acum { background: #fde68a !important; }
+.row-grand td { background: #154070; }
+.val-zero { color: #d1d5db; }
+.col-acum { background: #fff8e1 !important; font-weight: 700; }
+td.cel-drill { cursor: pointer; }
+td.cel-drill:hover { background: #dbeafe !important; text-decoration: underline; color: #1D63A5; }
+td.cel-sel { outline: 2px solid #1D63A5; outline-offset: -2px; background: #dbeafe !important; }
+
 </style>
 {% endblock %}
 
@@ -138,123 +179,66 @@
     </ol>
   </nav>
 
-  <!-- Hero -->
-  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mb-3">
-    <div class="hero-icon"><i class="bi bi-wallet2"></i></div>
-    <div class="flex-grow-1">
-      <h4 class="mb-0 fw-bold">Conferência de Despesas</h4>
-      <p class="mb-0 opacity-75 small">Matriz mensal por categoria — blocos por título, colunas por mês</p>
+  <!-- Topo: título e números numa faixa só -->
+  <div class="cd-topo">
+    <div>
+      <h1><i class="bi bi-wallet2"></i> Conferência de Despesas</h1>
+      <div class="sub">
+        {% if months %}{{ months[0].label }}{% if months[0].year != months[-1].year %}/{{ months[0].year }}{% endif %}
+        – {{ months[-1].label }}/{{ months[-1].year }} · {{ months | length }} mês(es){% endif %}
+        · clique num valor para ver e editar os lançamentos</div>
     </div>
-    <a href="/lancamentos_despesas/" class="btn btn-sm px-3 fw-semibold"
-       style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
-      <i class="bi bi-plus-circle me-1"></i> Novo Lançamento
-    </a>
+    <div class="nums">
+      <div class="num"><small>Total</small><b>{{ grand_total | formatar_moeda }}</b></div>
+      <div class="num"><small>Lançamentos</small><b>{{ total_lancamentos }}</b></div>
+      <div class="num"><small>Categorias</small><b>{{ blocks | map(attribute='rows') | map('length') | sum if blocks else 0 }}</b></div>
+    </div>
+    <a href="/lancamentos_despesas/" class="novo"><i class="bi bi-plus-circle me-1"></i> Novo lançamento</a>
   </div>
 
-  <!-- ── Stat cards ────────────────────────────────────────────────────────── -->
-  <div class="row g-3 mb-4">
-    <div class="col-6 col-md-3">
-      <div class="card stat-card p-3">
-        <div class="stat-label" style="color:#1D63A5;">Categorias</div>
-        <div class="stat-value" style="color:#1D63A5;">
-          {{ blocks | map(attribute='rows') | map('length') | sum if blocks else 0 }}
-        </div>
-        <div class="small text-muted mt-1">com despesas no período</div>
-      </div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="card stat-card p-3">
-        <div class="stat-label" style="color:#b45309;">Lançamentos</div>
-        <div class="stat-value" style="color:#b45309;">{{ total_lancamentos }}</div>
-        <div class="small text-muted mt-1">registros no período</div>
-      </div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="card stat-card p-3">
-        <div class="stat-label text-danger">Total Geral</div>
-        <div class="stat-value text-danger">{{ grand_total | formatar_moeda }}</div>
-        <div class="small text-muted mt-1">soma de todas as despesas</div>
-      </div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="card stat-card p-3">
-        <div class="stat-label text-muted">Período</div>
-        <div class="stat-value text-muted" style="font-size:.9rem;">
-          {% if months %}{{ months[0].label }}{% if months[0].year != months[-1].year %}/{{ months[0].year }}{% endif %}
-          – {{ months[-1].label }}/{{ months[-1].year }}{% endif %}
-        </div>
-        <div class="small text-muted mt-1">{{ months | length }} mês(es)</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Filtros ──────────────────────────────────────────────────────────── -->
-  <div class="card shadow-sm mb-4">
-    <div class="card-body">
-      <form method="get" id="form-filtros">
-        <div class="row g-3 align-items-end">
-
-          <!-- Data Início -->
-          <div class="col-6 col-md-2">
-            <label class="form-label small fw-semibold mb-1">Data Início</label>
-            <input type="date" name="data_inicio" value="{{ data_inicio }}" class="form-control form-control-sm">
-          </div>
-
-          <!-- Data Fim -->
-          <div class="col-6 col-md-2">
-            <label class="form-label small fw-semibold mb-1">Data Fim</label>
-            <input type="date" name="data_fim" value="{{ data_fim }}" class="form-control form-control-sm">
-          </div>
-
-          <!-- Empresa (multi-select) -->
-          <div class="col-12 col-md-3">
-            <label class="form-label small fw-semibold mb-1">Empresa</label>
-            <select name="empresa_ids[]" id="sel-empresas" class="form-select form-select-sm" multiple size="3">
-              {% for emp in empresas %}
-              <option value="{{ emp.id }}" {% if emp.id|string in empresa_ids %}selected{% endif %}>
-                {{ emp.nome }}
-              </option>
-              {% endfor %}
-            </select>
-            <div class="form-text">Ctrl+clique p/ múltiplos</div>
-          </div>
-
-          <!-- Título (multi-select) -->
-          <div class="col-12 col-md-3">
-            <label class="form-label small fw-semibold mb-1">Título</label>
-            <select name="titulo_ids[]" id="sel-titulos" class="form-select form-select-sm" multiple size="3">
-              {% for t in titulos %}
-              <option value="{{ t.id }}" {% if t.id|string in titulo_ids %}selected{% endif %}>
-                {{ t.nome }}
-              </option>
-              {% endfor %}
-            </select>
-            <div class="form-text">Ctrl+clique p/ múltiplos</div>
-          </div>
-
-          <!-- Botões -->
-          <div class="col-12 col-md-2 d-flex gap-2 align-items-end">
-            <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
-              <i class="bi bi-search"></i> Filtrar
-            </button>
-            <a href="{{ url_for('conf_despesas.conf_despesas') }}" class="btn btn-outline-secondary btn-sm" title="Limpar todos os filtros">
-              <i class="bi bi-x-circle me-1"></i>Limpar
-            </a>
-          </div>
-
-        </div>
-
-        <!-- Quick period buttons -->
-        <div class="mt-2 d-flex gap-1 flex-wrap">
-          <span class="text-muted small me-1 align-self-center">Período:</span>
-          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="mes_atual">Mês Atual</button>
-          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="mes_anterior">Mês Anterior</button>
-          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="ano_atual">Ano Atual</button>
-          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="ano_anterior">Ano Anterior</button>
-        </div>
-      </form>
-    </div>
-  </div>
+  <!-- ── Filtros: uma linha. Empresa e título viram botões; os selects
+       continuam no formulário (escondidos) e são eles que vão no GET. ── -->
+  <form method="get" id="form-filtros" class="cd-filtros">
+    <span class="lbl">Período</span>
+    <input type="date" name="data_inicio" value="{{ data_inicio }}" onchange="this.form.submit()">
+    <span class="text-muted small">a</span>
+    <input type="date" name="data_fim" value="{{ data_fim }}" onchange="this.form.submit()">
+    <button type="button" class="cd-chip periodo-btn" data-periodo="mes_atual">Mês atual</button>
+    <button type="button" class="cd-chip periodo-btn" data-periodo="mes_anterior">Mês anterior</button>
+    <button type="button" class="cd-chip periodo-btn" data-periodo="ano_atual">Ano atual</button>
+    <button type="button" class="cd-chip periodo-btn" data-periodo="ano_anterior">Ano anterior</button>
+    <span class="sep"></span>
+    <span class="lbl">Empresa</span>
+    <button type="button" class="cd-chip {{ 'on' if not empresa_ids }}" onclick="cdChip('sel-empresas', '')">Todas</button>
+    {% for emp in empresas %}
+    <button type="button" class="cd-chip {{ 'on' if emp.id|string in empresa_ids }}" onclick="cdChip('sel-empresas', '{{ emp.id }}')">{{ emp.nome }}</button>
+    {% endfor %}
+    <span class="sep"></span>
+    <span class="lbl">Título</span>
+    <button type="button" class="cd-chip {{ 'on' if not titulo_ids }}" onclick="cdChip('sel-titulos', '')">Todos</button>
+    {% for t in titulos %}
+    <button type="button" class="cd-chip {{ 'on' if t.id|string in titulo_ids }}" onclick="cdChip('sel-titulos', '{{ t.id }}')">{{ t.nome }}</button>
+    {% endfor %}
+    <a href="{{ url_for('conf_despesas.conf_despesas') }}" class="cd-chip text-decoration-none ms-auto" title="Limpar todos os filtros">
+      <i class="bi bi-x-circle me-1"></i>Limpar</a>
+    <select name="empresa_ids[]" id="sel-empresas" multiple hidden>
+      {% for emp in empresas %}<option value="{{ emp.id }}" {% if emp.id|string in empresa_ids %}selected{% endif %}>{{ emp.nome }}</option>{% endfor %}
+    </select>
+    <select name="titulo_ids[]" id="sel-titulos" multiple hidden>
+      {% for t in titulos %}<option value="{{ t.id }}" {% if t.id|string in titulo_ids %}selected{% endif %}>{{ t.nome }}</option>{% endfor %}
+    </select>
+  </form>
+  <script>
+  // um toque liga/desliga a empresa (ou título) e já filtra; "Todas" limpa
+  function cdChip(selId, val) {
+    var sel = document.getElementById(selId);
+    Array.prototype.forEach.call(sel.options, function (o) {
+      if (!val) o.selected = false;
+      else if (o.value === val) o.selected = !o.selected;
+    });
+    sel.form.submit();
+  }
+  </script>
 
   <!-- ── No results ────────────────────────────────────────────────────────── -->
   {% if not blocks %}
@@ -432,106 +416,209 @@
   {% endif %}
 
 </div>
-{# ── gaveta: os lançamentos de uma célula ── #}
-<div class="modal fade" id="cdModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header py-2">
-        <h6 class="modal-title fw-bold" id="cdTitulo"></h6>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-      </div>
-      <div class="modal-body p-2" id="cdCorpo"></div>
-    </div>
+{# ── gaveta ao lado: os lançamentos de uma célula, editados ali mesmo ── #}
+<div class="cd-veu" onclick="cdFecha()"></div>
+<aside class="cd-gav" aria-label="Lançamentos" data-sem-maiuscula>
+  <div class="cd-gav__cab">
+    <div><h2 id="cdTitulo"></h2><div class="cd-gav__sub" id="cdSub"></div></div>
+    <button type="button" class="cd-gav__x" onclick="cdFecha()" aria-label="Fechar">×</button>
   </div>
-</div>
+  <div class="cd-gav__corpo" id="cdCorpo"></div>
+  <div class="cd-gav__rod" id="cdRod"></div>
+</aside>
+
 {% endblock %}
 
 {% block scripts %}
 <style>
-td.cel-drill { cursor: pointer; }
-td.cel-drill:hover { background: #e8f0fb !important; text-decoration: underline; }
-#cdCorpo table { width: 100%; font-size: .8rem; border-collapse: collapse; }
-#cdCorpo th { color: #6b7684; font-weight: 700; padding: .35rem .4rem; border-bottom: 1px solid #dee3ea; }
-#cdCorpo td { padding: .4rem; border-top: 1px dashed #eef1f5; vertical-align: top; }
-#cdCorpo tr.cd-l { cursor: pointer; }
-#cdCorpo tr.cd-l:hover { background: #f3f7fc; }
-#cdCorpo small { color: #6b7684; }
+.cd-veu { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1050; display: none; }
+.cd-gav { position: fixed; top: 0; right: 0; bottom: 0; width: 520px; max-width: 100%; background: #fff; z-index: 1051;
+  box-shadow: -8px 0 30px rgba(0,0,0,.15); display: none; flex-direction: column; font-size: 13px; color: #1f2937; }
+body.cd-aberta .cd-veu { display: block; }
+body.cd-aberta .cd-gav { display: flex; }
+.cd-gav__cab { padding: 14px 18px; border-bottom: 1px solid #e5e7eb; display: flex; gap: 10px; align-items: flex-start; }
+.cd-gav__cab h2 { margin: 0; font-size: 15px; font-weight: 700; }
+.cd-gav__sub { color: #6b7280; font-size: 12px; margin-top: 2px; }
+.cd-gav__x { margin-left: auto; border: 0; background: none; font-size: 22px; color: #6b7280; line-height: 1; }
+.cd-gav__corpo { overflow: auto; padding: 12px 18px; flex: 1; }
+.cd-gav__rod { border-top: 1px solid #e5e7eb; padding: 10px 18px; display: flex; justify-content: space-between; font-weight: 700; }
+.cd-it { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+.cd-it__l1 { display: flex; justify-content: space-between; gap: 10px; }
+.cd-it__v { font-weight: 800; font-size: 14px; white-space: nowrap; }
+.cd-it__m { color: #6b7280; font-size: 11px; margin-top: 2px; }
+.cd-it__a { text-align: right; margin-top: 6px; }
+.cd-it.ed { border: 2px solid #1D63A5; background: #f8fbff; }
+.cd-f { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 8px; }
+.cd-f label { display: block; font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; margin-bottom: 2px; }
+.cd-f input, .cd-f select, .cd-f textarea { width: 100%; border: 1px solid #d1d5db; border-radius: 7px; padding: 6px 8px; font: inherit; background: #fff; text-transform: none; }
+.cd-f .full { grid-column: 1 / -1; }
+.cd-b { border: 1px solid #e5e7eb; background: #fff; border-radius: 8px; padding: 5px 11px; font-size: 12px; }
+.cd-b.pri { background: #1D63A5; border-color: #1D63A5; color: #fff; font-weight: 600; }
+.cd-erro { background: #fef2f2; color: #991b1b; border-radius: 8px; padding: 6px 10px; font-size: 12px; margin-top: 8px; }
+.cd-aviso { background: #fffbeb; color: #92400e; border-radius: 8px; padding: 7px 10px; font-size: 12px; margin-top: 8px; }
 </style>
 <script>
 (function () {
   var EMP = {{ empresa_ids | tojson }};
   var INI = {{ data_inicio | tojson }}, FIM = {{ data_fim | tojson }};
-  var modal = null;
+  var URL_LISTA = '{{ url_for("conf_despesas.conf_despesas_lancamentos") }}';
+  var URL_OPC = '{{ url_for("conf_despesas.conf_despesas_opcoes") }}';
+  var URL_SALVA = '/relatorios/conf_despesas/lancamento/';
+  var CHAVE = 'cd-reabre';
+  var OPC = null, LISTA = [], CEL = null, tdAtual = null;
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
   function brl(v) { return Number(v || 0).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}); }
-  function mostra(tit, html) {
-    document.getElementById('cdTitulo').innerHTML = tit;
-    document.getElementById('cdCorpo').innerHTML = html;
-    if (!modal) modal = new bootstrap.Modal(document.getElementById('cdModal'));
-    modal.show();
+  function num2(v) { return Number(v || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+  function abre() { document.body.classList.add('cd-aberta'); }
+  window.cdFecha = function () {
+    document.body.classList.remove('cd-aberta');
+    if (tdAtual) tdAtual.classList.remove('cel-sel');
+  };
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') cdFecha(); });
+
+  function opcoes() {
+    if (OPC) return Promise.resolve(OPC);
+    return fetch(URL_OPC, {credentials: 'same-origin'}).then(function (r) { return r.json(); })
+      .then(function (d) { if (!d.ok) throw new Error('opções'); OPC = d; return d; });
   }
-  document.querySelectorAll('td.cel-drill[data-cat]').forEach(function (td) {
-    td.addEventListener('click', function () {
-      var nome = td.getAttribute('data-nome');
-      var cel = Number(td.getAttribute('data-v'));
-      var q = new URLSearchParams();
-      q.set('data_inicio', INI); q.set('data_fim', FIM);
-      q.set('titulo_id', td.getAttribute('data-tit'));
-      q.set('categoria_id', td.getAttribute('data-cat'));
-      q.set('mes', td.getAttribute('data-mes') || '');
-      if (td.getAttribute('data-sub')) q.set('subcategoria_id', td.getAttribute('data-sub'));
-      EMP.forEach(function (e) { q.append('empresa_ids[]', e); });
-      mostra(esc(nome), '<div class="p-3 text-muted">carregando...</div>');
-      fetch('{{ url_for("conf_despesas.conf_despesas_lancamentos") }}?' + q.toString(),
-            {credentials: 'same-origin'})
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          if (!d || !d.ok) throw new Error((d && d.erro) || 'falhou');
-          // volta para ESTA tela, com os mesmos filtros, depois de salvar
-          var volta = encodeURIComponent(location.pathname + location.search);
-          var h = '';
-          if (!d.lancamentos.length) {
-            h = '<div class="p-3 text-muted">Nenhum lançamento de despesa nessa célula.</div>';
-          } else {
-            h = '<table><thead><tr><th>Data</th><th>Fornecedor / observação</th>'
-              + '<th>Empresa</th><th class="text-end">Valor</th><th></th></tr></thead><tbody>';
-            d.lancamentos.forEach(function (l) {
-              var obs = (l.observacao && l.observacao !== l.fornecedor) ? '<br><small>' + esc(l.observacao) + '</small>' : '';
-              var sub = l.subcategoria ? '<br><small>↳ ' + esc(l.subcategoria) + '</small>' : '';
-              var bco = l.banco ? '<br><small><i class="bi bi-bank"></i> ' + esc(l.banco) + '</small>' : '';
-              var url = '/lancamentos_despesas/editar/' + l.id + '?next=' + volta;
-              h += '<tr class="cd-l" onclick="location.href=\'' + url + '\'">'
-                 + '<td style="white-space:nowrap">' + esc(l.data) + '</td>'
-                 + '<td><b>' + esc(l.fornecedor || '—') + '</b>' + obs + sub + bco + '</td>'
-                 + '<td><small>' + esc(l.empresa) + '</small></td>'
-                 + '<td class="text-end fw-bold" style="white-space:nowrap">' + brl(l.valor) + '</td>'
-                 + '<td class="text-end"><a class="btn btn-sm btn-outline-primary py-0" href="' + url + '">'
-                 + '<i class="bi bi-pencil"></i> Editar</a></td></tr>';
-            });
-            h += '</tbody></table>'
-               + '<div class="text-end fw-bold mt-2 me-1">Total: ' + brl(d.total)
-               + ' · ' + d.lancamentos.length + ' lançamento(s)</div>';
-          }
-          // a célula pode ter valor que não é lançamento (aluguel do caixa,
-          // frete, folha); avisa em vez de deixar a diferença sem explicação
-          var dif = Math.round((cel - d.total) * 100) / 100;
-          if (Math.abs(dif) >= 0.01) {
-            h += '<div class="alert alert-warning py-1 px-2 mt-2 mb-0 small">'
-               + brl(dif) + ' desta célula não vem de lançamento de despesa '
-               + '(caixa, fretes ou folha) e por isso não aparece na lista.</div>';
-          }
-          mostra(esc(nome), h);
-        })
-        .catch(function (e) {
-          mostra(esc(nome), '<div class="p-3 text-danger">Erro: ' + esc(e.message) + '</div>');
-        });
+
+  function carrega(td) {
+    if (tdAtual) tdAtual.classList.remove('cel-sel');
+    tdAtual = td; td.classList.add('cel-sel');
+    CEL = {tit: td.getAttribute('data-tit'), cat: td.getAttribute('data-cat'),
+           sub: td.getAttribute('data-sub') || '', mes: td.getAttribute('data-mes') || '',
+           nome: td.getAttribute('data-nome'), v: Number(td.getAttribute('data-v'))};
+    var q = new URLSearchParams();
+    q.set('data_inicio', INI); q.set('data_fim', FIM);
+    q.set('titulo_id', CEL.tit); q.set('categoria_id', CEL.cat); q.set('mes', CEL.mes);
+    if (CEL.sub) q.set('subcategoria_id', CEL.sub);
+    EMP.forEach(function (e) { q.append('empresa_ids[]', e); });
+    document.getElementById('cdTitulo').textContent = CEL.nome;
+    document.getElementById('cdSub').textContent = 'carregando…';
+    document.getElementById('cdCorpo').innerHTML = '';
+    document.getElementById('cdRod').innerHTML = '';
+    abre();
+    fetch(URL_LISTA + '?' + q.toString(), {credentials: 'same-origin'})
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.ok) throw new Error((d && d.erro) || 'falhou');
+        LISTA = d.lancamentos;
+        desenha(d.total);
+      })
+      .catch(function (e) {
+        document.getElementById('cdCorpo').innerHTML = '<div class="cd-erro">Erro: ' + esc(e.message) + '</div>';
+      });
+  }
+
+  function desenha(total) {
+    document.getElementById('cdSub').textContent = LISTA.length + ' lançamento(s) · clique em Editar, altere e salve — a tabela atualiza e você continua aqui';
+    var h = '';
+    if (!LISTA.length) h = '<div class="text-muted p-2">Nenhum lançamento de despesa nessa célula.</div>';
+    LISTA.forEach(function (l, i) {
+      var obs = (l.observacao && l.observacao !== l.fornecedor) ? esc(l.observacao) : '';
+      var meta = [l.data, l.subcategoria ? '↳ ' + l.subcategoria : '', l.banco ? '🏦 ' + l.banco : '', l.empresa]
+        .filter(Boolean).map(esc).join(' · ');
+      h += '<div class="cd-it" data-i="' + i + '">'
+         + '<div class="cd-it__l1"><b>' + esc(l.fornecedor || '—') + '</b><span class="cd-it__v">' + brl(l.valor) + '</span></div>'
+         + (obs ? '<div class="cd-it__m">' + obs + '</div>' : '')
+         + '<div class="cd-it__m">' + meta + '</div>'
+         + '<div class="cd-it__a"><button type="button" class="cd-b" onclick="cdEdita(' + i + ')"><i class="bi bi-pencil"></i> Editar</button></div>'
+         + '</div>';
     });
+    var dif = Math.round((CEL.v - total) * 100) / 100;
+    if (Math.abs(dif) >= 0.01)
+      h += '<div class="cd-aviso">' + brl(dif) + ' desta célula não vem de lançamento de despesa (caixa, fretes ou folha) e por isso não aparece na lista.</div>';
+    document.getElementById('cdCorpo').innerHTML = h;
+    document.getElementById('cdRod').innerHTML = '<span>Total</span><span>' + brl(total) + '</span>';
+  }
+
+  function opts(lista, sel, vazio) {
+    var h = vazio !== undefined ? '<option value="">' + esc(vazio) + '</option>' : '';
+    lista.forEach(function (o) { h += '<option value="' + o.id + '"' + (String(o.id) === String(sel) ? ' selected' : '') + '>' + esc(o.nome) + '</option>'; });
+    return h;
+  }
+
+  window.cdEdita = function (i) {
+    var l = LISTA[i];
+    var box = document.querySelector('.cd-it[data-i="' + i + '"]');
+    box.innerHTML = '<div class="text-muted">carregando…</div>';
+    opcoes().then(function (o) {
+      box.classList.add('ed');
+      box.innerHTML = '<div class="cd-it__l1"><b>' + esc(l.fornecedor || '—') + '</b><span class="cd-it__v">' + brl(l.valor) + '</span></div>'
+        + '<div class="cd-f">'
+        + '<div><label>Data</label><input type="date" class="e-data" value="' + esc(l.data_iso) + '"></div>'
+        + '<div><label>Valor</label><input type="text" inputmode="decimal" class="e-valor" value="' + num2(l.valor) + '"></div>'
+        + '<div><label>Título</label><select class="e-tit">' + opts(o.titulos, l.titulo_id) + '</select></div>'
+        + '<div><label>Categoria</label><select class="e-cat"></select></div>'
+        + '<div><label>Subcategoria</label><select class="e-sub"></select></div>'
+        + '<div><label>Empresa</label><select class="e-emp">' + opts(o.empresas, l.cliente_id, '—') + '</select></div>'
+        + '<div class="full"><label>Fornecedor</label><input type="text" class="e-forn" value="' + esc(l.fornecedor) + '"></div>'
+        + '<div class="full"><label>Observação</label><textarea rows="2" class="e-obs">' + esc(l.observacao) + '</textarea></div>'
+        + '</div><div class="cd-erro" style="display:none"></div>'
+        + '<div class="cd-it__a"><button type="button" class="cd-b" onclick="cdCancela()">Cancelar</button> '
+        + '<button type="button" class="cd-b pri e-salva"><i class="bi bi-check2"></i> Salvar</button></div>';
+      var selT = box.querySelector('.e-tit'), selC = box.querySelector('.e-cat'), selS = box.querySelector('.e-sub');
+      function cats(catSel) {
+        selC.innerHTML = opts(o.categorias.filter(function (c) { return String(c.titulo_id) === selT.value; }), catSel);
+        subs(catSel === l.categoria_id ? l.subcategoria_id : '');
+      }
+      function subs(subSel) {
+        selS.innerHTML = opts(o.subcategorias.filter(function (s) { return String(s.categoria_id) === selC.value; }), subSel, 'Nenhuma');
+      }
+      selT.onchange = function () { cats(''); };
+      selC.onchange = function () { subs(''); };
+      cats(l.categoria_id);
+      box.querySelector('.e-salva').onclick = function () { salva(l, box); };
+    }).catch(function () { box.innerHTML = '<div class="cd-erro">Não deu para carregar as listas.</div>'; });
+  };
+  window.cdCancela = function () { desenha(LISTA.reduce(function (a, l) { return a + l.valor; }, 0)); };
+
+  function salva(l, box) {
+    var corpo = {
+      data: box.querySelector('.e-data').value, valor: box.querySelector('.e-valor').value,
+      titulo_id: box.querySelector('.e-tit').value, categoria_id: box.querySelector('.e-cat').value,
+      subcategoria_id: box.querySelector('.e-sub').value, cliente_id: box.querySelector('.e-emp').value,
+      fornecedor: box.querySelector('.e-forn').value, observacao: box.querySelector('.e-obs').value
+    };
+    var btn = box.querySelector('.e-salva'); btn.disabled = true;
+    fetch(URL_SALVA + l.id, {method: 'POST', credentials: 'same-origin',
+          headers: {'Content-Type': 'application/json'}, body: JSON.stringify(corpo)})
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        btn.disabled = false;
+        if (!d.ok) { var e = box.querySelector('.cd-erro'); e.textContent = d.erro || 'Não foi possível salvar.'; e.style.display = 'block'; return; }
+        // recarrega a tabela no mesmo ponto e reabre a gaveta da mesma célula
+        try { sessionStorage.setItem(CHAVE, JSON.stringify({cel: CEL, y: window.scrollY,
+              x: (document.querySelector('.tbl-scroll') || {}).scrollTop || 0})); } catch (e2) {}
+        location.reload();
+      })
+      .catch(function () { btn.disabled = false; alert('Falha de conexão — nada foi salvo.'); });
+  }
+
+  document.querySelectorAll('td.cel-drill[data-cat]').forEach(function (td) {
+    td.addEventListener('click', function () { carrega(td); });
   });
+
+  // depois de salvar: volta à mesma posição e reabre a gaveta da célula
+  try {
+    var r = JSON.parse(sessionStorage.getItem(CHAVE) || 'null');
+    if (r) {
+      sessionStorage.removeItem(CHAVE);
+      window.scrollTo(0, r.y || 0);
+      var cx = document.querySelector('.tbl-scroll'); if (cx) cx.scrollTop = r.x || 0;
+      var sel = 'td.cel-drill[data-tit="' + r.cel.tit + '"][data-cat="' + r.cel.cat + '"][data-mes="' + r.cel.mes + '"]';
+      var cand = Array.prototype.filter.call(document.querySelectorAll(sel), function (t) {
+        return (t.getAttribute('data-sub') || '') === (r.cel.sub || ''); });
+      if (cand.length) carrega(cand[0]);
+    }
+  } catch (e) {}
 })();
 </script>
+
 <script>
 (function () {
   const inp_ini = document.querySelector('[name="data_inicio"]');
@@ -563,6 +650,7 @@ td.cel-drill:hover { background: #e8f0fb !important; text-decoration: underline;
       }
       inp_ini.value = ini.toISOString().slice(0, 10);
       inp_fim.value = fim.toISOString().slice(0, 10);
+      document.getElementById('form-filtros').submit();
     });
   });
 
