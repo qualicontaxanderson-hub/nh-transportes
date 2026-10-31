@@ -2073,6 +2073,47 @@ def trocar_motorista():
                 pass
 
 
+@bp.route('/ped-frete-novo/transportadora', methods=['POST'])
+@login_required
+def nova_transportadora():
+    """Cadastra a transportadora ali mesmo, no "Quem levou" do card Terceiro.
+
+    Mora em `motoristas` (e o campo que o frete do caminhao de fora usa desde
+    16/02/2026), apontada para o veiculo TERCEIRO e sem comissao — igual a
+    BARROS. Nome que ja existe (sem diferenciar maiuscula) devolve o cadastro
+    existente em vez de duplicar.
+    """
+    nome = ' '.join(((request.get_json(silent=True) or {}).get('nome') or '').split()).upper()
+    if len(nome) < 3:
+        return jsonify({'ok': False, 'erro': 'digite o nome da transportadora'}), 400
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""SELECT id FROM veiculos WHERE ativo = 1 AND caminhao = 'TERCEIRO'
+                        ORDER BY id LIMIT 1""")
+        ext = cur.fetchone()
+        if not ext:
+            return jsonify({'ok': False, 'erro': 'veículo TERCEIRO não encontrado no cadastro'}), 400
+        cur.execute("SELECT id, nome, ativo FROM motoristas WHERE UPPER(TRIM(nome)) = %s LIMIT 1", (nome,))
+        ja = cur.fetchone()
+        if ja:
+            if not ja['ativo']:
+                cur.execute("UPDATE motoristas SET ativo = 1 WHERE id = %s", (ja['id'],))
+                conn.commit()
+            return jsonify({'ok': True, 'id': ja['id'], 'nome': ja['nome'], 'existia': True})
+        cur.execute("""INSERT INTO motoristas (nome, paga_comissao, ativo, veiculo_id)
+                       VALUES (%s, 0, 1, %s)""", (nome, ext['id']))
+        conn.commit()
+        return jsonify({'ok': True, 'id': cur.lastrowid, 'nome': nome})
+    except Exception as e:
+        conn.rollback()
+        logging.getLogger(__name__).exception("[ped_frete_novo] nova_transportadora")
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
 @bp.route('/ped-frete-novo/lancar', methods=['POST'])
 @login_required
 def lancar():

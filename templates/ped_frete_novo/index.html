@@ -1848,6 +1848,39 @@ function pfnGavPinta(lista, busca){
     d.textContent = 'Nada encontrado.';
     alvo.appendChild(d);
   }
+  // Terceiro: a transportadora contratada hoje pode não estar cadastrada —
+  // cadastra ali mesmo, sem sair da carga.
+  if (lista === 'transportadoras'){
+    var nv = document.createElement('label');
+    nv.className = 'opc';
+    nv.setAttribute('data-novo', '1');
+    nv.style.cssText = 'color:#1D63A5;font-weight:700;border-style:dashed';
+    var t = (busca || '').trim();
+    var sp2 = document.createElement('span');
+    sp2.textContent = t ? '+ Cadastrar “' + t.toUpperCase() + '” como transportadora'
+                        : '+ Nova transportadora';
+    nv.appendChild(sp2);
+    alvo.appendChild(nv);
+  }
+}
+
+function pfnNovaTransp(){
+  var q = document.getElementById('pfn-gav-q');
+  var nome = (q.value || '').trim();
+  if (!nome) nome = (prompt('Nome da transportadora:') || '').trim();
+  else if (!confirm('Cadastrar "' + nome.toUpperCase() + '" como transportadora?')) return;
+  if (nome.length < 3) { if (nome) alert('Digite o nome completo da transportadora.'); return; }
+  fetch('/ped-frete-novo/transportadora', {method: 'POST',
+        headers: {'Content-Type': 'application/json'}, body: JSON.stringify({nome: nome})})
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if (!j.ok){ alert(j.erro || 'Não foi possível cadastrar.'); return; }
+      PFN_OP.transportadoras = PFN_OP.transportadoras || [];
+      if (!PFN_OP.transportadoras.some(function(x){ return x.id === j.id; }))
+        PFN_OP.transportadoras.push({id: j.id, nome: j.nome});
+      pfnGavPega(j.id, j.nome, '');
+    })
+    .catch(function(){ alert('Falha de conexão — nada foi cadastrado.'); });
 }
 
 document.addEventListener('DOMContentLoaded', function(){
@@ -1856,6 +1889,7 @@ document.addEventListener('DOMContentLoaded', function(){
   lista.addEventListener('click', function(ev){
     var op = ev.target.closest ? ev.target.closest('.opc') : null;
     if (!op) return;
+    if (op.getAttribute('data-novo')) { pfnNovaTransp(); return; }
     pfnGavPega(op.getAttribute('data-id'), op.getAttribute('data-nome'),
                op.getAttribute('data-litros'));
   });
