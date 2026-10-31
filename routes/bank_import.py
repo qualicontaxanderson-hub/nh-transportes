@@ -1106,13 +1106,45 @@ def _sem_acento_maiusculo(txt):
     return re.sub(r'\s+', ' ', t.upper()).strip()
 
 
+def _nome_quase_igual(nome, texto):
+    """
+    O nome aparece no texto do banco com no máximo UMA letra diferente
+    (trocada, a mais ou a menos): RENIER LUIZ ALVEZ x "RENIER LUIZ ALVES".
+    Compara com cada trecho do texto que tem o mesmo número de palavras.
+    Só para nomes de 2 palavras ou mais.
+
+    Medido em 31/10/2026 nos trocos desde 01/06: 24 casos com 1 letra de
+    diferença, todos ligados à mão ao MESMO débito que a regra escolheria.
+    """
+    so_letras = lambda t: re.sub(r'\s+', ' ', re.sub(r'[^A-Z ]', ' ', t)).strip()
+    nome = so_letras(nome)
+    palavras = so_letras(texto).split()
+    k = len(nome.split())
+    if k < 2:
+        return False
+    for i in range(len(palavras) - k + 1):
+        trecho = ' '.join(palavras[i:i + k])
+        if abs(len(trecho) - len(nome)) > 1:
+            continue
+        ant = list(range(len(trecho) + 1))
+        for x, ca in enumerate(nome, 1):
+            atual = [x]
+            for y, cb in enumerate(trecho, 1):
+                atual.append(min(ant[y] + 1, atual[y - 1] + 1, ant[y - 1] + (ca != cb)))
+            ant = atual
+        if ant[-1] <= 1:
+            return True
+    return False
+
+
 def _auto_vincular_troco_pix(cursor, conn, account_id):
     """
     Liga o Troco PIX (pedido na pista) ao PIX enviado que o banco lançou,
     sem ninguém clicar — só quando não há dúvida:
 
       * débito PENDENTE da conta, no MESMO dia e com o MESMO valor do troco;
-      * o favorecido é o cliente PIX: o nome dele está no texto do banco, ou o
+      * o favorecido é o cliente PIX: o nome dele está no texto do banco (com
+        até uma letra diferente — _nome_quase_igual), ou o
         CPF/CNPJ da chave PIX é o documento do lançamento, ou é o documento em
         que trocos anteriores dele já caíram (utils/troco_pix_banco);
       * UM candidato só, dos dois lados (um troco -> um débito e o débito não
@@ -1172,7 +1204,8 @@ def _auto_vincular_troco_pix(cursor, conn, account_id):
 
         def favorecido(t, b):
             nome = _sem_acento_maiusculo(t['nome_completo'])
-            if nome and nome in _sem_acento_maiusculo(b['descricao']):
+            texto = _sem_acento_maiusculo(b['descricao'])
+            if nome and (nome in texto or _nome_quase_igual(nome, texto)):
                 return True
             doc = re.sub(r'\D', '', b['cnpj_cpf'] or '')
             if doc and doc in (aprendidos.get(t['cid']) or {}).get('docs', ()):
