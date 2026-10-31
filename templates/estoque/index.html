@@ -157,6 +157,43 @@
     font-weight:700; cursor:pointer; font-family:inherit; }
   #estq .chip.on{ background:var(--eq-azul); border-color:var(--eq-azul);
     color:#fff; }
+  /* ── Modal Vincular: cartao da nota repaginado ── */
+  .vc{ padding:.7rem .8rem; gap:.65rem; }
+  .vc .mig-cand__c{ display:flex; flex-direction:column; gap:.3rem; }
+  .vc-top{ display:flex; align-items:center; gap:.45rem; flex-wrap:wrap; }
+  .vc-top .mig-cand__nf{ font-size:1rem; }
+  .vc-q{ margin-left:auto; font-weight:800; font-size:1rem; font-variant-numeric:tabular-nums;
+    text-align:right; line-height:1.1; }
+  .vc-q small{ display:block; font-size:11px; font-weight:600; color:var(--muted); }
+  .vc-forn{ font-size:12px; font-weight:600; color:var(--ink); margin-top:-.15rem; }
+  .vc-grid{ display:grid; grid-template-columns:16px 1fr; column-gap:.45rem; row-gap:.22rem;
+    font-size:12px; color:var(--ink); background:#f7f9fc; border-radius:8px; padding:.45rem .55rem; }
+  .vc-grid > i{ color:#6b7f99; font-size:12px; line-height:1.5; }
+  .vc-mut{ color:var(--muted); }
+  .vc-prod{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .vc-lin{ font-size:12px; color:var(--muted); }
+  .vc-resl{ display:flex; gap:.35rem; flex-wrap:wrap; align-items:center; }
+  .vc-tag{ display:inline-flex; align-items:center; gap:.3rem; border-radius:999px; padding:.15rem .55rem;
+    font-size:11px; font-weight:700; background:#eef2f7; color:#4b5b70; }
+  .vc-tag--top{ background:#e6effa; color:#1D63A5; }
+  .vc-tag--ok{ background:var(--ok-bg); color:var(--ok); }
+  .vc-tag--pend{ background:var(--pend-bg); color:var(--pend); }
+  .vc-res{ display:inline-flex; align-items:center; gap:.3rem; border-radius:8px; padding:.2rem .6rem;
+    font-size:12px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .vc-res b{ font-weight:800; }
+  .vc-res--perda{ background:#fdecec; color:#b42318; }
+  .vc-res--sobra{ background:#e7f6ec; color:#1e7e34; }
+  .vc-res--ok{ background:#e7f6ec; color:#1e7e34; }
+  .vc-modo__row{ display:flex; gap:.9rem; flex-wrap:wrap; align-items:flex-start; }
+  .vc-modo__row > div:first-child{ flex:1 1 170px; max-width:220px; }
+  .vc-seg{ display:inline-flex; border:1px solid var(--line-2); border-radius:9px; overflow:hidden; }
+  .vc-seg .mig-modo__op{ flex:0 0 auto; border:0; border-radius:0; padding:.38rem .95rem; margin:0;
+    font-weight:700; font-size:.85rem; align-items:center; gap:.35rem; box-shadow:none; }
+  .vc-seg .mig-modo__op + .mig-modo__op{ border-left:1px solid var(--line-2); }
+  .vc-seg .mig-modo__op input{ margin:0; }
+  .vc-seg .mig-modo__op--on{ background:#1D63A5; color:#fff; box-shadow:none; }
+  .vc-fecha{ margin-top:.55rem; font-size:12px; color:var(--muted); display:flex; align-items:center;
+    gap:.4rem; flex-wrap:wrap; }
 </style>
 
 
@@ -670,38 +707,64 @@
            (ps > 0 ? '+' : '−') + fmt(Math.abs(ps)) + ' L</span>';
   }
 
-  function selosDe(c) {
+  // Preco por litro da nota (para dar o R$ da perda/sobra).
+  function precoL(c) {
+    var it = itemSel(c) || c;
+    return it.item_litros > 0 && it.item_valor ? it.item_valor / it.item_litros : 0;
+  }
+
+  // Perda (-) / sobra (+) para a EMPRESA se esta nota fechar com esta
+  // descarga: o que entrou no tanque por conta dela menos o que foi comprado.
+  function psFechando(c, recebidoAgora) {
+    var it = itemSel(c) || c;
+    return Math.round(((it.recebido_fisico || 0) + (Number(recebidoAgora) || 0) -
+                       (it.item_litros || 0)) * 1000) / 1000;
+  }
+
+  // Chip do resultado: perda em vermelho, sobra em verde, com o R$.
+  function resChip(ps, c, prefixo) {
+    var rs = Math.abs(ps) * precoL(c);
+    if (Math.abs(ps) <= 0.001)
+      return '<span class="vc-res vc-res--ok"><i class="bi bi-check2-circle"></i> ' +
+             (prefixo || '') + 'sem diferença</span>';
+    var perda = ps < 0;
+    return '<span class="vc-res vc-res--' + (perda ? 'perda' : 'sobra') + '">' +
+           '<i class="bi bi-' + (perda ? 'arrow-down-circle' : 'arrow-up-circle') + '"></i> ' +
+           (prefixo || '') + (perda ? 'perda ' : 'sobra ') + '<b>' + fmt(Math.abs(ps)) + ' L</b>' +
+           (rs >= 0.01 ? ' · R$ ' + fmt(rs, 2) : '') + '</span>';
+  }
+
+  function resultadoDe(c) {
     var s = '';
-    if (c.parcial) s += '<span class="mig-badge mig-badge--ok"><i class="bi bi-arrow-repeat"></i> já iniciada · próxima a descarregar</span>';
-    if (!c.cobre)  s += '<span class="mig-badge mig-badge--pend">saldo ' + fmt(c.saldo) +
-                        ' L · não cobre o que falta</span>';
-    else if (c.dif_litros === 0) s += '<span class="mig-badge mig-badge--ok">saldo exato</span>';
-    else if (c.dentro_tolerancia) s += '<span class="mig-badge mig-badge--info">sobram ' +
-                                       fmt(Math.abs(c.dif_litros)) + ' L na nota</span>';
-    if (c.dif_dias === 0)              s += '<span class="mig-badge mig-badge--ok">mesmo dia</span>';
-    else {
-      var n = Math.abs(c.dif_dias);
-      s += '<span class="mig-badge mig-badge--info">' + n + (n === 1 ? ' dia ' : ' dias ') +
-           (c.dif_dias < 0 ? 'antes' : 'depois') + '</span>';
+    if (c.parcial) s += '<span class="vc-tag vc-tag--ok"><i class="bi bi-arrow-repeat"></i> já iniciada</span>';
+    if (!c.cobre) {
+      s += '<span class="vc-tag vc-tag--pend">saldo ' + fmt(c.saldo) + ' L · não cobre</span>';
+    } else if (c.dentro_tolerancia) {
+      s += resChip(psFechando(c, estado.recebido), c);
+    } else {
+      s += '<span class="vc-tag">fica saldo de ' + fmt(c.saldo - (Number(estado.falta) || 0)) + ' L</span>';
     }
-    if (c.varias_linhas) s += '<span class="mig-badge mig-badge--info">' + c.itens.length +
-                              ' linhas deste produto</span>';
+    if (c.varias_linhas) s += '<span class="vc-tag">' + c.itens.length + ' linhas deste produto</span>';
     return s;
   }
 
+  function quandoDe(c) {
+    var d = c.dif_dias, n = Math.abs(d);
+    var rel = d === 0 ? 'mesmo dia' : n + (n === 1 ? ' dia ' : ' dias ') + (d < 0 ? 'antes' : 'depois');
+    return '<b>' + esc((c.emissao_br || '—').slice(0, 5)) + (c.emissao_hora ? ' ' + esc(c.emissao_hora) : '') +
+           '</b> <span class="vc-mut">' + rel + '</span>';
+  }
+
   function cteDe(c) {
-    if (!c.ctes || !c.ctes.length) {
-      return '<div class="mig-cand__cte mig-cand__cte--sem"><i class="bi bi-truck"></i> sem CT-e capturado</div>';
-    }
+    if (!c.ctes || !c.ctes.length) return '<span class="vc-mut">sem CT-e capturado</span>';
     return c.ctes.map(function (t) {
       var p = ['<b>CT-e ' + esc(t.cte_numero) + '</b>'];
-      if (t.cte_transportadora) p.push(esc(t.cte_transportadora));
+      if (t.cte_transportadora) p.push(esc(String(t.cte_transportadora).replace(/\s+(LTDA|EIRELI|ME|EPP|S\/?A)\.?$/i, '')));
       if (t.cte_valor_frete !== null && t.cte_valor_frete !== undefined)
         p.push('frete R$ ' + fmt(t.cte_valor_frete, 2));
-      if (t.cte_placa) p.push(esc(t.cte_placa));
-      if (t.mun_ini && t.mun_fim) p.push(esc(t.mun_ini) + '→' + esc(t.mun_fim));
-      return '<div class="mig-cand__cte"><i class="bi bi-truck"></i> ' + p.join(' · ') + '</div>';
-    }).join('');
+      if (t.mun_ini && t.mun_fim) p.push('<span class="vc-mut">' + esc(t.mun_ini) + ' → ' + esc(t.mun_fim) + '</span>');
+      return p.join(' · ');
+    }).join('<br>');
   }
 
   function render(d) {
@@ -782,62 +845,53 @@
         // A estrela so vai para a primeira se ela REALMENTE cobrir o que falta.
         var top = i === 0 && c.cobre;
         var cls = 'mig-cand' + (top ? ' mig-cand--top' : '') + (c.cobre ? '' : ' mig-cand--fraca');
-        h += '<label class="' + cls + '" data-i="' + i + '">' +
+        var dif = c.saldo < c.item_litros - 0.001;
+        h += '<label class="' + cls + ' vc" data-i="' + i + '">' +
           '<input type="radio" name="vcand" value="' + i + '">' +
-          '<div class="mig-cand__c"><div class="mig-cand__t">' +
-          '<span class="mig-cand__nf">NF-e ' + esc(c.numero) + '</span>' +
-          (top ? '<span class="mig-badge mig-badge--info"><i class="bi bi-star-fill"></i> mais provável</span>' : '') +
-          '</div><div class="mig-cand__forn">' + esc(c.fornecedor || '') + '</div>' +
-          (c.produto_xml
-            ? '<div class="mig-cand__prod" title="' + esc(c.produto_xml) + '">' +
-              '<b>Produto:</b> ' + esc(c.produto_xml) + '</div>'
-            : '') +
-          '<div class="mig-cand__l">emitida <b>' + esc(c.emissao_br || '—') + '</b> · série ' + esc(c.serie) +
+          '<div class="mig-cand__c">' +
+          '<div class="vc-top"><span class="mig-cand__nf">NF-e ' + esc(c.numero) + '</span>' +
+          (top ? '<span class="vc-tag vc-tag--top"><i class="bi bi-star-fill"></i> mais provável</span>' : '') +
+          '<span class="vc-q">' + fmt(c.item_litros) + ' L' +
+          (dif ? '<small>saldo ' + fmt(c.saldo) + ' L</small>' : '') + '</span></div>' +
+          '<div class="vc-forn">' + esc(c.fornecedor || '') + '</div>' +
+          '<div class="vc-grid">' +
+          '<i class="bi bi-calendar3"></i><div>' + quandoDe(c) + '</div>' +
+          '<i class="bi bi-person"></i><div>' +
+          (c.motorista ? '<b>' + esc(c.motorista) + '</b>' : '<span class="vc-mut">motorista não informado</span>') +
+          (c.placa ? ' · ' + esc(c.placa) : '') + '</div>' +
+          '<i class="bi bi-truck"></i><div>' + cteDe(c) + '</div>' +
+          '<i class="bi bi-droplet"></i><div class="vc-mut vc-prod" title="' + esc(c.produto_xml || '') + '">' +
+          esc(c.produto_xml || '—') + ' · série ' + esc(c.serie) +
           (c.cod_anp ? ' · ANP ' + esc(c.cod_anp) : '') + '</div>' +
+          '</div>' +
           // Nota com mais de uma linha do mesmo combustivel: escolhe qual.
           (c.varias_linhas
-            ? '<div class="mig-cand__l">linha: <select class="js-linha form-select form-select-sm" ' +
+            ? '<div class="vc-lin">linha: <select class="js-linha form-select form-select-sm" ' +
               'style="width:auto;display:inline-block" data-doc="' + c.documento_id + '">' +
               c.itens.map(function (it) {
                 return '<option value="' + it.item_id + '"' +
                        (it.item_id === c.item_id ? ' selected' : '') + '>item ' + esc(it.n_item) +
                        ' · saldo ' + fmt(it.saldo) + ' L</option>';
               }).join('') + '</select></div>'
-            : '<div class="mig-cand__l">linha ' + esc(c.n_item) + '</div>') +
-          '<div class="mig-cand__badges">' + selosDe(c) + '</div>' + cteDe(c) +
-          '</div><div class="mig-cand__v"><div class="q">' + fmt(c.item_litros) + ' L</div>' +
-          '<div class="s">saldo <b>' + fmt(c.saldo) + '</b> L</div></div></label>';
+            : '') +
+          '<div class="vc-resl">' + resultadoDe(c) + '</div>' +
+          '</div></label>';
       });
       // Duas perguntas separadas: QUANTOS litros desta nota vieram nesta
       // descarga, e se a nota esta ENCERRADA. A segunda e que fecha a nota.
-      h += '<div class="mig-modo" id="vincModo" hidden>' +
-        '<div class="mig-vlbl">Litros desta nota que entraram nesta descarga</div>' +
-        '<input type="number" step="0.001" min="0" class="form-control form-control-sm" ' +
-        'id="vincLitros" style="max-width:180px">' +
-        '<div class="mig-hint" id="vincHint"></div>' +
-        '<div class="mig-vlbl" style="margin-top:.7rem">Esta nota está encerrada?</div>' +
-        // Linhas discretas, nao caixas: em coluna, o flex-basis de 190px das
-        // caixas virava ALTURA — dois blocos gigantes vazios na tela.
-        '<div class="mig-modo__ops mig-modo__ops--lista">' +
-        // NENHUM marcado de proposito: sem escolha explicita o botao nao
-        // habilita. Era o `checked` daqui que gravava 'parcial' sem o usuario
-        // nunca ter visto a pergunta.
-        '<label class="mig-modo__op">' +
-        '<input type="radio" name="vmodo" value="parcial">' +
-        '<div class="mig-modo__lin"><b>Parcial</b>' +
-        '<span>ainda falta descarregar — a nota guarda saldo e volta</span></div>' +
-        '</label>' +
-        '<label class="mig-modo__op">' +
-        '<input type="radio" name="vmodo" value="integral">' +
-        '<div class="mig-modo__lin"><b>Integral</b>' +
-        '<span>fecha a nota agora — sai das candidatas e apura a perda</span></div>' +
-        '</label>' +
-        '</div>' +
+      h += '<div class="mig-modo vc-modo" id="vincModo" hidden>' +
+        '<div class="vc-modo__row">' +
+        '<div><div class="mig-vlbl">Litros desta nota nesta descarga</div>' +
+        '<input type="number" step="0.001" min="0" class="form-control form-control-sm" id="vincLitros">' +
+        '<div class="mig-hint" id="vincHint"></div></div>' +
+        // NENHUM marcado de proposito: sem escolha o botao nao habilita.
+        '<div><div class="mig-vlbl">Nota</div><div class="vc-seg">' +
+        '<label class="mig-modo__op"><input type="radio" name="vmodo" value="parcial"><span>Parcial</span></label>' +
+        '<label class="mig-modo__op"><input type="radio" name="vmodo" value="integral"><span>Integral</span></label>' +
+        '</div></div></div>' +
         '<div id="vincAvisos"></div>' +
-        '<div class="mig-vlbl" style="margin-top:.7rem">Observação ' +
-        '<span style="text-transform:none;font-weight:400">(opcional)</span></div>' +
-        '<input type="text" maxlength="255" class="form-control form-control-sm" id="vincObs" ' +
-        'placeholder="ex.: conferido com o canhoto"></div>';
+        '<div class="mig-vlbl" style="margin-top:.6rem">Observação</div>' +
+        '<input type="text" maxlength="255" class="form-control form-control-sm" id="vincObs"></div>';
     }
     body.innerHTML = h;
     atualizaBotao();
@@ -908,25 +962,8 @@
                  ' L. Pode ser proposital (perda), mas confira.</div>';
         }
         if (integral) {
-          var it = itemSel(sel);
-          // O que ENTROU NO TANQUE nas descargas ligadas a esta nota, mais o
-          // recebido desta descarga. Nao e o litros vinculado: se o tanque
-          // recebeu mais do que a nota cobre, o vinculo para no saldo e a
-          // sobra sumiria.
-          var recNota = (it ? (it.recebido_fisico || 0) : 0) + (Number(estado.recebido) || 0);
-          var ps = Math.round((recNota - (it ? it.item_litros : 0)) * 1000) / 1000;
-          if (Math.abs(ps) <= 0.001) {
-            txt += '<div class="mig-aviso mig-aviso--ok"><i class="bi bi-check2-circle"></i> ' +
-                   'Ao fechar: a nota terá recebido exatamente os ' +
-                   fmt(it.item_litros) + ' L. Sem diferença.</div>';
-          } else {
-            txt += '<div class="mig-aviso"><i class="bi bi-calculator"></i> <b>Ao fechar:</b> ' +
-                   'o tanque terá recebido <b>' + fmt(recNota) + ' L</b> por conta desta nota' +
-                   ((it.recebido_fisico || 0) > 0
-                     ? ' (' + fmt(it.recebido_fisico) + ' em descargas anteriores + ' +
-                       fmt(estado.recebido) + ' nesta)' : '') +
-                   ', contra <b>' + fmt(it.item_litros) + ' L</b> na nota → ' + difHtml(ps) + '</div>';
-          }
+          txt += '<div class="vc-fecha">Ao fechar a nota: ' +
+                 resChip(psFechando(sel, estado.recebido), sel) + '</div>';
         }
       }
       av.innerHTML = txt;

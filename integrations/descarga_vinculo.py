@@ -29,7 +29,7 @@ propria linha que fechou (descarga_nota.perda_sobra_l).
 
 Funcoes puras em relacao a transacao: recebem o cursor e NAO dao commit.
 """
-from datetime import date
+from datetime import date, datetime
 
 # Janela folgada de proposito: o produto carrega sexta e desce segunda, ou
 # carrega terca e desce quarta. 5 dias cobre o padrao real de viagem.
@@ -80,6 +80,7 @@ def _ctes_por_chave(cur, chaves):
                c.id AS cte_documento_id, c.numero AS cte_numero,
                c.dh_emissao AS cte_emissao, c.emit_nome AS cte_transportadora,
                ct.vprest AS cte_valor_frete, ct.placa AS cte_placa,
+               ct.motorista_nome AS cte_motorista,
                ct.mun_ini, ct.uf_ini, ct.mun_fim, ct.uf_fim
         FROM dfe_cte_nfe n
         JOIN dfe_documentos c ON c.id = n.documento_id AND c.tipo = 'CTe'
@@ -352,6 +353,7 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
         SELECT doc.id  AS documento_id, doc.chave, doc.numero, doc.serie,
                doc.dh_emissao, doc.emit_cnpj, doc.emit_nome,
                doc.valor_total AS nota_valor,
+               doc.transp_placa, doc.transp_motorista,
                i.id AS item_id, i.n_item, i.produto_xml, i.cod_anp, i.unidade,
                i.quantidade AS item_litros, i.valor_total AS item_valor, i.categoria,
                COALESCE(v.litros, 0)  AS vinculado_total,
@@ -433,6 +435,13 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
                 "documento_id": doc_id, "chave": r["chave"], "numero": r["numero"],
                 "serie": r["serie"], "emissao": dia_nfe,
                 "emissao_br": dia_nfe.strftime("%d/%m/%Y") if dia_nfe else "",
+                # Hora da emissao e quem trouxe (motorista/placa: do CT-e,
+                # senao da propria NF-e). So para mostrar no modal.
+                "emissao_hora": emissao.strftime("%H:%M") if isinstance(emissao, datetime) else "",
+                "motorista": next((t["cte_motorista"] for t in ctes.get(r["chave"], [])
+                                   if t.get("cte_motorista")), None) or r.get("transp_motorista"),
+                "placa": next((t["cte_placa"] for t in ctes.get(r["chave"], [])
+                               if t.get("cte_placa")), None) or r.get("transp_placa"),
                 "fornecedor": r["emit_nome"], "emit_cnpj": r["emit_cnpj"],
                 "nota_valor": _f(r["nota_valor"]),
                 "ctes": ctes.get(r["chave"], []),
