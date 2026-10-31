@@ -272,7 +272,9 @@ def validar_periodo(inicio, fim, incluir_hoje=False):
     """Por padrão só dias FECHADOS (até ontem): quem for GRAVAR não pode pegar
     dia pela metade — a segunda consulta acharia lançamentos novos no meio
     dos antigos. ``incluir_hoje`` é só para quem MOSTRA (a tela de consulta)."""
-    limite = proximo_dia_util(date.today()) if incluir_hoje else date.today() - timedelta(days=1)
+    from utils.fuso import hoje_brasilia
+    hoje = hoje_brasilia()
+    limite = proximo_dia_util(hoje) if incluir_hoje else hoje - timedelta(days=1)
     if fim > limite:
         raise ValueError(f'Período até {fim} passa do permitido ({limite}).')
     if inicio > fim:

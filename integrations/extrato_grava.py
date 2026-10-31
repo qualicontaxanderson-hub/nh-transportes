@@ -150,7 +150,8 @@ def sincronizar(mod, api_txs, cursor, conn, hoje=None):
             "VALUES (%s, %s, %s, 'ofx')", (conta, a['id_banco'], b['id']))
     r['casados_ofx'] = len(pares)
     conn.commit()
-    desde = (hoje or date.today()) - timedelta(days=DIAS_GRAVA)
+    from utils.fuso import hoje_brasilia
+    desde = (hoje or hoje_brasilia()) - timedelta(days=DIAS_GRAVA)
     antigos = [a for a in sobra if a['data_transacao'] < desde]
     if antigos:
         r['antigos_fora'] = len(antigos)

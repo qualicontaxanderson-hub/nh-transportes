@@ -38,6 +38,7 @@ from flask import Blueprint, Response, json, render_template, request
 from flask_login import login_required
 
 from utils.decorators import admin_required
+from utils.fuso import hoje_brasilia
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +164,7 @@ def _atalhos(hoje):
 @login_required
 @admin_required
 def index():
-    hoje = date.today()
+    hoje = hoje_brasilia()
     ontem = hoje - timedelta(days=1)
     chave = request.args.get('banco') or next(iter(BANCOS))
     if chave not in BANCOS:
@@ -199,7 +200,7 @@ def bruto():
     """Os lançamentos do período como o banco mandou, ao lado do texto que o
     OFX gravou para o mesmo lançamento — para montar o texto da API igual ao
     do OFX (as regras e memorizações casam pelo texto). Só lê; baixa um JSON."""
-    hoje = date.today()
+    hoje = hoje_brasilia()
     chave = request.args.get('banco') or ''
     if chave not in BANCOS:
         return Response('banco desconhecido', status=400)

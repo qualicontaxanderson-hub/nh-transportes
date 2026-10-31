@@ -42,6 +42,7 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
 from integrations import banco_api as api
+from utils.fuso import hoje_brasilia
 from integrations.banco_api import (BancoAuthError, BancoError, SemCredencial,  # noqa: F401
                                     TransacaoInvalida)
 
@@ -249,12 +250,24 @@ def ler(inicio, fim, sessao=None, incluir_hoje=False):
     sessao = sessao or abrir_sessao()
     txs = []
     res = {}
+    hoje = hoje_brasilia()
     for ano, mes, di, df in _meses(inicio, fim):
-        d = buscar_extrato_mes(sessao, ano, mes, di, df)
-        res = d.get('resultado')
-        if not isinstance(res, dict) or not isinstance(res.get('transacoes'), list):
-            raise TransacaoInvalida(
-                f'resposta sem resultado.transacoes ({ano}-{mes:02d}): chaves {sorted(d)}')
+        try:
+            d = buscar_extrato_mes(sessao, ano, mes, di, df)
+            r = d.get('resultado')
+            if not isinstance(r, dict) or not isinstance(r.get('transacoes'), list):
+                raise TransacaoInvalida(
+                    f'resposta sem resultado.transacoes ({ano}-{mes:02d}): chaves {sorted(d)}')
+        except Exception as e:
+            # Mês que ainda não começou (sábado 31/10 com o feriado de 02/11:
+            # o PIX de hoje vem datado de 03/11). Se o Sicoob recusar esse
+            # mês, o que já veio do mês corrente vale mesmo assim.
+            if date(ano, mes, di) > hoje and txs:
+                logger.warning('[sicoob] mês futuro %d-%02d (dias %d-%d) recusado: %s',
+                               ano, mes, di, df, e)
+                continue
+            raise
+        res = r
         txs += [para_transacao(t) for t in res['transacoes']]
     id_sintetico(txs)
     fora = [t for t in txs if not inicio <= t['data_transacao'] <= fim]

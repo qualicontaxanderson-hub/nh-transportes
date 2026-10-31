@@ -38,7 +38,8 @@ def rodar(logger, hoje=None):
     from integrations.extrato_grava import sincronizar
     from routes.extrato_online import BANCOS
     from utils import pix_consulta
-    hoje = hoje or date.today()
+    from utils.fuso import hoje_brasilia
+    hoje = hoje or hoje_brasilia()
     resumo = {}
     for chave, banco in BANCOS.items():
         if not banco.get('grava'):
