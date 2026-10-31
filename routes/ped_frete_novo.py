@@ -23,6 +23,7 @@ vinculo boleto<->fretes ja existe e ja e usada: `cobrancas_freites`.
 """
 
 import logging
+import re
 from datetime import date, timedelta
 
 from flask import Blueprint, render_template, request, jsonify
@@ -243,6 +244,20 @@ def _ensure_tabela():
                 conn.commit()
             except Exception:
                 conn.rollback()
+        # O que a casa paga ao caminhao de fora, por frete, e o pagamento do
+        # banco que quitou. Tabela propria: `fretes` nao muda, e apagar esta
+        # devolve a tela ao que era.
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS frete_terceiro (
+                frete_id            INT PRIMARY KEY,
+                custo               DECIMAL(12,2) NOT NULL,
+                bank_transaction_id INT NULL,
+                ligado_em           DATETIME NULL,
+                ligado_por          VARCHAR(80) NULL,
+                criado_em           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                KEY ix_ft_bt (bank_transaction_id)
+            ) COMMENT 'Frete de terceiro: custo da transportadora e o pagamento que quitou'
+        """)
         conn.commit()
         _tabela_pronta = True
     except Exception:
@@ -2073,6 +2088,213 @@ def trocar_motorista():
                 pass
 
 
+def _terceiro_id(cur):
+    cur.execute("""SELECT id FROM veiculos WHERE ativo = 1 AND caminhao = 'TERCEIRO'
+                    ORDER BY id LIMIT 1""")
+    r = cur.fetchone()
+    return (r['id'] if isinstance(r, dict) else r[0]) if r else 0
+
+
+def _postos_nossos(cur):
+    """Postos da casa: o frete do terceiro e pago pela casa (a pagar). Nos
+    outros, quem paga o terceiro e o cliente — o valor e so informativo.
+    Os da casa sao os ligados a um plano de contas (Posto NH, NH BR-153)."""
+    cur.execute("SELECT id FROM clientes WHERE grupo_contabil_id IS NOT NULL")
+    return {(r['id'] if isinstance(r, dict) else r[0]) for r in cur.fetchall()}
+
+
+def _digitos(s):
+    return re.sub(r'\D', '', s or '')
+
+
+def _terceiros(cur, desde):
+    """Cargas do caminhao de fora desde `desde`, uma linha por carga (dia +
+    transportadora + posto), com custo, situacao e o pagamento ligado.
+
+    Liga sozinho o pagamento quando nao ha duvida: saida de uma conta da
+    casa, do CNPJ da transportadora, com o valor EXATO da carga, ate 60 dias
+    depois dela, e um candidato so dos dois lados. Nao concilia nada no banco
+    (isso continua com quem concilia) — so marca a carga como paga. Quem
+    chama faz o commit.
+    """
+    ext = _terceiro_id(cur)
+    if not ext:
+        return []
+    cur.execute("""
+        SELECT f.id, f.data_frete, f.motoristas_id, f.clientes_id, f.pedido_id,
+               COALESCE(f.quantidade_manual, q.valor, 0) AS litros,
+               m.nome AS transp, m.cpf AS doc, c.razao_social AS posto,
+               p.nome AS produto, ft.custo, ft.bank_transaction_id AS bt
+          FROM fretes f
+          JOIN motoristas m ON m.id = f.motoristas_id
+          JOIN clientes c ON c.id = f.clientes_id
+          LEFT JOIN quantidades q ON q.id = f.quantidade_id
+          LEFT JOIN produto p ON p.id = f.produto_id
+          LEFT JOIN frete_terceiro ft ON ft.frete_id = f.id
+         WHERE f.veiculos_id = %s AND f.data_frete >= %s
+         ORDER BY f.data_frete DESC, f.id""", (ext, desde))
+    nossos = _postos_nossos(cur)
+    cargas = {}
+    for r in cur.fetchall():
+        k = (r['data_frete'], r['motoristas_id'], r['clientes_id'], r['pedido_id'] or 0)
+        cg = cargas.setdefault(k, {'data': r['data_frete'], 'transp': r['transp'],
+                                   'transp_id': r['motoristas_id'], 'doc': _digitos(r['doc']),
+                                   'posto': r['posto'], 'nosso': r['clientes_id'] in nossos,
+                                   'fretes': [], 'litros': 0.0, 'custo': 0.0,
+                                   'sem_custo': 0, 'bts': set(), 'produtos': []})
+        cg['fretes'].append(r['id'])
+        cg['litros'] += float(r['litros'] or 0)
+        if r['custo'] is None:
+            cg['sem_custo'] += 1
+        else:
+            cg['custo'] += float(r['custo'])
+        if r['bt']:
+            cg['bts'].add(r['bt'])
+        if r['produto'] and r['produto'] not in cg['produtos']:
+            cg['produtos'].append(r['produto'])
+    lista = list(cargas.values())
+
+    todos_bt = {b for cg in lista for b in cg['bts']}
+    info_bt = {}
+    if todos_bt:
+        ph = ','.join(['%s'] * len(todos_bt))
+        cur.execute(f"""SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, a.apelido
+                          FROM bank_transactions bt JOIN bank_accounts a ON a.id = bt.account_id
+                         WHERE bt.id IN ({ph})""", list(todos_bt))
+        info_bt = {r['id']: r for r in cur.fetchall()}
+
+    # candidatos para as cargas da casa ainda sem pagamento
+    abertas = [cg for cg in lista
+               if cg['nosso'] and not cg['bts'] and cg['custo'] > 0 and not cg['sem_custo']]
+    cur.execute("SELECT bank_transaction_id FROM frete_terceiro WHERE bank_transaction_id IS NOT NULL")
+    usados = {(r['bank_transaction_id'] if isinstance(r, dict) else r[0]) for r in cur.fetchall()}
+    for cg in abertas:
+        cg['candidatos'] = []
+        cur.execute("""
+            SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf, a.apelido
+              FROM bank_transactions bt
+              JOIN bank_accounts a ON a.id = bt.account_id
+              JOIN clientes c ON c.id = a.cliente_id AND c.grupo_contabil_id IS NOT NULL
+             WHERE bt.tipo = 'DEBIT' AND ABS(bt.valor - %s) < 0.005
+               AND bt.data_transacao BETWEEN %s AND DATE_ADD(%s, INTERVAL 60 DAY)
+             ORDER BY bt.data_transacao""", (cg['custo'], cg['data'], cg['data']))
+        primeiro = (cg['transp'] or '').split()[0].upper() if cg['transp'] else ''
+        for b in cur.fetchall():
+            if b['id'] in usados:
+                continue
+            doc = _digitos(b['cnpj_cpf'])
+            pelo_doc = bool(cg['doc']) and (cg['doc'] == doc or cg['doc'] in _digitos(b['descricao']))
+            pelo_nome = len(primeiro) >= 3 and primeiro in (b['descricao'] or '').upper()
+            if pelo_doc or pelo_nome:
+                b['pelo_doc'] = pelo_doc
+                cg['candidatos'].append(b)
+    disputa = {}
+    for cg in abertas:
+        for b in cg['candidatos']:
+            disputa[b['id']] = disputa.get(b['id'], 0) + 1
+    for cg in abertas:
+        fortes = [b for b in cg['candidatos'] if b['pelo_doc']]
+        if len(fortes) == 1 and disputa[fortes[0]['id']] == 1:
+            b = fortes[0]
+            ph = ','.join(['%s'] * len(cg['fretes']))
+            cur.execute(f"""UPDATE frete_terceiro SET bank_transaction_id = %s, ligado_em = NOW(),
+                                   ligado_por = 'auto' WHERE frete_id IN ({ph})
+                               AND bank_transaction_id IS NULL""", [b['id']] + cg['fretes'])
+            cg['bts'] = {b['id']}
+            info_bt[b['id']] = b
+            cg['candidatos'] = []
+
+    for cg in lista:
+        cg['pagamentos'] = [info_bt[b] for b in cg['bts'] if b in info_bt]
+        if not cg['nosso']:
+            cg['situacao'] = 'informativo'
+        elif cg['sem_custo']:
+            cg['situacao'] = 'sem_valor'
+        elif cg['pagamentos']:
+            cg['situacao'] = 'pago'
+        else:
+            cg['situacao'] = 'a_pagar'
+        cg.setdefault('candidatos', [])
+        cg['bts'] = sorted(cg['bts'])
+    return lista
+
+
+@bp.route('/ped-frete-novo/terceiro-custo', methods=['POST'])
+@login_required
+def terceiro_custo():
+    """Grava (ou corrige) o valor do frete do terceiro de uma carga. O total
+    se divide entre os fretes da carga pelos litros."""
+    d = request.get_json(silent=True) or {}
+    ids = [int(i) for i in d.get('frete_ids') or [] if str(i).isdigit()]
+    total = _f(d.get('total'))
+    if not ids or total < 0:
+        return jsonify({'ok': False, 'erro': 'informe o valor'}), 400
+    _ensure_tabela()
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        ext = _terceiro_id(cur)
+        ph = ','.join(['%s'] * len(ids))
+        cur.execute(f"""SELECT f.id, COALESCE(f.quantidade_manual, q.valor, 0) AS litros
+                          FROM fretes f LEFT JOIN quantidades q ON q.id = f.quantidade_id
+                         WHERE f.id IN ({ph}) AND f.veiculos_id = %s""", ids + [ext])
+        fr = cur.fetchall()
+        if len(fr) != len(ids):
+            return jsonify({'ok': False, 'erro': 'frete não é de terceiro'}), 400
+        soma = sum(float(r['litros'] or 0) for r in fr) or len(fr)
+        resto = round(total, 2)
+        for i, r in enumerate(fr):
+            parte = resto if i == len(fr) - 1 else round(total * (float(r['litros'] or 0) or 1) / soma, 2)
+            resto = round(resto - parte, 2)
+            cur.execute("""INSERT INTO frete_terceiro (frete_id, custo) VALUES (%s, %s)
+                           ON DUPLICATE KEY UPDATE custo = VALUES(custo)""", (r['id'], parte))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        conn.rollback()
+        logging.getLogger(__name__).exception("[ped_frete_novo] terceiro_custo")
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@bp.route('/ped-frete-novo/terceiro-pagamento', methods=['POST'])
+@login_required
+def terceiro_pagamento():
+    """Liga (ou desliga, bank_transaction_id vazio) o pagamento do banco a uma
+    carga de terceiro. So marca a carga; a conciliacao do banco nao muda."""
+    d = request.get_json(silent=True) or {}
+    ids = [int(i) for i in d.get('frete_ids') or [] if str(i).isdigit()]
+    try:
+        bt = int(d.get('bank_transaction_id') or 0) or None
+    except (TypeError, ValueError):
+        bt = None
+    if not ids:
+        return jsonify({'ok': False, 'erro': 'carga não informada'}), 400
+    _ensure_tabela()
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        ph = ','.join(['%s'] * len(ids))
+        quem = (getattr(current_user, 'username', None) or getattr(current_user, 'nome', None) or '')[:80]
+        if bt:
+            cur.execute(f"""UPDATE frete_terceiro SET bank_transaction_id = %s, ligado_em = NOW(),
+                                   ligado_por = %s WHERE frete_id IN ({ph})""", [bt, quem] + ids)
+        else:
+            cur.execute(f"""UPDATE frete_terceiro SET bank_transaction_id = NULL, ligado_em = NULL,
+                                   ligado_por = NULL WHERE frete_id IN ({ph})""", ids)
+        conn.commit()
+        return jsonify({'ok': True, 'alterados': cur.rowcount})
+    except Exception as e:
+        conn.rollback()
+        logging.getLogger(__name__).exception("[ped_frete_novo] terceiro_pagamento")
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
 @bp.route('/ped-frete-novo/transportadora', methods=['POST'])
 @login_required
 def nova_transportadora():
@@ -2083,7 +2305,9 @@ def nova_transportadora():
     BARROS. Nome que ja existe (sem diferenciar maiuscula) devolve o cadastro
     existente em vez de duplicar.
     """
-    nome = ' '.join(((request.get_json(silent=True) or {}).get('nome') or '').split()).upper()
+    _corpo = request.get_json(silent=True) or {}
+    nome = ' '.join((_corpo.get('nome') or '').split()).upper()
+    doc = _digitos(_corpo.get('cnpj'))[:14] or None
     if len(nome) < 3:
         return jsonify({'ok': False, 'erro': 'digite o nome da transportadora'}), 400
     conn = get_db_connection()
@@ -2101,8 +2325,8 @@ def nova_transportadora():
                 cur.execute("UPDATE motoristas SET ativo = 1 WHERE id = %s", (ja['id'],))
                 conn.commit()
             return jsonify({'ok': True, 'id': ja['id'], 'nome': ja['nome'], 'existia': True})
-        cur.execute("""INSERT INTO motoristas (nome, paga_comissao, ativo, veiculo_id)
-                       VALUES (%s, 0, 1, %s)""", (nome, ext['id']))
+        cur.execute("""INSERT INTO motoristas (nome, cpf, paga_comissao, ativo, veiculo_id)
+                       VALUES (%s, %s, 0, 1, %s)""", (nome, doc, ext['id']))
         conn.commit()
         return jsonify({'ok': True, 'id': cur.lastrowid, 'nome': nome})
     except Exception as e:
@@ -2173,7 +2397,9 @@ def lancar():
         if (it or {}).get('preco_litro') in (None, ''):
             return jsonify({'ok': False,
                             'erro': 'produto %d: informe o frete por litro' % n}), 400
+        custo_l = (it or {}).get('custo_terceiro_litro')
         linhas.append({
+            'custo_terceiro_litro': None if custo_l in (None, '') else _f(custo_l),
             'fornecedor_id': fornecedor_id, 'produto_id': produto_id,
             'base_id': _int(it, 'base_id') or None,
             'quantidade_id': _int(it, 'quantidade_id') or None,
@@ -2239,6 +2465,18 @@ def lancar():
         mot = cursor.fetchone()
         paga = bool((mot or {}).get('paga_comissao', 1))
 
+        # Caminhao de fora: a casa nao cobra frete (no posto nosso nao se cobra,
+        # no posto de cliente quem cobra e o terceiro) e nao paga comissao. O
+        # que entra e o custo da transportadora, item a item.
+        eh_terceiro = vid == _terceiro_id(cursor)
+        if eh_terceiro:
+            paga = False
+            for n, ln in enumerate(linhas, 1):
+                if ln['custo_terceiro_litro'] is None:
+                    return jsonify({'ok': False,
+                                    'erro': 'produto %d: informe o frete do terceiro por litro' % n}), 400
+                ln['preco_litro'] = 0.0
+
         pedido_id, numero, criou_pedido = _carga_do_dia(
             cursor, dia, vid, mid,
             pedido_id=_int(dados, 'pedido_id') or None,
@@ -2267,6 +2505,9 @@ def lancar():
                   valores['valor_cte'], valores['comissao_cte'], valores['lucro'],
                   pedido_id))
             frete_id = cursor.lastrowid
+            if eh_terceiro:
+                cursor.execute("INSERT INTO frete_terceiro (frete_id, custo) VALUES (%s, %s)",
+                               (frete_id, round(ln['litros'] * ln['custo_terceiro_litro'], 2)))
 
             # a mercadoria — ja apontando pro frete que nasceu com ela, pra que
             # mover ou corrigir depois leve os dois juntos
@@ -2491,7 +2732,7 @@ def index():
     _ensure_tabela()
     hoje = hoje_brasilia()
     modo = (request.args.get('modo') or 'dia').lower()
-    if modo not in ('dia', 'caminhao', 'cobrar', 'conferir'):
+    if modo not in ('dia', 'caminhao', 'cobrar', 'conferir', 'terceiros'):
         modo = 'dia'
 
     try:
@@ -2548,6 +2789,9 @@ def index():
             # PROBLEMAS existem, senao o numero perde o sentido.
             ctx['achados'] = sum(g['n'] for g in ctx['conferencia']
                                  if not g.get('aviso'))
+        elif modo == 'terceiros':
+            ctx['terceiros'] = _terceiros(cursor, hoje - timedelta(days=120))
+            conn.commit()
         elif modo == 'cobrar':
             ctx['cobrar'] = _a_cobrar(cursor, hoje - timedelta(days=120))
             ctx['totais']['a_cobrar'] = sum(c['valor'] for c in ctx['cobrar'])
