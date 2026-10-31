@@ -55,8 +55,11 @@ document.addEventListener('DOMContentLoaded', function() {
     var inputType = (input.type || '').toLowerCase();
     
     // Verifica se o campo deve ser excluído
-    var shouldExclude = excludeTypes.includes(inputType) || 
-                        excludeNames.some(function(name) { return inputName.includes(name); });
+    // data-sem-maiuscula (no campo ou num pai): a tela cuida das letras sozinha
+    // (ex.: Plano de Contas, que segue a grafia padronizada do contador)
+    var shouldExclude = excludeTypes.includes(inputType) ||
+                        excludeNames.some(function(name) { return inputName.includes(name); }) ||
+                        !!input.closest('[data-sem-maiuscula]');
     
     if (!shouldExclude) {
       // Converte para maiúsculas ao digitar
