@@ -1659,6 +1659,7 @@ def conf_despesas_lancamentos():
         cur = conn.cursor(dictionary=True)
         cur.execute("""
             SELECT ld.id, ld.data, ld.valor, ld.fornecedor, ld.observacao,
+                   ld.cliente_id, ld.titulo_id, ld.categoria_id, ld.subcategoria_id,
                    s.nome AS subcategoria, cl.razao_social AS empresa,
                    ba.apelido AS banco, bt.descricao AS banco_texto
               FROM lancamentos_despesas ld
@@ -1679,9 +1680,82 @@ def conf_despesas_lancamentos():
             'empresa': r['empresa'] or '',
             'banco': r['banco'] or '',
             'banco_texto': r['banco_texto'] or '',
+            # para a gaveta editar ali mesmo
+            'data_iso': r['data'].isoformat() if r['data'] else '',
+            'cliente_id': r['cliente_id'], 'titulo_id': r['titulo_id'],
+            'categoria_id': r['categoria_id'], 'subcategoria_id': r['subcategoria_id'],
         } for r in cur.fetchall()]
         cur.close()
     finally:
         conn.close()
     return jsonify({'ok': True, 'lancamentos': linhas,
                     'total': round(sum(l['valor'] for l in linhas), 2)})
+
+
+@bp.route('/conf_despesas/opcoes', methods=['GET'])
+@login_required
+@admin_required
+def conf_despesas_opcoes():
+    """Listas da gaveta de edição: títulos, categorias, subcategorias, empresas."""
+    from routes.lancamentos_despesas import get_clientes_com_produtos
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id, nome FROM titulos_despesas WHERE ativo = 1 ORDER BY ordem, nome")
+        titulos = cur.fetchall()
+        cur.execute("SELECT id, titulo_id, nome FROM categorias_despesas WHERE ativo = 1 ORDER BY ordem, nome")
+        categorias = cur.fetchall()
+        cur.execute("SELECT id, categoria_id, nome FROM subcategorias_despesas WHERE ativo = 1 ORDER BY ordem, nome")
+        subcategorias = cur.fetchall()
+        cur.close()
+    finally:
+        conn.close()
+    empresas = [{'id': c['id'], 'nome': c.get('razao_social') or c.get('nome') or ''}
+                for c in (get_clientes_com_produtos() or [])]
+    return jsonify({'ok': True, 'titulos': titulos, 'categorias': categorias,
+                    'subcategorias': subcategorias, 'empresas': empresas})
+
+
+@bp.route('/conf_despesas/lancamento/<int:lid>', methods=['POST'])
+@login_required
+@admin_required
+def conf_despesas_salvar(lid):
+    """Edita o lançamento pela gaveta, sem sair da Conferência. Mesmas regras
+    e mesmas colunas da tela de edição (lancamentos_despesas.editar)."""
+    from routes.lancamentos_despesas import parse_brazilian_currency, validate_lancamento_input
+    d = request.get_json(silent=True) or {}
+    data = (d.get('data') or '').strip()
+    titulo_id = str(d.get('titulo_id') or '').strip()
+    categoria_id = str(d.get('categoria_id') or '').strip()
+    valor = str(d.get('valor') or '').strip()
+    ok, erros = validate_lancamento_input(data, titulo_id, categoria_id, valor)
+    if not ok:
+        return jsonify({'ok': False, 'erro': ' '.join(erros)}), 400
+    try:
+        valor_dec = parse_brazilian_currency(valor)
+    except Exception:
+        return jsonify({'ok': False, 'erro': 'Valor inválido.'}), 400
+    sub = str(d.get('subcategoria_id') or '').strip()
+    cli = str(d.get('cliente_id') or '').strip()
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("""UPDATE lancamentos_despesas
+                          SET data = %s, cliente_id = %s, titulo_id = %s, categoria_id = %s,
+                              subcategoria_id = %s, valor = %s, fornecedor = %s, observacao = %s
+                        WHERE id = %s""",
+                    (data, int(cli) if cli else None, int(titulo_id), int(categoria_id),
+                     int(sub) if sub else None, valor_dec, (d.get('fornecedor') or '').strip(),
+                     (d.get('observacao') or '').strip(), lid))
+        if cur.rowcount == 0:
+            cur.execute("SELECT COUNT(*) FROM lancamentos_despesas WHERE id = %s", (lid,))
+            if not cur.fetchone()[0]:
+                return jsonify({'ok': False, 'erro': 'Lançamento não encontrado.'}), 404
+        conn.commit()
+        cur.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'ok': False, 'erro': 'Erro ao salvar: %s' % e}), 500
+    finally:
+        conn.close()
