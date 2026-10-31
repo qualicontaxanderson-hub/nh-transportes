@@ -3,231 +3,344 @@
 
 {% block styles %}
 <style>
-  .page-hero {
-    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
-    border-radius: .75rem;
-    padding: 1.5rem 2rem;
-    margin-bottom: 1.5rem;
-    color: #fff;
-  }
-  .page-hero .hero-icon {
-    width: 3rem; height: 3rem;
-    background: rgba(255,255,255,.15);
-    border-radius: .6rem;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.5rem;
-    flex-shrink: 0;
-  }
-  /* ── Multi-column grid: cards side by side ── */
-  .tipo-grid { columns: 2; column-gap: 1rem; }
-  @media (max-width: 767px) { .tipo-grid { columns: 1; } }
-  @media (min-width: 1400px) { .tipo-grid { columns: 3; } }
-  .tipo-card { break-inside: avoid; display: inline-block; width: 100%; }
-  /* ── Compact table typography ── */
-  .tipo-table { font-size: 0.78rem; }
-  .tipo-table thead th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: #555; padding: 0.3rem 0.5rem; border-bottom: 1px solid #dee2e6; }
-  .tipo-table tbody td { padding: 0.25rem 0.5rem; vertical-align: middle; }
-  .th-codigo { width: 90px; }
-  .th-acoes { width: 70px; }
-  .td-codigo { white-space: nowrap; }
-  .td-acoes { white-space: nowrap; }
-  .td-nome { word-break: break-word; }
-  .row-inativa { opacity: 0.55; }
-  .btn-xs { padding: 0.1rem 0.3rem; font-size: 0.72rem; line-height: 1.3; border-radius: 0.2rem; }
+  .pc { --azul:#1D63A5; --azul-esc:#154070; --tinta:#1f2937; --suave:#6b7280; --linha:#e5e7eb; font-size:13px; color:var(--tinta); }
+  .pc-topo { background:linear-gradient(135deg,var(--azul),var(--azul-esc)); color:#fff; border-radius:14px; padding:14px 18px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .pc-topo h1 { margin:0; font-size:19px; font-weight:700; }
+  .pc-topo .sub { opacity:.8; font-size:12px; }
+  .pc-emp { margin-left:auto; display:flex; gap:6px; flex-wrap:wrap; }
+  .pc-emp a { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.25); color:#fff; padding:5px 12px; border-radius:99px; font-size:12px; text-decoration:none; }
+  .pc-emp a.on { background:#fff; color:var(--azul-esc); font-weight:700; }
+  .pc-btn-n { background:#fff; color:var(--azul-esc); border:0; border-radius:8px; padding:7px 12px; font-weight:700; }
+  .pc-btn-l { background:rgba(255,255,255,.12); color:#fff; border:1px solid rgba(255,255,255,.3); border-radius:8px; padding:6px 11px; font-size:12px; text-decoration:none; }
+
+  .pc-tipos { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-top:12px; }
+  @media (max-width: 900px) { .pc-tipos { grid-template-columns:repeat(3,1fr); } }
+  .pc-tipo { background:#fff; border-radius:12px; padding:10px 14px; border:0; border-top:4px solid; text-align:left; box-shadow:0 1px 2px rgba(0,0,0,.05); }
+  .pc-tipo small { color:var(--suave); font-size:10px; font-weight:700; letter-spacing:.06em; display:block; }
+  .pc-tipo b { font-size:20px; }
+  .pc-tipo.on { outline:2px solid var(--azul); }
+  .pc-barra { display:flex; gap:8px; align-items:center; margin-top:12px; flex-wrap:wrap; }
+  .pc-busca { flex:1; min-width:220px; border:1px solid var(--linha); border-radius:10px; padding:9px 12px; font-size:13px; background:#fff; }
+  .pc-chip { border:1px solid var(--linha); background:#fff; border-radius:99px; padding:6px 12px; font-size:12px; }
+  .pc-chip.on { background:var(--tinta); color:#fff; border-color:var(--tinta); }
+
+  .pc-grade { display:grid; grid-template-columns:repeat(auto-fill,minmax(400px,1fr)); gap:12px; margin-top:12px; align-items:start; }
+  @media (max-width: 500px) { .pc-grade { grid-template-columns:1fr; } }
+  .pc-card { background:#fff; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.06); overflow:hidden; }
+  .pc-card header { display:flex; align-items:center; gap:10px; padding:11px 14px; border-bottom:1px solid var(--linha); background:linear-gradient(#fafcff,#fff); }
+  .pc-card header small { color:var(--suave); font-size:10px; text-transform:uppercase; letter-spacing:.05em; display:block; }
+  .pc-card header h3 { margin:1px 0 0; font-size:14px; font-weight:700; }
+  .pc-qt { background:#e8f0fa; color:var(--azul-esc); font-weight:700; border-radius:99px; padding:1px 9px; font-size:11px; }
+  .pc-todas { margin-left:auto; color:var(--suave); font-size:11px; display:flex; gap:4px; align-items:center; cursor:pointer; white-space:nowrap; }
+  .pc-card ul { list-style:none; margin:0; padding:4px 0; }
+  .pc-card li { display:flex; align-items:center; gap:10px; padding:6px 14px; cursor:pointer; }
+  .pc-card li:hover { background:#f5f8fd; }
+  .pc-card li.sel { background:#fef2f2; }
+  .pc-card li.inativa .nm { color:#9ca3af; text-decoration:line-through; }
+  .pc-card li code { font-family:ui-monospace,Consolas,monospace; font-size:12px; color:var(--azul-esc); background:#eef4fb; border-radius:6px; padding:2px 7px; min-width:62px; text-align:center; }
+  .pc-card li .nm { flex:1; }
+  .pc-uso { font-size:10px; color:#92400e; background:#fef3c7; border-radius:99px; padding:1px 8px; white-space:nowrap; }
+  .pc-ed { border:0; background:none; color:var(--suave); opacity:0; }
+  .pc-card li:hover .pc-ed { opacity:1; }
+  .pc-vazio { text-align:center; color:var(--suave); padding:40px; display:none; }
+
+  .pc-lote { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); background:#111827; color:#fff; border-radius:14px; padding:10px 14px; display:none; gap:12px; align-items:center; box-shadow:0 10px 30px rgba(0,0,0,.25); z-index:1040; }
+  .pc-lote.on { display:flex; }
+  .pc-lote b { font-size:14px; }
+  .pc-lote small { color:#9ca3af; }
+  .pc-lote .x { background:#dc2626; color:#fff; border:0; border-radius:8px; padding:7px 12px; font-weight:700; }
+  .pc-lote .c { background:none; color:#d1d5db; border:1px solid #374151; border-radius:8px; padding:7px 12px; }
+
+  .pc-veu { position:fixed; inset:0; background:rgba(15,23,42,.35); z-index:1050; display:none; }
+  .pc-gav { position:fixed; top:0; right:0; bottom:0; width:440px; max-width:100%; background:#fff; z-index:1051; box-shadow:-8px 0 30px rgba(0,0,0,.15); display:none; flex-direction:column; }
+  body.pc-editando .pc-veu { display:block; }
+  body.pc-editando .pc-gav { display:flex; }
+  .pc-gav .cab { padding:16px 18px; border-bottom:1px solid var(--linha); display:flex; align-items:flex-start; }
+  .pc-gav .cab h2 { margin:0; font-size:16px; font-weight:700; }
+  .pc-gav .cab small { color:var(--suave); }
+  .pc-gav .cab .fechar { margin-left:auto; border:0; background:none; font-size:22px; color:var(--suave); line-height:1; }
+  .pc-gav .corpo { padding:16px 18px; flex:1; overflow:auto; display:flex; flex-direction:column; gap:12px; }
+  .pc-gav label.t { font-size:10px; font-weight:700; color:var(--suave); text-transform:uppercase; display:block; margin-bottom:3px; }
+  .pc-gav input[type=text], .pc-gav select, .pc-gav textarea { width:100%; border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; font:inherit; }
+  .pc-gav .dupla { display:grid; grid-template-columns:130px 1fr; gap:10px; }
+  .pc-seg { display:flex; gap:6px; flex-wrap:wrap; }
+  .pc-seg button { border:1px solid var(--linha); background:#fff; border-radius:8px; padding:6px 10px; font-size:12px; }
+  .pc-seg button.on { background:#e8f0fa; border-color:var(--azul); color:var(--azul-esc); font-weight:700; }
+  .pc-info { background:#f8fafc; border-radius:10px; padding:10px 12px; font-size:12px; color:#374151; }
+  .pc-info b { display:block; margin-bottom:4px; }
+  .pc-erro { background:#fef2f2; color:#991b1b; border-radius:8px; padding:8px 10px; font-size:12px; display:none; }
+  .pc-gav .rod { padding:12px 18px; border-top:1px solid var(--linha); display:flex; gap:8px; justify-content:space-between; align-items:center; }
+  .pc-b { border:1px solid var(--linha); background:#fff; border-radius:8px; padding:8px 14px; font-weight:600; }
+  .pc-b.pri { background:var(--azul); color:#fff; border-color:var(--azul); }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-
-  <nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb small">
+<div class="container-fluid pc py-3">
+  <nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb small mb-0">
       <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
       <li class="breadcrumb-item"><a href="{{ url_for('plano_contas.lista') }}" class="text-decoration-none">Plano de Contas</a></li>
       <li class="breadcrumb-item active">{{ grupo.nome }}</li>
     </ol>
   </nav>
 
-  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-    <div class="hero-icon"><i class="bi bi-folder-fill"></i></div>
-    <div class="flex-grow-1">
-      <h4 class="mb-0 fw-bold">
-        <span class="badge bg-white bg-opacity-25 me-1" style="font-family:monospace;font-size:0.75em;">{{ grupo.codigo }}</span>
-        {{ grupo.nome }}
-      </h4>
-      {% if grupo.descricao %}
-      <p class="mb-0 opacity-75 small">{{ grupo.descricao }}</p>
-      {% else %}
-      <p class="mb-0 opacity-75 small">Contas contábeis deste grupo.</p>
-      {% endif %}
-    </div>
-    <div class="d-flex gap-2 flex-wrap">
-      <a href="{{ url_for('plano_contas.vincular_clientes', id=grupo.id) }}"
-         class="btn btn-sm px-3" style="background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.35);">
-        <i class="bi bi-building me-1"></i> Vincular Empresas
-      </a>
-      <a href="{{ url_for('plano_contas.nova_conta', grupo_id=grupo.id) }}"
-         class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
-        <i class="bi bi-plus-circle me-1"></i> Nova Conta
-      </a>
-    </div>
-  </div>
-
-  {% if not contas %}
-  <div class="alert alert-info mb-3 d-flex align-items-start gap-3" style="font-size:0.9rem;">
-    <i class="bi bi-info-circle-fill fs-4 mt-1 text-primary"></i>
+  <div class="pc-topo">
     <div>
-      <strong>Grupo criado!</strong> Próximos passos:
-      <ol class="mb-0 mt-1 ps-3">
-        <li>
-          <a href="{{ url_for('plano_contas.nova_conta', grupo_id=grupo.id) }}" class="fw-semibold">
-            Adicione as contas contábeis
-          </a>
-          (ex.: Banco Bradesco = <code>1121</code>, Banco EFI = <code>1122</code>)
-        </li>
-        <li>
-          <a href="{{ url_for('plano_contas.vincular_clientes', id=grupo.id) }}" class="fw-semibold">
-            Vincule as empresas
-          </a>
-          que utilizarão este plano de contas.
-        </li>
-      </ol>
+      <h1><i class="bi bi-diagram-3"></i> Plano de Contas · {{ grupo.nome }}</h1>
+      <div class="sub">{{ contas|length }} contas de lançamento · {{ n_em_uso }} em uso
+        {% if empresas %} · usado por {{ empresas|join(', ') }}{% endif %}</div>
     </div>
+    <div class="pc-emp">
+      {% for g in grupos %}
+      <a href="{{ url_for('plano_contas.detalhe', id=g.id) }}" class="{{ 'on' if g.id == grupo.id else '' }}">{{ g.nome }}</a>
+      {% endfor %}
+      <a href="{{ url_for('plano_contas.vincular_clientes', id=grupo.id) }}" class="pc-btn-l"><i class="bi bi-building"></i> Empresas</a>
+    </div>
+    <button class="pc-btn-n" type="button" onclick="pcAbrir(null)"><i class="bi bi-plus-lg"></i> Nova conta</button>
   </div>
-  {% endif %}
 
-  {# ── Cores e ícones por tipo ── #}
-  {% set TIPO_META = {
-    'ATIVO':    {'cor': '#1D63A5', 'icone': 'bi-bank',          'label': 'Ativo'},
-    'PASSIVO':  {'cor': '#6f42c1', 'icone': 'bi-arrow-down-circle', 'label': 'Passivo'},
-    'RECEITAS': {'cor': '#198754', 'icone': 'bi-graph-up-arrow', 'label': 'Receitas'},
-    'CUSTOS':   {'cor': '#fd7e14', 'icone': 'bi-box-seam',       'label': 'Custos'},
-    'DESPESAS': {'cor': '#dc3545', 'icone': 'bi-wallet2',        'label': 'Despesas'},
-    'OUTROS':   {'cor': '#6c757d', 'icone': 'bi-three-dots',     'label': 'Outros'},
-  } %}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ cat }} alert-dismissible fade show mt-2 mb-0 py-2" role="alert">{{ msg }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+    {% endfor %}
+  {% endwith %}
 
-  {% if contas_por_tipo %}
-  <div class="tipo-grid">
-    {% for tipo, lista in contas_por_tipo.items() %}
-    {% set meta = TIPO_META.get(tipo, TIPO_META['OUTROS']) %}
-    <div class="tipo-card card shadow-sm mb-3">
-      <div class="card-header py-1 px-2 d-flex align-items-center gap-1"
-           style="background:{{ meta.cor }};color:white;">
-        <i class="bi {{ meta.icone }}"></i>
-        <span class="fw-bold" style="letter-spacing:0.05em;font-size:0.78rem;">{{ meta.label | upper }}</span>
-        <span class="badge bg-white ms-auto"
-              style="color:{{ meta.cor }};font-size:0.68rem;">
-          {{ lista | length }}
-        </span>
-      </div>
-      <div class="card-body p-0">
-        <table class="table table-hover table-sm mb-0 tipo-table">
-          <thead style="background:#f0f4f8;">
-            <tr>
-              <th class="th-codigo">Cód. Contábil</th>
-              <th>Nome da Conta</th>
-              <th class="th-acoes text-center">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for c in lista %}
-            <tr {% if not c.ativo %}class="row-inativa"{% endif %}>
-              <td class="td-codigo">
-                <span class="badge"
-                      style="font-family:monospace;font-size:0.72em;letter-spacing:0.03em;background:{{ meta.cor }};color:#fff;">
-                  {{ c.codigo }}
-                </span>
-              </td>
-              <td class="td-nome">
-                {{ c.nome }}
-                {% if not c.ativo %}<span class="badge bg-secondary ms-1" style="font-size:0.6em;">Inativa</span>{% endif %}
-                {% if c.descricao %}
-                <br><span class="text-muted" style="font-size:0.72em;">{{ c.descricao }}</span>
-                {% endif %}
-              </td>
-              <td class="text-center text-nowrap td-acoes">
-                <a href="{{ url_for('plano_contas.editar_conta', conta_id=c.id) }}"
-                   class="btn btn-xs btn-outline-primary" title="Editar">
-                  <i class="bi bi-pencil"></i>
-                </a>
-                <form method="POST" action="{{ url_for('plano_contas.excluir_conta', conta_id=c.id) }}"
-                      style="display:inline;"
-                      onsubmit="return confirm('Excluir a conta \'{{ c.nome }}\' ({{ c.codigo }})?');">
-                  <button type="submit" class="btn btn-xs btn-outline-danger" title="Excluir">
-                    <i class="bi bi-trash"></i>
-                  </button>
-                </form>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
+  {% set cores = {'ATIVO':'#1D63A5','PASSIVO':'#7c3aed','RECEITAS':'#16a34a','CUSTOS':'#ea580c','DESPESAS':'#dc2626','OUTROS':'#6b7280'} %}
+  <div class="pc-tipos">
+    {% for t in ordem_tipos %}
+    <button type="button" class="pc-tipo" data-tipo="{{ t }}" style="border-top-color:{{ cores[t] }}" onclick="pcTipo('{{ t }}')">
+      <small>{{ t }}</small><b>{{ por_tipo[t] }}</b>
+    </button>
     {% endfor %}
   </div>
-  {% elif contas %}
-  {# Fallback: flat table if contas_por_tipo is somehow empty but contas is not #}
-  <div class="card shadow-sm">
-    <div class="card-header py-2" style="background:#1D63A5;color:white;">
-      <h6 class="mb-0"><i class="bi bi-list-ul"></i> Contas do Grupo</h6>
+
+  <div class="pc-barra">
+    <input class="pc-busca" id="pcBusca" placeholder="🔎  Buscar por código ou nome (ex.: 11220, Cora, depreciação)" oninput="pcFiltrar()">
+    <button type="button" class="pc-chip on" data-f="todas" onclick="pcFiltro(this)">Todas</button>
+    <button type="button" class="pc-chip" data-f="uso" onclick="pcFiltro(this)">Em uso</button>
+    <button type="button" class="pc-chip" data-f="livre" onclick="pcFiltro(this)">Sem uso</button>
+    <button type="button" class="pc-chip" data-f="inativa" onclick="pcFiltro(this)">Inativas</button>
+  </div>
+
+  <div class="pc-grade" id="pcGrade">
+    {% for card in cards %}
+    <section class="pc-card" data-tipo="{{ card.tipo }}">
+      <header>
+        <div><small>{{ card.acima }}</small><h3>{{ card.titulo }}</h3></div>
+        <span class="pc-qt">{{ card.contas|length }}</span>
+        <label class="pc-todas"><input type="checkbox" onchange="pcTodas(this)"> todas</label>
+      </header>
+      <ul>
+        {% for c in card.contas %}
+        <li data-id="{{ c.id }}" data-codigo="{{ c.codigo }}" data-nome="{{ c.nome }}" data-tipo="{{ c.tipo_grupo or 'OUTROS' }}"
+            data-desc="{{ c.descricao or '' }}" data-cls="{{ c.classificacao or '' }}" data-ativo="{{ 1 if c.ativo else 0 }}"
+            data-uso="{{ 1 if c.em_uso else 0 }}" class="{{ '' if c.ativo else 'inativa' }}" onclick="pcClique(event, this)">
+          <input type="checkbox" class="pc-sel" {{ 'disabled title="Em uso — não pode ser excluída"'|safe if c.em_uso else '' }} onclick="event.stopPropagation(); pcConta()">
+          <code>{{ c.codigo }}</code><span class="nm">{{ c.nome }}</span>
+          {% if c.em_uso %}<span class="pc-uso"><i class="bi bi-lock-fill"></i> em uso</span>{% endif %}
+          <button type="button" class="pc-ed" title="Editar"><i class="bi bi-pencil"></i></button>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endfor %}
+  </div>
+  <div class="pc-vazio" id="pcVazio">Nenhuma conta com esse filtro.</div>
+  <div style="height:80px"></div>
+</div>
+
+<div class="pc-lote" id="pcLote">
+  <b><span id="pcNsel">0</span> selecionadas</b><small>contas <i class="bi bi-lock-fill"></i> em uso não podem ser marcadas</small>
+  <button type="button" class="c" onclick="pcLimpar()">Limpar</button>
+  <button type="button" class="x" onclick="pcExcluirLote()"><i class="bi bi-trash"></i> Excluir <span id="pcNsel2">0</span></button>
+</div>
+
+<div class="pc-veu" onclick="pcFechar()"></div>
+<aside class="pc-gav" aria-label="Conta">
+  <div class="cab">
+    <div><h2 id="gTit">Editar conta</h2><small id="gSub">{{ grupo.nome }}</small></div>
+    <button type="button" class="fechar" onclick="pcFechar()">×</button>
+  </div>
+  <div class="corpo">
+    <div class="pc-erro" id="gErro"></div>
+    <div class="dupla">
+      <div><label class="t">Código</label><input type="text" id="gCod" inputmode="numeric"></div>
+      <div><label class="t">Nome</label><input type="text" id="gNome"></div>
     </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-hover table-sm mb-0 tipo-table">
-          <thead class="table-light">
-            <tr>
-              <th class="th-codigo">Cód. Contábil</th>
-              <th>Nome da Conta</th>
-              <th class="th-acoes text-center">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for c in contas %}
-            <tr>
-              <td class="td-codigo">
-                <span class="badge bg-secondary" style="font-family:monospace;font-size:0.72em;">
-                  {{ c.codigo }}
-                </span>
-              </td>
-              <td class="td-nome">{{ c.nome }}</td>
-              <td class="text-center text-nowrap td-acoes">
-                <a href="{{ url_for('plano_contas.editar_conta', conta_id=c.id) }}"
-                   class="btn btn-xs btn-outline-primary" title="Editar">
-                  <i class="bi bi-pencil"></i>
-                </a>
-                <form method="POST" action="{{ url_for('plano_contas.excluir_conta', conta_id=c.id) }}"
-                      style="display:inline;"
-                      onsubmit="return confirm('Excluir a conta \'{{ c.nome }}\' ({{ c.codigo }})?');">
-                  <button type="submit" class="btn btn-xs btn-outline-danger" title="Excluir">
-                    <i class="bi bi-trash"></i>
-                  </button>
-                </form>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+    <div><label class="t">Tipo</label>
+      <div class="pc-seg" id="gTipo">
+        {% for t in ordem_tipos %}<button type="button" data-t="{{ t }}" onclick="pcSegTipo('{{ t }}')">{{ t|capitalize }}</button>{% endfor %}
       </div>
     </div>
-  </div>
-  {% else %}
-  <div class="card shadow-sm">
-    <div class="card-body p-4 text-center text-muted">
-      <i class="bi bi-list-ol fs-1"></i>
-      <p class="mt-2 mb-0">Nenhuma conta cadastrada neste grupo ainda.</p>
-      <a href="{{ url_for('plano_contas.nova_conta', grupo_id=grupo.id) }}"
-         class="btn btn-primary btn-sm mt-2">
-        <i class="bi bi-plus-circle"></i> Adicionar primeira conta
-      </a>
+    <div><label class="t">Fica dentro de</label>
+      <select id="gPai">
+        <option value="">— sem grupo —</option>
+        {% for k, nome, acima in pais %}<option value="{{ k }}">{{ acima }} › {{ nome }}</option>{% endfor %}
+      </select>
     </div>
+    <div><label class="t">Observação</label><textarea id="gDesc" rows="2" placeholder="opcional"></textarea></div>
+    <div class="form-check form-switch" id="gAtivoBox"><input class="form-check-input" type="checkbox" id="gAtivo"><label class="form-check-label" for="gAtivo">Conta ativa</label></div>
+    <div class="pc-info" id="gUso" style="display:none"><b><i class="bi bi-link-45deg"></i> Onde esta conta é usada</b><div id="gUsoLista"></div></div>
   </div>
-  {% endif %}
+  <div class="rod">
+    <span></span>
+    <span><button type="button" class="pc-b" onclick="pcFechar()">Cancelar</button>
+      <button type="button" class="pc-b pri" id="gSalvar" onclick="pcSalvar()"><i class="bi bi-check2"></i> Salvar</button></span>
+  </div>
+</aside>
+{% endblock %}
 
-  <div class="mt-3 d-flex gap-2">
-    <a href="{{ url_for('plano_contas.lista') }}" class="btn btn-secondary btn-sm">
-      <i class="bi bi-arrow-left"></i> Voltar à lista de grupos
-    </a>
-  </div>
-</div>
+{% block scripts %}
+<script>
+(function () {
+  var URL_SALVAR = '{{ url_for("plano_contas.salvar_conta", grupo_id=grupo.id) }}';
+  var URL_LOTE = '{{ url_for("plano_contas.excluir_lote", grupo_id=grupo.id) }}';
+  var URL_USO = '{{ url_for("plano_contas.uso_conta", conta_id=0) }}';
+  var tipoAtual = null, filtro = 'todas', editId = null, tipoSel = 'OUTROS';
+  var CHAVE = 'pc-tipo-{{ grupo.id }}';
+
+  function sem(s) { return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+
+  window.pcTipo = function (t) {
+    tipoAtual = (tipoAtual === t) ? null : t;
+    try { sessionStorage.setItem(CHAVE, tipoAtual || ''); } catch (e) {}
+    document.querySelectorAll('.pc-tipo').forEach(function (b) { b.classList.toggle('on', b.dataset.tipo === tipoAtual); });
+    pcFiltrar();
+  };
+  window.pcFiltro = function (el) {
+    filtro = el.dataset.f;
+    document.querySelectorAll('.pc-chip').forEach(function (b) { b.classList.toggle('on', b === el); });
+    pcFiltrar();
+  };
+  window.pcFiltrar = function () {
+    var q = sem(document.getElementById('pcBusca').value.trim());
+    var algum = false;
+    document.querySelectorAll('.pc-card').forEach(function (card) {
+      var vis = 0;
+      card.querySelectorAll('li').forEach(function (li) {
+        var d = li.dataset, ok = true;
+        if (tipoAtual && d.tipo !== tipoAtual) ok = false;
+        if (filtro === 'uso' && d.uso !== '1') ok = false;
+        if (filtro === 'livre' && d.uso === '1') ok = false;
+        if (filtro === 'inativa' && d.ativo === '1') ok = false;
+        if (ok && q && d.codigo.indexOf(q) === -1 && sem(d.nome).indexOf(q) === -1) ok = false;
+        li.style.display = ok ? '' : 'none';
+        if (ok) vis++;
+      });
+      card.style.display = vis ? '' : 'none';
+      card.querySelector('.pc-qt').textContent = vis;
+      if (vis) algum = true;
+    });
+    document.getElementById('pcVazio').style.display = algum ? 'none' : 'block';
+  };
+
+  function marcadas() {
+    return Array.prototype.filter.call(document.querySelectorAll('.pc-sel:checked'), function (c) {
+      return c.closest('li').style.display !== 'none';
+    });
+  }
+  window.pcConta = function () {
+    var m = marcadas();
+    document.querySelectorAll('.pc-card li').forEach(function (li) { li.classList.toggle('sel', li.querySelector('.pc-sel').checked); });
+    document.getElementById('pcNsel').textContent = m.length;
+    document.getElementById('pcNsel2').textContent = m.length;
+    document.getElementById('pcLote').classList.toggle('on', m.length > 0);
+  };
+  window.pcTodas = function (el) {
+    el.closest('.pc-card').querySelectorAll('li').forEach(function (li) {
+      var c = li.querySelector('.pc-sel');
+      if (!c.disabled && li.style.display !== 'none') c.checked = el.checked;
+    });
+    pcConta();
+  };
+  window.pcLimpar = function () {
+    document.querySelectorAll('.pc-sel, .pc-todas input').forEach(function (c) { c.checked = false; });
+    pcConta();
+  };
+  window.pcExcluirLote = function () {
+    var ids = marcadas().map(function (c) { return c.closest('li').dataset.id; });
+    if (!ids.length) return;
+    if (!confirm('Excluir de verdade ' + ids.length + ' conta(s)? Não dá para desfazer.')) return;
+    fetch(URL_LOTE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: ids }) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { alert(j.erro || 'Não foi possível excluir.'); return; }
+        var msg = j.excluidas + ' conta(s) excluída(s).';
+        if (j.bloqueadas) msg += ' ' + j.bloqueadas + ' ficaram por estarem em uso.';
+        alert(msg);
+        location.reload();
+      })
+      .catch(function () { alert('Falha de conexão — nada foi excluído.'); });
+  };
+
+  window.pcSegTipo = function (t) {
+    tipoSel = t;
+    document.querySelectorAll('#gTipo button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === t); });
+  };
+  window.pcClique = function (ev, li) {
+    if (ev.target.classList.contains('pc-sel')) return;
+    pcAbrir(li);
+  };
+  window.pcAbrir = function (li) {
+    var d = li ? li.dataset : {};
+    editId = li ? d.id : null;
+    document.getElementById('gTit').textContent = li ? 'Editar conta' : 'Nova conta';
+    document.getElementById('gCod').value = d.codigo || '';
+    document.getElementById('gNome').value = d.nome || '';
+    document.getElementById('gDesc').value = d.desc || '';
+    document.getElementById('gAtivo').checked = !li || d.ativo === '1';
+    document.getElementById('gAtivoBox').style.display = li ? '' : 'none';
+    var cls = (d.cls || '').split('-');
+    document.getElementById('gPai').value = cls.length >= 5 ? cls.slice(0, 4).join('-') : '';
+    var card = li ? li.closest('.pc-card') : null;
+    document.getElementById('gSub').textContent = card
+      ? '{{ grupo.nome }} · ' + card.querySelector('small').textContent + ' › ' + card.querySelector('h3').textContent
+      : '{{ grupo.nome }}';
+    pcSegTipo(d.tipo || tipoAtual || 'DESPESAS');
+    document.getElementById('gErro').style.display = 'none';
+    var uso = document.getElementById('gUso');
+    uso.style.display = 'none';
+    if (li && d.uso === '1') {
+      fetch(URL_USO.replace('/0/', '/' + d.id + '/')).then(function (r) { return r.json(); }).then(function (j) {
+        if (!j.ok || !j.usos.length) return;
+        document.getElementById('gUsoLista').innerHTML = j.usos.map(function (u) {
+          var s = document.createElement('div'); s.textContent = u; return s.outerHTML; }).join('');
+        uso.style.display = '';
+      });
+    }
+    document.body.classList.add('pc-editando');
+    setTimeout(function () { document.getElementById(li ? 'gNome' : 'gCod').focus(); }, 50);
+  };
+  window.pcFechar = function () { document.body.classList.remove('pc-editando'); };
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') pcFechar(); });
+
+  window.pcSalvar = function () {
+    var corpo = {
+      id: editId, codigo: document.getElementById('gCod').value.trim(),
+      nome: document.getElementById('gNome').value.trim(), tipo_grupo: tipoSel,
+      pai: document.getElementById('gPai').value, descricao: document.getElementById('gDesc').value,
+      ativo: document.getElementById('gAtivo').checked
+    };
+    var btn = document.getElementById('gSalvar'); btn.disabled = true;
+    fetch(URL_SALVAR, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        btn.disabled = false;
+        if (!j.ok) { var e = document.getElementById('gErro'); e.textContent = j.erro || 'Não foi possível salvar.'; e.style.display = 'block'; return; }
+        try { sessionStorage.setItem('pc-scroll-{{ grupo.id }}', String(window.scrollY)); } catch (e2) {}
+        location.reload();
+      })
+      .catch(function () { btn.disabled = false; alert('Falha de conexão — nada foi salvo.'); });
+  };
+
+  // volta onde estava (tipo escolhido e posição da tela) depois de salvar/excluir
+  try {
+    var t = sessionStorage.getItem(CHAVE); if (t) pcTipo(t);
+    var y = sessionStorage.getItem('pc-scroll-{{ grupo.id }}');
+    if (y) { sessionStorage.removeItem('pc-scroll-{{ grupo.id }}'); window.scrollTo(0, parseInt(y, 10)); }
+  } catch (e) {}
+})();
+</script>
 {% endblock %}
