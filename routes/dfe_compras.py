@@ -357,7 +357,7 @@ def compras():
                     f"""
                     SELECT n.chave_nfe, c.numero AS cte_numero, c.situacao AS cte_situacao,
                            c.emit_nome AS transportadora, c.emit_cnpj AS transp_cnpj,
-                           ct.vprest AS frete, ct.placa,
+                           ct.vprest AS frete, ct.qtd_unid AS litros, ct.placa,
                            ct.motorista_nome, ct.motorista_cpf,
                            ct.mun_ini, ct.uf_ini, ct.mun_fim, ct.uf_fim
                     FROM dfe_cte_nfe n

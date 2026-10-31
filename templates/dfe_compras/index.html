@@ -75,7 +75,13 @@
         <div class="lin"><span class="k">Motorista:</span> {{ t.motorista_nome or '—' }}</div>
         <div class="lin"><span class="k">Placa:</span> {{ t.placa or '—' }}</div>
         <div class="lin"><span class="k">Rota:</span> {% if t.mun_ini or t.mun_fim %}{{ t.mun_ini or '?' }}/{{ t.uf_ini or '' }} → {{ t.mun_fim or '?' }}/{{ t.uf_fim or '' }}{% else %}—{% endif %}</div>
-        <div class="lin"><span class="k">Frete:</span> <b class="fr">{{ (t.frete or 0) | formatar_moeda }}</b></div>
+        <div class="lin"><span class="k">Frete:</span> <b class="fr">{{ (t.frete or 0) | formatar_moeda }}</b>
+          {#- O CT-e diz quantos litros transportou (qtd_unid): o frete dividido
+              por eles da o centavo por litro, que e como a casa combina a rota. -#}
+          {% if t.litros and t.litros > 0 and t.frete %}
+          <span class="sep">·</span> <b>R$ {{ '%.3f' | format(t.frete / t.litros) | replace('.', ',') }}/L</b>
+          <span style="color:#64748b">sobre {{ '{:,.0f}'.format(t.litros).replace(',', '.') }} L</span>
+          {% endif %}</div>
       </div>
       {% endfor %}
     {% else %}
