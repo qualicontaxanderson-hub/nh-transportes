@@ -39,6 +39,25 @@ def _ensure_tables():
                     REFERENCES plano_contas_contas(id) ON DELETE SET NULL
             ) COMMENT='Vínculo por empresa entre categorias de despesas e contas contábeis'
         """)
+        # Conta contábil por SUBCATEGORIA (opcional). Quando existe, manda na
+        # exportação; quando não, vale a da categoria. Ex.: CASA GOIATUBA vai
+        # como 41630 Diversas, mas a subcategoria CONSTRUÇÃO vai como 41306
+        # Materiais de Construção.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS subcategoria_despesa_contas (
+                id                INT          AUTO_INCREMENT PRIMARY KEY,
+                subcategoria_id   INT          NOT NULL,
+                cliente_id        INT          NOT NULL,
+                conta_contabil_id INT          NULL,
+                UNIQUE KEY uq_sdc_sub_cliente (subcategoria_id, cliente_id),
+                CONSTRAINT fk_sdc_sub FOREIGN KEY (subcategoria_id)
+                    REFERENCES subcategorias_despesas(id) ON DELETE CASCADE,
+                CONSTRAINT fk_sdc_cliente FOREIGN KEY (cliente_id)
+                    REFERENCES clientes(id) ON DELETE CASCADE,
+                CONSTRAINT fk_sdc_conta FOREIGN KEY (conta_contabil_id)
+                    REFERENCES plano_contas_contas(id) ON DELETE SET NULL
+            ) COMMENT='Conta contábil por empresa da subcategoria; vazia = usa a da categoria'
+        """)
         # Adiciona coluna exibir_dre se ainda não existir (idempotente)
         try:
             cursor.execute("""
@@ -496,11 +515,49 @@ def editar_categoria(id):
 
 
 # Rotas de gerenciamento de subcategorias
+def _salvar_contas_subcategoria(cursor, sub_id):
+    """Grava os vínculos empresa -> conta da subcategoria. Linha sem conta
+    não é gravada: sem vínculo, a exportação usa a conta da categoria."""
+    cursor.execute("DELETE FROM subcategoria_despesa_contas WHERE subcategoria_id = %s", (sub_id,))
+    for eid, cid in zip(request.form.getlist('empresa_id[]'), request.form.getlist('conta_contabil_id[]')):
+        if eid and cid:
+            cursor.execute(
+                """INSERT INTO subcategoria_despesa_contas (subcategoria_id, cliente_id, conta_contabil_id)
+                   VALUES (%s, %s, %s)
+                   ON DUPLICATE KEY UPDATE conta_contabil_id = VALUES(conta_contabil_id)""",
+                (sub_id, int(eid), int(cid)))
+
+
+def _contas_para_form_subcategoria(conn, cursor, sub_id, categoria_id):
+    """(empresas, contas_por_grupo, vinculos da subcategoria, contas da categoria)"""
+    vinculos = []
+    if sub_id:
+        cursor.execute(
+            """SELECT sdc.cliente_id, sdc.conta_contabil_id, c.grupo_contabil_id
+                 FROM subcategoria_despesa_contas sdc
+                 JOIN clientes c ON c.id = sdc.cliente_id
+                WHERE sdc.subcategoria_id = %s""", (sub_id,))
+        vinculos = cursor.fetchall()
+    da_categoria = []
+    if categoria_id:
+        cursor.execute(
+            """SELECT COALESCE(c.nome_fantasia, c.razao_social) AS empresa,
+                      CONCAT(pc.codigo, ' ', pc.nome) AS conta
+                 FROM categoria_despesa_contas cdc
+                 JOIN clientes c ON c.id = cdc.cliente_id
+                 LEFT JOIN plano_contas_contas pc ON pc.id = cdc.conta_contabil_id
+                WHERE cdc.categoria_id = %s""", (categoria_id,))
+        da_categoria = cursor.fetchall()
+    empresas, contas_por_grupo = _load_form_data(conn)
+    return empresas, contas_por_grupo, vinculos, da_categoria
+
+
 @bp.route('/subcategorias/nova', methods=['GET', 'POST'])
 @login_required
 @admin_required
 def nova_subcategoria():
     """Criar nova subcategoria de despesa"""
+    _ensure_tables()
     conn = None
     cursor = None
     try:
@@ -518,6 +575,7 @@ def nova_subcategoria():
                 request.form.get('ordem', 0),
                 1
             ))
+            _salvar_contas_subcategoria(cursor, cursor.lastrowid)
 
             conn.commit()
             flash('Subcategoria criada com sucesso!', 'success')
@@ -547,10 +605,14 @@ def nova_subcategoria():
         """)
         categorias = cursor.fetchall()
 
+        empresas, contas_por_grupo, vinculos, da_categoria = _contas_para_form_subcategoria(
+            conn, cursor, None, categoria_id)
         return render_template('despesas/subcategoria_form.html',
                              subcategoria=None,
                              categorias=categorias,
-                             categoria_pre=categoria)
+                             categoria_pre=categoria,
+                             empresas=empresas, contas_por_grupo=contas_por_grupo,
+                             vinculos=vinculos, da_categoria=da_categoria)
     except Exception as e:
         if conn:
             conn.rollback()
@@ -568,6 +630,7 @@ def nova_subcategoria():
 @admin_required
 def editar_subcategoria(id):
     """Editar subcategoria de despesa"""
+    _ensure_tables()
     conn = None
     cursor = None
     try:
@@ -585,6 +648,7 @@ def editar_subcategoria(id):
                 request.form.get('ordem', 0),
                 id
             ))
+            _salvar_contas_subcategoria(cursor, id)
 
             conn.commit()
 
@@ -617,10 +681,14 @@ def editar_subcategoria(id):
         """)
         categorias = cursor.fetchall()
 
+        empresas, contas_por_grupo, vinculos, da_categoria = _contas_para_form_subcategoria(
+            conn, cursor, id, subcategoria['categoria_id'])
         return render_template('despesas/subcategoria_form.html',
                              subcategoria=subcategoria,
                              categorias=categorias,
-                             categoria_pre=categoria)
+                             categoria_pre=categoria,
+                             empresas=empresas, contas_por_grupo=contas_por_grupo,
+                             vinculos=vinculos, da_categoria=da_categoria)
     except Exception as e:
         if conn:
             conn.rollback()

@@ -58,6 +58,22 @@
                         <small class="form-text text-muted">Ordem de exibição</small>
                     </div>
                 </div>
+                <div class="border-top pt-3 mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label mb-0"><i class="bi bi-journal-bookmark me-1"></i>Conta contábil desta subcategoria <span class="text-muted fw-normal">(opcional)</span></label>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarLinha()">
+                            <i class="bi bi-plus-lg"></i> Adicionar empresa</button>
+                    </div>
+                    <div class="form-text mb-2">
+                        Sem conta aqui, a exportação para o contador usa a conta da <b>categoria</b>.
+                        Use quando esta subcategoria deve ir para outra conta — ex.: CASA GOIATUBA vai como Diversas,
+                        mas CONSTRUÇÃO vai como Materiais de Construção.
+                        {% if da_categoria %}<br>Conta da categoria hoje:
+                        {% for d in da_categoria %}<b>{{ d.empresa }}</b>: {{ d.conta or 'sem conta' }}{% if not loop.last %} · {% endif %}{% endfor %}
+                        {% endif %}
+                    </div>
+                    <div id="vinculosContainer"></div>
+                </div>
                 <div class="d-flex justify-content-between">
                     <a href="{{ url_for('despesas.categoria_detalhes', categoria_id=subcategoria.categoria_id) if subcategoria else (url_for('despesas.categoria_detalhes', categoria_id=categoria_pre.id) if categoria_pre else url_for('despesas.index')) }}" 
                        class="btn btn-secondary">
@@ -71,4 +87,65 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const EMPRESAS = {{ empresas | tojson }};
+const CONTAS_POR_GRUPO = {{ contas_por_grupo | tojson }};
+const VINCULOS_INICIAIS = {{ vinculos | tojson }};
+
+function buildEmpresaSelect(selectedId) {
+    let html = '<option value="">— Selecione a empresa —</option>';
+    EMPRESAS.forEach(e => {
+        html += `<option value="${e.id}" data-grupo="${e.grupo_contabil_id || ''}" ${e.id == selectedId ? 'selected' : ''}>${e.nome}</option>`;
+    });
+    return html;
+}
+function buildContaOptions(grupoId, selectedId) {
+    const contas = grupoId ? (CONTAS_POR_GRUPO[String(grupoId)] || []) : [];
+    let html = '<option value="">— usa a conta da categoria —</option>';
+    contas.forEach(c => {
+        html += `<option value="${c.id}" ${c.id == selectedId ? 'selected' : ''}>${c.label}</option>`;
+    });
+    return html;
+}
+function buildContaWidget(grupoId, selectedId) {
+    return `
+        <input type="search" class="form-control form-control-sm mb-1 inp-busca-conta"
+               placeholder="🔍 Buscar conta..." oninput="filtrarContas(this)" autocomplete="off">
+        <select name="conta_contabil_id[]" class="form-select form-select-sm sel-conta">
+          ${buildContaOptions(grupoId, selectedId)}
+        </select>`;
+}
+function filtrarContas(inp) {
+    const sel = inp.closest('.conta-wrapper').querySelector('.sel-conta');
+    const query = inp.value.toLowerCase();
+    Array.from(sel.options).forEach(opt => {
+        if (!opt.value) { opt.hidden = false; return; }
+        opt.hidden = query.length > 0 && !opt.text.toLowerCase().includes(query);
+    });
+}
+function adicionarLinha(empresaId, contaId, grupoId) {
+    const div = document.createElement('div');
+    div.className = 'row g-2 mb-2 align-items-center linha-vinculo';
+    div.innerHTML = `
+        <div class="col-5">
+          <select name="empresa_id[]" class="form-select form-select-sm sel-empresa" onchange="onEmpresaMudou(this)">
+            ${buildEmpresaSelect(empresaId)}
+          </select>
+        </div>
+        <div class="col-6"><div class="conta-wrapper">${buildContaWidget(grupoId, contaId)}</div></div>
+        <div class="col-1">
+          <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.linha-vinculo').remove()">
+            <i class="bi bi-trash"></i></button>
+        </div>`;
+    document.getElementById('vinculosContainer').appendChild(div);
+}
+function onEmpresaMudou(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    sel.closest('.linha-vinculo').querySelector('.conta-wrapper').innerHTML = buildContaWidget(opt.dataset.grupo || null, null);
+}
+VINCULOS_INICIAIS.forEach(v => adicionarLinha(v.cliente_id, v.conta_contabil_id, v.grupo_contabil_id));
+</script>
 {% endblock %}

@@ -3464,8 +3464,10 @@ def exportar_contabil():
 
     # Fetch categoria/subcategoria accounting codes for despesas
     # Build a mapping: bank_transaction_id → conta_contabil code
-    cursor.execute(
-        """SELECT ld.bank_transaction_id,
+    # A conta da SUBCATEGORIA (subcategoria_despesa_contas) manda quando
+    # existe; sem ela vale a da categoria, como sempre foi. Enquanto ninguém
+    # preencher conta em subcategoria, o resultado é idêntico ao anterior.
+    _sql_cat = """SELECT ld.bank_transaction_id,
                   pc.codigo AS conta_codigo,
                   pc.nome   AS conta_nome
            FROM lancamentos_despesas ld
@@ -3474,7 +3476,26 @@ def exportar_contabil():
            LEFT JOIN plano_contas_contas pc ON pc.id = cdc.conta_contabil_id
            WHERE ld.bank_transaction_id IS NOT NULL
              AND pc.id IS NOT NULL"""
-    )
+    try:
+        cursor.execute(
+            """SELECT ld.bank_transaction_id,
+                      COALESCE(pcs.codigo, pc.codigo) AS conta_codigo,
+                      COALESCE(pcs.nome,   pc.nome)   AS conta_nome
+               FROM lancamentos_despesas ld
+               LEFT JOIN categoria_despesa_contas cdc
+                   ON cdc.categoria_id = ld.categoria_id AND cdc.cliente_id = ld.cliente_id
+               LEFT JOIN plano_contas_contas pc ON pc.id = cdc.conta_contabil_id
+               LEFT JOIN subcategoria_despesa_contas sdc
+                   ON sdc.subcategoria_id = ld.subcategoria_id AND sdc.cliente_id = ld.cliente_id
+               LEFT JOIN plano_contas_contas pcs ON pcs.id = sdc.conta_contabil_id
+               WHERE ld.bank_transaction_id IS NOT NULL
+                 AND (pc.id IS NOT NULL OR pcs.id IS NOT NULL)"""
+        )
+    except Exception:
+        # tabela da subcategoria ainda não criada neste banco: só a categoria
+        logger.warning("exportar_contabil: sem subcategoria_despesa_contas; usando só a categoria",
+                       exc_info=True)
+        cursor.execute(_sql_cat)
     despesa_conta_map = {}
     for r in cursor.fetchall():
         if r['bank_transaction_id'] and r['bank_transaction_id'] not in despesa_conta_map:
