@@ -433,6 +433,7 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
         if doc_id not in notas:
             notas[doc_id] = {
                 "documento_id": doc_id, "chave": r["chave"], "numero": r["numero"],
+                "_dh": emissao,
                 "serie": r["serie"], "emissao": dia_nfe,
                 "emissao_br": dia_nfe.strftime("%d/%m/%Y") if dia_nfe else "",
                 # Hora da emissao e quem trouxe (motorista/placa: do CT-e,
@@ -490,8 +491,15 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
         })
         candidatas.append(c)
 
+    # Ordem pela DATA (pedido do usuario, 31/10): a nota ja iniciada vem
+    # primeiro (e a proxima da fila); depois a emitida mais perto do dia da
+    # descarga - hoje, ontem, anteontem... - e, no mesmo dia, a mais tarde.
+    # Antes era pelo score (litros + dias), que embaralhava os dias.
     candidatas.sort(key=lambda c: (not (c["parcial"] and c["cobre"]),
-                                   not c["cobre"], c["score"]))
+                                   abs(c["dif_dias"]), c["dif_dias"] > 0,
+                                   -(c["_dh"].timestamp() if isinstance(c.get("_dh"), datetime) else 0)))
+    for c in candidatas:
+        c.pop("_dh", None)
     return {"descarga": descarga, "candidatas": candidatas[:limite],
             "ocultas_fechadas": n_fechadas, "ocultas_sem_saldo": n_sem_saldo}
 
