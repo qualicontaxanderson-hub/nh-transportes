@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+{% block title %}Aprovar contas contábeis - Despesas - {{ app_name }}{% endblock %}
+
+{% block styles %}
+<style>
+  .ap { --azul:#1D63A5; --linha:#e5e7eb; --suave:#6b7280; font-size:13px; color:#1f2937; max-width:980px; margin:0 auto; }
+  .ap-topo { background:linear-gradient(135deg,#1D63A5,#154070); color:#fff; border-radius:14px; padding:14px 18px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  .ap-topo h1 { margin:0; font-size:18px; font-weight:700; }
+  .ap-topo .sub { opacity:.8; font-size:12px; }
+  .ap-prog { margin-left:auto; text-align:right; }
+  .ap-prog b { font-size:20px; }
+  .ap-barra { height:6px; background:rgba(255,255,255,.25); border-radius:99px; margin-top:6px; width:200px; overflow:hidden; }
+  .ap-barra i { display:block; height:100%; background:#fde68a; }
+  .ap-abas { display:flex; gap:6px; margin:12px 0; flex-wrap:wrap; }
+  .ap-abas button { border:1px solid var(--linha); background:#fff; border-radius:99px; padding:6px 13px; font-size:12px; }
+  .ap-abas button.on { background:#1f2937; color:#fff; border-color:#1f2937; }
+  .ap-card { background:#fff; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.07); padding:14px 16px; margin-bottom:10px; border-left:5px solid #f59e0b; }
+  .ap-card.feito { border-left-color:#16a34a; opacity:.75; }
+  .ap-card small.cam { color:var(--suave); font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+  .ap-card h3 { font-size:15px; font-weight:700; margin:2px 0 6px; }
+  .ap-meta { color:var(--suave); font-size:12px; margin-bottom:8px; }
+  .ap-linha { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .ap-linha select { flex:1; min-width:260px; border:1px solid #d1d5db; border-radius:8px; padding:7px 9px; font:inherit; }
+  .ap-b { border:1px solid var(--linha); background:#fff; border-radius:8px; padding:7px 12px; font-weight:600; font-size:12px; }
+  .ap-b.ok { background:#16a34a; border-color:#16a34a; color:#fff; }
+  .ap-b.cat { color:#1D63A5; }
+  .ap-sug { font-size:11px; color:#92400e; background:#fef3c7; border-radius:99px; padding:1px 8px; }
+  .ap-dec { font-size:12px; color:#166534; }
+  .ap-vazio { text-align:center; color:var(--suave); padding:30px; background:#fff; border-radius:14px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+<div class="ap" data-sem-maiuscula>
+  <nav aria-label="breadcrumb" class="mb-2"><ol class="breadcrumb small mb-0">
+    <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+    <li class="breadcrumb-item"><a href="{{ url_for('despesas.index') }}" class="text-decoration-none">Despesas</a></li>
+    <li class="breadcrumb-item active">Aprovar contas contábeis</li></ol></nav>
+
+  <div class="ap-topo">
+    <div>
+      <h1><i class="bi bi-check2-square"></i> Conta contábil de cada subcategoria</h1>
+      <div class="sub">{{ empresa.nome if empresa else '' }} · uma por vez: aprove a sugestão, troque a conta ou mantenha a da categoria</div>
+    </div>
+    <div class="ap-prog">
+      <div><b id="apFalta">{{ pend_sub }}</b> de {{ subs|length }} subcategorias para decidir</div>
+      <div class="ap-barra"><i id="apBarra" style="width:{{ ((subs|length - pend_sub) * 100 / (subs|length or 1)) | round }}%"></i></div>
+    </div>
+  </div>
+
+  {% if not contas %}
+  <div class="ap-vazio mt-3">Esta empresa não tem plano de contas ligado.</div>
+  {% else %}
+  <div class="ap-abas">
+    <button type="button" class="on" data-f="pend" onclick="apFiltro(this)">Para decidir</button>
+    <button type="button" data-f="feito" onclick="apFiltro(this)">Já decididas</button>
+    <button type="button" data-f="cat" onclick="apFiltro(this)">Categorias sem conta ({{ cats|length }})</button>
+  </div>
+
+  {% macro sel(sugestao, vazio) %}
+  <select class="ap-conta">
+    <option value="">{{ vazio }}</option>
+    {% for c in contas %}<option value="{{ c.id }}" {{ 'selected' if c.id == sugestao }}>{{ c.codigo }} · {{ c.nome }}</option>{% endfor %}
+  </select>
+  {% endmacro %}
+
+  <div id="apLista">
+  {% for r in subs %}
+  <div class="ap-card {{ 'feito' if r.decidida }}" data-grupo="{{ 'feito' if r.decidida else 'pend' }}" data-tipo="sub" data-id="{{ r.sid }}">
+    <small class="cam">{{ r.titulo }} › {{ r.categoria }}</small>
+    <h3>{{ r.sub }}</h3>
+    <div class="ap-meta">
+      {{ r.n }} lançamento(s) em 12 meses · {{ r.v | formatar_moeda }} ·
+      conta da categoria: <b>{{ r.conta_cat_txt or 'SEM CONTA' }}</b>
+      {% if r.decidida %} · <span class="ap-dec ap-dectxt"><i class="bi bi-check-circle-fill"></i>
+        {{ ('vai como ' ~ r.conta_sub_txt) if r.conta_sub_txt else 'usa a da categoria' }}</span>
+      {% elif r.sugestao and r.sugestao != r.conta_cat %} · <span class="ap-sug">sugestão pelo nome</span>{% endif %}
+    </div>
+    <div class="ap-linha">
+      {{ sel(r.sugestao, '— escolha a conta —') }}
+      <button type="button" class="ap-b ok" onclick="apSalva(this, false)"><i class="bi bi-check2"></i> Aprovar</button>
+      <button type="button" class="ap-b cat" onclick="apSalva(this, true)" title="Não precisa de conta própria">Manter a da categoria</button>
+    </div>
+  </div>
+  {% endfor %}
+
+  {% for r in cats %}
+  <div class="ap-card" data-grupo="cat" data-tipo="cat" data-id="{{ r.cid }}" style="border-left-color:#dc2626">
+    <small class="cam">{{ r.titulo }}</small>
+    <h3>{{ r.categoria }} <span class="ap-sug" style="background:#fee2e2;color:#991b1b">categoria sem conta</span></h3>
+    <div class="ap-meta">{{ r.n }} lançamento(s) em 12 meses · {{ r.v | formatar_moeda }} ·
+      sem conta, esses lançamentos vão para o contador sem a conta da despesa</div>
+    <div class="ap-linha">
+      {{ sel(r.sugestao, '— escolha a conta —') }}
+      <button type="button" class="ap-b ok" onclick="apSalva(this, false)"><i class="bi bi-check2"></i> Aprovar</button>
+    </div>
+  </div>
+  {% endfor %}
+  </div>
+  <div class="ap-vazio" id="apNada" style="display:none">Nada aqui. 🎉</div>
+  {% endif %}
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var URL = '{{ url_for("despesas.contas_aprovar_salvar") }}', EMP = {{ (empresa.id if empresa else 1) | tojson }};
+  var TOTAL = {{ subs|length }}, filtro = 'pend';
+  function aplica() {
+    var vis = 0;
+    document.querySelectorAll('.ap-card').forEach(function (c) {
+      var ok = c.getAttribute('data-grupo') === filtro;
+      c.style.display = ok ? '' : 'none'; if (ok) vis++;
+    });
+    document.getElementById('apNada').style.display = vis ? 'none' : 'block';
+  }
+  window.apFiltro = function (b) {
+    filtro = b.getAttribute('data-f');
+    document.querySelectorAll('.ap-abas button').forEach(function (x) { x.classList.toggle('on', x === b); });
+    aplica();
+  };
+  window.apSalva = function (btn, daCategoria) {
+    var card = btn.closest('.ap-card'), sel = card.querySelector('.ap-conta');
+    var conta = daCategoria ? '' : sel.value;
+    if (!daCategoria && !conta) { alert('Escolha a conta (ou use "Manter a da categoria").'); return; }
+    btn.disabled = true;
+    fetch(URL, {method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({tipo: card.getAttribute('data-tipo'), id: card.getAttribute('data-id'), conta: conta, empresa: EMP})})
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        btn.disabled = false;
+        if (!j.ok) { alert(j.erro || 'Não foi possível salvar.'); return; }
+        var antes = card.getAttribute('data-grupo');
+        card.classList.add('feito');
+        card.setAttribute('data-grupo', card.getAttribute('data-tipo') === 'cat' ? 'cat-feito' : 'feito');
+        var txt = daCategoria ? 'usa a da categoria' : ('vai como ' + sel.options[sel.selectedIndex].text);
+        var m = card.querySelector('.ap-dectxt');
+        if (!m) { m = document.createElement('span'); m.className = 'ap-dec ap-dectxt'; card.querySelector('.ap-meta').appendChild(m); }
+        m.innerHTML = ' · <i class="bi bi-check-circle-fill"></i> ' + txt.replace(/</g, '&lt;');
+        if (antes === 'pend') {
+          var f = document.getElementById('apFalta'), n = Math.max(0, parseInt(f.textContent, 10) - 1);
+          f.textContent = n;
+          document.getElementById('apBarra').style.width = Math.round((TOTAL - n) * 100 / (TOTAL || 1)) + '%';
+        }
+        aplica();
+      })
+      .catch(function () { btn.disabled = false; alert('Falha de conexão — nada foi salvo.'); });
+  };
+  aplica();
+})();
+</script>
+{% endblock %}

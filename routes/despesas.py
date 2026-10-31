@@ -800,3 +800,151 @@ def excluir_subcategoria(id):
     if categoria_id:
         return redirect(url_for('despesas.categoria_detalhes', categoria_id=categoria_id))
     return redirect(url_for('despesas.index'))
+
+
+# ─── Aprovar contas contábeis, uma a uma ─────────────────────────────────────
+
+_PALAVRAS_VAZIAS = {'DE', 'DA', 'DO', 'DAS', 'DOS', 'E', 'A', 'O', 'EM', 'COM', 'PARA', 'POR', 'S', 'C'}
+
+
+def _tokens(txt):
+    import unicodedata
+    t = unicodedata.normalize('NFKD', txt or '').encode('ascii', 'ignore').decode().upper()
+    return {w for w in __import__('re').split(r'[^A-Z0-9]+', t) if len(w) > 1 and w not in _PALAVRAS_VAZIAS}
+
+
+def _sugere(nome, contas):
+    """A conta do plano cujo nome mais se parece com `nome` (palavras em comum).
+    None quando nada passa de metade das palavras."""
+    alvo = _tokens(nome)
+    if not alvo:
+        return None
+    melhor, nota = None, 0.0
+    for c in contas:
+        comum = len(alvo & c['_tok'])
+        if not comum:
+            continue
+        n = comum / len(alvo) + comum / (len(c['_tok']) or 1) * 0.3
+        if n > nota:
+            melhor, nota = c, n
+    return melhor if nota >= 0.5 else None
+
+
+@bp.route('/contas/aprovar')
+@login_required
+@admin_required
+def contas_aprovar():
+    """Fila para decidir, uma a uma, a conta contábil das subcategorias (e das
+    categorias usadas que estão sem conta). Só da empresa escolhida (padrão:
+    Posto NH, cliente 1 — o único com plano de contas ligado hoje)."""
+    _ensure_tables()
+    try:
+        cliente_id = int(request.args.get('empresa') or 1)
+    except ValueError:
+        cliente_id = 1
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT id, COALESCE(nome_fantasia, razao_social) AS nome, grupo_contabil_id FROM clientes WHERE id = %s",
+                    (cliente_id,))
+        empresa = cur.fetchone()
+        contas = []
+        if empresa and empresa['grupo_contabil_id']:
+            cur.execute("""SELECT id, codigo, nome, tipo_grupo FROM plano_contas_contas
+                            WHERE grupo_id = %s AND ativo = 1 ORDER BY codigo""", (empresa['grupo_contabil_id'],))
+            contas = cur.fetchall()
+        for c in contas:
+            c['_tok'] = _tokens(c['nome'])
+        por_id = {c['id']: c for c in contas}
+        desp = [c for c in contas if c['tipo_grupo'] in ('DESPESAS', 'CUSTOS')]
+
+        cur.execute("""
+            SELECT s.id sid, s.nome sub, c.id cid, c.nome categoria, t.nome titulo,
+                   cdc.conta_contabil_id conta_cat,
+                   sdc.id decidida, sdc.conta_contabil_id conta_sub,
+                   (SELECT COUNT(*) FROM lancamentos_despesas l
+                     WHERE l.subcategoria_id = s.id AND l.cliente_id = %s AND l.data >= DATE_SUB(CURDATE(), INTERVAL 365 DAY)) n,
+                   (SELECT COALESCE(SUM(valor), 0) FROM lancamentos_despesas l
+                     WHERE l.subcategoria_id = s.id AND l.cliente_id = %s AND l.data >= DATE_SUB(CURDATE(), INTERVAL 365 DAY)) v
+              FROM subcategorias_despesas s
+              JOIN categorias_despesas c ON c.id = s.categoria_id
+              JOIN titulos_despesas t ON t.id = c.titulo_id
+              LEFT JOIN categoria_despesa_contas cdc ON cdc.categoria_id = c.id AND cdc.cliente_id = %s
+              LEFT JOIN subcategoria_despesa_contas sdc ON sdc.subcategoria_id = s.id AND sdc.cliente_id = %s
+             WHERE s.ativo = 1 AND c.ativo = 1
+             ORDER BY (sdc.id IS NOT NULL), n DESC, t.ordem, c.nome, s.nome""",
+                    (cliente_id, cliente_id, cliente_id, cliente_id))
+        subs = cur.fetchall()
+        for r in subs:
+            r['conta_cat_txt'] = ('%s %s' % (por_id[r['conta_cat']]['codigo'], por_id[r['conta_cat']]['nome'])
+                                  if r['conta_cat'] in por_id else None)
+            r['conta_sub_txt'] = ('%s %s' % (por_id[r['conta_sub']]['codigo'], por_id[r['conta_sub']]['nome'])
+                                  if r['conta_sub'] in por_id else None)
+            sug = _sugere(r['sub'], desp) or _sugere('%s %s' % (r['categoria'], r['sub']), desp)
+            r['sugestao'] = (r['conta_sub'] or (sug['id'] if sug else None) or r['conta_cat'])
+
+        cur.execute("""
+            SELECT c.id cid, c.nome categoria, t.nome titulo,
+                   COUNT(l.id) n, COALESCE(SUM(l.valor), 0) v
+              FROM categorias_despesas c
+              JOIN titulos_despesas t ON t.id = c.titulo_id
+              JOIN lancamentos_despesas l ON l.categoria_id = c.id AND l.cliente_id = %s
+                   AND l.data >= DATE_SUB(CURDATE(), INTERVAL 365 DAY)
+              LEFT JOIN categoria_despesa_contas cdc ON cdc.categoria_id = c.id AND cdc.cliente_id = %s
+             WHERE c.ativo = 1 AND cdc.conta_contabil_id IS NULL
+             GROUP BY c.id, c.nome, t.nome
+             ORDER BY v DESC""", (cliente_id, cliente_id))
+        cats = cur.fetchall()
+        for r in cats:
+            sug = _sugere(r['categoria'], desp)
+            r['sugestao'] = sug['id'] if sug else None
+    finally:
+        cur.close()
+        conn.close()
+    for c in contas:
+        c.pop('_tok', None)
+    return render_template('despesas/contas_aprovar.html', empresa=empresa, contas=contas,
+                           subs=subs, cats=cats,
+                           pend_sub=sum(1 for r in subs if not r['decidida']))
+
+
+@bp.route('/contas/aprovar/salvar', methods=['POST'])
+@login_required
+@admin_required
+def contas_aprovar_salvar():
+    """Grava UMA decisão. tipo='sub': conta da subcategoria (conta vazia =
+    'usa a da categoria', fica registrada como decidida). tipo='cat': conta da
+    categoria que estava sem conta."""
+    _ensure_tables()
+    d = request.get_json(silent=True) or {}
+    try:
+        cliente_id = int(d.get('empresa') or 1)
+        alvo = int(d.get('id'))
+        conta = int(d['conta']) if d.get('conta') else None
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'erro': 'dados inválidos'}), 400
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        if d.get('tipo') == 'sub':
+            cur.execute("""INSERT INTO subcategoria_despesa_contas (subcategoria_id, cliente_id, conta_contabil_id)
+                           VALUES (%s, %s, %s)
+                           ON DUPLICATE KEY UPDATE conta_contabil_id = VALUES(conta_contabil_id)""",
+                        (alvo, cliente_id, conta))
+        elif d.get('tipo') == 'cat':
+            if not conta:
+                return jsonify({'ok': False, 'erro': 'escolha a conta'}), 400
+            cur.execute("""INSERT INTO categoria_despesa_contas (categoria_id, cliente_id, conta_contabil_id)
+                           VALUES (%s, %s, %s)
+                           ON DUPLICATE KEY UPDATE conta_contabil_id = VALUES(conta_contabil_id)""",
+                        (alvo, cliente_id, conta))
+        else:
+            return jsonify({'ok': False, 'erro': 'tipo inválido'}), 400
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
