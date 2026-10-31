@@ -254,9 +254,20 @@ def _do_dia(conn, dia):
                AND bt.data_transacao BETWEEN %s AND %s
              ORDER BY COALESCE(i.visto_em, bt.data_transacao), bt.id""", params)
         return [_formatar(r) for r in cur.fetchall()
-                if (r['visto_em'].date() if r['visto_em'] else r['data_transacao']) == dia]
+                if _dia_do_pix(r) == dia]
     finally:
         cur.close()
+
+
+def _dia_do_pix(r):
+    """O dia em que o PIX entrou: o mais cedo entre o dia em que o sistema o
+    viu e a data do banco. O Sicoob nunca data para trás -- só para a frente
+    (PIX de sábado vem com a data de segunda), e aí vale o dia em que foi
+    visto. Mas se a leitura parou e voltou no dia seguinte (30/10 20:50 ->
+    31/10 09:40), o visto é tarde e vale a data do banco -- senão o PIX cai
+    no dia errado e não acha o cupom."""
+    visto = r.get('visto_em')
+    return min(visto.date(), r['data_transacao']) if visto else r['data_transacao']
 
 
 def _formatar(r):
@@ -268,7 +279,7 @@ def _formatar(r):
         hora = 'até ' + _hora(r['visto_em'])
     else:
         hora = ''
-    dia = r['visto_em'].date() if r.get('visto_em') else r['data_transacao']
+    dia = _dia_do_pix(r)
     return {
         'id': r['id'],
         'valor': float(r['valor']),
