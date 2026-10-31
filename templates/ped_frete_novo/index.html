@@ -496,7 +496,7 @@ body > .container-fluid:has(#pfn){
 {% endblock %}
 
 {% block content %}
-{% macro form_carga(dia, vid, mid, placa, sem, cap, ocup, mnome='', pedido=0) %}
+{% macro form_carga(dia, vid, mid, placa, sem, cap, ocup, mnome='', pedido=0, terceiro=False) %}
           <div class="novo">
             {#- `data-pedido` amarra o lançamento à viagem deste cartão. Com
                 duas viagens no mesmo dia, sem ele o posto caía na última. -#}
@@ -505,6 +505,7 @@ body > .container-fluid:has(#pfn){
                  data-veiculo="{{ vid }}"
                  data-motorista="{{ mid }}"
                  data-pedido="{{ pedido or 0 }}"
+                 {%- if terceiro %} data-terceiro="1"{% endif %}
                  data-capacidade="{{ '%.0f' | format(cap or 0) }}"
                  data-ocupado="{{ '%.0f' | format(ocup or 0) }}">
               <div class="nf__t novo__t">Novo posto em {{ placa }} ·
@@ -513,10 +514,19 @@ body > .container-fluid:has(#pfn){
                   ser outro: sem poder trocar aqui, a carga nascia no nome
                   errado e so dava pra consertar movendo depois. -#}
               <div class="nf__g" style="margin-bottom:.5rem">
+                {% if terceiro %}
+                {#- Caminhao de fora: quem leva e a transportadora, gravada no
+                    campo do motorista (como a casa faz desde 16/02/2026). -#}
+                <div class="nf__c nf__c--w">Quem levou (transportadora)
+                  <button type="button" class="esc esc--w nf__mot"
+                          data-lista="transportadoras" data-valor=""
+                          onclick="pfnEscolher(this, 'Quem levou')">— escolha —</button></div>
+                {% else %}
                 <div class="nf__c nf__c--w">Motorista
                   <button type="button" class="esc esc--w {{ 'tem' if mid }} nf__mot"
                           data-lista="motoristas" data-valor="{{ mid }}"
                           onclick="pfnEscolher(this, 'Quem vai dirigir')">{{ mnome or '— escolha —' }}</button></div>
+                {% endif %}
               </div>
 
               <div class="nf__g">
@@ -1302,13 +1312,14 @@ body > .container-fluid:has(#pfn){
     {% for v in ociosos %}
     <div class="vg vg--ocioso">
       <div class="vg__h" onclick="pfnAbre(this)">
-        <span class="vg__ic" style="background:#f2f5f8;color:#9aa5b1">
-          <i class="bi bi-truck"></i></span>
+        <span class="vg__ic" style="{{ 'background:#fff4e5;color:#c2410c' if v.terceiro else 'background:#f2f5f8;color:#9aa5b1' }}">
+          <i class="bi {{ 'bi-truck-front' if v.terceiro else 'bi-truck' }}"></i></span>
         <div class="vg__t">
           <div class="vg__p">{{ v.placa }}</div>
           <div class="vg__d">{{ v.caminhao }}
-            {%- if v.motorista %} · {{ v.motorista }}{% endif %} ·
-            sem carga nesse dia</div>
+            {%- if v.terceiro %} · frete contratado de transportadora
+            {%- else %}{%- if v.motorista %} · {{ v.motorista }}{% endif %} ·
+            sem carga nesse dia{% endif %}</div>
         </div>
         <div class="vg__n">
           <div class="vg__c">
@@ -1323,14 +1334,16 @@ body > .container-fluid:has(#pfn){
       <div class="vg__corpo">
         <div class="vg__c2">
           <div class="fechou fechou--abre">
-            <span><i class="bi bi-truck"></i> Nenhuma carga nesse caminhão
+            <span><i class="bi bi-truck"></i>
+              {%- if v.terceiro %} Contratou um caminhão de fora? Lance a carga aqui e escolha quem levou
+              {%- else %} Nenhuma carga nesse caminhão{% endif %}
               {{ semana }}, {{ dia.strftime('%d/%m') }}</span>
             <button type="button" class="bd__b bd__b--novo novo__abre"
                     onclick="pfnAbreNovo(this)">
               <i class="bi bi-plus-lg"></i> Adicionar Carga</button>
           </div>
           {{ form_carga(dia, v.id, v.motorista_id or 0, v.placa, semana,
-                        v.capacidade, 0, v.motorista) }}
+                        v.capacidade, 0, v.motorista, terceiro=v.terceiro) }}
         </div>
       </div>
     </div>
@@ -2540,7 +2553,10 @@ function pfnLancar(botao){
     return e.hasAttribute('data-valor') ? e.getAttribute('data-valor') : e.value;
   }
 
-  if (!val('.nf__mot')){ alert('Escolha o motorista.'); return; }
+  if (!val('.nf__mot') || val('.nf__mot') === '0'){
+    alert(form.getAttribute('data-terceiro') ? 'Escolha quem levou (a transportadora).' : 'Escolha o motorista.');
+    return;
+  }
   if (!val('.nf__cli')){ alert('Escolha o posto.'); return; }
   if (!val('.nf__ori')){ alert('Escolha a origem.'); return; }
 

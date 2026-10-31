@@ -2091,6 +2091,9 @@ def lancar():
     if not carga:
         return jsonify({'ok': False, 'erro': 'carga não informada'}), 400
     dia, vid, mid = carga
+    # fretes.motoristas_id e NOT NULL; no caminhao de fora e a transportadora
+    if not mid:
+        return jsonify({'ok': False, 'erro': 'falta o motorista (ou, no terceiro, quem levou)'}), 400
 
     def _int(fonte, chave):
         try:
@@ -2568,6 +2571,17 @@ def index():
                 m = padrao.get(oc['id']) or {}
                 oc['motorista_id'] = m.get('id') or 0
                 oc['motorista'] = m.get('nome') or ''
+            # O caminhao de fora tambem abre carga, sempre por ultimo e mesmo
+            # que ja tenha uma no dia (outra transportadora e outra carga).
+            # Antes so dava lancando num caminhao nosso e movendo depois para
+            # "Terceiro" — ele nao tem placa e a frota da tela filtra por placa.
+            # Quem levou (a transportadora) vai no campo do motorista, como a
+            # casa registra desde 16/02/2026.
+            if terceiro_id and alvo is None:
+                ociosos.append({'id': terceiro_id, 'placa': 'Terceiro',
+                                'caminhao': 'Caminhão de fora', 'capacidade': 0,
+                                'motorista_id': 0, 'motorista': '', 'terceiro': True})
+            ctx['op']['json']['transportadoras'] = transportadoras
             ctx['ociosos'] = ociosos
 
             ctx['totais'] = {
