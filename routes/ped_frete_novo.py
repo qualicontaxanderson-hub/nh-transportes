@@ -2120,6 +2120,7 @@ def _terceiros(cur, desde):
     ext = _terceiro_id(cur)
     if not ext:
         return []
+    nossos = _postos_nossos(cur)
     cur.execute("""
         SELECT f.id, f.data_frete, f.motoristas_id, f.clientes_id, f.pedido_id,
                COALESCE(f.quantidade_manual, q.valor, 0) AS litros,
@@ -2133,7 +2134,6 @@ def _terceiros(cur, desde):
           LEFT JOIN frete_terceiro ft ON ft.frete_id = f.id
          WHERE f.veiculos_id = %s AND f.data_frete >= %s
          ORDER BY f.data_frete DESC, f.id""", (ext, desde))
-    nossos = _postos_nossos(cur)
     cargas = {}
     for r in cur.fetchall():
         k = (r['data_frete'], r['motoristas_id'], r['clientes_id'], r['pedido_id'] or 0)
@@ -2752,7 +2752,7 @@ def index():
            # todo cliente fica entre +2,7 e +3,0. Vem preenchido, da pra mudar.
            'vencimento_padrao': (hoje + timedelta(days=3)).isoformat(),
            'viagens': [], 'ociosos': [], 'dias': [], 'veiculos': [],
-           'cobrar': [], 'divergencias': [], 'erro': None, 'destinos': [],
+           'cobrar': [], 'divergencias': [], 'erro': None, 'destinos': [], 'terceiros': [],
            'transportadoras': [], 'terceiro_id': 0,
            'conferencia': [], 'achados': 0,
            'op': {'clientes': [], 'fornecedores': [], 'produtos': [],

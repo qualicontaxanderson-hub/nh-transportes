@@ -572,10 +572,21 @@ body > .container-fluid:has(#pfn){
                       <input type="text" inputmode="numeric" class="nf__pm nf__mask"
                              data-casas="4" placeholder="0,0000"
                              oninput="pfnMascara(this)"></label>
+                    {% if terceiro %}
+                    {#- Caminhao de fora: a casa nao cobra frete (o posto nosso
+                        nao paga; no de cliente quem cobra e o terceiro). O que
+                        se digita e o que a transportadora cobra. -#}
+                    <input type="hidden" class="nf__pl" value="0">
+                    <label class="nf__c nf__c--manual">Frete do terceiro por litro
+                      <input type="text" inputmode="numeric" class="nf__ct nf__mask"
+                             placeholder="0,000" oninput="pfnMascara(this)">
+                      <span class="nf__hist">o que a transportadora cobra</span></label>
+                    {% else %}
                     <label class="nf__c nf__c--manual">Frete por litro
                       <input type="text" inputmode="numeric" class="nf__pl nf__mask"
                              placeholder="0,000" oninput="pfnMascara(this)">
                       <span class="nf__hist nf__hpl"></span></label>
+                    {% endif %}
                     <button type="button" class="nf__cte-link"
                             onclick="pfnMostraCte(this)">CT-e sai diferente do frete?</button>
                     <label class="nf__c nf__c--cte" hidden>CT-e por litro
@@ -590,11 +601,15 @@ body > .container-fluid:has(#pfn){
                       <span class="v nf__nf">—</span></div>
                     <div class="cl"><span class="k">Frete</span>
                       <span class="v nf__vf">—</span></div>
-                    <div class="cl"><span class="k">Comissão · R$ 0,01/L</span>
+                    <div class="cl" {{ 'hidden' if terceiro }}><span class="k">Comissão · R$ 0,01/L</span>
                       <span class="v nf__cm">—</span></div>
                     <div class="cl"><span class="k">CT-e · comissão 8%</span>
                       <span class="v nf__cc">—</span></div>
-                    <div class="cl cl--tot"><span class="k">Lucro</span>
+                    {% if terceiro %}
+                    <div class="cl cl--tot"><span class="k">Frete do terceiro</span>
+                      <span class="v nf__vt">—</span></div>
+                    {% endif %}
+                    <div class="cl cl--tot" {{ 'hidden' if terceiro }}><span class="k">Lucro</span>
                       <span class="v nf__lu">—</span></div>
                   </div>
                 </div>
@@ -633,6 +648,8 @@ body > .container-fluid:has(#pfn){
         {%- else %} <b>nada fora do lugar</b>{% endif -%}
       {%- elif modo == 'cobrar' -%}
         {{ totais.postos }} cliente(s) · {{ totais.a_cobrar | formatar_moeda }} sem boleto
+      {%- elif modo == 'terceiros' -%}
+        fretes de caminhão de fora · últimos 120 dias
       {%- elif modo == 'caminhao' -%}
         {{ semana }}, {{ dia.strftime('%d/%m/%Y') }} · linha do tempo do caminhão
       {%- else -%}
@@ -650,6 +667,8 @@ body > .container-fluid:has(#pfn){
          class="{{ 'on' if modo == 'cobrar' }}">A cobrar</a>
       <a href="{{ url_for('ped_frete_novo.index', modo='conferir') }}"
          class="{{ 'on' if modo == 'conferir' }}">Conferência</a>
+      <a href="{{ url_for('ped_frete_novo.index', modo='terceiros') }}"
+         class="{{ 'on' if modo == 'terceiros' }}">Terceiros</a>
     </div>
   </div>
 
@@ -730,6 +749,82 @@ body > .container-fluid:has(#pfn){
     nenhum número é alterado aqui.</p>
 
   {# ══════════════ MODO: A COBRAR ══════════════ #}
+  {% elif modo == 'terceiros' %}
+    {#- Frete de caminhao de fora. Posto da casa: a casa paga a transportadora
+        (a pagar -> pago, ligado ao pagamento do banco). Posto de cliente: quem
+        paga o terceiro e o cliente, o valor fica so informativo. -#}
+    {% set ap = terceiros | selectattr('situacao', 'equalto', 'a_pagar') | list %}
+    {% set sv = terceiros | selectattr('situacao', 'equalto', 'sem_valor') | list %}
+    <div class="g-nums duas">
+      <div class="n n--ambar"><div class="r">A pagar a terceiros</div>
+        <div class="v">{{ ap | sum(attribute='custo') | formatar_moeda }}</div></div>
+      <div class="n n--azul"><div class="r">Cargas sem valor do terceiro</div>
+        <div class="v">{{ sv | length }}</div></div>
+    </div>
+
+    <div class="grade">
+    {% for cg in terceiros %}
+    {% set cor = {'a_pagar': '#b45309', 'pago': '#15803d', 'informativo': '#64748b', 'sem_valor': '#b91c1c'}[cg.situacao] %}
+    <div class="cli" data-fretes="{{ cg.fretes | join(',') }}">
+      <div class="cli__h">
+        <span class="cli__n">{{ cg.data.strftime('%d/%m') }} · {{ cg.transp }}</span>
+        <span class="selo" style="background:{{ cor }}1a;color:{{ cor }};font-weight:700">
+          {{ {'a_pagar': 'a pagar', 'pago': 'pago', 'informativo': 'informativo — cliente paga o terceiro', 'sem_valor': 'falta o valor do terceiro'}[cg.situacao] }}</span>
+      </div>
+      <div class="cli__c" style="display:flex;flex-direction:column;gap:.45rem">
+        <div style="font-size:.85rem;color:#475569">{{ cg.posto }} ·
+          {{ '{:,.0f}'.format(cg.litros).replace(',', '.') }} L ·
+          {{ cg.produtos | join(', ') }}</div>
+        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+          <span style="font-size:.8rem;font-weight:700;color:#475569">Frete do terceiro</span>
+          <input type="text" inputmode="decimal" class="campo tc-valor" style="max-width:140px"
+                 value="{{ ('%.2f' | format(cg.custo)).replace('.', ',') if not cg.sem_custo else '' }}"
+                 placeholder="R$ total da carga">
+          <button type="button" class="bd__b" onclick="pfnTercCusto(this)">Salvar valor</button>
+        </div>
+        {% if cg.pagamentos %}
+          {% for b in cg.pagamentos %}
+          <div style="font-size:.82rem;background:#f0fdf4;border-radius:8px;padding:.4rem .6rem">
+            <b>Pago {{ b.data_transacao.strftime('%d/%m/%Y') }}</b> · {{ b.valor | formatar_moeda }} ·
+            {{ b.apelido }} · <span style="color:#64748b">{{ b.descricao }}</span>
+            <button type="button" class="bd__b" style="margin-left:.4rem"
+                    onclick="pfnTercPaga(this, 0)">desligar</button>
+          </div>
+          {% endfor %}
+        {% elif cg.situacao == 'a_pagar' %}
+          {% if cg.candidatos %}
+          <div style="font-size:.8rem;color:#475569">Pagamentos com esse valor depois da carga:</div>
+          {% for b in cg.candidatos %}
+          <div style="font-size:.82rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+            <span>{{ b.data_transacao.strftime('%d/%m/%Y') }} · {{ b.valor | formatar_moeda }} ·
+              {{ b.apelido }} · <span style="color:#64748b">{{ b.descricao }}</span></span>
+            <button type="button" class="bd__b bd__b--sim" onclick="pfnTercPaga(this, {{ b.id }})">É este</button>
+          </div>
+          {% endfor %}
+          {% else %}
+          <div style="font-size:.8rem;color:#64748b">Nenhum pagamento de {{ cg.custo | formatar_moeda }}
+            para essa transportadora ainda — liga sozinho quando aparecer no extrato.</div>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <div class="vazio"><i class="bi bi-truck-front"></i><br>Nenhum frete de terceiro nos últimos 120 dias.</div>
+    {% endfor %}
+    </div>
+    <script>
+    function pfnTercIds(el){ return el.closest('.cli').getAttribute('data-fretes').split(',').map(Number); }
+    function pfnTercCusto(btn){
+      var v = btn.parentNode.querySelector('.tc-valor').value.replace(/\./g, '').replace(',', '.');
+      if (v === '' || isNaN(parseFloat(v))){ alert('Digite o valor total que a transportadora cobrou.'); return; }
+      pfnEnvia(btn, '/ped-frete-novo/terceiro-custo', {frete_ids: pfnTercIds(btn), total: parseFloat(v)});
+    }
+    function pfnTercPaga(btn, bt){
+      if (!bt && !confirm('Desligar este pagamento da carga?')) return;
+      pfnEnvia(btn, '/ped-frete-novo/terceiro-pagamento', {frete_ids: pfnTercIds(btn), bank_transaction_id: bt || null});
+    }
+    </script>
+
   {% elif modo == 'cobrar' %}
 
     <div class="g-nums duas">
@@ -2290,6 +2385,9 @@ function pfnContaItem(item){
   item.querySelector('.nf__cm').textContent = pfnMoeda(comis);
   item.querySelector('.nf__cc').textContent = pfnMoeda(cte) + ' · ' + pfnMoeda(ccte);
   item.querySelector('.nf__lu').textContent = pfnMoeda(temFrete ? frete - comis - ccte : 0);
+  var ct = item.querySelector('.nf__ct');
+  if (ct) item.querySelector('.nf__vt').textContent =
+    ct.value === '' ? '—' : pfnMoeda(Math.round(litros * (pfnNum(ct) || 0) * 100) / 100);
 }
 
 // Cabe na carreta? Soma TODOS os produtos do lançamento — é a pergunta que
@@ -2613,6 +2711,11 @@ function pfnLancar(botao){
       alert(rot + 'digite o frete por litro. Se esse posto não paga frete, digite 0.');
       return;
     }
+    var ctCampo = it.querySelector('.nf__ct');
+    if (ctCampo && ctCampo.value === ''){
+      alert(rot + 'digite o frete do terceiro por litro (o que a transportadora cobra).');
+      return;
+    }
     payload.push({
       fornecedor_id: parseInt(v('.nf__forn'), 10),
       produto_id: parseInt(v('.nf__prod'), 10),
@@ -2622,7 +2725,8 @@ function pfnLancar(botao){
       preco_mercadoria: pfnNum(it.querySelector('.nf__pm')) || 0,
       preco_litro: String(pfnNum(it.querySelector('.nf__pl'))),
       preco_cte: it.querySelector('.nf__pc').value === ''
-        ? '' : String(pfnNum(it.querySelector('.nf__pc')))
+        ? '' : String(pfnNum(it.querySelector('.nf__pc'))),
+      custo_terceiro_litro: ctCampo ? String(pfnNum(ctCampo)) : ''
     });
   }
   if (!payload.length){ alert('Adicione ao menos um produto.'); return; }
