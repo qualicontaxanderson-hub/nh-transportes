@@ -1523,7 +1523,7 @@ def tempo_real():
 @login_required
 def pendente_descer_descargas(item_id):
     """Alertas de descarga que podem receber esta linha de nota: mesma empresa
-    e mesmo produto, ainda com litros sem nota, de 2 dias antes a 15 dias
+    e mesmo produto, ainda pendentes (as ja vinculadas, mesmo com sobra, ficam fora), de 2 dias antes a 15 dias
     depois da emissao. Mais perto da emissao primeiro. So leitura - o vinculo
     em si vai pela rota de sempre (/estoque/descarga/<id>/vincular)."""
     conn = get_db_connection()
@@ -1555,7 +1555,7 @@ def pendente_descer_descargas(item_id):
                       JOIN dfe_documentos d2 ON d2.id = i2.documento_id
                      WHERE dn2.descarga_id = dp.id) AS notas
               FROM descargas_pendentes dp
-             WHERE dp.cliente_id = %s AND dp.produto_id = %s AND dp.status <> 'ignorada'
+             WHERE dp.cliente_id = %s AND dp.produto_id = %s AND dp.status = 'pendente'
                AND DATE(COALESCE(dp.data_final, dp.data_inicial, dp.data_descarga))
                    BETWEEN %s AND %s
             """, (it['cliente_id'], it['pid'], dia - timedelta(days=2), dia + timedelta(days=15)))
@@ -1706,6 +1706,7 @@ def pendente_descer():
                 'produto_xml': r['produto_xml'], 'valor': valor,
                 'preco_l': (valor / nota_l) if nota_l else 0,
                 'cte_numero': cte1['cte_numero'] if cte1 else None,
+                'cte_outros': [x['cte_numero'] for x in (ctes.get(r['chave']) or [])[1:]],
                 'cte_transp': cte1['cte_transp'] if cte1 else None,
                 'cte_frete': float(cte1['vprest']) if cte1 and cte1['vprest'] is not None else None,
                 'dias': dias,

@@ -249,7 +249,7 @@
         <div>{% if c.mot_nome %}<b>{{ c.mot_nome }}</b>{% if c.mais %} +{{ c.mais }}{% endif %}{% else %}<span class="mut">motorista não informado</span>{% endif %}
           {% if c.placa %} <span class="placa">{{ c.placa }}</span>{% endif %}</div>
         <i class="bi bi-truck"></i>
-        <div>{% if c.cte_numero %}<b>CT-e {{ c.cte_numero }}</b> · {{ c.cte_transp or '' }}{% if c.cte_frete is not none %} · frete R$ {{ c.cte_frete | fmtnum(2) }}{% endif %}
+        <div>{% if c.cte_numero %}<b>CT-e {{ c.cte_numero }}</b> · {{ c.cte_transp or '' }}{% if c.cte_frete is not none %} · frete R$ {{ c.cte_frete | fmtnum(2) }}{% endif %}{% if c.cte_outros %} <span class="res res--perda" title="mais de um CT-e para esta nota">+ CT-e {{ c.cte_outros | join(", ") }}</span>{% endif %}
              {% else %}<span class="mut">sem CT-e capturado</span>{% endif %}</div>
         <i class="bi bi-cash-coin"></i>
         <div>R$ {{ c.valor | fmtnum(2) }} <span class="mut">· R$ {{ c.preco_l | fmtnum(4) }}/L · {{ c.nota_litros | fmtnum(0) }} L na nota</span></div>
