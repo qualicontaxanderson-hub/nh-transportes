@@ -1149,6 +1149,11 @@ def _auto_vincular_troco_pix(cursor, conn, account_id):
         que trocos anteriores dele já caíram (utils/troco_pix_banco);
       * UM candidato só, dos dois lados (um troco -> um débito e o débito não
         serve a outro troco). Dois trocos iguais no dia ficam para a mão.
+      * DIA SEGUINTE (01/11/2026): sem candidato no mesmo dia, aceita o débito
+        de D+1 (troco da noite que o banco lança no outro dia) — desde que esse
+        débito não sirva também a nenhum troco do próprio D+1 (mesmo valor e
+        mesmo favorecido). Medido desde 01/06: 4 casos, todos iguais ao vínculo
+        feito à mão, nenhum diferente.
 
     Medido em 24/10/2026 nos 368 trocos com valor desde 01/06: a regra achou
     322 só por nome/chave e 347 com o documento já visto, todos IGUAIS ao
@@ -1167,14 +1172,18 @@ def _auto_vincular_troco_pix(cursor, conn, account_id):
                  JOIN troco_pix_clientes tpc ON tpc.id = tp.troco_pix_cliente_id
                 WHERE tp.bank_transaction_id IS NULL AND tp.troco_pix > 0
                   AND UPPER(COALESCE(tp.status, '')) <> 'CANCELADO'
-                  AND tp.data IN (SELECT DISTINCT data_transacao FROM bank_transactions
-                                   WHERE account_id=%s AND tipo='DEBIT' AND status='pendente')""",
-            (account_id,),
+                  AND (tp.data IN (SELECT DISTINCT data_transacao FROM bank_transactions
+                                    WHERE account_id=%s AND tipo='DEBIT' AND status='pendente')
+                       OR DATE_ADD(tp.data, INTERVAL 1 DAY) IN (
+                                   SELECT DISTINCT data_transacao FROM bank_transactions
+                                    WHERE account_id=%s AND tipo='DEBIT' AND status='pendente'))""",
+            (account_id, account_id),
         )
         trocos = cursor.fetchall()
         if not trocos:
             return 0
-        datas = sorted({t['data'] for t in trocos})
+        um_dia = _dt.timedelta(days=1)
+        datas = sorted({t['data'] for t in trocos} | {t['data'] + um_dia for t in trocos})
         ph = ','.join(['%s'] * len(datas))
         cursor.execute(
             f"""SELECT id, data_transacao, valor, descricao, cnpj_cpf
@@ -1199,8 +1208,25 @@ def _auto_vincular_troco_pix(cursor, conn, account_id):
         ocupados |= _debitos_estornados(cursor, account_id, datas)
         # O documento em que os trocos do cliente JÁ caíram: liga mesmo com o
         # nome digitado errado ou a chave por telefone/e-mail (347 de 368).
+        # Todos os trocos dos dias seguintes (ligados ou não): o débito de D+1
+        # que serve a um troco do próprio D+1 é dele, não do troco da véspera.
+        dias_seg = sorted({t['data'] + um_dia for t in trocos})
+        ph2 = ','.join(['%s'] * len(dias_seg))
+        cursor.execute(
+            f"""SELECT tp.data, tp.troco_pix, tp.troco_pix_cliente_id AS cid,
+                       tpc.nome_completo, tpc.tipo_chave_pix, tpc.chave_pix
+                  FROM troco_pix tp
+                  JOIN troco_pix_clientes tpc ON tpc.id = tp.troco_pix_cliente_id
+                 WHERE tp.troco_pix > 0 AND UPPER(COALESCE(tp.status, '')) <> 'CANCELADO'
+                   AND tp.data IN ({ph2})""",
+            dias_seg,
+        )
+        do_dia_seg = defaultdict(list)
+        for o in cursor.fetchall():
+            do_dia_seg[(o['data'], f"{float(o['troco_pix']):.2f}")].append(o)
         from utils.troco_pix_banco import do_banco
-        aprendidos = do_banco(cursor, sorted({t['cid'] for t in trocos}))
+        aprendidos = do_banco(cursor, sorted({t['cid'] for t in trocos}
+                                             | {o['cid'] for os_ in do_dia_seg.values() for o in os_}))
 
         def favorecido(t, b):
             nome = _sem_acento_maiusculo(t['nome_completo'])
@@ -1217,8 +1243,15 @@ def _auto_vincular_troco_pix(cursor, conn, account_id):
 
         candidatos = {}
         for t in trocos:
-            candidatos[t['id']] = [b for b in por_dia_valor[(t['data'], f"{float(t['troco_pix']):.2f}")]
-                                   if b['id'] not in ocupados and favorecido(t, b)]
+            v = f"{float(t['troco_pix']):.2f}"
+            cs = [b for b in por_dia_valor[(t['data'], v)]
+                  if b['id'] not in ocupados and favorecido(t, b)]
+            if not cs:
+                d1 = t['data'] + um_dia
+                cs = [b for b in por_dia_valor[(d1, v)]
+                      if b['id'] not in ocupados and favorecido(t, b)
+                      and not any(favorecido(o, b) for o in do_dia_seg[(d1, v)])]
+            candidatos[t['id']] = cs
         disputa = Counter(b['id'] for cs in candidatos.values() for b in cs)
 
         agora = _dt.datetime.now()
