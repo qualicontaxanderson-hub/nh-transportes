@@ -338,10 +338,10 @@
     <div class="tab-pane fade {% if tab == 'descargas' %}show active{% endif %}" id="pane-descargas" role="tabpanel">
       <div class="d-flex justify-content-between align-items-end gap-3 flex-wrap">
         <div class="flex-fill"></div>
-        {# toolbar: reler e-mails de descarga (lidos+nao-lidos, ultimos 3 dias) #}
+        {# toolbar: reler e-mails de descarga (lidos+nao-lidos, ultimos 10 dias) #}
         <div class="mig-toolbar mb-3 d-flex align-items-center gap-2">
           <button type="button" class="btn btn-sm btn-outline-primary" id="btnReler">
-            <i class="bi bi-arrow-repeat"></i> Reler e-mails (últimos 3 dias)
+            <i class="bi bi-arrow-repeat"></i> Reler e-mails (últimos 10 dias)
           </button>
           <span id="relerMsg" class="small text-muted"></span>
         </div>
@@ -1194,7 +1194,7 @@
       });
   });
 
-  // Reler e-mails de descarga (lidos+nao-lidos, ultimos 3 dias). O base.html
+  // Reler e-mails de descarga (lidos+nao-lidos, ultimos 10 dias). O base.html
   // injeta o X-CSRFToken no fetch. Idempotente no servidor (chave UNIQUE).
   var btnReler = document.getElementById('btnReler');
   if (btnReler) btnReler.addEventListener('click', function () {

@@ -1244,7 +1244,7 @@ def conciliacao():
 # (chave UNIQUE + gravar_descarga pula duplicadas). Usa o MESMO GET_LOCK do
 # scheduler p/ nao rodar concorrente com um tick da importacao.
 # ==========================================================================
-_RELER_DIAS = 3
+_RELER_DIAS = 10
 _ELS_LOCK = "els_email_import"
 
 
