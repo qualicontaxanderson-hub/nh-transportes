@@ -2608,7 +2608,15 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
                                    (SELECT c2.nome FROM lancamentos_despesas ld3
                                       LEFT JOIN categorias_despesas c2 ON c2.id = ld3.categoria_id
                                      WHERE ld3.bank_transaction_id = bt.id
-                                     ORDER BY ld3.id LIMIT 1) AS despesa_categoria
+                                     ORDER BY ld3.id LIMIT 1) AS despesa_categoria,
+                                   -- Troco PIX ligado a este debito (707 dos 790
+                                   -- "sem vinculo" sao troco): o card diz qual.
+                                   (SELECT tp.id FROM troco_pix tp
+                                     WHERE tp.bank_transaction_id = bt.id
+                                     ORDER BY tp.id LIMIT 1) AS troco_id,
+                                   (SELECT tp.numero_sequencial FROM troco_pix tp
+                                     WHERE tp.bank_transaction_id = bt.id
+                                     ORDER BY tp.id LIMIT 1) AS troco_num
                             FROM bank_transactions bt
                             INNER JOIN bank_accounts ba ON bt.account_id = ba.id
                             LEFT JOIN fornecedores f ON bt.fornecedor_id = f.id
