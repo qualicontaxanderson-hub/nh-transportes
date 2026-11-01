@@ -43,6 +43,75 @@
     #pend .pend__right{ text-align:left; width:100%; display:flex; justify-content:space-between; align-items:baseline;
       border-top:1px solid var(--line-2); padding-top:.5rem; margin-top:.15rem; }
   }
+
+  /* ===== Cards novos (01/11/2026) ===== */
+  #pend .pcs{ display:grid; grid-template-columns:repeat(auto-fill,minmax(420px,1fr)); gap:.8rem; align-items:start; }
+  @media (max-width:520px){ #pend .pcs{ grid-template-columns:1fr; } }
+  #pend .pc{ background:#fff; border:1px solid var(--line-2); border-radius:16px; box-shadow:var(--shadow);
+    overflow:hidden; position:relative; }
+  #pend .pc::before{ content:""; position:absolute; inset:0 auto 0 0; width:5px; background:var(--c); }
+  #pend .pc__in{ padding:.85rem 1rem .8rem 1.15rem; display:flex; flex-direction:column; gap:.5rem; }
+  #pend .pc__head{ display:flex; align-items:flex-start; gap:.6rem; }
+  #pend .pc__id{ min-width:0; flex:1; }
+  #pend .pc__l1{ display:flex; align-items:center; gap:.45rem; flex-wrap:wrap; }
+  #pend .pc__chip{ background:var(--cbg); color:var(--c); font-weight:800; font-size:.8rem; border-radius:8px; padding:.12rem .55rem; }
+  #pend .pc__nf{ font-weight:800; font-size:1rem; color:#1f2937; }
+  #pend .pc__nf small{ color:var(--muted); font-weight:600; }
+  #pend .pc__emp{ font-size:.72rem; color:var(--muted); font-weight:600; }
+  #pend .pc__forn{ font-size:.8rem; font-weight:700; color:#334155; margin-top:.2rem; line-height:1.25; }
+  #pend .pc__saldo{ text-align:right; flex:0 0 auto; font-size:1.45rem; font-weight:800; color:var(--amber);
+    font-variant-numeric:tabular-nums; line-height:1.05; }
+  #pend .pc__saldo small{ display:block; font-size:.62rem; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+  #pend .pc__grid{ display:grid; grid-template-columns:16px 1fr; column-gap:.5rem; row-gap:.25rem; font-size:.78rem;
+    color:#334155; background:#f7f9fc; border-radius:10px; padding:.5rem .65rem; }
+  #pend .pc__grid > i{ color:#7b8ba3; line-height:1.55; }
+  #pend .pc__grid b{ color:#1f2937; }
+  #pend .mut{ color:var(--muted); }
+  #pend .placa{ font-family:ui-monospace,Menlo,monospace; font-size:.72rem; background:#fff; border:1px solid var(--line-2); border-radius:4px; padding:0 .3rem; }
+  #pend .pc__bar{ height:6px; background:#eef1f5; border-radius:99px; overflow:hidden; }
+  #pend .pc__bar i{ display:block; height:100%; background:var(--c); }
+  #pend .pc__barl{ display:flex; justify-content:space-between; font-size:.72rem; color:var(--muted); margin-top:-.25rem; }
+  #pend .pc__ver{ border:1px solid var(--line-2); background:#fff; color:var(--blue); font-weight:700; font-size:.8rem;
+    border-radius:10px; padding:.45rem .7rem; display:flex; align-items:center; gap:.4rem; cursor:pointer; width:100%; }
+  #pend .pc__ver:hover{ border-color:var(--blue); background:#f4f8fd; }
+  #pend .pc__ver .chev{ margin-left:auto; transition:transform .2s; }
+  #pend .pc.on .pc__ver .chev{ transform:rotate(180deg); }
+  #pend .pc__al{ border-top:1px solid var(--line-2); background:#fbfcfe; padding:.6rem .8rem .7rem 1.15rem; }
+  #pend .pc__al[hidden]{ display:none; }
+  #pend .idade{ display:inline-block; border-radius:999px; padding:0 .5rem; font-size:.68rem; font-weight:700; line-height:1.6; }
+  #pend .idade--0{ background:#dcfce7; color:#166534; }
+  #pend .idade--1{ background:#dbeafe; color:#1e40af; }
+  #pend .idade--2{ background:#ede9fe; color:#5b21b6; }
+  #pend .idade--3{ background:#e5e7eb; color:#374151; }
+  #pend .idade--7{ background:#fee2e2; color:#b91c1c; }
+  #pend .vc-dia{ display:inline-block; border-radius:999px; padding:0 .5rem; font-size:.68rem; font-weight:700; line-height:1.6; }
+  #pend .vc-dia--0 { background:#dcfce7; color:#166534; }
+  #pend .vc-dia--a1{ background:#dbeafe; color:#1e40af; }
+  #pend .vc-dia--a2{ background:#ede9fe; color:#5b21b6; }
+  #pend .vc-dia--a3{ background:#e5e7eb; color:#374151; }
+  #pend .vc-dia--d1{ background:#fef3c7; color:#92400e; }
+  #pend .vc-dia--d2{ background:#ffedd5; color:#c2410c; }
+  #pend .vc-dia--d3{ background:#fee2e2; color:#b91c1c; }
+  #pend .al{ background:#fff; border:1px solid var(--line-2); border-radius:12px; padding:.55rem .65rem; margin-bottom:.45rem; }
+  #pend .al__top{ display:flex; gap:.6rem; align-items:center; }
+  #pend .al__l{ flex:1; min-width:0; font-size:.8rem; }
+  #pend .al__l .sub{ font-size:.72rem; color:var(--muted); margin-top:.1rem; }
+  #pend .al__q{ text-align:right; font-weight:800; font-variant-numeric:tabular-nums; font-size:.95rem; }
+  #pend .al__q small{ display:block; font-size:.62rem; color:var(--muted); font-weight:700; text-transform:uppercase; }
+  #pend .bt-v{ border:0; background:var(--blue); color:#fff; font-weight:700; font-size:.78rem; border-radius:9px; padding:.4rem .75rem; cursor:pointer; }
+  #pend .bt-v:disabled{ opacity:.5; cursor:default; }
+  #pend .al__f{ margin-top:.55rem; padding-top:.55rem; border-top:1px dashed var(--line-2); display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; }
+  #pend .al__f[hidden]{ display:none; }
+  #pend .al__f input[type=number]{ width:120px; border:1px solid var(--line-2); border-radius:8px; padding:.32rem .5rem; font-size:.85rem; }
+  #pend .seg{ display:inline-flex; border:1px solid var(--line-2); border-radius:9px; overflow:hidden; }
+  #pend .seg label{ padding:.32rem .8rem; font-weight:700; font-size:.8rem; cursor:pointer; margin:0; display:flex; gap:.3rem; align-items:center; }
+  #pend .seg label + label{ border-left:1px solid var(--line-2); }
+  #pend .seg label.on{ background:var(--blue); color:#fff; }
+  #pend .seg input{ display:none; }
+  #pend .res{ border-radius:8px; padding:.15rem .55rem; font-size:.76rem; font-weight:600; }
+  #pend .res--perda{ background:#fdecec; color:#b42318; }
+  #pend .res--sobra, #pend .res--ok{ background:#e7f6ec; color:#1e7e34; }
+  #pend .al__vazio{ font-size:.8rem; color:var(--muted); padding:.3rem 0; }
 </style>
 {% endblock %}
 
@@ -154,31 +223,146 @@
   <div class="empty"><i class="bi bi-check2-circle"></i>
     Nada pendente{% if um_empresa %} nesta empresa{% endif %} — todas as notas de combustível desceram por completo.</div>
 {% else %}
+<div class="pcs">
   {% for c in cards %}
-  <div class="pend" style="--c:{{ c.cor }}">
-    <div class="pend__main">
-      <div class="pend__top">
-        <span class="pend__dot"></span>
-        <span class="pend__prod">{{ c.nome }}</span>
-        <span class="pill">nº {{ c.numero }}/{{ c.serie }}</span>
-        <span class="tipo">NF-e</span>
-        {% if not um_empresa %}<span class="pend__emp">· {{ c.empresa_nome }}</span>{% endif %}
+  {% set pct = ((c.ja_desceu * 100 / c.nota_litros) if c.nota_litros else 0) | round(0) %}
+  {% set idc = '0' if c.dias == 0 else ('1' if c.dias == 1 else ('2' if c.dias == 2 else ('3' if c.dias is not none and c.dias < 7 else '7'))) %}
+  <article class="pc" style="--c:{{ c.cor }};--cbg:{{ c.cbg }}" data-item="{{ c.item_id }}"
+           data-preco="{{ c.preco_l }}">
+    <div class="pc__in">
+      <div class="pc__head">
+        <div class="pc__id">
+          <div class="pc__l1">
+            <span class="pc__chip">{{ c.nome }}</span>
+            <span class="pc__nf">NF-e {{ c.numero }}<small>/{{ c.serie }}</small></span>
+            {% if c.dias is not none %}<span class="idade idade--{{ idc }}">{{ 'hoje' if c.dias == 0 else ('ontem' if c.dias == 1 else 'há %d dias' % c.dias) }}</span>{% endif %}
+            {% if not um_empresa %}<span class="pc__emp">{{ c.empresa_nome }}</span>{% endif %}
+          </div>
+          <div class="pc__forn">{{ c.fornecedor or '—' }}</div>
+        </div>
+        <div class="pc__saldo">{{ c.saldo | fmtnum(0) }} L<small>pra descer</small></div>
       </div>
-      <div class="pend__meta">
-        {{ c.data.strftime('%d/%m/%Y') if c.data else '—' }}
-        <span class="sep">·</span>
-        {% if c.mot_nome %}<span class="mot">{{ c.mot_nome }}</span>{% if c.placa %} <span class="placa">{{ c.placa }}</span>{% endif %}{% if c.mais %} +{{ c.mais }}{% endif %}
-        {% else %}<span class="semcte">sem CT-e vinculado</span>{% endif %}
-        <span class="sep">·</span> nota {{ c.nota_litros | fmtnum(0) }} L
-        <span class="sep">·</span> já desceu {{ c.ja_desceu | fmtnum(0) }} L
+      <div class="pc__grid">
+        <i class="bi bi-calendar3"></i>
+        <div>emitida <b>{{ c.data.strftime('%d/%m/%Y %H:%M') if c.data else '—' }}</b></div>
+        <i class="bi bi-person"></i>
+        <div>{% if c.mot_nome %}<b>{{ c.mot_nome }}</b>{% if c.mais %} +{{ c.mais }}{% endif %}{% else %}<span class="mut">motorista não informado</span>{% endif %}
+          {% if c.placa %} <span class="placa">{{ c.placa }}</span>{% endif %}</div>
+        <i class="bi bi-truck"></i>
+        <div>{% if c.cte_numero %}<b>CT-e {{ c.cte_numero }}</b> · {{ c.cte_transp or '' }}{% if c.cte_frete is not none %} · frete R$ {{ c.cte_frete | fmtnum(2) }}{% endif %}
+             {% else %}<span class="mut">sem CT-e capturado</span>{% endif %}</div>
+        <i class="bi bi-cash-coin"></i>
+        <div>R$ {{ c.valor | fmtnum(2) }} <span class="mut">· R$ {{ c.preco_l | fmtnum(4) }}/L · {{ c.nota_litros | fmtnum(0) }} L na nota</span></div>
       </div>
+      <div class="pc__bar"><i style="width:{{ pct }}%"></i></div>
+      <div class="pc__barl"><span>já desceu {{ c.ja_desceu | fmtnum(0) }} L</span><span>{{ pct | int }}%</span></div>
+      <button type="button" class="pc__ver js-ver"><i class="bi bi-bell"></i> Alertas de descarga para vincular
+        <i class="bi bi-chevron-down chev"></i></button>
     </div>
-    <div class="pend__right">
-      <div class="pend__saldo">{{ c.saldo | fmtnum(0) }} L</div>
-      <div class="pend__rot">pra descer</div>
-    </div>
-  </div>
+    <div class="pc__al" hidden></div>
+  </article>
   {% endfor %}
+</div>
 {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  function fmt(n, d) { d = d || 0; return (Number(n) || 0).toLocaleString('pt-BR', {minimumFractionDigits: d, maximumFractionDigits: d}); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function diaChip(d) {
+    var n = Math.abs(d);
+    var rel = d === 0 ? 'mesmo dia' : n + (n === 1 ? ' dia ' : ' dias ') + (d < 0 ? 'antes' : 'depois');
+    return '<span class="vc-dia vc-dia--' + (d === 0 ? '0' : (d < 0 ? 'a' : 'd') + Math.min(n, 3)) + '">' + rel + '</span>';
+  }
+  function resChip(ps, preco) {
+    if (Math.abs(ps) <= 0.001) return '<span class="res res--ok">sem diferença</span>';
+    var rs = Math.abs(ps) * preco, perda = ps < 0;
+    return '<span class="res res--' + (perda ? 'perda' : 'sobra') + '">' + (perda ? 'perda ' : 'sobra ') +
+           '<b>' + fmt(Math.abs(ps)) + ' L</b>' + (rs >= 0.01 ? ' · R$ ' + fmt(rs, 2) : '') + '</span>';
+  }
+
+  function monta(card, j) {
+    var box = card.querySelector('.pc__al'), preco = Number(card.getAttribute('data-preco')) || 0;
+    if (!j.descargas.length) {
+      box.innerHTML = '<div class="al__vazio"><i class="bi bi-info-circle"></i> Nenhum alerta de descarga deste produto ' +
+        'sem nota, de 2 dias antes a 15 dias depois da emissão. Se desceu sem alarme, use <b>Reler e-mails</b> ' +
+        'ou lance manual na <a href="/estoque?tab=descargas">aba Estoque</a>.</div>';
+      return;
+    }
+    box.innerHTML = j.descargas.map(function (d) {
+      var sug = Math.min(d.falta, j.saldo);
+      return '<div class="al" data-id="' + d.id + '" data-falta="' + d.falta + '">' +
+        '<div class="al__top"><div class="al__l"><b>' + esc(d.dia_br) + (d.hora ? ' ' + esc(d.hora) : '') + '</b> ' +
+        diaChip(d.dif_dias) + ' · TQ ' + esc(d.tanque == null ? '—' : d.tanque) + (d.manual ? ' · manual' : '') +
+        '<div class="sub">recebido ' + fmt(d.total) + ' L' +
+        (d.volume_inicial != null ? ' · régua ' + fmt(d.volume_inicial) + ' → ' + fmt(d.volume_final) : '') +
+        (d.notas ? ' · já tem NF-e ' + esc(d.notas) + ' (' + fmt(d.vinculado) + ' L)' : '') + '</div></div>' +
+        '<div class="al__q">' + fmt(d.falta) + ' L<small>sem nota</small></div>' +
+        '<button type="button" class="bt-v js-abre">Vincular</button></div>' +
+        '<div class="al__f" hidden>' +
+        '<input type="number" step="0.001" min="0" class="js-l" value="' + sug + '">' +
+        '<div class="seg"><label><input type="radio" name="m' + d.id + '" value="parcial">Parcial</label>' +
+        '<label><input type="radio" name="m' + d.id + '" value="integral">Integral</label></div>' +
+        '<span class="js-res"></span>' +
+        '<button type="button" class="bt-v js-ok" disabled style="margin-left:auto">Confirmar</button></div></div>';
+    }).join('');
+    box._j = j; box._preco = preco;
+  }
+
+  function atualiza(al) {
+    var box = al.closest('.pc__al'), j = box._j;
+    var l = parseFloat(al.querySelector('.js-l').value), m = al.querySelector('input[type=radio]:checked');
+    al.querySelectorAll('.seg label').forEach(function (x) { x.classList.toggle('on', x.querySelector('input').checked); });
+    var ok = l > 0 && l <= j.saldo + 1e-6 && !!m;
+    var bt = al.querySelector('.js-ok');
+    bt.disabled = !ok;
+    bt.textContent = !m ? 'Confirmar' : (m.value === 'integral' ? 'Fechar nota com ' + fmt(l) + ' L' : 'Vincular ' + fmt(l) + ' L');
+    var r = al.querySelector('.js-res');
+    if (l > j.saldo + 1e-6) r.innerHTML = '<span class="res res--perda">máximo ' + fmt(j.saldo, 3) + ' L (saldo da nota)</span>';
+    else if (m && m.value === 'integral') {
+      // O que o tanque recebeu por conta desta nota (descargas anteriores +
+      // o que esta descarga tem sem nota) contra o que foi comprado.
+      var ps = Math.round((j.recebido_fisico + Number(al.getAttribute('data-falta')) - j.nota_litros) * 1000) / 1000;
+      r.innerHTML = 'ao fechar: ' + resChip(ps, box._preco);
+    } else r.innerHTML = '';
+  }
+
+  document.addEventListener('click', function (ev) {
+    var v = ev.target.closest('.js-ver');
+    if (v) {
+      var card = v.closest('.pc'), box = card.querySelector('.pc__al');
+      var abrir = box.hidden;
+      box.hidden = !abrir; card.classList.toggle('on', abrir);
+      if (abrir && !box._j) {
+        box.innerHTML = '<div class="al__vazio"><i class="bi bi-hourglass-split"></i> Buscando alertas…</div>';
+        fetch('/estoque/pendente-descer/item/' + card.getAttribute('data-item') + '/descargas')
+          .then(function (r) { return r.json(); })
+          .then(function (j) { if (!j.ok) throw new Error(j.erro || 'falha'); monta(card, j); })
+          .catch(function (e) { box.innerHTML = '<div class="al__vazio">Não deu para buscar: ' + esc(e.message || e) + '</div>'; });
+      }
+      return;
+    }
+    var a = ev.target.closest('.js-abre');
+    if (a) { var f = a.closest('.al').querySelector('.al__f'); f.hidden = !f.hidden; return; }
+    var ok = ev.target.closest('.js-ok');
+    if (ok) {
+      var al = ok.closest('.al'), card2 = ok.closest('.pc');
+      var m = al.querySelector('input[type=radio]:checked');
+      ok.disabled = true; ok.textContent = 'Gravando…';
+      fetch('/estoque/descarga/' + al.getAttribute('data-id') + '/vincular', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({item_id: Number(card2.getAttribute('data-item')),
+                              litros: parseFloat(al.querySelector('.js-l').value), modo: m.value, observacao: ''})
+      }).then(function (r) { return r.json(); })
+        .then(function (d) { if (!d.ok) throw new Error(d.erro || 'falha'); location.reload(); })
+        .catch(function (e) { alert('Não deu para vincular: ' + (e.message || e)); atualiza(al); });
+    }
+  });
+  document.addEventListener('change', function (ev) { var al = ev.target.closest('.al'); if (al) atualiza(al); });
+  document.addEventListener('input', function (ev) { var al = ev.target.closest('.al'); if (al) atualiza(al); });
+})();
+</script>
 {% endblock %}

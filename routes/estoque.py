@@ -1519,6 +1519,74 @@ def tempo_real():
 # Motorista/placa vem do CT-e vinculado (dfe_cte_nfe -> dfe_cte); 1 nota pode
 # ter N CT-e -> mostra o principal + "+N".
 # ==========================================================================
+@estoque_bp.route('/estoque/pendente-descer/item/<int:item_id>/descargas', methods=['GET'])
+@login_required
+def pendente_descer_descargas(item_id):
+    """Alertas de descarga que podem receber esta linha de nota: mesma empresa
+    e mesmo produto, ainda com litros sem nota, de 2 dias antes a 15 dias
+    depois da emissao. Mais perto da emissao primeiro. So leitura - o vinculo
+    em si vai pela rota de sempre (/estoque/descarga/<id>/vincular)."""
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """
+            SELECT i.id, i.quantidade, doc.cliente_id, doc.dh_emissao,
+                   COALESCE(i.classificado_produto_id, i.produto_id) AS pid,
+                   COALESCE((SELECT SUM(litros) FROM descarga_nota WHERE item_id = i.id), 0) AS vinc,
+                   COALESCE((SELECT SUM(dp.total_descarga) FROM descarga_nota a
+                              JOIN descargas_pendentes dp ON dp.id = a.descarga_id
+                             WHERE a.item_id = i.id), 0) AS recebido_fisico
+              FROM dfe_itens i JOIN dfe_documentos doc ON doc.id = i.documento_id
+             WHERE i.id = %s""", (item_id,))
+        it = cur.fetchone()
+        if not it:
+            return jsonify({'ok': False, 'erro': 'Nota não encontrada.'}), 404
+        dia = it['dh_emissao'].date() if it['dh_emissao'] else hoje_brasilia()
+        cur.execute(
+            """
+            SELECT dp.id, dp.tanque, dp.total_descarga, dp.volume_inicial, dp.volume_final,
+                   dp.origem, dp.status,
+                   COALESCE(dp.data_final, dp.data_inicial, dp.data_descarga) AS dt,
+                   COALESCE((SELECT SUM(dn.litros) FROM descarga_nota dn
+                              WHERE dn.descarga_id = dp.id), 0) AS vinculado,
+                   (SELECT GROUP_CONCAT(d2.numero ORDER BY d2.numero SEPARATOR ', ')
+                      FROM descarga_nota dn2 JOIN dfe_itens i2 ON i2.id = dn2.item_id
+                      JOIN dfe_documentos d2 ON d2.id = i2.documento_id
+                     WHERE dn2.descarga_id = dp.id) AS notas
+              FROM descargas_pendentes dp
+             WHERE dp.cliente_id = %s AND dp.produto_id = %s AND dp.status <> 'ignorada'
+               AND DATE(COALESCE(dp.data_final, dp.data_inicial, dp.data_descarga))
+                   BETWEEN %s AND %s
+            """, (it['cliente_id'], it['pid'], dia - timedelta(days=2), dia + timedelta(days=15)))
+        lista = []
+        for d in cur.fetchall():
+            total = float(d['total_descarga'] or 0)
+            falta = round(total - float(d['vinculado'] or 0), 3)
+            if falta <= 0.001:
+                continue
+            dt = d['dt']
+            ddia = dt.date() if hasattr(dt, 'date') else dt
+            lista.append({
+                'id': d['id'], 'tanque': d['tanque'], 'total': total, 'falta': falta,
+                'vinculado': float(d['vinculado'] or 0), 'notas': d['notas'],
+                'volume_inicial': float(d['volume_inicial']) if d['volume_inicial'] is not None else None,
+                'volume_final': float(d['volume_final']) if d['volume_final'] is not None else None,
+                'manual': d['origem'] != 'els_email',
+                'dia_br': ddia.strftime('%d/%m') if ddia else '',
+                'hora': dt.strftime('%H:%M') if isinstance(dt, datetime) else '',
+                'dif_dias': (ddia - dia).days if ddia else 0,
+            })
+        lista.sort(key=lambda x: (abs(x['dif_dias']), x['dif_dias'] < 0))
+        saldo = round(float(it['quantidade'] or 0) - float(it['vinc'] or 0), 3)
+        return jsonify({'ok': True, 'descargas': lista, 'saldo': saldo,
+                        'nota_litros': float(it['quantidade'] or 0),
+                        'recebido_fisico': float(it['recebido_fisico'] or 0)})
+    finally:
+        cur.close()
+        conn.close()
+
+
 @estoque_bp.route('/estoque/pendente-descer', methods=['GET'])
 @login_required
 def pendente_descer():
@@ -1547,7 +1615,9 @@ def pendente_descer():
         # ---- Itens de NF-e combustivel com SALDO > 0 (formula da Camada 2) ----
         sql = f"""
             SELECT doc.id AS documento_id, doc.chave, doc.numero, doc.serie,
-                   doc.dh_emissao, doc.cliente_id, doc.emit_nome,
+                   doc.dh_emissao, doc.cliente_id, doc.emit_nome, doc.emit_cnpj,
+                   doc.transp_placa, doc.transp_motorista,
+                   i.id AS item_id, i.valor_total AS item_valor, i.produto_xml,
                    COALESCE(i.classificado_produto_id, i.produto_id) AS pid,
                    i.quantidade AS nota_litros,
                    COALESCE(v.litros, 0) AS ja_desceu,
@@ -1582,7 +1652,8 @@ def pendente_descer():
             marc = ",".join(["%s"] * len(chaves))
             cur.execute(
                 f"""
-                SELECT n.chave_nfe, ct.motorista_nome, ct.placa
+                SELECT n.chave_nfe, ct.motorista_nome, ct.placa,
+                       c.numero AS cte_numero, c.emit_nome AS cte_transp, ct.vprest
                 FROM dfe_cte_nfe n
                 JOIN dfe_documentos c ON c.id = n.documento_id AND c.tipo = 'CTe'
                 LEFT JOIN dfe_cte ct ON ct.documento_id = c.id
@@ -1616,14 +1687,29 @@ def pendente_descer():
             if vistos:
                 mot_nome, placa = vistos[0]
                 mais = len(vistos) - 1
+            # Sem CT-e: o motorista/placa que a propria NF-e informa.
+            if not mot_nome and r.get('transp_motorista'):
+                mot_nome = r['transp_motorista']
+            placa = placa or r.get('transp_placa')
+            cte1 = (ctes.get(r['chave']) or [None])[0]
+            nota_l = float(r['nota_litros'] or 0)
+            valor = float(r['item_valor'] or 0)
+            dias = (hoje_brasilia() - r['dh_emissao'].date()).days if r['dh_emissao'] else None
 
             cards.append({
                 'empresa_nome': nome_emp.get(r['cliente_id'], '—'),
-                'pid': r['pid'], 'nome': info['nome'], 'cor': info['cor'],
+                'pid': r['pid'], 'nome': info['nome'], 'cor': info['cor'], 'cbg': info['cbg'],
                 'numero': r['numero'], 'serie': r['serie'],
                 'data': r['dh_emissao'], 'fornecedor': r['emit_nome'],
                 'mot_nome': mot_nome, 'placa': placa, 'mais': mais,
-                'nota_litros': float(r['nota_litros'] or 0),
+                'item_id': r['item_id'], 'cliente_id': r['cliente_id'],
+                'produto_xml': r['produto_xml'], 'valor': valor,
+                'preco_l': (valor / nota_l) if nota_l else 0,
+                'cte_numero': cte1['cte_numero'] if cte1 else None,
+                'cte_transp': cte1['cte_transp'] if cte1 else None,
+                'cte_frete': float(cte1['vprest']) if cte1 and cte1['vprest'] is not None else None,
+                'dias': dias,
+                'nota_litros': nota_l,
                 'ja_desceu': float(r['ja_desceu'] or 0),
                 'saldo': saldo,
             })
