@@ -575,7 +575,8 @@ def vinculos_resumo(cur, descarga_ids):
 
 
 def registrar_vinculo(cur, descarga_id, item_id, litros, usuario_id=None,
-                      observacao=None, modo='parcial', tolerancia_l=TOLERANCIA_L):
+                      observacao=None, modo='parcial', tolerancia_l=TOLERANCIA_L,
+                      tanque_errado=False):
     """Grava UM lancamento depois de revalidar TUDO no servidor.
 
     Nao confia em nada da tela: o `documento_id` sai do `item_id` (nunca vem de
@@ -592,8 +593,15 @@ def registrar_vinculo(cur, descarga_id, item_id, litros, usuario_id=None,
     modo='integral' FECHA a nota: grava perda_sobra_l nesta linha e tira a nota
     das candidatas dali pra frente.
 
+    tanque_errado=True: ocorrencia de produto descarregado no tanque de OUTRO
+    combustivel (ex.: 06/10/2026, etanol da NF-e 3252 no TQ1 de gasolina).
+    So nesse caso aceita produto diferente, e exige a observacao contando o
+    que houve. Nenhuma rota da tela passa isto: e lancado a parte.
+
     Levanta ValueError com mensagem pronta pra exibir. NAO da commit.
     """
+    if tanque_errado and not (observacao or '').strip():
+        raise ValueError("Tanque errado: conte o que aconteceu na observação.")
     try:
         litros = float(str(litros).replace(",", "."))
     except (TypeError, ValueError):
@@ -640,7 +648,7 @@ def registrar_vinculo(cur, descarga_id, item_id, litros, usuario_id=None,
         raise ValueError("A nota precisa ser uma NF-e autorizada.")
     if it["cliente_id"] != d["cliente_id"]:
         raise ValueError("Esta nota é de outra empresa.")
-    if not d["produto_id"] or it["produto_id"] != d["produto_id"]:
+    if not tanque_errado and (not d["produto_id"] or it["produto_id"] != d["produto_id"]):
         raise ValueError("O produto da nota não é o mesmo da descarga.")
 
     saldo_item = round((_f(it["quantidade"]) or 0.0) - (_f(it["vinculado_item"]) or 0.0), 3)
