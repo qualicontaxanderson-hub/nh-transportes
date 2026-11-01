@@ -203,6 +203,12 @@ def _notas(cur, cliente_id, produto_ids, ini, fim, pend_ini=None):
 
     # Os vinculos INTEIROS de cada item — inclusive os de fora do periodo, sem
     # os quais a ultima parcela nao fecharia certo.
+    # Tanque errado (produto da nota <> produto da descarga; ex.: 06/10/2026,
+    # etanol da NF-e 3252 no TQ1 de gasolina, devolvido depois): a nota NAO
+    # entra como compra de nenhum dos dois -- o combustivel foi embora na
+    # devolucao e a perda esta em Despesas. Ela so conta como descida no
+    # produto DELA, para sair do "falta descer". Por isso o vinculo e buscado
+    # tambem pelo produto do item.
     cur.execute("""
         SELECT dn.item_id, dn.litros AS vinc_l,
                DATE(COALESCE(dp.data_descarga, dp.data_final,
@@ -210,10 +216,12 @@ def _notas(cur, cliente_id, produto_ids, ini, fim, pend_ini=None):
                dp.produto_id AS pid
           FROM descarga_nota dn
           JOIN descargas_pendentes dp ON dp.id = dn.descarga_id
+          JOIN dfe_itens i ON i.id = dn.item_id
          WHERE dp.cliente_id = %s
-           AND dp.produto_id IN (""" + marcas + """)
+           AND (dp.produto_id IN (""" + marcas + """)
+                OR i.classificado_produto_id IN (""" + marcas + """))
          ORDER BY dn.item_id, d, dn.id
-    """, [cliente_id] + list(produto_ids))
+    """, [cliente_id] + list(produto_ids) + list(produto_ids))
     por_item = {}
     for r in cur.fetchall():
         por_item.setdefault(r['item_id'], []).append(r)
@@ -234,9 +242,13 @@ def _notas(cur, cliente_id, produto_ids, ini, fim, pend_ini=None):
             else:
                 usar = resto                      # a ultima fecha a nota
             resto -= usar
-            ky = (r['d'], r['pid'])
+            tanque_errado = r['pid'] != it['pid']
+            # a baixa do "falta descer" e sempre no produto da nota
+            ky = (r['d'], it['pid'] if tanque_errado else r['pid'])
             baixa.setdefault(item_id, {})
             baixa[item_id][ky] = baixa[item_id].get(ky, 0.0) + usar
+            if tanque_errado:
+                continue
             if ini <= r['d'] <= fim:
                 l, rs = descidas.get(ky, (0.0, 0.0))
                 descidas[ky] = (l + usar, rs + usar * unit)

@@ -840,7 +840,7 @@ def _auditoria_dados(cur, cliente_id, d_ini, d_fim):
     cur.execute(f"""
         SELECT dn.item_id, i.quantidade AS nota_l, dn.litros AS vinc_l,
                DATE(COALESCE(dp.data_descarga, dp.data_final, dp.data_inicial)) AS dia,
-               dp.produto_id AS pid
+               dp.produto_id AS pid, i.classificado_produto_id AS item_pid
         FROM descarga_nota dn
         JOIN dfe_itens i ON i.id = dn.item_id
         JOIN descargas_pendentes dp ON dp.id = dn.descarga_id
@@ -863,6 +863,11 @@ def _auditoria_dados(cur, cliente_id, d_ini, d_fim):
             else:
                 usar = resto
             resto -= usar
+            # Tanque errado (nota de um produto descida no tanque de outro,
+            # depois devolvida): nao e compra do tanque. A perda esta em
+            # Despesas. Ex.: NF-e 3252 (etanol) no TQ1 de gasolina, 06/10/2026.
+            if r['item_pid'] != r['pid']:
+                continue
             if not (d_ini <= r['dia'] <= d_fim):
                 continue
             ky = (r['dia'], r['pid'])
