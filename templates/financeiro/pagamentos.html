@@ -85,50 +85,61 @@ body > .container-fluid:has(#pag){
   border:1px solid var(--line-2); border-radius:10px; padding:.4rem .7rem; }
 #pag .pe a:hover{ border-color:var(--azul); }
 
-/* ── Lista ────────────────────────────────────────────────────────── */
-#pag .lst{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
-  overflow:hidden; }
-#pag .topo-lst{ display:flex; align-items:center; gap:.55rem; padding:.55rem .7rem;
-  border-bottom:1px solid var(--line); font-size:.8rem; font-weight:700;
-  color:var(--muted); cursor:pointer; user-select:none; margin:0; }
+/* ── Lista em CARDS (01/11/2026) ──────────────────────────────────
+   A lista corrida de três linhas apertadas ficava ilegível: nome, banco,
+   vínculo e valor brigando na mesma faixa. Agora cada débito é um card —
+   o favorecido em destaque, o valor grande, a borda esquerda na cor da
+   situação, e o vínculo dizendo de verdade o que é (Troco PIX, fornecedor,
+   despesa) em vez do "sem vínculo" que cobria 707 trocos. */
+#pag .lst{ display:grid; grid-template-columns:minmax(0,1fr); gap:.5rem; }
+@media (min-width:768px){ #pag .lst{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (min-width:1300px){ #pag .lst{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
+#pag .topo-lst, #pag .dia, #pag .mais, #pag .vazio{ grid-column:1/-1; }
+#pag .topo-lst{ display:flex; align-items:center; gap:.55rem; padding:.5rem .75rem;
+  background:#fff; border:1px solid var(--line-2); border-radius:12px; font-size:.8rem;
+  font-weight:700; color:var(--muted); cursor:pointer; user-select:none; margin:0; }
 #pag .topo-lst .tot{ margin-left:auto; color:var(--vermelho);
   font-variant-numeric:tabular-nums; }
 
-#pag .dia{ display:flex; align-items:center; gap:.55rem; padding:.45rem .7rem;
-  background:var(--azul-claro); color:var(--azul-deep); font-size:.8rem; font-weight:800;
-  border-bottom:1px solid var(--line-2); cursor:pointer; user-select:none;
-  position:sticky; top:0; z-index:3; margin:0; }
+#pag .dia{ display:flex; align-items:center; gap:.55rem; padding:.45rem .75rem;
+  background:var(--azul-claro); color:var(--azul-deep); font-size:.82rem; font-weight:800;
+  border:1px solid #d3e2f2; border-radius:10px; cursor:pointer; user-select:none;
+  position:sticky; top:0; z-index:3; margin:.35rem 0 0; }
 #pag .dia .tot{ margin-left:auto; font-variant-numeric:tabular-nums; }
 #pag .dia .sem{ font-weight:700; opacity:.7; }
+#pag .dia .q{ font-weight:700; opacity:.65; font-size:.74rem; }
 #pag .dia.oculta, #pag .lin.oculta{ display:none; }
 
-#pag .lin{ display:grid; grid-template-columns:auto minmax(0,1fr); gap:.08rem .55rem;
-  grid-template-areas:"chk desc" "chk meio" "chk baixo";
-  padding:.5rem .6rem; border-bottom:1px solid var(--line); align-items:center;
-  position:relative; cursor:pointer; }
-#pag .lin:last-child{ border-bottom:0; }
-#pag .lin.sel{ background:var(--azul-claro); }
-#pag .c-chk{ grid-area:chk; align-self:center; }
-#pag .c-desc{ grid-area:desc; font-size:.85rem; font-weight:700; letter-spacing:-.01em;
-  min-width:0; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
-  overflow:hidden; line-height:1.28; }
-#pag .c-meio{ grid-area:meio; display:flex; align-items:center; gap:.35rem; min-width:0; }
-/* O banco fica ANCORADO a direita, na mesma coluna do valor logo abaixo.
-   Antes o nome longo do fornecedor empurrava o banco para o meio da linha e
-   ele caia justamente em cima do valor. */
-#pag .c-meio .banco{ margin-left:auto; flex:0 0 auto; font-size:.73rem;
-  color:var(--ink-2); font-weight:700; white-space:nowrap; }
-/* Quem cede espaco e o vinculo, nao o banco. */
-#pag .c-meio .vinc{ min-width:0; overflow:hidden; text-overflow:ellipsis;
-  white-space:nowrap; }
-#pag .c-meio .desp-cat{ font-size:.72rem; color:var(--muted); font-weight:600;
-  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#pag .c-baixo{ grid-area:baixo; display:flex; align-items:center; gap:.35rem;
-  min-width:0; margin-top:.12rem; }
-#pag .c-valor{ margin-left:auto; font-size:.95rem; font-weight:800; color:var(--vermelho);
+#pag .lin{ position:relative; background:#fff; border:1px solid var(--line-2);
+  border-left:4px solid var(--pend); border-radius:12px; padding:.6rem .7rem .5rem;
+  display:flex; flex-direction:column; gap:.35rem; cursor:pointer; min-width:0;
+  box-shadow:0 1px 3px rgba(20,35,60,.06); transition:box-shadow .12s, border-color .12s; }
+#pag .lin:hover{ box-shadow:0 4px 14px rgba(20,35,60,.1); }
+#pag .lin--ok{ border-left-color:var(--verde); }
+#pag .lin--ign{ border-left-color:#9aa3ae; background:#fbfbfc; }
+#pag .lin.sel{ background:var(--azul-claro); border-color:var(--azul);
+  border-left-color:var(--azul); }
+#pag .c-top{ display:flex; align-items:flex-start; gap:.55rem; min-width:0; }
+#pag .c-chk{ margin-top:.15rem; flex:0 0 auto; }
+#pag .c-quem{ min-width:0; flex:1; }
+#pag .c-nome{ font-size:.92rem; font-weight:800; letter-spacing:-.01em; line-height:1.25;
+  overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2;
+  -webkit-box-orient:vertical; word-break:break-word; }
+#pag .c-sub{ font-size:.72rem; color:var(--muted); font-weight:600; margin-top:.1rem;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#pag .c-valor{ flex:0 0 auto; font-size:1.08rem; font-weight:800; color:var(--vermelho);
   font-variant-numeric:tabular-nums; letter-spacing:-.02em; white-space:nowrap;
-  flex:0 0 auto; }
-#pag .c-acao{ display:flex; gap:.1rem; align-items:center; flex:0 0 auto; margin-left:.3rem; }
+  line-height:1.2; text-align:right; }
+#pag .c-banco{ display:block; font-size:.68rem; color:var(--ink-2); font-weight:700;
+  letter-spacing:0; margin-top:.15rem; }
+#pag .c-vinc{ display:flex; align-items:center; gap:.35rem; flex-wrap:wrap; min-width:0;
+  padding-top:.35rem; border-top:1px dashed var(--line); }
+#pag .c-vinc .vinc{ max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#pag .c-vinc .desp-cat{ font-size:.74rem; color:var(--ink-2); font-weight:600;
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#pag .c-acao{ display:flex; gap:.1rem; align-items:center; flex:0 0 auto; margin-left:auto; }
+#pag .selo--troco{ background:rgba(23,150,60,.12); color:var(--ok); text-decoration:none; }
+#pag .selo--troco:hover{ background:rgba(23,150,60,.2); color:var(--ok); }
 
 #pag .marca{ width:19px; height:19px; cursor:pointer; accent-color:var(--azul); margin:0; }
 #pag .selo{ display:inline-block; font-size:.66rem; font-weight:800; border-radius:5px;
@@ -149,7 +160,7 @@ body > .container-fluid:has(#pag){
 #pag .ic:hover{ background:var(--surface); border-color:var(--line-2); }
 #pag .ic--rev{ color:var(--azul); }
 #pag .ic--ok{ color:var(--verde); }
-#pag .menu{ position:absolute; z-index:20; right:.7rem; top:100%; min-width:190px;
+#pag .menu{ position:absolute; z-index:20; right:.5rem; top:calc(100% - .4rem); min-width:190px;
   background:#fff; border:1px solid var(--line-2); border-radius:10px;
   box-shadow:0 8px 24px rgba(20,35,60,.16); overflow:hidden; }
 #pag .menu[hidden]{ display:none; }
@@ -159,12 +170,12 @@ body > .container-fluid:has(#pag){
 #pag .menu button:hover{ background:var(--surface); }
 #pag .menu .perigo{ color:var(--danger); }
 
-#pag .mais{ padding:.6rem .7rem; }
+#pag .mais{ padding:.3rem 0; }
 #pag .mais button{ width:100%; border:1px dashed var(--line-2); background:transparent;
   color:var(--muted); border-radius:10px; padding:.5rem; font-size:.82rem; font-weight:700;
   cursor:pointer; font-family:inherit; }
 #pag .mais button:hover{ border-color:var(--azul); color:var(--azul); }
-#pag .vazio{ text-align:center; color:var(--muted); padding:2.2rem 1rem; font-size:.85rem; }
+#pag .vazio{ background:#fff; border:1px solid var(--line-2); border-radius:12px; text-align:center; color:var(--muted); padding:2.2rem 1rem; font-size:.85rem; }
 
 /* ── Barra de lote ────────────────────────────────────────────────── */
 #pag .lote{ position:fixed; left:0; right:0; bottom:0; z-index:1040;
@@ -287,10 +298,11 @@ body > .container-fluid:has(#pag){
                    + (1 if (data_inicio or data_fim) else 0) + (1 if f_descricao else 0)
                    + (1 if (valor_min or valor_max) else 0) %}
 
-{% set tot_dia = {} %}
+{% set tot_dia = {} %}{% set n_dia = {} %}
 {% for t in transacoes %}
   {% set d = t.data_transacao.strftime('%Y-%m-%d') if t.data_transacao else 'sem-data' %}
   {% if tot_dia.update({d: tot_dia.get(d, 0) + (t.valor or 0)}) %}{% endif %}
+  {% if n_dia.update({d: n_dia.get(d, 0) + 1}) %}{% endif %}
 {% endfor %}
 
 <div id="pag" class="container-fluid">
@@ -339,53 +351,71 @@ body > .container-fluid:has(#pag){
           {% if t.data_transacao %}{{ t.data_transacao.strftime('%d/%m/%Y') }}
             <span class="sem">{{ ['seg','ter','qua','qui','sex','sáb','dom'][t.data_transacao.weekday()] }}</span>
           {% else %}sem data{% endif %}
+          <span class="q">· {{ n_dia.get(d, 0) }}</span>
           <span class="tot">R$ {{ "{:,.2f}".format(tot_dia.get(d, 0)).replace(',','X').replace('.',',').replace('X','.') }}</span>
         </label>
       {% endif %}
 
-      <div class="lin{% if ns.i >= 25 %} oculta{% endif %}" data-dia="{{ d }}"
-           data-valor="{{ t.valor }}" onclick="pagClique(event, this)">
-        <input type="checkbox" class="marca pchk c-chk" value="{{ t.id }}"
-               data-status="{{ t.status }}" data-dia="{{ d }}"
-               onclick="event.stopPropagation()" onchange="pagMarcou(this)">
+      {# O texto do banco vem como "Transf Pix enviada - NOME - 041.159.771-08":
+         o card mostra o NOME em destaque e o resto embaixo. Texto sem esse
+         formato fica inteiro como titulo. #}
+      {% set txt = (t.descricao or t.memo or '—') %}
+      {% set partes = txt.split(' - ') %}
+      {% if partes|length >= 3 %}
+        {% set tipo_txt = partes[0] %}{% set nome_txt = partes[1:-1]|join(' - ') %}{% set doc_txt = partes[-1] %}
+      {% elif partes|length == 2 %}
+        {% set tipo_txt = partes[0] %}{% set nome_txt = partes[1] %}{% set doc_txt = '' %}
+      {% else %}
+        {% set tipo_txt = '' %}{% set nome_txt = txt %}{% set doc_txt = '' %}
+      {% endif %}
+      <div class="lin{% if t.status == 'conciliado' %} lin--ok{% elif t.status == 'ignorado' %} lin--ign{% endif %}{% if ns.i >= 25 %} oculta{% endif %}"
+           data-dia="{{ d }}" data-valor="{{ t.valor }}" onclick="pagClique(event, this)"
+           title="{{ txt }}">
+        <div class="c-top">
+          <input type="checkbox" class="marca pchk c-chk" value="{{ t.id }}"
+                 data-status="{{ t.status }}" data-dia="{{ d }}"
+                 onclick="event.stopPropagation()" onchange="pagMarcou(this)">
+          <div class="c-quem">
+            <div class="c-nome">{{ nome_txt }}</div>
+            {% if tipo_txt or doc_txt %}
+            <div class="c-sub">{{ tipo_txt }}{% if tipo_txt and doc_txt %} · {% endif %}{{ doc_txt }}</div>
+            {% endif %}
+          </div>
+          <div class="c-valor">R$ {{ "{:,.2f}".format(t.valor).replace(',','X').replace('.',',').replace('X','.') }}
+            {% if t.conta_apelido or t.banco_nome %}<span class="c-banco">{{ t.conta_apelido or t.banco_nome }}</span>{% endif %}
+          </div>
+        </div>
 
-        <div class="c-desc" title="{{ t.descricao or t.memo or '' }}">{{ t.descricao or t.memo or '—' }}</div>
+        {# A situação, a quem o pagamento está ligado e as ações. #}
+        <div class="c-vinc">
+          {% if t.status == 'conciliado' %}<span class="selo selo--ok"><i class="bi bi-check-circle"></i> Conciliado</span>
+          {% elif t.status == 'ignorado' %}<span class="selo selo--ign">Ignorado</span>
+          {% else %}<span class="selo selo--pend">Pendente</span>{% endif %}
 
-        {# Linha 2 — a quem o pagamento está vinculado, e o banco. #}
-        <div class="c-meio">
-          {% if t.fornecedor_nome %}
+          {% if t.troco_id %}
+            <a class="selo selo--troco vinc" onclick="event.stopPropagation()"
+               href="{{ url_for('troco_pix.visualizar', troco_pix_id=t.troco_id) }}"
+               title="ver o Troco PIX">Troco PIX{% if t.troco_num %} · {{ t.troco_num }}{% endif %} &nearr;</a>
+          {% elif t.fornecedor_nome %}
             <span class="selo selo--forn vinc">{{ t.fornecedor_nome }}</span>
           {% elif t.is_despesa %}
             {% set data_str = t.data_transacao.strftime('%Y-%m-%d') if t.data_transacao else '' %}
             <a class="selo selo--desp" onclick="event.stopPropagation()"
                href="/lancamentos_despesas/?cliente_id={{ t.empresa_id or '' }}&data_inicio={{ data_str }}&data_fim={{ data_str }}"
                title="ver o lançamento de despesa">Despesa &nearr;</a>
-            {# O espaço ao lado do selo estava vazio: agora diz QUAL despesa.
-               Pagamento rateado em várias categorias mostra a primeira e o
+            {# Pagamento rateado em várias categorias mostra a primeira e o
                resto como "+N" — dizer só a primeira seria mentira. #}
             {% if t.despesa_categoria %}
               <span class="desp-cat">{{ t.despesa_categoria }}{% if (t.despesa_n or 0) > 1 %}
                 <b>+{{ t.despesa_n - 1 }}</b>{% endif %}</span>
             {% endif %}
           {% elif t.status == 'conciliado' %}
-            {# Conciliado sem fornecedor e sem despesa: o vínculo se perdeu. #}
+            {# Conciliado sem fornecedor, despesa nem troco: o vínculo se perdeu. #}
             <span class="selo selo--alerta"
                   title="Conciliado sem lançamento vinculado. Reverta e reconcilie para criar o lançamento.">sem vínculo</span>
-          {% else %}
+          {% elif t.status != 'ignorado' %}
             <span class="selo selo--nada">sem destino</span>
           {% endif %}
-          {% if t.conta_apelido or t.banco_nome %}
-            <span class="banco">{{ t.conta_apelido or t.banco_nome }}</span>
-          {% endif %}
-        </div>
-
-        {# Linha 3 — situação, valor e ações. #}
-        <div class="c-baixo">
-          {% if t.status == 'conciliado' %}<span class="selo selo--ok">Conciliado</span>
-          {% elif t.status == 'ignorado' %}<span class="selo selo--ign">Ignorado</span>
-          {% else %}<span class="selo selo--pend">Pendente</span>{% endif %}
-
-          <span class="c-valor">R$ {{ "{:,.2f}".format(t.valor).replace(',','X').replace('.',',').replace('X','.') }}</span>
 
           <span class="c-acao">
             {% if t.status in ('conciliado', 'ignorado') %}
