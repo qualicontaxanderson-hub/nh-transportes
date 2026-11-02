@@ -1245,6 +1245,77 @@ def _taxas_operadora_por_mes(conn, data_inicio, data_fim):
     return out
 
 
+def _taxas_sicredi_por_mes(conn, taxas_data, months):
+    """{bandeira_id: {mk: taxa}} da epoca do Sicredi (maquininha ate 13/07/2026).
+
+    taxa do mes = venda do ARQUIVO do Sicredi paga no mes - deposito do Sicredi
+    no extrato no mes. A venda e a da operadora, nao a do caixa (pedido do
+    usuario, 02/11/2026: em 23/06 o caixa nao tinha uma venda de 6.875,84 do
+    Master credito e a taxa de junho saia -3.037,20). O deposito fica na conta
+    porque desconta tambem a antecipacao (~1,8%), que o arquivo nao traz.
+
+    Dia em que o deposito passa do liquido do arquivo (02/01: paga venda de
+    dez/2025, antes do arquivo) entra so com o MDR do arquivo.
+
+    Julho/2026 tem as duas maquininhas: soma a parte da SIPAG (venda de julho,
+    vendido - liquido pago).
+    """
+    from utils import cartao_arquivo
+    mks = {m['key'] for m in months if m['key'] < _OPERADORA_DESDE_MES['SIPAG']}
+    if not mks:
+        return {}
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT bandeira_cartao_id AS b, forma_recebimento_id AS f FROM conf_cartoes_vinculos")
+        formas = defaultdict(list)
+        for r in cur.fetchall():
+            formas[int(r['b'])].append(int(r['f']))
+        out = {}
+        for t in taxas_data:
+            if cartao_arquivo._operadora_de(t['nome'], t['tipo']) != 'SIPAG':
+                continue
+            band, forma = cartao_arquivo._sipag_da_bandeira(t['nome'], t['tipo'])
+            fids = formas.get(t['bid'])
+            if not band or not forma or not fids:
+                continue
+            cur.execute("""SELECT dt_pagamento AS d, SUM(bruto) AS b, SUM(liquido) AS l
+                             FROM cartao_sicredi_transacoes
+                            WHERE status = 'Aprovada' AND bandeira = %s AND forma = %s
+                              AND dt_pagamento IS NOT NULL
+                            GROUP BY dt_pagamento""", (band, forma))
+            arq = {r['d']: (float(r['b'] or 0), float(r['l'] or 0)) for r in cur.fetchall()}
+            if not arq:
+                continue
+            ph = ','.join(['%s'] * len(fids))
+            cur.execute(f"""SELECT data_transacao AS d, SUM(valor) AS v
+                              FROM bank_transactions
+                             WHERE tipo = 'CREDIT' AND forma_recebimento_id IN ({ph})
+                               AND descricao LIKE 'SICREDI%%'
+                               AND data_transacao BETWEEN %s AND %s
+                             GROUP BY data_transacao""",
+                        fids + [min(arq), max(arq)])
+            bco = {r['d']: float(r['v'] or 0) for r in cur.fetchall()}
+            m = defaultdict(float)
+            for d in set(arq) | set(bco):
+                mk = f'{d.year}{d.month:02d}'
+                if mk not in mks:
+                    continue
+                br, lq = arq.get(d, (0.0, 0.0))
+                bk = bco.get(d, 0.0)
+                m[mk] += br - (lq if bk > lq + 0.01 else bk)
+            if '202607' in m:
+                cur.execute("""SELECT COALESCE(SUM(bruto - liquido_pago), 0) AS t
+                                 FROM cartao_sipag_transacoes
+                                WHERE bandeira = %s AND forma = %s AND liquido_pago IS NOT NULL
+                                  AND dt_transacao >= '2026-07-01' AND dt_transacao < '2026-08-01'""",
+                            (band, forma))
+                m['202607'] += float(cur.fetchone()['t'] or 0)
+            out[t['bid']] = dict(m)
+        return out
+    finally:
+        cur.close()
+
+
 def _aplicar_taxas_operadora(conn, taxas_data, data_inicio, data_fim, months):
     """Troca, em taxas_data, o mes de cada bandeira pela taxa do arquivo da
     operadora onde ele vale (_OPERADORA_DESDE_MES). Bandeira sem operadora ou
@@ -1264,6 +1335,17 @@ def _aplicar_taxas_operadora(conn, taxas_data, data_inicio, data_fim, months):
             mk = m['key']
             if mk >= desde_mk:
                 t['fee_by_month'][mk] = round(op[t['bid']].get(mk, 0.0), 2)
+        t['fee_total'] = sum(t['fee_by_month'].values())
+    # Antes da SIPAG (ate jul/2026): arquivo do Sicredi x deposito.
+    try:
+        sic = _taxas_sicredi_por_mes(conn, taxas_data, months)
+    except Exception:
+        import logging; logging.getLogger(__name__).exception('conf_despesas: taxa pelo Sicredi falhou; fica a do caixa')
+        sic = {}
+    for t in taxas_data:
+        for mk, v in sic.get(t['bid'], {}).items():
+            if mk in t['fee_by_month']:
+                t['fee_by_month'][mk] = round(v, 2)
         t['fee_total'] = sum(t['fee_by_month'].values())
     return taxas_data
 
