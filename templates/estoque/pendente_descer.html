@@ -423,9 +423,7 @@
         .then(function () { location.reload(); })
         .catch(function (e) {
           alert('Não deu para vincular: ' + (e.message || e) +
-                (feitos ? '
-
-' + feitos + ' descarga(s) já foram gravadas como Parcial; confira e termine pela lista.' : ''));
+                (feitos ? ' — ' + feitos + ' descarga(s) já foram gravadas como Parcial; confira e termine pela lista.' : ''));
           location.reload();
         });
       return;
