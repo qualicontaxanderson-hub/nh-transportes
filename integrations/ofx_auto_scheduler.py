@@ -46,11 +46,48 @@ def _job(app):
         logger.exception("[ofx_auto] falha no job.")
     finally:
         try:
+            # Troco PIX lançado na tela DEPOIS que o PIX já entrou no extrato:
+            # a ligação automática só rodava quando chegava lançamento novo.
+            # Aqui ela roda a cada 10 min (ainda com o lock) para os débitos
+            # pendentes dos últimos 10 dias (pedido do usuário, 02/11/2026).
+            # Mesma regra, mesmo candidato único.
+            if got == 1:
+                _trocos_pendentes(app)
+        except Exception:
+            logger.exception("[ofx_auto] falha ao ligar trocos pendentes.")
+        try:
             if got == 1 and cur is not None:
                 cur.execute("SELECT RELEASE_LOCK(%s)", (_LOCK_NAME,))
                 cur.fetchall()
         except Exception:
             pass
+        for c in (cur, conn):
+            try:
+                if c is not None:
+                    c.close()
+            except Exception:
+                pass
+
+
+def _trocos_pendentes(app):
+    conn = cur = None
+    try:
+        from routes.bank_import import _auto_vincular_troco_pix
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("""SELECT DISTINCT account_id FROM bank_transactions
+                        WHERE tipo='DEBIT' AND status='pendente'
+                          AND data_transacao >= CURDATE() - INTERVAL 10 DAY""")
+        contas = [r['account_id'] for r in cur.fetchall()]
+        n = 0
+        with app.app_context():
+            for conta in contas:
+                n += _auto_vincular_troco_pix(cur, conn, conta) or 0
+        if n:
+            app.logger.info("[ofx_auto] %d troco(s) PIX ligado(s) na varredura.", n)
+    except Exception:
+        app.logger.exception("[ofx_auto] falha ao ligar trocos pendentes.")
+    finally:
         for c in (cur, conn):
             try:
                 if c is not None:
