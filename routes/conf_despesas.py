@@ -623,6 +623,7 @@ def _fetch_lancamentos(conn, data_inicio, data_fim, empresa_ids, titulo_ids):
         SELECT
             ld.id,
             ld.data,
+            ld.bank_transaction_id,
             COALESCE(ld.valor, 0)                               AS valor,
             ld.titulo_id,
             COALESCE(t.ordem,  9999)                            AS titulo_ordem,
@@ -646,6 +647,45 @@ def _fetch_lancamentos(conn, data_inicio, data_fim, empresa_ids, titulo_ids):
     rows = cur.fetchall()
     cur.close()
     return rows
+
+
+def _trocar_abastecimentos(conn, lancamentos, data_inicio, data_fim, empresa_ids, titulo_ids):
+    """Nas subcategorias vinculadas a uma placa da Frota (utils.frota_despesa),
+    o valor sai dos cupons a prazo: tira o lancamento DIGITADO (sem pagamento
+    no banco) a partir do corte e poe um por cupom. Falhando, fica como era."""
+    from utils import frota_despesa as fd
+    try:
+        vincs = fd.vinculos(conn)
+        if not vincs:
+            return lancamentos
+        subs = {v['subcategoria_id'] for v in vincs}
+        corte = fd.CORTE
+
+        def _dia(d):
+            return d if hasattr(d, 'year') else datetime.strptime(str(d)[:10], '%Y-%m-%d').date()
+
+        fica = [l for l in lancamentos
+                if not (l.get('subcategoria_id') in subs and not l.get('bank_transaction_id')
+                        and _dia(l['data']) >= corte)]
+        emp = {str(e) for e in empresa_ids}
+        tit = {str(t) for t in titulo_ids}
+        for a in fd.abastecimentos(conn, data_inicio, data_fim, vincs):
+            if emp and str(a['cliente_id']) not in emp:
+                continue
+            if tit and str(a['titulo_id']) not in tit:
+                continue
+            fica.append({
+                'id': None, 'data': a['data'], 'bank_transaction_id': None, 'valor': a['valor'],
+                'titulo_id': a['titulo_id'], 'titulo_ordem': a['titulo_ordem'], 'titulo_nome': a['titulo_nome'],
+                'categoria_id': a['categoria_id'], 'categoria_ordem': a['categoria_ordem'],
+                'categoria_nome': a['categoria_nome'],
+                'subcategoria_id': a['subcategoria_id'], 'subcategoria_ordem': a['subcategoria_ordem'],
+                'subcategoria_nome': a['subcategoria_nome'], 'abast': True,
+            })
+        return fica
+    except Exception:
+        import logging; logging.getLogger(__name__).exception('conf_despesas: abastecimentos da frota falharam; fica o digitado')
+        return lancamentos
 
 
 def _build_category_matrix(lancamentos, months):
@@ -1500,6 +1540,10 @@ def conf_despesas():
             lancamentos = _fetch_lancamentos(
                 conn, data_inicio, data_fim, empresa_ids, titulo_ids,
             )
+            # Combustivel das placas vinculadas na Frota: sai dos cupons.
+            lancamentos = _trocar_abastecimentos(
+                conn, lancamentos, data_inicio, data_fim, empresa_ids, titulo_ids,
+            )
 
             # ── Inclui ALUGUEL proveniente de RETIRADA ALUGUEL do caixa ─────
             # Só inclui quando nenhum filtro de título está ativo OU quando o
@@ -1841,7 +1885,7 @@ def conf_despesas_lancamentos():
     try:
         cur = conn.cursor(dictionary=True)
         cur.execute("""
-            SELECT ld.id, ld.data, ld.valor, ld.fornecedor, ld.observacao,
+            SELECT ld.id, ld.data, ld.valor, ld.fornecedor, ld.observacao, ld.bank_transaction_id,
                    ld.cliente_id, ld.titulo_id, ld.categoria_id, ld.subcategoria_id,
                    s.nome AS subcategoria, cl.razao_social AS empresa,
                    ba.apelido AS banco, bt.descricao AS banco_texto
@@ -1867,8 +1911,47 @@ def conf_despesas_lancamentos():
             'data_iso': r['data'].isoformat() if r['data'] else '',
             'cliente_id': r['cliente_id'], 'titulo_id': r['titulo_id'],
             'categoria_id': r['categoria_id'], 'subcategoria_id': r['subcategoria_id'],
+            '_bt': r['bank_transaction_id'], '_dia': r['data'],
         } for r in cur.fetchall()]
         cur.close()
+        # Subcategoria vinculada a placa da Frota: os cupons no lugar do digitado.
+        try:
+            from utils import frota_despesa as fd
+            vincs = [v for v in fd.vinculos(conn)
+                     if v['titulo_id'] == titulo_id and v['categoria_id'] == categoria_id
+                     and (not sub or v['subcategoria_id'] == int(sub))]
+            if vincs:
+                subs = {v['subcategoria_id'] for v in vincs}
+                linhas = [l for l in linhas
+                          if not (l['subcategoria_id'] in subs and not l['_bt']
+                                  and l['_dia'] and l['_dia'] >= fd.CORTE)]
+                emp = {str(e) for e in empresa_ids}
+                for a in fd.abastecimentos(conn, ini, fim, vincs):
+                    if emp and str(a['cliente_id']) not in emp:
+                        continue
+                    extra = ['%s L' % ('%.2f' % a['litros']).replace('.', ',')]
+                    if a['litros']:
+                        extra.append('R$ %s/L' % ('%.3f' % (a['valor'] / a['litros'])).replace('.', ','))
+                    if a['km']:
+                        extra.append('km %s' % format(int(a['km']), ',d').replace(',', '.'))
+                    if a['frentista']:
+                        extra.append(a['frentista'])
+                    linhas.append({
+                        'id': None, 'abast': True,
+                        'data': a['data'].strftime('%d/%m/%Y'),
+                        'hora': a['dh_emissao'].strftime('%H:%M') if a['dh_emissao'] else '',
+                        'valor': a['valor'],
+                        'fornecedor': 'Cupom %s · %s' % (a['numero'] or '?', a['placa']),
+                        'observacao': ' · '.join(extra),
+                        'subcategoria': a['subcategoria_nome'], 'empresa': '', 'banco': '',
+                        'banco_texto': '', 'subcategoria_id': a['subcategoria_id'],
+                        '_dia': a['data'],
+                    })
+                linhas.sort(key=lambda l: (l['_dia'] or date.min, l.get('hora', '')))
+        except Exception:
+            import logging; logging.getLogger(__name__).exception('conf_despesas: lista de abastecimentos falhou')
+        for l in linhas:
+            l.pop('_bt', None); l.pop('_dia', None)
     finally:
         conn.close()
     return jsonify({'ok': True, 'lancamentos': linhas,
