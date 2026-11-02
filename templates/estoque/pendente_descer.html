@@ -111,6 +111,13 @@
   #pend .res{ border-radius:8px; padding:.15rem .55rem; font-size:.76rem; font-weight:600; }
   #pend .res--perda{ background:#fdecec; color:#b42318; }
   #pend .res--sobra, #pend .res--ok{ background:#e7f6ec; color:#1e7e34; }
+  #pend .tds{ background:#f3f7ff; border:1px solid #c9d8f5; border-radius:12px; padding:.6rem .7rem; margin-bottom:.55rem; font-size:.8rem; }
+  #pend .tds__t{ font-weight:800; margin-bottom:.35rem; }
+  #pend .tds__i{ display:flex; gap:.45rem; align-items:center; padding:.15rem 0; margin:0; cursor:pointer; }
+  #pend .tds__i b{ margin-left:auto; font-variant-numeric:tabular-nums; }
+  #pend .tds__i em{ font-style:normal; font-size:.7rem; color:var(--muted); }
+  #pend .tds__f{ display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; margin-top:.45rem; padding-top:.45rem; border-top:1px dashed #c9d8f5; }
+  #pend .av{ font-size:.74rem; color:#8a5a00; background:#fff4d6; border-radius:8px; padding:.2rem .55rem; width:100%; }
   #pend .al__vazio{ font-size:.8rem; color:var(--muted); padding:.3rem 0; }
 </style>
 {% endblock %}
@@ -292,7 +299,24 @@
         'ou lance manual na <a href="/estoque?tab=descargas">aba Estoque</a>.</div>';
       return;
     }
-    box.innerHTML = j.descargas.map(function (d) {
+    var todas = '';
+    if (j.descargas.length > 1) {
+      // Varias descargas para a mesma nota (caminhao com compartimentos, ou
+      // descida em duas vezes): grava as anteriores como Parcial e a ultima
+      // como Integral, em ordem de horario. Antes a pessoa tinha que saber
+      // disso; marcando Integral na primeira, a nota fechava com perda.
+      var ord = j.descargas.slice().sort(function (a, b) {
+        return (a.dif_dias - b.dif_dias) || String(a.hora).localeCompare(String(b.hora)); });
+      todas = '<div class="tds"><div class="tds__t"><i class="bi bi-collection"></i> Vincular mais de uma descarga a esta nota</div>' +
+        ord.map(function (d) {
+          return '<label class="tds__i"><input type="checkbox" class="js-td" checked data-id="' + d.id +
+            '" data-falta="' + d.falta + '" data-ord="' + ord.indexOf(d) + '">' + esc(d.dia_br) + (d.hora ? ' ' + esc(d.hora) : '') +
+            ' <em>TQ ' + esc(d.tanque == null ? '—' : d.tanque) + '</em><b>' + fmt(d.falta) + ' L</b></label>';
+        }).join('') +
+        '<div class="tds__f"><span class="js-tdres"></span>' +
+        '<button type="button" class="bt-v js-tdok" style="margin-left:auto">Vincular</button></div></div>';
+    }
+    box.innerHTML = todas + j.descargas.map(function (d) {
       var sug = Math.min(d.falta, j.saldo);
       return '<div class="al" data-id="' + d.id + '" data-falta="' + d.falta + '">' +
         '<div class="al__top"><div class="al__l"><b>' + esc(d.dia_br) + (d.hora ? ' ' + esc(d.hora) : '') + '</b> ' +
@@ -307,9 +331,43 @@
         '<div class="seg"><label><input type="radio" name="m' + d.id + '" value="parcial">Parcial</label>' +
         '<label><input type="radio" name="m' + d.id + '" value="integral">Integral</label></div>' +
         '<span class="js-res"></span>' +
+        (j.descargas.length > 1 ? '<span class="av js-av" hidden></span>' : '') +
         '<button type="button" class="bt-v js-ok" disabled style="margin-left:auto">Confirmar</button></div></div>';
     }).join('');
     box._j = j; box._preco = preco;
+    var td = box.querySelector('.tds');
+    if (td) atualizaTodas(td);
+  }
+
+  // Plano do "vincular todas": em ordem de horario, cada descarga cobre o que
+  // falta nela ate acabar o saldo da nota; a ultima usada fecha (Integral).
+  function planoTodas(td) {
+    var j = td.closest('.pc__al')._j, resta = j.saldo, plano = [], recebido = 0;
+    td.querySelectorAll('.js-td:checked').forEach(function (c) {
+      if (resta <= 0.0005) return;
+      var falta = Number(c.getAttribute('data-falta')), l = Math.min(falta, resta);
+      l = Math.round(l * 1000) / 1000;
+      plano.push({id: c.getAttribute('data-id'), litros: l, modo: 'parcial'});
+      recebido += falta; resta -= l;
+    });
+    if (plano.length) plano[plano.length - 1].modo = 'integral';
+    return {plano: plano, ps: Math.round((j.recebido_fisico + recebido - j.nota_litros) * 1000) / 1000};
+  }
+
+  function atualizaTodas(td) {
+    var p = planoTodas(td), bt = td.querySelector('.js-tdok');
+    var tot = p.plano.reduce(function (s, x) { return s + Number(td.querySelector('.js-td[data-id="' + x.id + '"]').getAttribute('data-falta')); }, 0);
+    bt.disabled = p.plano.length < 2;
+    bt.textContent = p.plano.length < 2 ? 'Marque 2 ou mais' : 'Vincular as ' + p.plano.length + ' (' + fmt(tot) + ' L) e fechar';
+    td.querySelector('.js-tdres').innerHTML = p.plano.length < 2 ? '' : 'ao fechar: ' + resChip(p.ps, td.closest('.pc__al')._preco);
+  }
+
+  function gravaUm(itemId, x) {
+    return fetch('/estoque/descarga/' + x.id + '/vincular', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({item_id: itemId, litros: x.litros, modo: x.modo, observacao: ''})
+    }).then(function (r) { return r.json(); })
+      .then(function (d) { if (!d.ok) throw new Error(d.erro || 'falha'); });
   }
 
   function atualiza(al) {
@@ -328,6 +386,15 @@
       var ps = Math.round((j.recebido_fisico + Number(al.getAttribute('data-falta')) - j.nota_litros) * 1000) / 1000;
       r.innerHTML = 'ao fechar: ' + resChip(ps, box._preco);
     } else r.innerHTML = '';
+    var av = al.querySelector('.js-av');
+    if (av) {
+      var outras = 0;
+      box.querySelectorAll('.al').forEach(function (o) { if (o !== al) outras += Number(o.getAttribute('data-falta')); });
+      av.hidden = !(m && m.value === 'integral' && outras > 0);
+      av.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Ainda há ' + fmt(outras) +
+        ' L sem nota em outra descarga desta lista. Se ela também é desta nota, marque Parcial aqui e Integral na última ' +
+        '(ou use “Vincular mais de uma descarga” acima).';
+    }
   }
 
   document.addEventListener('click', function (ev) {
@@ -343,6 +410,24 @@
           .then(function (j) { if (!j.ok) throw new Error(j.erro || 'falha'); monta(card, j); })
           .catch(function (e) { box.innerHTML = '<div class="al__vazio">Não deu para buscar: ' + esc(e.message || e) + '</div>'; });
       }
+      return;
+    }
+    var tok = ev.target.closest('.js-tdok');
+    if (tok) {
+      var td = tok.closest('.tds'), card3 = tok.closest('.pc'), p = planoTodas(td);
+      if (p.plano.length < 2) return;
+      tok.disabled = true; tok.textContent = 'Gravando…';
+      var itemId = Number(card3.getAttribute('data-item')), feitos = 0;
+      p.plano.reduce(function (pr, x) { return pr.then(function () { return gravaUm(itemId, x).then(function () { feitos++; }); }); },
+                     Promise.resolve())
+        .then(function () { location.reload(); })
+        .catch(function (e) {
+          alert('Não deu para vincular: ' + (e.message || e) +
+                (feitos ? '
+
+' + feitos + ' descarga(s) já foram gravadas como Parcial; confira e termine pela lista.' : ''));
+          location.reload();
+        });
       return;
     }
     var a = ev.target.closest('.js-abre');
@@ -361,7 +446,9 @@
         .catch(function (e) { alert('Não deu para vincular: ' + (e.message || e)); atualiza(al); });
     }
   });
-  document.addEventListener('change', function (ev) { var al = ev.target.closest('.al'); if (al) atualiza(al); });
+  document.addEventListener('change', function (ev) {
+    var td = ev.target.closest('.tds'); if (td) { atualizaTodas(td); return; }
+    var al = ev.target.closest('.al'); if (al) atualiza(al); });
   document.addEventListener('input', function (ev) { var al = ev.target.closest('.al'); if (al) atualiza(al); });
 })();
 </script>
