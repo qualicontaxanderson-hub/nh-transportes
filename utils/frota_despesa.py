@@ -52,13 +52,46 @@ def garante_tabela(conn):
             UNIQUE KEY uq_placa_doc (placa, cliente_doc),
             KEY ix_sub (subcategoria_id)
         )""")
+    # Cupom SEM placa (material comprado a prazo pelo proprio posto, ex.:
+    # tacografo, fita) vinculado direto a uma despesa, um por um.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS frota_despesa_cupom (
+            venda_id        INT          NOT NULL PRIMARY KEY,
+            subcategoria_id INT          NOT NULL,
+            criado_por      VARCHAR(80)  NULL,
+            criado_em       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            KEY ix_sub (subcategoria_id)
+        )""")
     conn.commit()
     cur.close()
     _pronta = True
 
 
+_CAMINHO = """
+                   s.nome AS subcategoria_nome, COALESCE(s.ordem, 9999) AS subcategoria_ordem,
+                   c.id AS categoria_id, c.nome AS categoria_nome, COALESCE(c.ordem, 9999) AS categoria_ordem,
+                   t.id AS titulo_id, t.nome AS titulo_nome, COALESCE(t.ordem, 9999) AS titulo_ordem"""
+
+
+def vinculos_cupom(conn):
+    """Cupons sem placa vinculados um a um: {venda_id: caminho da despesa}."""
+    garante_tabela(conn)
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""
+            SELECT f.venda_id, f.subcategoria_id,""" + _CAMINHO + """
+              FROM frota_despesa_cupom f
+              JOIN subcategorias_despesas s ON s.id = f.subcategoria_id
+              JOIN categorias_despesas c ON c.id = s.categoria_id
+              JOIN titulos_despesas t ON t.id = c.titulo_id""")
+        return {r['venda_id']: r for r in cur.fetchall()}
+    finally:
+        cur.close()
+
+
 def vinculos(conn):
-    """Todos os vinculos com o caminho da despesa (titulo > categoria > sub)."""
+    """Todos os vinculos com o caminho da despesa (titulo > categoria > sub).
+    Inclui as subcategorias que so tem cupom vinculado (placa '')."""
     garante_tabela(conn)
     cur = conn.cursor(dictionary=True)
     try:
@@ -71,9 +104,15 @@ def vinculos(conn):
               JOIN subcategorias_despesas s ON s.id = f.subcategoria_id
               JOIN categorias_despesas c ON c.id = s.categoria_id
               JOIN titulos_despesas t ON t.id = c.titulo_id""")
-        return cur.fetchall()
+        out = cur.fetchall()
     finally:
         cur.close()
+    tem = {v['subcategoria_id'] for v in out}
+    for vc in vinculos_cupom(conn).values():
+        if vc['subcategoria_id'] not in tem:
+            tem.add(vc['subcategoria_id'])
+            out.append(dict(vc, placa='', cliente_doc=None))
+    return out
 
 
 def abastecimentos(conn, ini, fim, vincs=None):
@@ -84,8 +123,10 @@ def abastecimentos(conn, ini, fim, vincs=None):
     if not vincs:
         return []
     ini = max(ini, CORTE) if isinstance(ini, date) else max(str(ini), CORTE.isoformat())
-    por_chave = {(v['placa'], v['cliente_doc']): v for v in vincs}
-    placas = sorted({v['placa'] for v in vincs})
+    por_chave = {(v['placa'], v['cliente_doc']): v for v in vincs if v['placa']}
+    placas = sorted({v['placa'] for v in vincs if v['placa']}) or ['#']
+    subs = {v['subcategoria_id'] for v in vincs}
+    por_cupom = {k: v for k, v in vinculos_cupom(conn).items() if v['subcategoria_id'] in subs}
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute("""SELECT id, REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-','') AS doc
@@ -102,16 +143,16 @@ def abastecimentos(conn, ini, fim, vincs=None):
               FROM vendas_xml v
              WHERE {_ONDE_PRAZO}
                AND DATE(v.dh_emissao) BETWEEN %s AND %s
-               AND {_PLACA_SQL} IN ({ph})
-             ORDER BY v.dh_emissao, v.id""", [ini, fim] + placas)
+               AND ({_PLACA_SQL} IN ({ph}) OR v.id IN ({','.join(['%s'] * len(por_cupom)) or 'NULL'}))
+             ORDER BY v.dh_emissao, v.id""", [ini, fim] + placas + list(por_cupom))
         saida = []
         for r in cur.fetchall():
-            v = por_chave.get((r['placa'], r['cliente_doc'] or ''))
+            v = por_cupom.get(r['id']) or por_chave.get((r['placa'], r['cliente_doc'] or ''))
             if not v:
                 continue
             saida.append(dict(v, **{
                 'venda_id': r['id'], 'data': r['data'], 'dh_emissao': r['dh_emissao'],
-                'numero': r['numero'], 'placa': r['placa'],
+                'numero': r['numero'], 'placa': r['placa'] or 'sem placa',
                 'km': float(r['km']) if r['km'] else None,
                 'valor': float(r['valor_total'] or 0),
                 'litros': float(r['litros'] or 0),
