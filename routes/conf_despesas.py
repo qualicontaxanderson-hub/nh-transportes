@@ -1194,6 +1194,102 @@ def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
     return result
 
 
+# ── Taxa de cartão pelo ARQUIVO DA OPERADORA (02/11/2026) ─────────────────
+#
+# A conta de cima (venda do caixa - credito do extrato) erra onde o caixa
+# lanca diferente do que a operadora pagou: no Baratao o caixa lanca o preco
+# da bomba (~7% acima) e a "taxa" saia 1.507,47 em jul/2026 contra 578,18 do
+# arquivo; na X7 os descontos do lote viravam taxa (e ate taxa negativa).
+# O usuario pediu a taxa da Conferencia de Cartoes, aba Operadora: vendido -
+# liquido de cada venda JA PAGA, no mes da VENDA.
+#
+# Onde o arquivo vale:
+#   - X7 e Baratao: o ano todo (arquivos desde dez/2025 e jan/2026);
+#   - bandeiras da SIPAG: so de ago/2026 em diante. Ate 13/07 a maquininha
+#     era do Sicredi, cujo arquivo traz o MDR (0,85%) mas nao a antecipacao
+#     (~1,8%), que so aparece no extrato -- ali a conta de cima e a certa.
+_OPERADORA_DESDE_MES = {'SIPAG': '202608'}
+_OP_CACHE = {}
+_OP_CACHE_TTL = 900
+
+
+def _taxas_operadora_por_mes(conn, data_inicio, data_fim):
+    """{bandeira_id: {mk: taxa}} do arquivo da operadora, pelo mes da venda,
+    so venda ja paga. Leva dezenas de segundos (le os arquivos inteiros), por
+    isso fica 15 min em memoria por periodo."""
+    import time as _time
+    chave = (data_inicio, data_fim)
+    hit = _OP_CACHE.get(chave)
+    if hit and _time.time() - hit[0] < _OP_CACHE_TTL:
+        return hit[1]
+    from routes import conf_cartoes as _cc
+    from utils import cartao_arquivo
+    bandeiras = _cc._get_bandeiras(conn)
+    vm = defaultdict(list)
+    for b in bandeiras:
+        for v in b.get('vinculos', []):
+            vm[b['id']].append(v['forma_recebimento_id'])
+    bf, desde, _ = cartao_arquivo.ciclos_operadora(conn, bandeiras, vm, data_inicio, data_fim)
+    vm2 = defaultdict(list, {b['id']: vm.get(b['id'], []) for b in bf})
+    pag = cartao_arquivo.pagamentos_operadora(conn, bf, vm2, desde, data_inicio, data_fim)
+    out = {}
+    for bid, o in pag.items():
+        m = defaultdict(float)
+        for d, v in (o.get('por_venda') or {}).items():
+            if not v.get('pago_em'):
+                continue
+            dd = d if hasattr(d, 'year') else datetime.strptime(str(d)[:10], '%Y-%m-%d').date()
+            m[f'{dd.year}{dd.month:02d}'] += float(v['vendido'] or 0) - float(v['liquido'] or 0)
+        out[int(bid)] = dict(m)
+    _OP_CACHE[chave] = (_time.time(), out)
+    return out
+
+
+def _aplicar_taxas_operadora(conn, taxas_data, data_inicio, data_fim, months):
+    """Troca, em taxas_data, o mes de cada bandeira pela taxa do arquivo da
+    operadora onde ele vale (_OPERADORA_DESDE_MES). Bandeira sem operadora ou
+    mes antes do arquivo ficam com a conta de sempre."""
+    from utils import cartao_arquivo
+    try:
+        op = _taxas_operadora_por_mes(conn, data_inicio, data_fim)
+    except Exception:
+        import logging; logging.getLogger(__name__).exception('conf_despesas: taxa pela operadora falhou; fica a do caixa')
+        return taxas_data
+    for t in taxas_data:
+        oper = cartao_arquivo._operadora_de(t['nome'], t['tipo'])
+        if not oper or t['bid'] not in op:
+            continue
+        desde_mk = _OPERADORA_DESDE_MES.get(oper, '')
+        for m in months:
+            mk = m['key']
+            if mk >= desde_mk:
+                t['fee_by_month'][mk] = round(op[t['bid']].get(mk, 0.0), 2)
+        t['fee_total'] = sum(t['fee_by_month'].values())
+    return taxas_data
+
+
+def _empresas_donas(conn, data_inicio, data_fim):
+    """(empresas com venda de cartao no periodo, empresas da frota).
+
+    Cartao, frete e motorista nao tem empresa no lancamento de despesa: sao
+    da empresa que tem a maquininha e os funcionarios (hoje so o Posto NH).
+    Com o filtro numa empresa que nao e dona, esses blocos nao entram -- antes
+    apareciam ate na Fresh."""
+    cur = conn.cursor()
+    try:
+        cur.execute("""SELECT DISTINCT lc.cliente_id
+                         FROM lancamentos_caixa_comprovacao lcc
+                         JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+                        WHERE lcc.bandeira_cartao_id IS NOT NULL
+                          AND lc.data BETWEEN %s AND %s""", (data_inicio, data_fim))
+        cartao = {str(r[0]) for r in cur.fetchall() if r[0] is not None}
+        cur.execute("""SELECT DISTINCT COALESCE(clienteid, id_cliente) FROM funcionarios""")
+        frota = {str(r[0]) for r in cur.fetchall() if r[0] is not None}
+        return cartao, frota
+    finally:
+        cur.close()
+
+
 # Bandeiras que devem aparecer como linhas STANDALONE (não agrupadas por tipo)
 _STANDALONE_CARD_PATTERNS = ('BARATAO', 'X7')
 
@@ -1390,7 +1486,9 @@ def conf_despesas():
             motorista_cost_by_vid = _build_motorista_cost_by_vehicle(
                 conn, func_rows, months, frete_counts, comissao_fretes
             )
-            if veiculo_mot:
+            _emp_cartao, _emp_frota = _empresas_donas(conn, data_inicio, data_fim)
+            # Frete (receita, litros) e motorista so na empresa da frota
+            if veiculo_mot and (not empresa_ids or _emp_frota & set(empresa_ids)):
                 veiculo_matchers = _compile_veiculo_matchers(veiculo_mot)
                 for block in blocks:
                     titulo_norm = _ascii_upper(block['titulo_nome'])
@@ -1561,7 +1659,7 @@ def conf_despesas():
                     'FINANCEIRO' in _ascii_upper(_titulo_nome_by_id.get(tid, ''))
                     for tid in titulo_ids
                 )
-            )
+            ) and (not empresa_ids or bool(_emp_cartao & set(empresa_ids)))
             if include_taxas:
                 # Taxas de cartão são sempre calculadas globalmente (sem filtro de
                 # empresa) para coincidir com conf_cartoes e garantir que
@@ -1570,6 +1668,9 @@ def conf_despesas():
                 taxas_data = _fetch_taxas_cartao(
                     conn, data_inicio, data_fim, [], months
                 )
+                if taxas_data:
+                    taxas_data = _aplicar_taxas_operadora(
+                        conn, taxas_data, data_inicio, data_fim, months)
                 if taxas_data:
                     taxa_rows, taxa_by_month, taxa_total = _build_taxas_cartao_rows(
                         taxas_data, months
