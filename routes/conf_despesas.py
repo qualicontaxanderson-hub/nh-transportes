@@ -1929,8 +1929,9 @@ def conf_despesas_lancamentos():
                 for a in fd.abastecimentos(conn, ini, fim, vincs):
                     if emp and str(a['cliente_id']) not in emp:
                         continue
-                    extra = ['%s L' % ('%.2f' % a['litros']).replace('.', ',')]
-                    if a['litros']:
+                    sem_placa = a['placa'] == 'sem placa'
+                    extra = [] if sem_placa else ['%s L' % ('%.2f' % a['litros']).replace('.', ',')]
+                    if a['litros'] and not sem_placa:
                         extra.append('R$ %s/L' % ('%.3f' % (a['valor'] / a['litros'])).replace('.', ','))
                     if a['km']:
                         extra.append('km %s' % format(int(a['km']), ',d').replace(',', '.'))
