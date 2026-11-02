@@ -623,6 +623,18 @@ def index():
 
         ctx['clientes'] = clientes
         ctx['frota'] = frota
+        # Vinculo placa -> despesa (o combustivel vai sozinho p/ Conf. Despesas)
+        try:
+            from utils import frota_despesa as fd
+            vm = {(v['placa'], v['cliente_doc']): v for v in fd.vinculos(conn)}
+            for p in frota_toda:
+                v = vm.get((p['placa'], p['doc'] or ''))
+                p['vinculo'] = ({'sub': v['subcategoria_id'],
+                                 'nome': '%s › %s › %s' % (v['titulo_nome'], v['categoria_nome'],
+                                                          v['subcategoria_nome'])}
+                                if v else None)
+        except Exception:
+            logging.getLogger(__name__).exception('[prazo] falha lendo vinculos da frota')
         ctx['formas'] = _formas_para_tela(_formas_disponiveis(cur, de, ate),
                                           clientes)
         # Conferencia olha a frota TODA de proposito: e a aba de achar problema,
@@ -706,6 +718,68 @@ def vincular():
             cur.close()
         if conn:
             conn.close()
+
+
+@bp.route('/prazo/frota/despesas', methods=['GET'])
+@login_required
+def frota_despesas_opcoes():
+    """Titulos, categorias e subcategorias ativas, para o vinculo da placa."""
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT id, nome FROM titulos_despesas ORDER BY COALESCE(ordem, 9999), nome")
+        tit = cur.fetchall()
+        cur.execute("""SELECT id, titulo_id, nome FROM categorias_despesas
+                        WHERE ativo = 1 ORDER BY COALESCE(ordem, 9999), nome""")
+        cat = cur.fetchall()
+        cur.execute("""SELECT id, categoria_id, nome FROM subcategorias_despesas
+                        WHERE ativo = 1 ORDER BY COALESCE(ordem, 9999), nome""")
+        sub = cur.fetchall()
+        return jsonify({'ok': True, 'titulos': tit, 'categorias': cat, 'subcategorias': sub})
+    finally:
+        cur.close()
+        conn.close()
+
+
+@bp.route('/prazo/frota/vincular', methods=['POST'])
+@login_required
+def frota_vincular():
+    """Liga (ou desliga, sem subcategoria) UMA placa a uma subcategoria de
+    despesa. So guarda o de-para: a Conf. Despesas calcula pelos cupons."""
+    from utils import frota_despesa as fd
+    dados = request.get_json(silent=True) or {}
+    placa = fd.placa_limpa(dados.get('placa'))
+    doc = _so_digitos(dados.get('doc'))
+    sub = dados.get('subcategoria_id')
+    sub = int(sub) if str(sub or '').isdigit() else None
+    if not placa:
+        return jsonify({'ok': False, 'erro': 'sem placa'}), 400
+    conn = get_db_connection()
+    fd.garante_tabela(conn)
+    cur = conn.cursor()
+    try:
+        if sub:
+            cur.execute("SELECT 1 FROM subcategorias_despesas WHERE id = %s", (sub,))
+            if not cur.fetchone():
+                return jsonify({'ok': False, 'erro': 'subcategoria não existe'}), 400
+            cur.execute("""INSERT INTO frota_despesa_vinculo (placa, cliente_doc, subcategoria_id, criado_por)
+                           VALUES (%s, %s, %s, %s)
+                           ON DUPLICATE KEY UPDATE subcategoria_id = VALUES(subcategoria_id),
+                                                   criado_por = VALUES(criado_por), criado_em = NOW()""",
+                        (placa, doc, sub, getattr(current_user, 'nome_completo', None)
+                         or getattr(current_user, 'username', None) or 'sistema'))
+        else:
+            cur.execute("DELETE FROM frota_despesa_vinculo WHERE placa = %s AND cliente_doc = %s",
+                        (placa, doc))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as exc:
+        conn.rollback()
+        logging.getLogger(__name__).exception('[prazo] falha no vinculo da placa %s', placa)
+        return jsonify({'ok': False, 'erro': str(exc)}), 500
+    finally:
+        cur.close()
+        conn.close()
 
 
 @bp.route('/prazo/notas', methods=['GET'])

@@ -520,13 +520,17 @@ body.cd-aberta .cd-gav { display: flex; }
     if (!LISTA.length) h = '<div class="text-muted p-2">Nenhum lançamento de despesa nessa célula.</div>';
     LISTA.forEach(function (l, i) {
       var obs = (l.observacao && l.observacao !== l.fornecedor) ? esc(l.observacao) : '';
-      var meta = [l.data, l.subcategoria ? '↳ ' + l.subcategoria : '', l.banco ? '🏦 ' + l.banco : '', l.empresa]
+      var meta = [l.data + (l.hora ? ' ' + l.hora : ''), l.subcategoria ? '↳ ' + l.subcategoria : '', l.banco ? '🏦 ' + l.banco : '', l.empresa]
         .filter(Boolean).map(esc).join(' · ');
+      // Abastecimento da Frota (cupom a prazo): calculado, nao se edita aqui.
+      var acao = l.abast
+        ? '<span class="cd-it__m"><i class="bi bi-fuel-pump"></i> abastecimento da Frota (cupom) — vínculo em Prazo › Frota</span>'
+        : '<button type="button" class="cd-b" onclick="cdEdita(' + i + ')"><i class="bi bi-pencil"></i> Editar</button>';
       h += '<div class="cd-it" data-i="' + i + '">'
          + '<div class="cd-it__l1"><b>' + esc(l.fornecedor || '—') + '</b><span class="cd-it__v">' + brl(l.valor) + '</span></div>'
          + (obs ? '<div class="cd-it__m">' + obs + '</div>' : '')
          + '<div class="cd-it__m">' + meta + '</div>'
-         + '<div class="cd-it__a"><button type="button" class="cd-b" onclick="cdEdita(' + i + ')"><i class="bi bi-pencil"></i> Editar</button></div>'
+         + '<div class="cd-it__a">' + acao + '</div>'
          + '</div>';
     });
     var dif = Math.round((CEL.v - total) * 100) / 100;
