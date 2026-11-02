@@ -499,6 +499,11 @@ body > .container-fluid:has(#prz){
           <div class="lin__q"></div><div class="lin__v"></div>
         </div>
         {% endif %}
+        {% if p.vinculo %}
+        <div class="lin"><div class="lin__a" style="color:#1e7e34">
+          <i class="bi bi-link-45deg"></i> Despesa: <b>{{ p.vinculo.nome }}</b>
+          <small>o combustível desta placa entra sozinho na Conf. Despesas</small></div></div>
+        {% endif %}
         <span class="barra"><i style="width:{{ p.pct }}%;background:{{ p.cor }}"></i></span>
         <div class="rod">
           <a class="bt" target="_blank"
@@ -508,6 +513,10 @@ body > .container-fluid:has(#prz){
           <button type="button" class="bt" data-placa="{{ p.placa }}"
                   onclick="event.stopPropagation(); przCupons(this)">
             <i class="bi bi-receipt"></i> Cupons</button>
+          <button type="button" class="bt" data-placa="{{ p.placa }}" data-doc="{{ p.doc or '' }}"
+                  data-sub="{{ p.vinculo.sub if p.vinculo else '' }}"
+                  onclick="event.stopPropagation(); przVinculaDespesa(this)">
+            <i class="bi bi-link-45deg"></i> {{ 'Vinculado' if p.vinculo else 'Vincular' }}</button>
           <span class="dir" style="color:var(--muted);font-weight:700">
             {{ p.pct }}% do custo do período</span>
         </div>
@@ -937,6 +946,60 @@ function przVincula(botao){
       alert('Não deu pra salvar: ' + e.message);
     });
   };
+}
+
+// ─── vinculo placa -> despesa (Conf. Despesas calcula pelos cupons) ───
+var PRZ_DESP = null;
+function przVinculaDespesa(botao){
+  var placa = botao.getAttribute('data-placa'), doc = botao.getAttribute('data-doc');
+  var atual = botao.getAttribute('data-sub');
+  var tit = 'Despesa de ' + przEscapa(placa);
+  przMostra(tit, '<div style="padding:1rem;color:#6b7684">carregando...</div>');
+  var pega = PRZ_DESP ? Promise.resolve(PRZ_DESP)
+    : fetch('/prazo/frota/despesas', {credentials: 'same-origin'}).then(function(r){ return r.json(); })
+        .then(function(d){ if (!d.ok) throw new Error('listas'); PRZ_DESP = d; return d; });
+  pega.then(function(o){
+    var subAtual = o.subcategorias.filter(function(x){ return String(x.id) === String(atual); })[0];
+    var catAtual = subAtual && o.categorias.filter(function(x){ return x.id === subAtual.categoria_id; })[0];
+    function op(lista, sel){ return '<option value="">—</option>' + lista.map(function(x){
+      return '<option value="' + x.id + '"' + (String(x.id) === String(sel) ? ' selected' : '') + '>' + przEscapa(x.nome) + '</option>'; }).join(''); }
+    var st = 'width:100%;padding:.4rem;border:1px solid #d7dee6;border-radius:8px;margin:.2rem 0 .6rem';
+    przMostra(tit,
+      '<div style="font-size:.8rem;color:#6b7684;margin-bottom:.6rem">Os abastecimentos a prazo desta placa entram sozinhos nesta despesa ' +
+      '(desde 01/01/2026). O lançamento digitado à mão nela deixa de contar — o que veio de pagamento no banco continua.</div>' +
+      '<label style="font-size:.75rem;font-weight:700">Título</label><select id="vdT" style="' + st + '">' + op(o.titulos, catAtual ? catAtual.titulo_id : '') + '</select>' +
+      '<label style="font-size:.75rem;font-weight:700">Categoria (veículo)</label><select id="vdC" style="' + st + '"></select>' +
+      '<label style="font-size:.75rem;font-weight:700">Subcategoria</label><select id="vdS" style="' + st + '"></select>' +
+      '<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.4rem">' +
+      '<button type="button" class="bt" id="vdOk" style="background:#1d63a5;color:#fff">Salvar</button>' +
+      (atual ? '<button type="button" class="bt" id="vdTira">Desvincular</button>' : '') +
+      '<button type="button" class="bt" onclick="przFecha()">Cancelar</button></div>');
+    var sT = document.getElementById('vdT'), sC = document.getElementById('vdC'), sS = document.getElementById('vdS');
+    function cats(sel){ sC.innerHTML = op(o.categorias.filter(function(c){ return String(c.titulo_id) === sT.value; }), sel); subs(''); }
+    function subs(sel){
+      var l = o.subcategorias.filter(function(x){ return String(x.categoria_id) === sC.value; });
+      if (!sel){ var ab = l.filter(function(x){ return /COMBUST|ABASTEC/i.test(x.nome); })[0]; if (ab) sel = ab.id; }
+      sS.innerHTML = op(l, sel);
+    }
+    sT.onchange = function(){ cats(''); };
+    sC.onchange = function(){ subs(''); };
+    cats(catAtual ? catAtual.id : ''); if (subAtual) subs(subAtual.id);
+    function grava(sub){
+      fetch('/prazo/frota/vincular', {method: 'POST', credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({placa: placa, doc: doc, subcategoria_id: sub})})
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if (!d.ok) throw new Error(d.erro || 'falhou'); window.location.reload(); })
+      .catch(function(e){ alert('Não deu pra salvar: ' + e.message); });
+    }
+    document.getElementById('vdOk').onclick = function(){
+      if (!sS.value){ alert('Escolha a subcategoria (ex.: COMBUSTIVEL / ABASTECIMENTO).'); return; }
+      grava(sS.value);
+    };
+    var t = document.getElementById('vdTira'); if (t) t.onclick = function(){ grava(null); };
+  }).catch(function(e){
+    przMostra(tit, '<div style="padding:1rem;color:#a32d2d">Erro: ' + przEscapa(e.message) + '</div>');
+  });
 }
 
 // ─── os cupons de uma placa, com quem abasteceu ───────────────────────
