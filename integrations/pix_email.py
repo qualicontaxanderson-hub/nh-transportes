@@ -354,6 +354,12 @@ def _mesmo_nome(a, b):
     if (len(curto) >= 10 and len(curto.split()) >= 2
             and longo.startswith(curto + ' ')):
         return 1
+    # algumas letras trocadas (ALVEZ x ALVES, WELINGTON x WELLIGTON): o valor
+    # e a data ja estreitaram os candidatos; o nome so precisa ser parecido.
+    import difflib
+    if (len(ca.split()) >= 2 and len(cb.split()) >= 2
+            and difflib.SequenceMatcher(None, ca, cb).ratio() >= 0.85):
+        return 1
     return 0
 
 

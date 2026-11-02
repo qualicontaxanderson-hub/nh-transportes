@@ -1137,6 +1137,31 @@ def _nome_quase_igual(nome, texto):
     return False
 
 
+def _nome_parecido(nome, texto):
+    """(semelhanca 0..1, trecho do texto) do trecho do texto do banco mais
+    parecido com o nome, com o mesmo numero de palavras. Pega o que
+    _nome_quase_igual (1 letra) deixa passar: WELINGTON x WELLIGTON (2 letras).
+    Medido em 02/11/2026 desde 01/06: com 0,85 so acha 1 troco a mais (o do
+    Welington, 0,96), nenhum diferente do que foi ligado a mao."""
+    import difflib
+    so_letras = lambda t: re.sub(r'\s+', ' ', re.sub(r'[^A-Z ]', ' ', t)).strip()
+    nome = so_letras(nome)
+    palavras = so_letras(texto).split()
+    k = len(nome.split())
+    melhor, trecho_m = 0.0, ''
+    if k < 2:
+        return melhor, trecho_m
+    for i in range(len(palavras) - k + 1):
+        trecho = ' '.join(palavras[i:i + k])
+        r = difflib.SequenceMatcher(None, nome, trecho).ratio()
+        if r > melhor:
+            melhor, trecho_m = r, trecho
+    return melhor, trecho_m
+
+
+NOME_PARECIDO_MIN = 0.85
+
+
 def _auto_vincular_troco_pix(cursor, conn, account_id):
     """
     Liga o Troco PIX (pedido na pista) ao PIX enviado que o banco lançou,
@@ -1154,6 +1179,10 @@ def _auto_vincular_troco_pix(cursor, conn, account_id):
         débito não sirva também a nenhum troco do próprio D+1 (mesmo valor e
         mesmo favorecido). Medido desde 01/06: 4 casos, todos iguais ao vínculo
         feito à mão, nenhum diferente.
+      * NOME PARECIDO (02/11/2026): sem candidato pelas regras acima, aceita o
+        débito de mesmo valor (D ou D+1) cujo nome no banco seja parecido com o
+        do cliente (>= 0,85, _nome_parecido) — WELINGTON x WELLIGTON. Ligado
+        assim, o nome do cliente PIX passa a ser o do banco (pedido do usuário).
 
     Medido em 24/10/2026 nos 368 trocos com valor desde 01/06: a regra achou
     322 só por nome/chave e 347 com o documento já visto, todos IGUAIS ao
@@ -1251,6 +1280,16 @@ def _auto_vincular_troco_pix(cursor, conn, account_id):
                 cs = [b for b in por_dia_valor[(d1, v)]
                       if b['id'] not in ocupados and favorecido(t, b)
                       and not any(favorecido(o, b) for o in do_dia_seg[(d1, v)])]
+            if not cs:
+                # nome com algumas letras diferentes (mesmo valor, D ou D+1)
+                cs = [b for d in (t['data'], t['data'] + um_dia)
+                      for b in por_dia_valor[(d, v)]
+                      if b['id'] not in ocupados
+                      and _nome_parecido(_sem_acento_maiusculo(t['nome_completo']),
+                                         _sem_acento_maiusculo(b['descricao']))[0]
+                          >= NOME_PARECIDO_MIN]
+                for b in cs:
+                    b['_parecido'] = True
             candidatos[t['id']] = cs
         disputa = Counter(b['id'] for cs in candidatos.values() for b in cs)
 
@@ -1274,6 +1313,16 @@ def _auto_vincular_troco_pix(cursor, conn, account_id):
                 "UPDATE troco_pix SET bank_transaction_id=%s WHERE id=%s AND bank_transaction_id IS NULL",
                 (bt_id, t['id']),
             )
+            if cs[0].get('_parecido'):
+                # O banco escreve o nome como está no CPF: o cadastro passa a ser ele.
+                _, novo = _nome_parecido(_sem_acento_maiusculo(t['nome_completo']),
+                                         _sem_acento_maiusculo(cs[0]['descricao']))
+                if novo and novo != _sem_acento_maiusculo(t['nome_completo']):
+                    cursor.execute(
+                        "UPDATE troco_pix_clientes SET nome_completo=%s WHERE id=%s",
+                        (novo, t['cid']))
+                    logger.info("_auto_vincular_troco_pix: cliente PIX %s renomeado %r -> %r",
+                                t['cid'], t['nome_completo'], novo)
             n += 1
         conn.commit()
         if n:
