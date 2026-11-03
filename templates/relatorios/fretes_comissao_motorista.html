@@ -24,18 +24,37 @@
       <button type="button" class="cm-chip" data-p="q1">Quinzena 1</button>
       <button type="button" class="cm-chip" data-p="q2">Quinzena 2</button>
     </div>
-    <div><label>Motorista</label>
-      <select name="motorista_id" class="js-auto"><option value="">Todos ({{ mot_lista|length }} no período)</option>
-        {% set ns = namespace(achou=false) %}
-        {% for m in mot_lista %}{% if motorista_id == m.id %}{% set ns.achou = true %}{% endif %}<option value="{{ m.id }}" {% if motorista_id == m.id %}selected{% endif %}>{{ m.nome }} · {{ m.n }} frete{{ "s" if m.n != 1 }}</option>{% endfor %}
-        {% if motorista_id and not ns.achou %}{% for m in motoristas if m.id == motorista_id %}<option value="{{ m.id }}" selected>{{ m.nome }} · sem frete no período</option>{% endfor %}{% endif %}
-      </select></div>
-    <div><label>Cliente</label>
-      <select name="cliente_id" class="js-auto"><option value="">Todos ({{ cli_lista|length }}{{ ' do motorista' if motorista_id else ' no período' }})</option>
-        {% set ns2 = namespace(achou=false) %}
-        {% for c in cli_lista %}{% if cliente_id == c.id %}{% set ns2.achou = true %}{% endif %}<option value="{{ c.id }}" {% if cliente_id == c.id %}selected{% endif %}>{{ c.nome }} · {{ c.n }}</option>{% endfor %}
-        {% if cliente_id and not ns2.achou %}{% for c in clientes if c.id == cliente_id %}<option value="{{ c.id }}" selected>{{ c.razao_social }} · sem frete no período</option>{% endfor %}{% endif %}
-      </select></div>
+    {# Lista própria em vez do <select>: no iPhone a roda nativa quebrava os
+       nomes em 2-3 linhas sem alinhamento (03/11/2026). #}
+    {% macro picker(campo, rotulo, itens, sel, todos, unid) %}
+    {% set atual = (itens|selectattr('id', 'equalto', sel)|list|first) if sel else None %}
+    <div><label>{{ rotulo }}</label>
+      <input type="hidden" name="{{ campo }}" value="{{ sel or '' }}">
+      <button type="button" class="cm-pk" data-alvo="pk-{{ campo }}">
+        <span class="cm-pk__v">{{ (atual.nome|title) if atual else (todos if not sel else 'Sem frete no período') }}</span>
+        <i class="bi bi-chevron-down"></i>
+      </button>
+      <div class="cm-sh" id="pk-{{ campo }}" hidden>
+        <div class="cm-sh__fundo" data-fecha></div>
+        <div class="cm-sh__caixa" role="dialog" aria-label="{{ rotulo }}">
+          <div class="cm-sh__cab"><b>{{ rotulo }}</b><button type="button" class="cm-sh__x" data-fecha aria-label="Fechar">×</button></div>
+          {% if itens|length > 7 %}<input type="search" class="cm-sh__busca" placeholder="Buscar…" autocomplete="off">{% endif %}
+          <div class="cm-sh__lista">
+            <button type="button" class="cm-op {{ 'on' if not sel }}" data-v=""><span class="cm-op__n">{{ todos }}</span><span class="cm-op__c">{{ itens|sum(attribute='n') }}</span></button>
+            {% for it in itens %}
+            <button type="button" class="cm-op {{ 'on' if sel == it.id }}" data-v="{{ it.id }}" data-busca="{{ (it.nome ~ ' ' ~ (it.sub or ''))|lower }}">
+              <span class="cm-op__n">{{ it.nome|title }}{% if it.sub and it.sub != it.nome %}<small>{{ it.sub|title }}</small>{% endif %}</span>
+              <span class="cm-op__c">{{ it.n }}</span>
+            </button>
+            {% endfor %}
+          </div>
+          <div class="cm-sh__pe">número à direita = {{ unid }}</div>
+        </div>
+      </div>
+    </div>
+    {% endmacro %}
+    {{ picker('motorista_id', 'Motorista', mot_lista, motorista_id, 'Todos os motoristas', 'fretes no período') }}
+    {{ picker('cliente_id', 'Cliente', cli_lista, cliente_id, 'Todos os clientes', 'fretes' ~ (' do motorista' if motorista_id else ' no período')) }}
     <div class="cm-acts">
       <button type="submit" class="cm-bt pri"><i class="bi bi-search"></i> Filtrar</button>
       <a class="cm-bt pdf" id="cmPdf" target="_blank" rel="noopener"
@@ -121,6 +140,21 @@
 .cm-flt > div { min-width: 0; }
 .cm-flt input[type=date] { -webkit-appearance: none; appearance: none; min-width: 0; min-height: 38px; text-align: left; }
 .cm-flt input, .cm-flt select { width: 100%; max-width: 100%; border: 1px solid #d1d5db; border-radius: 9px; padding: 8px 10px; font: inherit; background: #fff; }
+.cm-pk { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid #d1d5db; border-radius: 9px; padding: 8px 10px; background: #fff; font: inherit; color: #1f2937; text-align: left; min-height: 38px; }
+.cm-pk__v { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-pk i { color: #64748b; font-size: 12px; flex: none; }
+.cm-sh__fundo { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 1060; }
+.cm-sh__caixa { position: fixed; z-index: 1061; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, calc(100% - 24px)); max-height: calc(100vh - 80px); background: #fff; border-radius: 16px; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,.3); overflow: hidden; }
+.cm-sh__cab { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid #e5e7eb; font-size: 15px; }
+.cm-sh__x { border: 0; background: none; font-size: 24px; line-height: 1; color: #64748b; }
+.cm-sh__busca { margin: 10px 12px 4px; border: 1px solid #d1d5db; border-radius: 9px; padding: 8px 10px; font: inherit; }
+.cm-sh__lista { overflow-y: auto; padding: 4px 0; }
+.cm-op { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 0; background: none; padding: 11px 16px; text-align: left; font: inherit; color: #1f2937; border-bottom: 1px solid #f1f5f9; }
+.cm-op__n { font-size: 14px; font-weight: 600; line-height: 1.25; }
+.cm-op__n small { display: block; font-size: 11px; font-weight: 400; color: #94a3b8; margin-top: 1px; }
+.cm-op__c { flex: none; min-width: 34px; text-align: center; background: #eef2f7; color: #475569; border-radius: 10px; padding: 2px 8px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cm-op.on { background: #eff6ff; } .cm-op.on .cm-op__n { color: #1D63A5; } .cm-op.on .cm-op__c { background: #1D63A5; color: #fff; }
+.cm-sh__pe { padding: 8px 16px; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; }
 .cm-chips { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
 .cm-chip { border: 1px solid #cbd5e1; background: #f8fafc; border-radius: 16px; padding: 4px 11px; font-size: 12px; color: #334155; }
 .cm-chip.on { background: #1D63A5; color: #fff; border-color: #1D63A5; }
@@ -191,7 +225,28 @@
       var r2 = periodo(b.dataset.p); di.value = iso(r2[0]); df.value = iso(r2[1]); f.submit();
     });
   });
-  f.querySelectorAll('.js-auto').forEach(function (s) { s.addEventListener('change', function () { f.submit(); }); });
+  // lista própria de Motorista/Cliente: escolher já filtra
+  f.querySelectorAll('.cm-pk').forEach(function (bt) {
+    var sh = document.getElementById(bt.dataset.alvo);
+    var inp = bt.parentNode.querySelector('input[type=hidden]');
+    var busca = sh.querySelector('.cm-sh__busca');
+    bt.addEventListener('click', function () {
+      sh.hidden = false;
+      if (busca) { busca.value = ''; filtra(''); }
+      var on = sh.querySelector('.cm-op.on'); if (on) on.scrollIntoView({block: 'center'});
+    });
+    sh.querySelectorAll('[data-fecha]').forEach(function (x) { x.addEventListener('click', function () { sh.hidden = true; }); });
+    sh.querySelectorAll('.cm-op').forEach(function (op) {
+      op.addEventListener('click', function () { inp.value = op.dataset.v; sh.hidden = true; f.submit(); });
+    });
+    function filtra(t) {
+      sh.querySelectorAll('.cm-op[data-busca]').forEach(function (op) { op.hidden = t && op.dataset.busca.indexOf(t) < 0; });
+    }
+    if (busca) busca.addEventListener('input', function () { filtra(busca.value.trim().toLowerCase()); });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') document.querySelectorAll('.cm-sh').forEach(function (x) { x.hidden = true; });
+  });
   // o PDF sai com o que está nos campos (mesmo sem clicar em Filtrar)
   /* PDF. No iPhone com o sistema instalado como app (tela cheia) o PDF abria
      num visor sem voltar nem compartilhar. Agora: 1º toque gera o arquivo,

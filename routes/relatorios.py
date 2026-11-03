@@ -272,14 +272,15 @@ def _comissao_listas(params):
     """Filtro inteligente (pedido 03/11/2026): so os motoristas e clientes que
     TEM frete no periodo. Um filtra o outro: escolhido o motorista, a lista de
     clientes mostra so os dele (e vice-versa). Volta [{id, nome, n}]."""
-    def lista(campo_id, join, nome_sql, sem):
+    def lista(campo_id, join, nome_sql, sem, sub_sql=None):
+        sub_sql = sub_sql or nome_sql
         p = {k: v for k, v in params.items() if k != sem}
         where_sql, args = _build_filters(p)
         conn = get_db_connection()
         cur = conn.cursor(dictionary=True)
         try:
             cur.execute(f"""
-                SELECT {campo_id} AS id, {nome_sql} AS nome, COUNT(*) AS n
+                SELECT {campo_id} AS id, {nome_sql} AS nome, MAX({sub_sql}) AS sub, COUNT(*) AS n
                   FROM fretes f {join}
                  WHERE {campo_id} IS NOT NULL {where_sql}
                  GROUP BY {campo_id}, {nome_sql}
@@ -289,7 +290,9 @@ def _comissao_listas(params):
             cur.close()
             conn.close()
     return (lista('f.motoristas_id', 'JOIN motoristas m ON m.id = f.motoristas_id', 'm.nome', 'motorista_id'),
-            lista('f.clientes_id', 'JOIN clientes c ON c.id = f.clientes_id', 'c.razao_social', 'cliente_id'))
+            lista('f.clientes_id', 'JOIN clientes c ON c.id = f.clientes_id',
+                  "COALESCE(NULLIF(TRIM(c.nome_fantasia),''), c.razao_social)", 'cliente_id',
+                  'c.razao_social'))
 
 
 @bp.route('/fretes_comissao_motorista', methods=['GET'])
