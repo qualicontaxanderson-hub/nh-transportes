@@ -268,14 +268,40 @@ def _comissao_dados(params):
     }
 
 
+def _comissao_listas(params):
+    """Filtro inteligente (pedido 03/11/2026): so os motoristas e clientes que
+    TEM frete no periodo. Um filtra o outro: escolhido o motorista, a lista de
+    clientes mostra so os dele (e vice-versa). Volta [{id, nome, n}]."""
+    def lista(campo_id, join, nome_sql, sem):
+        p = {k: v for k, v in params.items() if k != sem}
+        where_sql, args = _build_filters(p)
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(f"""
+                SELECT {campo_id} AS id, {nome_sql} AS nome, COUNT(*) AS n
+                  FROM fretes f {join}
+                 WHERE {campo_id} IS NOT NULL {where_sql}
+                 GROUP BY {campo_id}, {nome_sql}
+                 ORDER BY nome""", args)
+            return cur.fetchall()
+        finally:
+            cur.close()
+            conn.close()
+    return (lista('f.motoristas_id', 'JOIN motoristas m ON m.id = f.motoristas_id', 'm.nome', 'motorista_id'),
+            lista('f.clientes_id', 'JOIN clientes c ON c.id = f.clientes_id', 'c.razao_social', 'cliente_id'))
+
+
 @bp.route('/fretes_comissao_motorista', methods=['GET'])
 @login_required
 def fretes_comissao_motorista():
     params = dict(request.args)
     params = _ensure_date_defaults_on_params(params)
     dados = _comissao_dados(params)
+    mot_lista, cli_lista = _comissao_listas(params)
     return render_template(
         'relatorios/fretes_comissao_motorista.html',
+        mot_lista=mot_lista, cli_lista=cli_lista,
         data_inicio=params.get('data_inicio'),
         data_fim=params.get('data_fim'),
         cliente_id=int(params.get('cliente_id')) if params.get('cliente_id') else None,

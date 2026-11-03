@@ -25,12 +25,16 @@
       <button type="button" class="cm-chip" data-p="q2">Quinzena 2</button>
     </div>
     <div><label>Motorista</label>
-      <select name="motorista_id"><option value="">Todos</option>
-        {% for m in motoristas %}<option value="{{ m.id }}" {% if motorista_id == m.id %}selected{% endif %}>{{ m.nome }}</option>{% endfor %}
+      <select name="motorista_id" class="js-auto"><option value="">Todos ({{ mot_lista|length }} no período)</option>
+        {% set ns = namespace(achou=false) %}
+        {% for m in mot_lista %}{% if motorista_id == m.id %}{% set ns.achou = true %}{% endif %}<option value="{{ m.id }}" {% if motorista_id == m.id %}selected{% endif %}>{{ m.nome }} · {{ m.n }} fretes</option>{% endfor %}
+        {% if motorista_id and not ns.achou %}{% for m in motoristas if m.id == motorista_id %}<option value="{{ m.id }}" selected>{{ m.nome }} · sem frete no período</option>{% endfor %}{% endif %}
       </select></div>
     <div><label>Cliente</label>
-      <select name="cliente_id"><option value="">Todos</option>
-        {% for c in clientes %}<option value="{{ c.id }}" {% if cliente_id == c.id %}selected{% endif %}>{{ c.razao_social }}</option>{% endfor %}
+      <select name="cliente_id" class="js-auto"><option value="">Todos ({{ cli_lista|length }}{{ ' do motorista' if motorista_id else ' no período' }})</option>
+        {% set ns2 = namespace(achou=false) %}
+        {% for c in cli_lista %}{% if cliente_id == c.id %}{% set ns2.achou = true %}{% endif %}<option value="{{ c.id }}" {% if cliente_id == c.id %}selected{% endif %}>{{ c.nome }} · {{ c.n }}</option>{% endfor %}
+        {% if cliente_id and not ns2.achou %}{% for c in clientes if c.id == cliente_id %}<option value="{{ c.id }}" selected>{{ c.razao_social }} · sem frete no período</option>{% endfor %}{% endif %}
       </select></div>
     <div class="cm-acts">
       <button type="submit" class="cm-bt pri"><i class="bi bi-search"></i> Filtrar</button>
@@ -114,7 +118,9 @@
 .cm-per { background: #fff; border: 1px solid #dbe3ee; border-radius: 20px; padding: 4px 12px; font-size: 12px; color: #475569; }
 .cm-flt { background: #fff; border-radius: 14px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
 .cm-flt label { display: block; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 3px; }
-.cm-flt input, .cm-flt select { width: 100%; border: 1px solid #d1d5db; border-radius: 9px; padding: 8px 10px; font: inherit; background: #fff; }
+.cm-flt > div { min-width: 0; }
+.cm-flt input[type=date] { -webkit-appearance: none; appearance: none; min-width: 0; min-height: 38px; text-align: left; }
+.cm-flt input, .cm-flt select { width: 100%; max-width: 100%; border: 1px solid #d1d5db; border-radius: 9px; padding: 8px 10px; font: inherit; background: #fff; }
 .cm-chips { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
 .cm-chip { border: 1px solid #cbd5e1; background: #f8fafc; border-radius: 16px; padding: 4px 11px; font-size: 12px; color: #334155; }
 .cm-chip.on { background: #1D63A5; color: #fff; border-color: #1D63A5; }
@@ -185,6 +191,7 @@
       var r2 = periodo(b.dataset.p); di.value = iso(r2[0]); df.value = iso(r2[1]); f.submit();
     });
   });
+  f.querySelectorAll('.js-auto').forEach(function (s) { s.addEventListener('change', function () { f.submit(); }); });
   // o PDF sai com o que está nos campos (mesmo sem clicar em Filtrar)
   var pdf = document.getElementById('cmPdf');
   if (pdf) pdf.addEventListener('click', function () {
