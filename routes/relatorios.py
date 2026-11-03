@@ -212,73 +212,68 @@ def fretes_comissao_cte():
     )
 
 
-@bp.route('/fretes_comissao_motorista', methods=['GET'])
-@login_required
-def fretes_comissao_motorista():
-    params = dict(request.args)
-    params = _ensure_date_defaults_on_params(params)
-
+def _comissao_dados(params):
+    """Tudo o que a tela e o PDF da Comissao Motorista mostram (mesma fonte
+    para os dois nao discordarem). Os numeros sao os mesmos da tela antiga."""
     where_sql, args = _build_filters(params)
-
-    # Para lidar com quantidades: usar COALESCE(f.quantidade_manual, q.valor)
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        q_totals = f"""
-            SELECT
-              COALESCE(SUM(f.comissao_motorista),0) AS total_comissao_motorista,
-              COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)),0) AS total_quantidade,
-              COALESCE(SUM(f.valor_total_frete),0) AS total_valor_frete
-            FROM fretes f
-            LEFT JOIN quantidades q ON f.quantidade_id = q.id
-            WHERE 1=1 {where_sql}
-        """
-        cursor.execute(q_totals, args)
-        totals = cursor.fetchone() or {}
-        total_comissao_motorista = totals.get('total_comissao_motorista', 0)
-        total_quantidade = totals.get('total_quantidade', 0)
-        total_valor_frete = totals.get('total_valor_frete', 0)
-
-        q_resumo = f"""
-            SELECT
-              m.id AS motorista_id,
-              m.nome AS motorista_nome,
-              COUNT(f.id) AS qtd_fretes,
-              COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)),0) AS quantidade_total,
-              COALESCE(SUM(CASE WHEN COALESCE(f.comissao_motorista,0) > 0
-                THEN COALESCE(f.quantidade_manual, q.valor, 0) ELSE 0 END),0) AS quantidade_comissionada,
-              COALESCE(SUM(f.comissao_motorista),0) AS comissao_total
-            FROM fretes f
-            LEFT JOIN motoristas m ON f.motoristas_id = m.id
-            LEFT JOIN quantidades q ON f.quantidade_id = q.id
-            WHERE 1=1 {where_sql}
-            GROUP BY m.id
-            ORDER BY motorista_nome ASC
-        """
-        cursor.execute(q_resumo, args)
-        resumo_motoristas = cursor.fetchall()
-
-        q_det = f"""
-            SELECT f.data_frete,
+        cursor.execute(f"""
+            SELECT f.id, f.data_frete,
                    COALESCE(c.razao_social,'') AS cliente_nome,
+                   COALESCE(NULLIF(TRIM(c.nome_fantasia),''), c.razao_social, '') AS cliente_curto,
                    COALESCE(p.nome,'') AS produto_nome,
                    COALESCE(m.nome,'') AS motorista_nome,
                    COALESCE(f.quantidade_manual, q.valor, 0) AS quantidade,
-                   f.valor_total_frete, f.comissao_motorista
+                   COALESCE(f.valor_total_frete, 0) AS valor_total_frete,
+                   COALESCE(f.comissao_motorista, 0) AS comissao_motorista
             FROM fretes f
             LEFT JOIN clientes c ON f.clientes_id = c.id
             LEFT JOIN produto p ON f.produto_id = p.id
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
             LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE 1=1 {where_sql}
-            ORDER BY motorista_nome ASC, f.data_frete DESC
-        """
-        cursor.execute(q_det, args)
+            ORDER BY motorista_nome ASC, f.data_frete DESC, f.id DESC
+        """, args)
         fretes = cursor.fetchall()
     finally:
         cursor.close()
         conn.close()
 
+    grupos = []
+    for f in fretes:
+        for k in ('quantidade', 'valor_total_frete', 'comissao_motorista'):
+            f[k] = float(f[k] or 0)
+        f['cliente_curto'] = (f['cliente_curto'] or '').title()
+        nome = f['motorista_nome'] or '(sem motorista)'
+        if not grupos or grupos[-1]['nome'] != nome:
+            grupos.append({'nome': nome, 'itens': [], 'fretes': 0, 'litros': 0.0,
+                           'litros_com': 0.0, 'valor_frete': 0.0, 'comissao': 0.0})
+        g = grupos[-1]
+        g['itens'].append(f)
+        g['fretes'] += 1
+        g['litros'] += f['quantidade']
+        g['valor_frete'] += f['valor_total_frete']
+        g['comissao'] += f['comissao_motorista']
+        if f['comissao_motorista'] > 0:
+            g['litros_com'] += f['quantidade']
+    return {
+        'grupos': grupos,
+        'total_fretes': len(fretes),
+        'total_quantidade': sum(g['litros'] for g in grupos),
+        'total_valor_frete': sum(g['valor_frete'] for g in grupos),
+        'total_comissao_motorista': sum(g['comissao'] for g in grupos),
+        'total_litros_com': sum(g['litros_com'] for g in grupos),
+    }
+
+
+@bp.route('/fretes_comissao_motorista', methods=['GET'])
+@login_required
+def fretes_comissao_motorista():
+    params = dict(request.args)
+    params = _ensure_date_defaults_on_params(params)
+    dados = _comissao_dados(params)
     return render_template(
         'relatorios/fretes_comissao_motorista.html',
         data_inicio=params.get('data_inicio'),
@@ -289,12 +284,42 @@ def fretes_comissao_motorista():
         clientes=_load_select_list('clientes'),
         motoristas=_load_select_list('motoristas'),
         produtos=_load_select_list('produto'),
-        total_comissao_motorista=total_comissao_motorista,
-        total_quantidade=total_quantidade,
-        total_valor_frete=total_valor_frete,
-        resumo_motoristas=resumo_motoristas,
-        fretes=fretes
+        **dados
     )
+
+
+@bp.route('/fretes_comissao_motorista.pdf', methods=['GET'])
+@login_required
+def fretes_comissao_motorista_pdf():
+    """O mesmo da tela, em A4 (botao PDF)."""
+    import os
+    import re as _re
+    from urllib.parse import quote
+    from flask import Response, current_app
+    from flask_login import current_user
+    from utils.relatorio_comissao import gerar
+    params = dict(request.args)
+    params = _ensure_date_defaults_on_params(params)
+    dados = _comissao_dados(params)
+    de = _parse_date_safe(params.get('data_inicio'))
+    ate = _parse_date_safe(params.get('data_fim'))
+    filtro = []
+    if params.get('motorista_id') and dados['grupos']:
+        filtro.append(', '.join(g['nome'] for g in dados['grupos']))
+    if params.get('cliente_id'):
+        nome = next((c.get('razao_social') for c in _load_select_list('clientes')
+                     if str(c.get('id')) == str(params.get('cliente_id'))), None)
+        if nome:
+            filtro.append('Cliente: %s' % nome)
+    logo = os.path.join(current_app.root_path, 'static', 'logo-nh.png')
+    pdf = gerar(dados, de, ate, filtro=' · '.join(filtro),
+                usuario=getattr(current_user, 'nome_completo', '') or getattr(current_user, 'username', '') or '',
+                logo=logo if os.path.exists(logo) else None)
+    nome_arq = 'Comissao Motorista %s a %s.pdf' % (
+        de.strftime('%d.%m.%Y') if de else '', ate.strftime('%d.%m.%Y') if ate else '')
+    return Response(pdf, mimetype='application/pdf', headers={
+        'Content-Disposition': "inline; filename=\"%s\"; filename*=UTF-8''%s"
+                               % (_re.sub(r'[^A-Za-z0-9 ._-]', '_', nome_arq), quote(nome_arq))})
 
 
 @bp.route('/fretes_lucro', methods=['GET'])
