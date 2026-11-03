@@ -727,7 +727,7 @@ def frota_despesas_opcoes():
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
-        cur.execute("SELECT id, nome FROM titulos_despesas ORDER BY nome")
+        cur.execute("SELECT id, nome FROM titulos_despesas WHERE ativo = 1 ORDER BY nome")
         tit = cur.fetchall()
         cur.execute("""SELECT id, titulo_id, nome FROM categorias_despesas
                         WHERE ativo = 1 ORDER BY nome""")
