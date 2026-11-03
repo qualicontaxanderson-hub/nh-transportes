@@ -139,6 +139,15 @@
 </div>
 
 <script>
+// Subcategoria obrigatória quando a categoria tem (pedido 03/11/2026)
+document.addEventListener('DOMContentLoaded', function () {
+    var f = document.getElementById('subcategoria_id');
+    if (f && window.NHSub && !f.disabled) NHSub.marcaSub(f);
+    var form = f ? f.closest('form') : null;
+    if (form) form.addEventListener('submit', function (ev) {
+        if (window.NHSub && NHSub.falta(f)) { ev.preventDefault(); alert(NHSub.MSG); f.focus(); }
+    });
+});
 // Load categorias when titulo is selected
 function loadCategorias() {
     const tituloId = document.getElementById('titulo_id').value;
@@ -165,6 +174,7 @@ function loadCategorias() {
                 const option = document.createElement('option');
                 option.value = cat.id;
                 option.textContent = cat.nome;
+                if (window.NHSub) NHSub.marcaCat(option, cat.n_sub || 0);
                 categoriaSelect.appendChild(option);
             });
             categoriaSelect.disabled = false;
@@ -201,6 +211,7 @@ function loadSubcategorias() {
                 subcategoriaSelect.appendChild(option);
             });
             subcategoriaSelect.disabled = false;
+            if (window.NHSub) NHSub.marcaSub(subcategoriaSelect);
         })
         .catch(error => {
             console.error('Erro ao carregar subcategorias:', error);

@@ -72,7 +72,7 @@
                             <option value="">Selecione...</option>
                             {% for categoria in categorias %}
                             <option value="{{ categoria.id }}" {% if categoria.id == lancamento.categoria_id %}selected{% endif %}>
-                                {{ categoria.nome }}
+                                {{ categoria.nome }}{% if categoria.n_sub %}  ▸ tem subcategoria{% endif %}
                             </option>
                             {% endfor %}
                         </select>
@@ -150,6 +150,15 @@
 </div>
 
 <script>
+// Subcategoria obrigatória quando a categoria tem (pedido 03/11/2026)
+document.addEventListener('DOMContentLoaded', function () {
+    var f = document.getElementById('subcategoria_id');
+    if (f && window.NHSub && !f.disabled) NHSub.marcaSub(f);
+    var form = f ? f.closest('form') : null;
+    if (form) form.addEventListener('submit', function (ev) {
+        if (window.NHSub && NHSub.falta(f)) { ev.preventDefault(); alert(NHSub.MSG); f.focus(); }
+    });
+});
 // Current values (used to maintain selection when reloading)
 const currentCategoriaId = {{ lancamento.categoria_id }};
 const currentSubcategoriaId = {{ lancamento.subcategoria_id or 'null' }};
@@ -181,6 +190,7 @@ function loadCategorias() {
                 const option = document.createElement('option');
                 option.value = cat.id;
                 option.textContent = cat.nome;
+                if (window.NHSub) NHSub.marcaCat(option, cat.n_sub || 0);
                 if (cat.id == currentCategoriaId) {
                     option.selected = true;
                 }
@@ -228,6 +238,7 @@ function loadSubcategorias() {
                 subcategoriaSelect.appendChild(option);
             });
             subcategoriaSelect.disabled = false;
+            if (window.NHSub) NHSub.marcaSub(subcategoriaSelect);
         })
         .catch(error => {
             console.error('Erro ao carregar subcategorias:', error);

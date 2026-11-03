@@ -69,6 +69,25 @@ def parse_brazilian_currency(value_str):
     return Decimal(value_str)
 
 
+def subcategoria_faltando(cursor, categoria_id, subcategoria_id):
+    """True quando a categoria TEM subcategoria ativa e nenhuma veio
+    (pedido 03/11/2026: lancamento so na categoria deixa as despesas
+    baguncadas). Categoria sem subcategoria passa normal."""
+    if str(subcategoria_id or '').strip():
+        return False
+    try:
+        cursor.execute("SELECT COUNT(*) FROM subcategorias_despesas WHERE categoria_id = %s AND ativo = 1",
+                       (int(categoria_id),))
+        r = cursor.fetchone()
+    except Exception:
+        return False
+    n = (list(r.values())[0] if isinstance(r, dict) else r[0]) if r else 0
+    return bool(n)
+
+
+MSG_SUB = 'Esta categoria tem subcategoria — escolha a subcategoria antes de salvar.'
+
+
 def validate_lancamento_input(data, titulo_id, categoria_id, valor):
     """
     Validate lancamento input fields.
@@ -315,6 +334,15 @@ def novo():
             # Validate
             is_valid, errors = validate_lancamento_input(data, titulo_id, categoria_id, valor)
             
+            if is_valid:
+                _c = get_db_connection()
+                try:
+                    _k = _c.cursor()
+                    if subcategoria_faltando(_k, categoria_id, subcategoria_id):
+                        is_valid, errors = False, [MSG_SUB]
+                    _k.close()
+                finally:
+                    _c.close()
             if not is_valid:
                 for error in errors:
                     flash(error, 'danger')
@@ -420,6 +448,15 @@ def editar(id):
             # Validate
             is_valid, errors = validate_lancamento_input(data, titulo_id, categoria_id, valor)
             
+            if is_valid:
+                _c = get_db_connection()
+                try:
+                    _k = _c.cursor()
+                    if subcategoria_faltando(_k, categoria_id, subcategoria_id):
+                        is_valid, errors = False, [MSG_SUB]
+                    _k.close()
+                finally:
+                    _c.close()
             if not is_valid:
                 for error in errors:
                     flash(error, 'danger')
@@ -504,9 +541,9 @@ def editar(id):
         
         # Get categorias for selected titulo
         cursor.execute("""
-            SELECT id, nome 
-            FROM categorias_despesas 
-            WHERE titulo_id = %s AND ativo = 1 
+            SELECT id, nome, (SELECT COUNT(*) FROM subcategorias_despesas sx WHERE sx.categoria_id = categorias_despesas.id AND sx.ativo = 1) AS n_sub
+            FROM categorias_despesas
+            WHERE titulo_id = %s AND ativo = 1
             ORDER BY nome
         """, (lancamento['titulo_id'],))
         categorias = cursor.fetchall()
@@ -736,13 +773,13 @@ def api_categorias(titulo_id):
         cursor = conn.cursor(dictionary=True)
         
         cursor.execute("""
-            SELECT id, nome 
-            FROM categorias_despesas 
-            WHERE titulo_id = %s AND ativo = 1 
+            SELECT id, nome, (SELECT COUNT(*) FROM subcategorias_despesas sx WHERE sx.categoria_id = categorias_despesas.id AND sx.ativo = 1) AS n_sub
+            FROM categorias_despesas
+            WHERE titulo_id = %s AND ativo = 1
             ORDER BY nome
         """, (titulo_id,))
         categorias = cursor.fetchall()
-        
+
         return jsonify(categorias)
     except Exception as e:
         return jsonify({'error': str(e)}), 500

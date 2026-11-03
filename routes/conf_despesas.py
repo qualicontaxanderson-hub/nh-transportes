@@ -1989,7 +1989,8 @@ def conf_despesas_opcoes():
 def conf_despesas_salvar(lid):
     """Edita o lançamento pela gaveta, sem sair da Conferência. Mesmas regras
     e mesmas colunas da tela de edição (lancamentos_despesas.editar)."""
-    from routes.lancamentos_despesas import parse_brazilian_currency, validate_lancamento_input
+    from routes.lancamentos_despesas import (parse_brazilian_currency, validate_lancamento_input,
+                                             subcategoria_faltando, MSG_SUB)
     d = request.get_json(silent=True) or {}
     data = (d.get('data') or '').strip()
     titulo_id = str(d.get('titulo_id') or '').strip()
@@ -2007,6 +2008,8 @@ def conf_despesas_salvar(lid):
     conn = get_db_connection()
     try:
         cur = conn.cursor()
+        if subcategoria_faltando(cur, categoria_id, sub):
+            return jsonify({'ok': False, 'erro': MSG_SUB}), 400
         cur.execute("""UPDATE lancamentos_despesas
                           SET data = %s, cliente_id = %s, titulo_id = %s, categoria_id = %s,
                               subcategoria_id = %s, valor = %s, fornecedor = %s, observacao = %s
