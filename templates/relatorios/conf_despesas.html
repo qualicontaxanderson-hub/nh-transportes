@@ -574,10 +574,14 @@ body.cd-aberta .cd-gav { display: flex; }
       var selT = box.querySelector('.e-tit'), selC = box.querySelector('.e-cat'), selS = box.querySelector('.e-sub');
       function cats(catSel) {
         selC.innerHTML = opts(o.categorias.filter(function (c) { return String(c.titulo_id) === selT.value; }), catSel);
+        if (window.NHSub) Array.prototype.forEach.call(selC.options, function (op) {
+          NHSub.marcaCat(op, o.subcategorias.filter(function (s) { return String(s.categoria_id) === op.value; }).length);
+        });
         subs(catSel === l.categoria_id ? l.subcategoria_id : '');
       }
       function subs(subSel) {
         selS.innerHTML = opts(o.subcategorias.filter(function (s) { return String(s.categoria_id) === selC.value; }), subSel, 'Nenhuma');
+        if (window.NHSub) NHSub.marcaSub(selS);
       }
       selT.onchange = function () { cats(''); };
       selC.onchange = function () { subs(''); };
@@ -594,6 +598,11 @@ body.cd-aberta .cd-gav { display: flex; }
       subcategoria_id: box.querySelector('.e-sub').value, cliente_id: box.querySelector('.e-emp').value,
       fornecedor: box.querySelector('.e-forn').value, observacao: box.querySelector('.e-obs').value
     };
+    if (window.NHSub && NHSub.falta(box.querySelector('.e-sub'))) {
+      var ef = box.querySelector('.cd-erro'); ef.textContent = NHSub.MSG; ef.style.display = 'block';
+      box.querySelector('.e-sub').focus();
+      return;
+    }
     var btn = box.querySelector('.e-salva'); btn.disabled = true;
     fetch(URL_SALVA + l.id, {method: 'POST', credentials: 'same-origin',
           headers: {'Content-Type': 'application/json'}, body: JSON.stringify(corpo)})

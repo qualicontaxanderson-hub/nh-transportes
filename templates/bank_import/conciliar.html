@@ -2641,6 +2641,7 @@ function carregarCategorias(selectTitulo, nomeCampoCategoria) {
     o.value = c.id; o.textContent = c.nome;
     // Embute subcategorias para uso em carregarSubcategorias()
     o.dataset.subcategorias = JSON.stringify(c.subcategorias || []);
+    if (window.NHSub) NHSub.marcaCat(o, (c.subcategorias || []).length);
     selCat.appendChild(o);
   });
   // Limpa subcategoria ao trocar categoria
@@ -2664,6 +2665,7 @@ function carregarSubcategorias(selCategoria) {
     o.value = s.id; o.textContent = s.nome;
     selSub.appendChild(o);
   });
+  if (window.NHSub) NHSub.marcaSub(selSub);
   /* Avanca ANTES de ir na rede: carregarFornecedoresDespesa faz fetch, e se
      ele falhar a funcao morre aqui — o usuario ficaria preso no degrau da
      categoria sem entender por que. */
@@ -2981,6 +2983,7 @@ function carregarCatLote() {
     const o = document.createElement('option');
     o.value = c.id; o.textContent = c.nome;
     o.dataset.subcategorias = JSON.stringify(c.subcategorias || []);
+    if (window.NHSub) NHSub.marcaCat(o, (c.subcategorias || []).length);
     selCat.appendChild(o);
   });
   if (window.lselSincronizar) lselSincronizar();   // as listas acompanham
@@ -3005,6 +3008,7 @@ function carregarSubCatLote() {
     o.value = s.id; o.textContent = s.nome;
     selSub.appendChild(o);
   });
+  if (window.NHSub) NHSub.marcaSub(selSub);
   if (window.lselSincronizar) lselSincronizar();   // as listas acompanham
 }
 
@@ -3080,6 +3084,7 @@ function submeterLote(tipo) {
       const categ  = document.getElementById('lote_categoria_id').value;
       const sub    = document.getElementById('lote_subcategoria_id').value;
       if (!titulo || !categ) { alert('Selecione o Título e a Categoria da despesa antes de confirmar.'); return; }
+      if (window.NHSub && NHSub.falta(document.getElementById('lote_subcategoria_id'))) { alert(NHSub.MSG); return; }
       add('desp_1_titulo_id', titulo);
       add('desp_1_categoria_id', categ);
       if (sub) add('desp_1_subcategoria_id', sub);
@@ -3251,6 +3256,16 @@ function aprovarSugestoesPagina() {
   const btn = document.getElementById('btnAprovarSugestoes');
   if (btn && total === 0) btn.disabled = true;
 })();
+
+// Despesa cuja categoria tem subcategoria nao sai sem a subcategoria.
+document.getElementById('formConciliar').addEventListener('submit', function(ev) {
+  if (!window.NHSub || document.getElementById('modal_tipo_debito').value !== 'despesa') return;
+  var falta = Array.prototype.find.call(this.querySelectorAll('.sel-subcategoria'), function (s) {
+    var ln = s.closest('.linha-desp') || s;
+    return ln.offsetParent !== null && NHSub.falta(s);
+  });
+  if (falta) { ev.preventDefault(); ev.stopImmediatePropagation(); alert(NHSub.MSG); falta.focus(); }
+});
 
 // Devolucao de despesa sem a despesa escolhida nao vai pro servidor.
 document.getElementById('formConciliar').addEventListener('submit', function(ev) {
