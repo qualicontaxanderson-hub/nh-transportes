@@ -337,6 +337,10 @@ def acertar_pela_planilha(conn):
                 ok = [c for c in cands if c['e2e'] not in usados and abs(c['valor'] - v) < 0.005
                       and ant.date() - timedelta(days=3) <= c['dt'].date() and c['dt'] <= visto
                       and (fase == 'valor' or c['nome'] == n)]
+                # a mesma pessoa pagou o mesmo valor 2 vezes: tanto faz qual é
+                # qual; vai o mais perto da leitura (o de dias antes já foi lido)
+                if fase == 'nome' and len(ok) > 1:
+                    ok = sorted(ok, key=lambda c: c['dt'], reverse=True)[:1]
                 if len(ok) == 1:
                     usados.add(ok[0]['e2e'])
                     pares.append((pid, ok[0]['dt']))

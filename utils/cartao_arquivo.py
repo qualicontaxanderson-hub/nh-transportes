@@ -728,7 +728,7 @@ def importar(conn, nome, conteudo):
                 from utils.pix_consulta import acertar_pela_planilha
                 acertar_pela_planilha(conn)
             except Exception:
-                logger.exception('[cartao_arquivo] acerto do dia dos PIX pela planilha falhou')
+                _log.exception('[cartao_arquivo] acerto do dia dos PIX pela planilha falhou')
         else:
             lotes, vendas = LEITORES[operadora](conteudo)
             gravar(conn, operadora, nome, lotes, vendas)
