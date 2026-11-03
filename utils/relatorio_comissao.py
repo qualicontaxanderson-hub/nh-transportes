@@ -7,6 +7,7 @@ routes/relatorios._comissao_dados — tela e papel não podem discordar.
 """
 from __future__ import annotations
 
+import io
 from datetime import datetime
 
 from reportlab.lib import colors
@@ -15,7 +16,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import KeepTogether, Paragraph, Spacer, Table, TableStyle
 
 from utils.relatorio_boletos import AZUL, FRACO, LINHA, TINTA, _moeda
-from utils.relatorio_frota import (UTIL, VERDE, _cartoes, _data_br, _escapar,
+from utils.relatorio_frota import (UTIL, VERDE, _Doc, _cartoes, _data_br, _escapar,
                                    _montar, _num, _tabela)
 
 _CINZA_CLARO = colors.HexColor('#9aa5b1')
@@ -33,7 +34,7 @@ def _cab_motorista(g):
          Paragraph('%d fretes · %s L transportados · %s L comissionados'
                    % (g['fretes'], _num(g['litros']), _num(g['litros_com'])), estilo_s)],
         Paragraph('Comissão<br/>%s' % _moeda(g['comissao']), estilo_v),
-    ]], colWidths=[UTIL - 45 * mm, 45 * mm])
+    ]], colWidths=[UTIL - 45 * mm - 1, 45 * mm])
     t.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), AZUL),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
@@ -46,7 +47,27 @@ def _cab_motorista(g):
 
 
 def gerar(dados, de, ate, filtro='', usuario='', logo=None, quando=None):
+    """Duas passadas (a 1ª conta as páginas), cada uma com o corpo montado de
+    novo: tabela que quebra de página não pode ser reaproveitada entre builds."""
     quando = quando or datetime.now().strftime('%d/%m/%Y %H:%M')
+    cab = {
+        'titulo': 'Comissão Motorista',
+        'sub': '%s a %s · %s' % (_data_br(de), _data_br(ate), filtro or 'Todos os motoristas'),
+        'quando': quando, 'usuario': usuario, 'logo': logo,
+        'rodape': 'NH Transportes · comissão dos motoristas por frete',
+    }
+    buf = io.BytesIO()
+    doc = _Doc(buf, cab)
+    doc.build(_corpo(dados))
+    paginas = doc.page
+    buf = io.BytesIO()
+    doc = _Doc(buf, cab)
+    doc.total_paginas = paginas
+    doc.build(_corpo(dados))
+    return buf.getvalue()
+
+
+def _corpo(dados):
     corpo = [_cartoes([
         ('Fretes', TINTA, str(dados['total_fretes'])),
         ('Litros', TINTA, _num(dados['total_quantidade'])),
@@ -101,9 +122,4 @@ def gerar(dados, de, ate, filtro='', usuario='', logo=None, quando=None):
                  ('LINEABOVE', (0, -1), (-1, -1), 0.8, LINHA)]),
     ]))
 
-    return _montar(corpo, {
-        'titulo': 'Comissão Motorista',
-        'sub': '%s a %s · %s' % (_data_br(de), _data_br(ate), filtro or 'Todos os motoristas'),
-        'quando': quando, 'usuario': usuario, 'logo': logo,
-        'rodape': 'NH Transportes · comissão dos motoristas por frete',
-    })
+    return corpo
