@@ -27,7 +27,7 @@
     <div><label>Motorista</label>
       <select name="motorista_id" class="js-auto"><option value="">Todos ({{ mot_lista|length }} no período)</option>
         {% set ns = namespace(achou=false) %}
-        {% for m in mot_lista %}{% if motorista_id == m.id %}{% set ns.achou = true %}{% endif %}<option value="{{ m.id }}" {% if motorista_id == m.id %}selected{% endif %}>{{ m.nome }} · {{ m.n }} fretes</option>{% endfor %}
+        {% for m in mot_lista %}{% if motorista_id == m.id %}{% set ns.achou = true %}{% endif %}<option value="{{ m.id }}" {% if motorista_id == m.id %}selected{% endif %}>{{ m.nome }} · {{ m.n }} frete{{ "s" if m.n != 1 }}</option>{% endfor %}
         {% if motorista_id and not ns.achou %}{% for m in motoristas if m.id == motorista_id %}<option value="{{ m.id }}" selected>{{ m.nome }} · sem frete no período</option>{% endfor %}{% endif %}
       </select></div>
     <div><label>Cliente</label>
