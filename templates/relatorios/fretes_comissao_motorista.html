@@ -255,6 +255,17 @@
      direto no toque, por isso são dois toques. No PC abre numa aba como antes. */
   var pdf = document.getElementById('cmPdf');
   var arquivo = null, chave = '';
+  // "Comissao Welington Braz Batista 01.10 a 31.10.2026.pdf" (pedido 03/11/2026)
+  function nomePdf() {
+    function d(v, ano) { if (!v) return ''; var p = v.split('-'); return p[2] + '.' + p[1] + (ano ? '.' + p[0] : ''); }
+    var mot = f.querySelector('input[name="motorista_id"]').value
+      ? (f.querySelector('[data-alvo="pk-motorista_id"] .cm-pk__v') || {}).textContent : 'Todos os motoristas';
+    var cli = f.querySelector('input[name="cliente_id"]').value
+      ? ' - ' + ((f.querySelector('[data-alvo="pk-cliente_id"] .cm-pk__v') || {}).textContent || '') : '';
+    var mesmoAno = di.value && df.value && di.value.slice(0, 4) === df.value.slice(0, 4);
+    var nome = 'Comissao ' + (mot || '').trim() + cli.trim().replace(/^-/, ' -') + ' ' + d(di.value, !mesmoAno) + ' a ' + d(df.value, true);
+    return nome.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() + '.pdf';
+  }
   function urlPdf() { return pdf.href.split('?')[0] + '?' + new URLSearchParams(new FormData(f)).toString(); }
   function podeCompartilhar() {
     try { return !!(navigator.canShare && navigator.canShare({files: [new File(['x'], 'a.pdf', {type: 'application/pdf'})]})); }
@@ -265,13 +276,13 @@
     if (!podeCompartilhar()) { pdf.href = u; return; }   // PC: segue o link
     ev.preventDefault();
     if (arquivo && chave === u) {
-      navigator.share({files: [arquivo], title: arquivo.name}).catch(function () {});
+      navigator.share({files: [arquivo]}).catch(function () {});
       return;
     }
     pdf.innerHTML = '<i class="bi bi-hourglass-split"></i> Gerando…';
     fetch(u, {credentials: 'same-origin'}).then(function (r) {
       if (!r.ok) throw new Error(r.status);
-      var nome = 'Comissao Motorista ' + (di.value || '') + ' a ' + (df.value || '') + '.pdf';
+      var nome = nomePdf();
       return r.blob().then(function (bl) { return new File([bl], nome, {type: 'application/pdf'}); });
     }).then(function (fl) {
       arquivo = fl; chave = u;
