@@ -228,7 +228,7 @@ def lista():
             SELECT id, nome 
             FROM titulos_despesas 
             WHERE ativo = 1 
-            ORDER BY ordem, nome
+            ORDER BY nome
         """)
         titulos = cursor.fetchall()
         
@@ -239,7 +239,7 @@ def lista():
                 SELECT id, nome 
                 FROM categorias_despesas 
                 WHERE titulo_id = %s AND ativo = 1 
-                ORDER BY ordem, nome
+                ORDER BY nome
             """, (titulo_id,))
             categorias = cursor.fetchall()
         
@@ -250,7 +250,7 @@ def lista():
                 SELECT id, nome 
                 FROM subcategorias_despesas 
                 WHERE categoria_id = %s AND ativo = 1 
-                ORDER BY ordem, nome
+                ORDER BY nome
             """, (categoria_id,))
             subcategorias = cursor.fetchall()
         
@@ -366,7 +366,7 @@ def novo():
             SELECT id, nome 
             FROM titulos_despesas 
             WHERE ativo = 1 
-            ORDER BY ordem, nome
+            ORDER BY nome
         """)
         titulos = cursor.fetchall()
         
@@ -498,7 +498,7 @@ def editar(id):
             SELECT id, nome 
             FROM titulos_despesas 
             WHERE ativo = 1 
-            ORDER BY ordem, nome
+            ORDER BY nome
         """)
         titulos = cursor.fetchall()
         
@@ -507,7 +507,7 @@ def editar(id):
             SELECT id, nome 
             FROM categorias_despesas 
             WHERE titulo_id = %s AND ativo = 1 
-            ORDER BY ordem, nome
+            ORDER BY nome
         """, (lancamento['titulo_id'],))
         categorias = cursor.fetchall()
         
@@ -516,7 +516,7 @@ def editar(id):
             SELECT id, nome 
             FROM subcategorias_despesas 
             WHERE categoria_id = %s AND ativo = 1 
-            ORDER BY ordem, nome
+            ORDER BY nome
         """, (lancamento['categoria_id'],))
         subcategorias = cursor.fetchall()
         
@@ -677,7 +677,7 @@ def mensal():
             SELECT id, nome, ordem
             FROM titulos_despesas 
             WHERE ativo = 1 
-            ORDER BY ordem, nome
+            ORDER BY nome
         """)
         titulos = cursor.fetchall()
         
@@ -688,7 +688,7 @@ def mensal():
                 SELECT id, nome, titulo_id, ordem
                 FROM categorias_despesas 
                 WHERE titulo_id = %s AND ativo = 1 
-                ORDER BY ordem, nome
+                ORDER BY nome
             """, (titulo['id'],))
             categorias = cursor.fetchall()
             
@@ -698,7 +698,7 @@ def mensal():
                     SELECT id, nome, categoria_id, ordem
                     FROM subcategorias_despesas 
                     WHERE categoria_id = %s AND ativo = 1 
-                    ORDER BY ordem, nome
+                    ORDER BY nome
                 """, (categoria['id'],))
                 categoria['subcategorias'] = cursor.fetchall()
             
@@ -739,7 +739,7 @@ def api_categorias(titulo_id):
             SELECT id, nome 
             FROM categorias_despesas 
             WHERE titulo_id = %s AND ativo = 1 
-            ORDER BY ordem, nome
+            ORDER BY nome
         """, (titulo_id,))
         categorias = cursor.fetchall()
         
@@ -768,7 +768,7 @@ def api_subcategorias(categoria_id):
             SELECT id, nome 
             FROM subcategorias_despesas 
             WHERE categoria_id = %s AND ativo = 1 
-            ORDER BY ordem, nome
+            ORDER BY nome
         """, (categoria_id,))
         subcategorias = cursor.fetchall()
         

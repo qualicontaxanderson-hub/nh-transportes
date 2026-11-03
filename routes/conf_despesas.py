@@ -1968,11 +1968,11 @@ def conf_despesas_opcoes():
     conn = get_db_connection()
     try:
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id, nome FROM titulos_despesas WHERE ativo = 1 ORDER BY ordem, nome")
+        cur.execute("SELECT id, nome FROM titulos_despesas WHERE ativo = 1 ORDER BY nome")
         titulos = cur.fetchall()
-        cur.execute("SELECT id, titulo_id, nome FROM categorias_despesas WHERE ativo = 1 ORDER BY ordem, nome")
+        cur.execute("SELECT id, titulo_id, nome FROM categorias_despesas WHERE ativo = 1 ORDER BY nome")
         categorias = cur.fetchall()
-        cur.execute("SELECT id, categoria_id, nome FROM subcategorias_despesas WHERE ativo = 1 ORDER BY ordem, nome")
+        cur.execute("SELECT id, categoria_id, nome FROM subcategorias_despesas WHERE ativo = 1 ORDER BY nome")
         subcategorias = cur.fetchall()
         cur.close()
     finally:

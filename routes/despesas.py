@@ -403,7 +403,7 @@ def nova_categoria():
             return redirect(url_for('despesas.titulo_detalhes', titulo_id=titulo_id))
 
         # Buscar títulos para o dropdown
-        cursor.execute("SELECT * FROM titulos_despesas WHERE ativo = 1 ORDER BY ordem, nome")
+        cursor.execute("SELECT * FROM titulos_despesas WHERE ativo = 1 ORDER BY nome")
         titulos = cursor.fetchall()
 
         empresas, contas_por_grupo = _load_form_data(conn)
@@ -481,7 +481,7 @@ def editar_categoria(id):
         cursor.execute("SELECT * FROM categorias_despesas WHERE id = %s", (id,))
         categoria = cursor.fetchone()
 
-        cursor.execute("SELECT * FROM titulos_despesas WHERE ativo = 1 ORDER BY ordem, nome")
+        cursor.execute("SELECT * FROM titulos_despesas WHERE ativo = 1 ORDER BY nome")
         titulos = cursor.fetchall()
 
         cursor.execute(
@@ -601,7 +601,7 @@ def nova_subcategoria():
             FROM categorias_despesas c
             LEFT JOIN titulos_despesas t ON c.titulo_id = t.id
             WHERE c.ativo = 1
-            ORDER BY t.ordem, c.ordem, c.nome
+            ORDER BY t.nome, c.nome
         """)
         categorias = cursor.fetchall()
 
@@ -677,7 +677,7 @@ def editar_subcategoria(id):
             FROM categorias_despesas c
             LEFT JOIN titulos_despesas t ON c.titulo_id = t.id
             WHERE c.ativo = 1
-            ORDER BY t.ordem, c.ordem, c.nome
+            ORDER BY t.nome, c.nome
         """)
         categorias = cursor.fetchall()
 

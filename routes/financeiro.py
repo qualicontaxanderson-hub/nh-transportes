@@ -2761,7 +2761,7 @@ def pagamentos():
                FROM categorias_despesas c
                INNER JOIN titulos_despesas t ON t.id = c.titulo_id
                WHERE c.ativo = 1 AND t.ativo = 1
-               ORDER BY t.ordem, t.nome, c.nome"""
+               ORDER BY t.nome, c.nome"""
         )
         categorias_despesa = cursor.fetchall()
     except Exception:

@@ -89,7 +89,7 @@ def novo():
         FROM categorias_despesas c
         INNER JOIN titulos_despesas t ON c.titulo_id = t.id
         WHERE c.ativo = 1 AND t.ativo = 1
-        ORDER BY t.ordem, t.nome, c.nome
+        ORDER BY t.nome, c.nome
     """)
     categorias = cursor.fetchall()
     
@@ -182,7 +182,7 @@ def editar(id):
         FROM categorias_despesas c
         INNER JOIN titulos_despesas t ON c.titulo_id = t.id
         WHERE c.ativo = 1 AND t.ativo = 1
-        ORDER BY t.ordem, t.nome, c.nome
+        ORDER BY t.nome, c.nome
     """)
     categorias = cursor.fetchall()
     

@@ -2049,7 +2049,7 @@ def _get_titulos_despesas(cursor):
            INNER JOIN categorias_despesas c ON c.titulo_id = t.id AND c.ativo = 1
            LEFT JOIN subcategorias_despesas s ON s.categoria_id = c.id AND s.ativo = 1
            WHERE t.ativo = 1
-           ORDER BY t.ordem, t.nome, c.ordem, c.nome, s.ordem, s.nome"""
+           ORDER BY t.nome, c.nome, s.nome"""
     )
     rows = cursor.fetchall()
     # Agrupa: { titulo_id: {nome, categorias: { cat_id: {nome, subcategorias:[]} }} }

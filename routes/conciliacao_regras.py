@@ -89,7 +89,7 @@ def _get_clientes(cursor):
 def _get_titulos_simples(cursor):
     """Retorna lista simples de títulos (sem JSON embutido — evita bug de aspas duplas)."""
     cursor.execute(
-        "SELECT id, nome FROM titulos_despesas WHERE ativo=1 ORDER BY ordem, nome"
+        "SELECT id, nome FROM titulos_despesas WHERE ativo=1 ORDER BY nome"
     )
     return cursor.fetchall()
 
@@ -769,7 +769,7 @@ def api_categorias(titulo_id):
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
-        "SELECT id, nome FROM categorias_despesas WHERE titulo_id=%s AND ativo=1 ORDER BY ordem, nome",
+        "SELECT id, nome FROM categorias_despesas WHERE titulo_id=%s AND ativo=1 ORDER BY nome",
         (titulo_id,),
     )
     cats = cursor.fetchall()

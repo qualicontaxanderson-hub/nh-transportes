@@ -727,13 +727,13 @@ def frota_despesas_opcoes():
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
-        cur.execute("SELECT id, nome FROM titulos_despesas ORDER BY COALESCE(ordem, 9999), nome")
+        cur.execute("SELECT id, nome FROM titulos_despesas ORDER BY nome")
         tit = cur.fetchall()
         cur.execute("""SELECT id, titulo_id, nome FROM categorias_despesas
-                        WHERE ativo = 1 ORDER BY COALESCE(ordem, 9999), nome""")
+                        WHERE ativo = 1 ORDER BY nome""")
         cat = cur.fetchall()
         cur.execute("""SELECT id, categoria_id, nome FROM subcategorias_despesas
-                        WHERE ativo = 1 ORDER BY COALESCE(ordem, 9999), nome""")
+                        WHERE ativo = 1 ORDER BY nome""")
         sub = cur.fetchall()
         return jsonify({'ok': True, 'titulos': tit, 'categorias': cat, 'subcategorias': sub})
     finally:
