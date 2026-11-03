@@ -722,6 +722,13 @@ def importar(conn, nome, conteudo):
             cab, vendas = pix_extrato.ler_sicoob(conteudo)
             lotes = []
             pix_extrato.gravar(conn, nome, cab, vendas)
+            try:
+                # PIX que o banco segurou (feriado/virada de mes) ganha o dia
+                # e a hora da planilha (utils/pix_consulta.aguardando_planilha)
+                from utils.pix_consulta import acertar_pela_planilha
+                acertar_pela_planilha(conn)
+            except Exception:
+                logger.exception('[cartao_arquivo] acerto do dia dos PIX pela planilha falhou')
         else:
             lotes, vendas = LEITORES[operadora](conteudo)
             gravar(conn, operadora, nome, lotes, vendas)

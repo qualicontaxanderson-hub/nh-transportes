@@ -266,12 +266,95 @@ def _dia_do_pix(r):
     visto. Mas se a leitura parou e voltou no dia seguinte (30/10 20:50 ->
     31/10 09:40), o visto é tarde e vale a data do banco -- senão o PIX cai
     no dia errado e não acha o cupom."""
+    if aguardando_planilha(r):
+        return r['leitura_anterior'].date()
     visto = r.get('visto_em')
     return min(visto.date(), r['data_transacao']) if visto else r['data_transacao']
 
 
+def aguardando_planilha(r):
+    """PIX que o banco segurou e soltou de uma vez: a leitura anterior foi
+    num dia, a que o viu já foi noutro, e o banco datou para depois. Foi o
+    sábado 31/10/2026: o Sicoob datou tudo para 03/11 (mês seguinte), a API
+    não mostra mês futuro e os 139 PIX do dia só apareceram às 00:00 de
+    01/11. O dia em que foi visto é mentira; fica no dia da leitura anterior
+    (o mais cedo possível) marcado "aguardando a planilha", e o Extrato Pix
+    do banco acerta dia e hora quando chega (acertar_pela_planilha)."""
+    v, a = r.get('visto_em'), r.get('leitura_anterior')
+    return bool(v and a and a.date() < v.date() < r['data_transacao'])
+
+
+def _chave_nome(s):
+    s = unicodedata.normalize('NFKD', s or '').encode('ascii', 'ignore').decode().upper()
+    return ''.join(ch for ch in s if ch.isalnum())[:10]
+
+
+def acertar_pela_planilha(conn):
+    """Dá o dia e a hora certos aos PIX "aguardando a planilha", pelo
+    Extrato Pix do Sicoob (pix_extrato). Casa por valor + nome do pagador;
+    só valor quando há um único candidato livre. O que não casar com
+    segurança continua aguardando. Devolve quantos acertou."""
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT id, valor, nome, visto_em, leitura_anterior
+              FROM pix_recebido_info
+             WHERE account_id = %s AND visto_em IS NOT NULL AND leitura_anterior IS NOT NULL
+               AND DATE(leitura_anterior) < DATE(visto_em) AND DATE(visto_em) < data_banco
+             ORDER BY id""", (ACCOUNT_ID,))
+        pend = cur.fetchall()
+        if not pend:
+            return 0
+        ini = min(r[4] for r in pend).date() - timedelta(days=3)
+        fim = max(r[3] for r in pend)
+        cur.execute("""SELECT e2e_id, dt, valor, pagador FROM pix_extrato
+                        WHERE dt BETWEEN %s AND %s""", (ini, fim))
+        cands = [{'e2e': e, 'dt': dt, 'valor': float(v), 'nome': _chave_nome(n)}
+                 for e, dt, v, n in cur.fetchall()]
+        if not cands:
+            return 0
+        # PIX da planilha que já tem dono: o lido na hora certa, mesmo valor
+        # e nome, visto até 1 dia depois.
+        cur.execute("""
+            SELECT valor, nome, visto_em FROM pix_recebido_info
+             WHERE account_id = %s AND visto_em BETWEEN %s AND %s
+               AND NOT (leitura_anterior IS NOT NULL AND DATE(leitura_anterior) < DATE(visto_em)
+                        AND DATE(visto_em) < data_banco)""",
+            (ACCOUNT_ID, ini, fim + timedelta(days=1)))
+        usados = set()
+        for v, n, visto in cur.fetchall():
+            k = _chave_nome(n)
+            c = next((c for c in cands if c['e2e'] not in usados and abs(c['valor'] - float(v)) < 0.005
+                      and c['nome'] == k and c['dt'] <= visto <= c['dt'] + timedelta(days=1)), None)
+            if c:
+                usados.add(c['e2e'])
+        pares = []
+        for fase in ('nome', 'valor'):
+            for r in pend:
+                if any(p[0] == r[0] for p in pares):
+                    continue
+                pid, v, n, visto, ant = r[0], float(r[1]), _chave_nome(r[2]), r[3], r[4]
+                ok = [c for c in cands if c['e2e'] not in usados and abs(c['valor'] - v) < 0.005
+                      and ant.date() - timedelta(days=3) <= c['dt'].date() and c['dt'] <= visto
+                      and (fase == 'valor' or c['nome'] == n)]
+                if len(ok) == 1:
+                    usados.add(ok[0]['e2e'])
+                    pares.append((pid, ok[0]['dt']))
+        for pid, dt in pares:
+            # leitura_anterior = a hora exata: deixa de "aguardar"
+            cur.execute("""UPDATE pix_recebido_info SET visto_em=%s, leitura_anterior=%s, hora_banco=%s
+                            WHERE id=%s""", (dt, dt, dt.strftime('%H:%M'), pid))
+        conn.commit()
+        logger.info('[pix_consulta] planilha acertou %s de %s PIX aguardando', len(pares), len(pend))
+        return len(pares)
+    finally:
+        cur.close()
+
+
 def _formatar(r):
-    if r.get('hora_banco'):
+    if aguardando_planilha(r):
+        hora = 'aguardando a planilha do banco'
+    elif r.get('hora_banco'):
         hora = 'às ' + r['hora_banco']
     elif r.get('visto_em') and r.get('leitura_anterior'):
         hora = 'entre %s e %s' % (_hora(r['leitura_anterior']), _hora(r['visto_em']))
