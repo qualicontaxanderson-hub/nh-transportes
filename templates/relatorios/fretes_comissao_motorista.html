@@ -1,304 +1,224 @@
 {% extends 'base.html' %}
-{% block title %}Relatório de Fretes - Comissão Motorista{% endblock %}
+{% block title %}Comissão Motorista{% endblock %}
+
+{% macro n(v, d=0) %}{{ ("{:,.%df}" % d).format(v|float).replace(",", "X").replace(".", ",").replace("X", ".") }}{% endmacro %}
+{% macro brl(v) %}R$ {{ n(v, 2) }}{% endmacro %}
 
 {% block content %}
-<div class="container-fluid">
+{# Repaginada 03/11/2026: no celular a tabela de 6 colunas ficava espremida.
+   Agora cada frete é uma linha de 2 andares no celular e tabela no PC;
+   PDF (A4) e WhatsApp saem dos mesmos números (_comissao_dados). #}
+<div class="cm">
+  <div class="cm-tit">
+    <h1><i class="bi bi-people"></i> Comissão Motorista</h1>
+    {% macro dbr(s) %}{% if s and s|length >= 10 %}{{ s[8:10] }}/{{ s[5:7] }}/{{ s[:4] }}{% else %}{{ s or '' }}{% endif %}{% endmacro %}
+    <span class="cm-per">{{ dbr(data_inicio) }} a {{ dbr(data_fim) }}</span>
+  </div>
 
-  <nav aria-label="breadcrumb" class="mt-2 mb-3">
-    <ol class="breadcrumb" style="font-size: 0.85rem;">
-      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
-      <li class="breadcrumb-item">Relatórios</li>
-      <li class="breadcrumb-item active" aria-current="page">Comissão Motorista</li>
-    </ol>
-  </nav>
-
-  <h2 class="mb-3" style="color:#1D63A5;"><i class="bi bi-people"></i> Comissão Motorista</h2>
-
-  <!-- Filtros -->
-  <form method="get" class="mb-4 row row-cols-lg-auto g-3 align-items-end">
-    <div class="col-12">
-      <label class="form-label">Data Inicial</label>
-      <input type="date" name="data_inicio" value="{{ data_inicio or '' }}" class="form-control">
+  <form method="get" class="cm-flt" id="cmForm">
+    <div><label>De</label><input type="date" name="data_inicio" value="{{ data_inicio or '' }}"></div>
+    <div><label>Até</label><input type="date" name="data_fim" value="{{ data_fim or '' }}"></div>
+    <div class="cm-chips">
+      <button type="button" class="cm-chip" data-p="mes">Este mês</button>
+      <button type="button" class="cm-chip" data-p="ant">Mês passado</button>
+      <button type="button" class="cm-chip" data-p="q1">Quinzena 1</button>
+      <button type="button" class="cm-chip" data-p="q2">Quinzena 2</button>
     </div>
-    <div class="col-12">
-      <label class="form-label">Data Final</label>
-      <input type="date" name="data_fim" value="{{ data_fim or '' }}" class="form-control">
-    </div>
-
-    <div class="col-12">
-      <label class="form-label">Cliente</label>
-      <select name="cliente_id" class="form-select">
-        <option value="">Todos</option>
-        {% for c in clientes %}
-        <option value="{{ c.id }}" {% if cliente_id == c.id %}selected{% endif %}>{{ c.razao_social }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="col-12">
-      <label class="form-label">Motorista</label>
-      <select name="motorista_id" class="form-select">
-        <option value="">Todos</option>
-        {% for m in motoristas %}
-        <option value="{{ m.id }}" {% if motorista_id == m.id %}selected{% endif %}>
-          {{ m.nome }}
-        </option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="col-12">
-      <button type="submit" class="btn btn-primary">
-        <i class="bi bi-search"></i> Filtrar
-      </button>
-      <a href="{{ url_for('relatorios.fretes_comissao_motorista') }}" class="btn btn-secondary">Limpar</a>
+    <div><label>Motorista</label>
+      <select name="motorista_id"><option value="">Todos</option>
+        {% for m in motoristas %}<option value="{{ m.id }}" {% if motorista_id == m.id %}selected{% endif %}>{{ m.nome }}</option>{% endfor %}
+      </select></div>
+    <div><label>Cliente</label>
+      <select name="cliente_id"><option value="">Todos</option>
+        {% for c in clientes %}<option value="{{ c.id }}" {% if cliente_id == c.id %}selected{% endif %}>{{ c.razao_social }}</option>{% endfor %}
+      </select></div>
+    <div class="cm-acts">
+      <button type="submit" class="cm-bt pri"><i class="bi bi-search"></i> Filtrar</button>
+      <a class="cm-bt pdf" id="cmPdf" target="_blank" rel="noopener"
+         href="{{ url_for('relatorios.fretes_comissao_motorista_pdf') }}?{{ request.query_string.decode() }}"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+      {% if grupos %}<button type="button" class="cm-bt wpp" id="btnCopiarWhatsapp"><i class="bi bi-whatsapp"></i> WhatsApp</button>{% endif %}
+      <a href="{{ url_for('relatorios.fretes_comissao_motorista') }}" class="cm-bt sec">Limpar</a>
     </div>
   </form>
 
-  <!-- Cards resumo -->
-  <div class="row g-4 mb-4">
-    <div class="col-md-4">
-      <div class="card h-100">
-        <div class="card-header" style="background:#4A90E2;color:white;">
-          <h6 class="mb-0"><i class="bi bi-fuel-pump"></i> Quantidade Total</h6>
-        </div>
-        <div class="card-body">
-          <h4 class="mb-0">{{ "{:,.2f}".format(total_quantidade or 0).replace(",", "X").replace(".", ",").replace("X", ".") }} L</h4>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-md-4">
-      <div class="card h-100">
-        <div class="card-header" style="background:#FF9800;color:white;">
-          <h6 class="mb-0"><i class="bi bi-cash-stack"></i> Valor Frete Total</h6>
-        </div>
-        <div class="card-body">
-          <h4 class="mb-0">{{ "R$ {:,.2f}".format(total_valor_frete|float if total_valor_frete else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</h4>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-md-4">
-      <div class="card h-100">
-        <div class="card-header" style="background:#1D63A5;color:white;">
-          <h6 class="mb-0"><i class="bi bi-percent"></i> Comissão Motorista Total</h6>
-        </div>
-        <div class="card-body">
-          <h4 class="mb-0">{{ "R$ {:,.2f}".format(total_comissao_motorista|float if total_comissao_motorista else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</h4>
-        </div>
-      </div>
-    </div>
+  <div class="cm-kpis">
+    <div class="cm-kpi"><small>Fretes</small><b>{{ total_fretes }}</b></div>
+    <div class="cm-kpi l"><small>Litros</small><b>{{ n(total_quantidade) }}</b></div>
+    <div class="cm-kpi f"><small>Valor frete</small><b>{{ brl(total_valor_frete) }}</b></div>
+    <div class="cm-kpi c"><small>Comissão</small><b>{{ brl(total_comissao_motorista) }}</b></div>
   </div>
 
-  <!-- Detalhe -->
-  <div class="card">
-    <div class="card-header" style="background:#151515;color:white;">
-      <h5 class="mb-0"><i class="bi bi-table"></i> Detalhamento</h5>
-    </div>
-    <div class="card-body">
-      {% if fretes %}
-      <div class="table-responsive">
-        <table class="table table-sm table-hover">
-          <thead style="background:#E8E8E8;">
-            <tr>
-              <th>Data</th>
-              <th>Cliente</th>
-              <th>Produto</th>
-              <th style="text-align:right;">Quantidade (L)</th>
-              <th style="text-align:right;">Valor Frete (R$)</th>
-              <th style="text-align:right;">Comissão Motorista (R$)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% set ns = namespace(cur_motorista='', sub_qtd=0, sub_frete=0, sub_comissao=0) %}
-            {% for item in fretes %}
-              {% if item.motorista_nome != ns.cur_motorista %}
-                {% if ns.cur_motorista != '' %}
-                <tr style="background:#f0f4fa; font-weight:600;">
-                  <td colspan="3" class="text-end">Subtotal {{ ns.cur_motorista }}</td>
-                  <td style="text-align:right;">{{ "{:,.2f}".format(ns.sub_qtd).replace(",","X").replace(".",",").replace("X",".") }}</td>
-                  <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_frete).replace(",","X").replace(".",",").replace("X",".") }}</td>
-                  <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_comissao).replace(",","X").replace(".",",").replace("X",".") }}</td>
-                </tr>
-                {% endif %}
-                {% set ns.cur_motorista = item.motorista_nome %}
-                {% set ns.sub_qtd = 0 %}
-                {% set ns.sub_frete = 0 %}
-                {% set ns.sub_comissao = 0 %}
-                <tr style="background:#1D63A5; color:white;">
-                  <td colspan="6"><strong><i class="bi bi-person-fill"></i> {{ item.motorista_nome or '(sem motorista)' }}</strong></td>
-                </tr>
-              {% endif %}
-              {% set ns.sub_qtd = ns.sub_qtd + (item.quantidade|float if item.quantidade else 0) %}
-              {% set ns.sub_frete = ns.sub_frete + (item.valor_total_frete|float if item.valor_total_frete else 0) %}
-              {% set ns.sub_comissao = ns.sub_comissao + (item.comissao_motorista|float if item.comissao_motorista else 0) %}
-              <tr>
-                <td>{{ item.data_frete.strftime('%d/%m/%Y') if item.data_frete }}</td>
-                <td>{{ item.cliente_nome or '-' }}</td>
-                <td>{{ item.produto_nome or '-' }}</td>
-                <td style="text-align:right;">{{ "{:,.2f}".format(item.quantidade or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-                <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.valor_total_frete|float if item.valor_total_frete else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-                <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.comissao_motorista|float if item.comissao_motorista else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-              </tr>
-            {% endfor %}
-            {# subtotal for last motorista group #}
-            {% if ns.cur_motorista != '' %}
-            <tr style="background:#f0f4fa; font-weight:600;">
-              <td colspan="3" class="text-end">Subtotal {{ ns.cur_motorista }}</td>
-              <td style="text-align:right;">{{ "{:,.2f}".format(ns.sub_qtd).replace(",","X").replace(".",",").replace("X",".") }}</td>
-              <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_frete).replace(",","X").replace(".",",").replace("X",".") }}</td>
-              <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_comissao).replace(",","X").replace(".",",").replace("X",".") }}</td>
-            </tr>
-            {% endif %}
+  {% if not grupos %}
+  <div class="cm-vazio">Sem fretes para os filtros escolhidos.</div>
+  {% endif %}
 
-            <!-- Linha de totais -->
-            <tr style="background:#F5F5F5; font-weight:bold;">
-              <td colspan="3">TOTAL GERAL</td>
-              <td style="text-align:right;">{{ "{:,.2f}".format(total_quantidade or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-              <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_valor_frete|float if total_valor_frete else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-              <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_comissao_motorista|float if total_comissao_motorista else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-            </tr>
-
-          </tbody>
-        </table>
+  {% for g in grupos %}
+  <section class="cm-mot">
+    <header class="cm-mot__cab">
+      <div>
+        <div class="cm-mot__nome"><i class="bi bi-person-fill"></i> {{ g.nome }}</div>
+        <div class="cm-mot__sub">{{ g.fretes }} fretes · {{ n(g.litros) }} L transportados · {{ n(g.litros_com) }} L comissionados</div>
       </div>
-      {% else %}
-      <span class="text-muted">Sem dados para os filtros escolhidos.</span>
-      {% endif %}
-    </div>
-  </div>
+      <div class="cm-mot__com"><small>Comissão</small>{{ brl(g.comissao) }}</div>
+    </header>
+    <table class="cm-det">
+      <thead><tr><th>Data</th><th>Produto</th><th>Cliente</th><th class="num">Litros</th><th class="num hide-sm">Frete</th><th class="num">Comissão</th></tr></thead>
+      <tbody>
+        {% for f in g.itens %}
+        {% set pr = (f.produto_nome or '')[:3]|upper|replace('-', '') %}
+        <tr class="{{ '' if f.comissao_motorista else 'zero' }}">
+          <td class="dt">{{ f.data_frete.strftime('%d/%m') if f.data_frete }}</td>
+          <td><span class="cm-pr cm-pr-{{ pr }}">{{ f.produto_nome or '—' }}</span></td>
+          <td class="cl" title="{{ f.cliente_nome }}">{{ f.cliente_curto or '—' }}</td>
+          <td class="num">{{ n(f.quantidade) }} L</td>
+          <td class="num hide-sm">{{ brl(f.valor_total_frete) if f.valor_total_frete else '—' }}</td>
+          <td class="num b">{% if f.comissao_motorista %}{{ brl(f.comissao_motorista) }}{% else %}<span class="z">sem comissão</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr><td colspan="3">Subtotal</td><td class="num">{{ n(g.litros) }} L</td><td class="num hide-sm">{{ brl(g.valor_frete) }}</td><td class="num">{{ brl(g.comissao) }}</td></tr></tfoot>
+    </table>
+  </section>
+  {% endfor %}
 
-  <!-- Resumo por Motorista -->
-  {% if resumo_motoristas %}
-  <div class="card mt-4">
-    <div class="card-header d-flex justify-content-between align-items-center" style="background:#1D63A5;color:white;">
-      <h5 class="mb-0"><i class="bi bi-bar-chart-fill"></i> Resumo por Motorista</h5>
-      <button type="button" class="btn btn-success btn-sm" id="btnCopiarWhatsapp">
-        <i class="bi bi-whatsapp"></i> Copiar para WhatsApp
-      </button>
-    </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0" id="tabelaResumoMotorista">
-          <thead style="background:#E8E8E8;">
-            <tr>
-              <th>Nome do Motorista</th>
-              <th style="text-align:right;">Qtd Transportada (L)</th>
-              <th style="text-align:right;">Qtd Comissionada (L)</th>
-              <th style="text-align:right;">Valor Comissão (R$)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for r in resumo_motoristas %}
-            <tr>
-              <td>{{ r.motorista_nome or '(sem motorista)' }}</td>
-              <td style="text-align:right;">{{ "{:,.2f}".format(r.quantidade_total or 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
-              <td style="text-align:right;">{{ "{:,.2f}".format(r.quantidade_comissionada or 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
-              <td style="text-align:right;">{{ "R$ {:,.2f}".format(r.comissao_total|float if r.comissao_total else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
-            </tr>
-            {% endfor %}
-            <tr style="background:#F5F5F5; font-weight:bold;">
-              <td>TOTAL</td>
-              <td style="text-align:right;">{{ "{:,.2f}".format(total_quantidade or 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
-              <td style="text-align:right;">{{ "{:,.2f}".format(resumo_motoristas|sum(attribute='quantidade_comissionada') or 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
-              <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_comissao_motorista|float if total_comissao_motorista else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+  {% if grupos %}
+  <div class="cm-res">
+    <h2><i class="bi bi-bar-chart-fill"></i> Resumo por motorista</h2>
+    <div class="cm-res__rol">
+    <table id="tabelaResumoMotorista">
+      <thead><tr><th>Motorista</th><th class="num">Fretes</th><th class="num">Transportado (L)</th><th class="num">Comissionado (L)</th><th class="num">Comissão</th></tr></thead>
+      <tbody>
+        {% for g in grupos %}
+        <tr data-nome="{{ g.nome }}" data-qt="{{ n(g.litros) }}" data-qc="{{ n(g.litros_com) }}" data-com="{{ brl(g.comissao) }}">
+          <td>{{ g.nome }}</td><td class="num">{{ g.fretes }}</td><td class="num">{{ n(g.litros) }}</td>
+          <td class="num">{{ n(g.litros_com) }}</td><td class="num b">{{ brl(g.comissao) }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="tot" data-total="1" data-qt="{{ n(total_quantidade) }}" data-qc="{{ n(total_litros_com) }}" data-com="{{ brl(total_comissao_motorista) }}">
+          <td>TOTAL</td><td class="num">{{ total_fretes }}</td><td class="num">{{ n(total_quantidade) }}</td>
+          <td class="num">{{ n(total_litros_com) }}</td><td class="num">{{ brl(total_comissao_motorista) }}</td>
+        </tr>
+      </tbody>
+    </table>
     </div>
   </div>
   {% endif %}
-
 </div>
 {% endblock %}
 
 {% block scripts %}
+<style>
+.cm { max-width: 1100px; margin: 0 auto; padding: 6px 0 40px; color: #1f2937; font-size: 14px; }
+.cm-tit { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 4px 0 12px; }
+.cm-tit h1 { margin: 0; font-size: 20px; color: #1D63A5; font-weight: 700; }
+.cm-per { background: #fff; border: 1px solid #dbe3ee; border-radius: 20px; padding: 4px 12px; font-size: 12px; color: #475569; }
+.cm-flt { background: #fff; border-radius: 14px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+.cm-flt label { display: block; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 3px; }
+.cm-flt input, .cm-flt select { width: 100%; border: 1px solid #d1d5db; border-radius: 9px; padding: 8px 10px; font: inherit; background: #fff; }
+.cm-chips { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
+.cm-chip { border: 1px solid #cbd5e1; background: #f8fafc; border-radius: 16px; padding: 4px 11px; font-size: 12px; color: #334155; }
+.cm-chip.on { background: #1D63A5; color: #fff; border-color: #1D63A5; }
+.cm-acts { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+.cm-bt { border: 0; border-radius: 9px; padding: 9px 14px; font-weight: 600; font-size: 13px; display: inline-flex; gap: 6px; align-items: center; text-decoration: none; }
+.cm-bt.pri { background: #1D63A5; color: #fff; } .cm-bt.pdf { background: #dc2626; color: #fff; }
+.cm-bt.wpp { background: #16a34a; color: #fff; } .cm-bt.sec { background: #e2e8f0; color: #334155; }
+.cm-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0; }
+.cm-kpi { background: #fff; border-radius: 12px; padding: 10px 12px; border-left: 4px solid #94a3b8; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.cm-kpi small { display: block; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+.cm-kpi b { font-size: 18px; } .cm-kpi.l { border-color: #4A90E2; } .cm-kpi.f { border-color: #FF9800; }
+.cm-kpi.c { border-color: #16a34a; } .cm-kpi.c b { color: #15803d; }
+.cm-vazio { background: #fff; border-radius: 12px; padding: 18px; color: #64748b; text-align: center; }
+.cm-mot { background: #fff; border-radius: 14px; margin-bottom: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.cm-mot__cab { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 12px 14px; background: #1D63A5; color: #fff; }
+.cm-mot__nome { font-weight: 800; font-size: 15px; } .cm-mot__sub { font-size: 11px; opacity: .85; margin-top: 2px; }
+.cm-mot__com { text-align: right; font-weight: 800; font-size: 17px; white-space: nowrap; }
+.cm-mot__com small { display: block; font-size: 10px; font-weight: 600; opacity: .8; }
+.cm table { width: 100%; border-collapse: collapse; margin: 0; }
+.cm-det th { font-size: 10px; text-transform: uppercase; color: #64748b; text-align: left; padding: 7px 10px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; }
+.cm-det td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+.cm .num { text-align: right !important; white-space: nowrap; } .cm .b { font-weight: 700; }
+.cm-det tr.zero td { color: #94a3b8; } .cm .z { font-size: 11px; font-weight: 500; color: #94a3b8; }
+.cm-det .dt { white-space: nowrap; font-weight: 600; } .cm-det .cl { font-size: 12px; }
+.cm-det tfoot td { font-weight: 800; background: #f0f4fa; border: 0; }
+.cm-pr { display: inline-block; border-radius: 6px; padding: 1px 7px; font-size: 11px; font-weight: 700; background: #e2e8f0; white-space: nowrap; }
+.cm-pr-S10 { background: #fef3c7; color: #92400e; } .cm-pr-S50 { background: #fde68a; color: #78350f; }
+.cm-pr-GAS { background: #dbeafe; color: #1e40af; } .cm-pr-ETA { background: #dcfce7; color: #166534; }
+.cm-res { background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.cm-res h2 { margin: 0; font-size: 14px; padding: 12px 14px; background: #0f172a; color: #fff; }
+.cm-res__rol { overflow-x: auto; }
+.cm-res td, .cm-res th { padding: 7px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+.cm-res th { font-size: 10px; text-transform: uppercase; color: #64748b; text-align: left; }
+.cm-res tr.tot td { font-weight: 800; background: #f0f4fa; }
+@media (max-width: 640px) {
+  .cm-kpis { grid-template-columns: 1fr 1fr; } .cm .hide-sm { display: none; }
+  .cm-det thead { display: none; }
+  .cm-det tr { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; padding: 8px 12px; border-bottom: 1px solid #f1f5f9; }
+  .cm-det td { padding: 0; border: 0; }
+  .cm-det td.dt, .cm-det td:nth-child(2) { grid-row: 1; }
+  .cm-det td.cl { grid-column: 1 / 3; grid-row: 2; color: #64748b; }
+  .cm-det td:nth-child(4) { grid-column: 3; grid-row: 1; }
+  .cm-det td:nth-child(6) { grid-column: 3; grid-row: 2; }
+  .cm-det tfoot tr { grid-template-columns: 1fr auto auto; }
+  .cm-mot__com { font-size: 15px; }
+}
+</style>
 <script>
-(function(){
-  function setDefaults(){
-    var di = document.querySelector('input[name="data_inicio"]');
-    var df = document.querySelector('input[name="data_fim"]');
-    if(!di || !df) return;
-    if(!di.value){
-      var now = new Date();
-      var first = new Date(now.getFullYear(), now.getMonth(), 1);
-      di.value = first.toISOString().slice(0,10);
-    }
-    if(!df.value){
-      var now = new Date();
-      df.value = now.toISOString().slice(0,10);
-    }
+(function () {
+  var f = document.getElementById('cmForm');
+  if (!f) return;
+  var di = f.querySelector('[name="data_inicio"]'), df = f.querySelector('[name="data_fim"]');
+  function iso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function periodo(p) {
+    var hoje = new Date(), base = di.value ? new Date(di.value + 'T12:00') : hoje;
+    var y = hoje.getFullYear(), m = hoje.getMonth();
+    if (p === 'mes') return [new Date(y, m, 1), new Date(y, m + 1, 0)];
+    if (p === 'ant') return [new Date(y, m - 1, 1), new Date(y, m, 0)];
+    y = base.getFullYear(); m = base.getMonth();
+    if (p === 'q1') return [new Date(y, m, 1), new Date(y, m, 15)];
+    return [new Date(y, m, 16), new Date(y, m + 1, 0)];
   }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', setDefaults);
-  else setDefaults();
-})();
+  // marca o atalho que bate com as datas da tela
+  f.querySelectorAll('.cm-chip').forEach(function (b) {
+    var r = periodo(b.dataset.p);
+    if (iso(r[0]) === di.value && iso(r[1]) === df.value) b.classList.add('on');
+    b.addEventListener('click', function () {
+      var r2 = periodo(b.dataset.p); di.value = iso(r2[0]); df.value = iso(r2[1]); f.submit();
+    });
+  });
+  // o PDF sai com o que está nos campos (mesmo sem clicar em Filtrar)
+  var pdf = document.getElementById('cmPdf');
+  if (pdf) pdf.addEventListener('click', function () {
+    pdf.href = pdf.href.split('?')[0] + '?' + new URLSearchParams(new FormData(f)).toString();
+  });
 
-document.addEventListener('DOMContentLoaded', function(){
   var btn = document.getElementById('btnCopiarWhatsapp');
-  if(!btn) return;
-  btn.addEventListener('click', function(){
-    var table = document.getElementById('tabelaResumoMotorista');
-    if(!table) return;
-    var rows = table.querySelectorAll('tbody tr');
-    var lines = [];
-    var diEl = document.querySelector('input[name="data_inicio"]');
-    var dfEl = document.querySelector('input[name="data_fim"]');
-    function fmtDate(v){ if(!v) return ''; var p=v.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
-    var periodo = (diEl && diEl.value && dfEl && dfEl.value)
-      ? '📅 Período: ' + fmtDate(diEl.value) + ' a ' + fmtDate(dfEl.value)
-      : '';
-    lines.push('🚛 *RESUMO DE COMISSÕES - MOTORISTAS*');
-    if(periodo) lines.push(periodo);
-    lines.push('━━━━━━━━━━━━━━━━━━━━');
-    rows.forEach(function(row){
-      var cells = row.querySelectorAll('td');
-      if(cells.length < 4) return;
-      var nome  = cells[0].textContent.trim();
-      var qtdT  = cells[1].textContent.trim();
-      var qtdC  = cells[2].textContent.trim();
-      var comis = cells[3].textContent.trim();
-      var isTotal = row.style.fontWeight === 'bold' || nome === 'TOTAL';
-      if(isTotal){
-        lines.push('━━━━━━━━━━━━━━━━━━━━');
-        lines.push('📌 *TOTAL GERAL*');
-        lines.push('   📦 Qtd Transportada: ' + qtdT + ' L');
-        lines.push('   ✅ Qtd Comissionada: ' + qtdC + ' L');
-        lines.push('   💵 *Comissão Total: ' + comis + '*');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    function br(v) { if (!v) return ''; var p = v.split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+    var L = ['🚛 *RESUMO DE COMISSÕES - MOTORISTAS*'];
+    if (di.value && df.value) L.push('📅 Período: ' + br(di.value) + ' a ' + br(df.value));
+    L.push('━━━━━━━━━━━━━━━━━━━━');
+    document.querySelectorAll('#tabelaResumoMotorista tbody tr').forEach(function (r) {
+      var d = r.dataset;
+      if (d.total) {
+        L.push('━━━━━━━━━━━━━━━━━━━━', '📌 *TOTAL GERAL*', '   📦 Qtd Transportada: ' + d.qt + ' L',
+               '   ✅ Qtd Comissionada: ' + d.qc + ' L', '   💵 *Comissão Total: ' + d.com + '*');
       } else {
-        lines.push('👤 *' + nome + '*');
-        lines.push('   📦 Qtd Transportada: ' + qtdT + ' L');
-        lines.push('   ✅ Qtd Comissionada: ' + qtdC + ' L');
-        lines.push('   💵 *Comissão: ' + comis + '*');
-        lines.push('');
+        L.push('👤 *' + d.nome + '*', '   📦 Qtd Transportada: ' + d.qt + ' L',
+               '   ✅ Qtd Comissionada: ' + d.qc + ' L', '   💵 *Comissão: ' + d.com + '*', '');
       }
     });
-    var text = lines.join('\n');
-    if(navigator.clipboard && navigator.clipboard.writeText){
-      navigator.clipboard.writeText(text).then(function(){
-        btn.innerHTML = '<i class="bi bi-check2"></i> Copiado!';
-        setTimeout(function(){ btn.innerHTML = '<i class="bi bi-whatsapp"></i> Copiar para WhatsApp'; }, 2500);
-      }).catch(function(){
-        alert('Não foi possível copiar automaticamente. Selecione e copie o texto manualmente.');
-      });
-    } else {
-      try {
-        var ta = document.createElement('textarea');
-        ta.value = text;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        btn.innerHTML = '<i class="bi bi-check2"></i> Copiado!';
-        setTimeout(function(){ btn.innerHTML = '<i class="bi bi-whatsapp"></i> Copiar para WhatsApp'; }, 2500);
-      } catch(e) {
-        alert('Não foi possível copiar automaticamente. Selecione e copie o texto manualmente.');
-      }
+    var txt = L.join('\n');
+    function ok() { btn.innerHTML = '<i class="bi bi-check2"></i> Copiado!';
+      setTimeout(function () { btn.innerHTML = '<i class="bi bi-whatsapp"></i> WhatsApp'; }, 2500); }
+    function manual() {
+      try { var ta = document.createElement('textarea'); ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); ok(); }
+      catch (e) { alert('Não foi possível copiar automaticamente.'); }
     }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok).catch(manual);
+    else manual();
   });
-});
+})();
 </script>
 {% endblock %}
