@@ -431,9 +431,15 @@ td.cel-sel { outline: 2px solid #1D63A5; outline-offset: -2px; background: #dbea
 
 {% block scripts %}
 <style>
-.cd-veu { position: fixed; inset: 0; background: rgba(15,23,42,.35); z-index: 1050; display: none; }
-.cd-gav { position: fixed; top: 0; right: 0; bottom: 0; width: 520px; max-width: 100%; background: #fff; z-index: 1051;
-  box-shadow: -8px 0 30px rgba(0,0,0,.15); display: none; flex-direction: column; font-size: 13px; color: #1f2937; }
+.cd-veu { position: fixed; inset: 0; background: rgba(15,23,42,.55); z-index: 1050; display: none; }
+/* janela no meio da tela (antes era gaveta apertada na direita) */
+.cd-gav { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: min(900px, calc(100% - 32px)); max-height: calc(100vh - 48px); background: #fff; z-index: 1051;
+  border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,.30); display: none; flex-direction: column;
+  font-size: 13px; color: #1f2937; overflow: hidden; }
+@media (max-width: 600px) {
+  .cd-gav { width: calc(100% - 16px); max-height: calc(100vh - 16px); border-radius: 10px; }
+}
 body.cd-aberta .cd-veu { display: block; }
 body.cd-aberta .cd-gav { display: flex; }
 .cd-gav__cab { padding: 14px 18px; border-bottom: 1px solid #e5e7eb; display: flex; gap: 10px; align-items: flex-start; }
