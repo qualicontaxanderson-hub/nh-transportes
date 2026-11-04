@@ -58,6 +58,11 @@ def _build_filters(params):
         where.append("f.fornecedores_id = %s")
         args.append(fornecedor_id)
 
+    veiculo_id = params.get('veiculo_id')
+    if veiculo_id:
+        where.append("f.veiculos_id = %s")
+        args.append(veiculo_id)
+
     where_sql = (" AND " + " AND ".join(where)) if where else ""
     return where_sql, args
 
@@ -216,6 +221,11 @@ def _comissao_dados(params):
     """Tudo o que a tela e o PDF da Comissao Motorista mostram (mesma fonte
     para os dois nao discordarem). Os numeros sao os mesmos da tela antiga."""
     where_sql, args = _build_filters(params)
+    # "com"/"sem" comissao (pedido 04/11/2026: ampliar os filtros)
+    if params.get('comissao') == 'com':
+        where_sql += " AND COALESCE(f.comissao_motorista, 0) > 0"
+    elif params.get('comissao') == 'sem':
+        where_sql += " AND COALESCE(f.comissao_motorista, 0) = 0"
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
@@ -225,6 +235,9 @@ def _comissao_dados(params):
                    COALESCE(NULLIF(TRIM(c.nome_fantasia),''), c.razao_social, '') AS cliente_curto,
                    COALESCE(p.nome,'') AS produto_nome,
                    COALESCE(m.nome,'') AS motorista_nome,
+                   COALESCE(NULLIF(TRIM(fo.nome_fantasia),''), fo.razao_social, '') AS distribuidora,
+                   COALESCE(o.nome, '') AS origem,
+                   COALESCE(v.placa, '') AS placa,
                    COALESCE(f.quantidade_manual, q.valor, 0) AS quantidade,
                    COALESCE(f.valor_total_frete, 0) AS valor_total_frete,
                    COALESCE(f.comissao_motorista, 0) AS comissao_motorista
@@ -233,6 +246,9 @@ def _comissao_dados(params):
             LEFT JOIN produto p ON f.produto_id = p.id
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
             LEFT JOIN quantidades q ON f.quantidade_id = q.id
+            LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
+            LEFT JOIN origens o ON f.origem_id = o.id
+            LEFT JOIN veiculos v ON f.veiculos_id = v.id
             WHERE 1=1 {where_sql}
             ORDER BY motorista_nome ASC, f.data_frete DESC, f.id DESC
         """, args)
@@ -246,11 +262,18 @@ def _comissao_dados(params):
         for k in ('quantidade', 'valor_total_frete', 'comissao_motorista'):
             f[k] = float(f[k] or 0)
         f['cliente_curto'] = (f['cliente_curto'] or '').title()
+        f['distribuidora'] = _nome_curto_distribuidora(f['distribuidora'])
+        f['origem'] = (f['origem'] or '').title()
         nome = f['motorista_nome'] or '(sem motorista)'
         if not grupos or grupos[-1]['nome'] != nome:
             grupos.append({'nome': nome, 'itens': [], 'fretes': 0, 'litros': 0.0,
-                           'litros_com': 0.0, 'valor_frete': 0.0, 'comissao': 0.0})
+                           'litros_com': 0.0, 'valor_frete': 0.0, 'comissao': 0.0,
+                           'sem': 0, 'placas': []})
         g = grupos[-1]
+        if not f['comissao_motorista']:
+            g['sem'] += 1
+        if f['placa'] and f['placa'] not in g['placas']:
+            g['placas'].append(f['placa'])
         g['itens'].append(f)
         g['fretes'] += 1
         g['litros'] += f['quantidade']
@@ -258,14 +281,36 @@ def _comissao_dados(params):
         g['comissao'] += f['comissao_motorista']
         if f['comissao_motorista'] > 0:
             g['litros_com'] += f['quantidade']
+    def resumo(chave):
+        acc = {}
+        for f in fretes:
+            k = f[chave] or '—'
+            r = acc.setdefault(k, {'nome': k, 'fretes': 0, 'litros': 0.0, 'frete': 0.0, 'comissao': 0.0})
+            r['fretes'] += 1
+            r['litros'] += f['quantidade']
+            r['frete'] += f['valor_total_frete']
+            r['comissao'] += f['comissao_motorista']
+        return sorted(acc.values(), key=lambda r: (-r['litros'], r['nome']))
     return {
         'grupos': grupos,
+        'por_produto': resumo('produto_nome'),
+        'por_cliente': resumo('cliente_curto'),
+        'por_distribuidora': resumo('distribuidora'),
+        'total_sem': sum(g['sem'] for g in grupos),
         'total_fretes': len(fretes),
         'total_quantidade': sum(g['litros'] for g in grupos),
         'total_valor_frete': sum(g['valor_frete'] for g in grupos),
         'total_comissao_motorista': sum(g['comissao'] for g in grupos),
         'total_litros_com': sum(g['litros_com'] for g in grupos),
     }
+
+
+def _nome_curto_distribuidora(s):
+    """'DISTRIBUIDORA TABOCAO LTDA - EM RECUPERACAO JUDICIAL' -> 'Distribuidora Tabocao'."""
+    import re as _re
+    s = _re.split(r'\s+-\s+', (s or '').strip())[0]
+    s = _re.sub(r'\b(LTDA|S\.?/?A\.?|EIRELI|ME|EPP)(?=\s|$|\.)\.?', '', s, flags=_re.I)
+    return _re.sub(r'\s+', ' ', s).strip(' .-').title()
 
 
 def _comissao_listas(params):
@@ -289,10 +334,20 @@ def _comissao_listas(params):
         finally:
             cur.close()
             conn.close()
-    return (lista('f.motoristas_id', 'JOIN motoristas m ON m.id = f.motoristas_id', 'm.nome', 'motorista_id'),
-            lista('f.clientes_id', 'JOIN clientes c ON c.id = f.clientes_id',
-                  "COALESCE(NULLIF(TRIM(c.nome_fantasia),''), c.razao_social)", 'cliente_id',
-                  'c.razao_social'))
+    return {
+        'motorista': lista('f.motoristas_id', 'JOIN motoristas m ON m.id = f.motoristas_id',
+                           'm.nome', 'motorista_id'),
+        'cliente': lista('f.clientes_id', 'JOIN clientes c ON c.id = f.clientes_id',
+                         "COALESCE(NULLIF(TRIM(c.nome_fantasia),''), c.razao_social)", 'cliente_id',
+                         'c.razao_social'),
+        'produto': lista('f.produto_id', 'JOIN produto p ON p.id = f.produto_id', 'p.nome', 'produto_id'),
+        'fornecedor': [dict(r, nome=_nome_curto_distribuidora(r['nome'])) for r in
+                       lista('f.fornecedores_id', 'JOIN fornecedores fo ON fo.id = f.fornecedores_id',
+                             "COALESCE(NULLIF(TRIM(fo.nome_fantasia),''), fo.razao_social)",
+                             'fornecedor_id', 'fo.razao_social')],
+        'veiculo': lista('f.veiculos_id', 'JOIN veiculos v ON v.id = f.veiculos_id',
+                         "COALESCE(NULLIF(TRIM(v.placa),''), v.caminhao)", 'veiculo_id', 'v.caminhao'),
+    }
 
 
 @bp.route('/fretes_comissao_motorista', methods=['GET'])
@@ -301,18 +356,18 @@ def fretes_comissao_motorista():
     params = dict(request.args)
     params = _ensure_date_defaults_on_params(params)
     dados = _comissao_dados(params)
-    mot_lista, cli_lista = _comissao_listas(params)
+    listas = _comissao_listas(params)
+
+    def _id(k):
+        v = params.get(k)
+        return int(v) if v and str(v).isdigit() else None
     return render_template(
         'relatorios/fretes_comissao_motorista.html',
-        mot_lista=mot_lista, cli_lista=cli_lista,
+        listas=listas,
         data_inicio=params.get('data_inicio'),
         data_fim=params.get('data_fim'),
-        cliente_id=int(params.get('cliente_id')) if params.get('cliente_id') else None,
-        motorista_id=int(params.get('motorista_id')) if params.get('motorista_id') else None,
-        produto_id=int(params.get('produto_id')) if params.get('produto_id') else None,
-        clientes=_load_select_list('clientes'),
-        motoristas=_load_select_list('motoristas'),
-        produtos=_load_select_list('produto'),
+        sel={k: _id(k) for k in ('motorista_id', 'cliente_id', 'produto_id', 'fornecedor_id', 'veiculo_id')},
+        comissao=params.get('comissao') or '',
         **dados
     )
 
@@ -335,11 +390,16 @@ def fretes_comissao_motorista_pdf():
     filtro = []
     if params.get('motorista_id') and dados['grupos']:
         filtro.append(', '.join(g['nome'] for g in dados['grupos']))
-    if params.get('cliente_id'):
-        nome = next((c.get('razao_social') for c in _load_select_list('clientes')
-                     if str(c.get('id')) == str(params.get('cliente_id'))), None)
-        if nome:
-            filtro.append('Cliente: %s' % nome)
+    listas = _comissao_listas(params)
+    for k, lista_k, rot in (('cliente_id', 'cliente', 'Cliente'), ('produto_id', 'produto', 'Produto'),
+                            ('fornecedor_id', 'fornecedor', 'Distribuidora'),
+                            ('veiculo_id', 'veiculo', 'Placa')):
+        if params.get(k):
+            nome = next((r['nome'] for r in listas[lista_k] if str(r['id']) == str(params.get(k))), None)
+            if nome:
+                filtro.append('%s: %s' % (rot, nome))
+    if params.get('comissao') in ('com', 'sem'):
+        filtro.append('Só %s comissão' % params['comissao'])
     logo = os.path.join(current_app.root_path, 'static', 'logo-nh.png')
     pdf = gerar(dados, de, ate, filtro=' · '.join(filtro),
                 usuario=getattr(current_user, 'nome_completo', '') or getattr(current_user, 'username', '') or '',
