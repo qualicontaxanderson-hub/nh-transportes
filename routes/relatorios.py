@@ -404,8 +404,22 @@ def fretes_comissao_motorista_pdf():
     pdf = gerar(dados, de, ate, filtro=' · '.join(filtro),
                 usuario=getattr(current_user, 'nome_completo', '') or getattr(current_user, 'username', '') or '',
                 logo=logo if os.path.exists(logo) else None)
-    nome_arq = 'Comissao Motorista %s a %s.pdf' % (
-        de.strftime('%d.%m.%Y') if de else '', ate.strftime('%d.%m.%Y') if ate else '')
+    # "Comissao Marcos Antonio 01.10 a 31.10.2026.pdf" -- o mesmo nome que o
+    # celular usa ao compartilhar (pedido 04/11/2026: no PC saía sem o nome)
+    partes = [', '.join(g['nome'].title() for g in dados['grupos'])
+              if params.get('motorista_id') and dados['grupos'] else 'Todos os motoristas']
+    for k, lista_k in (('cliente_id', 'cliente'), ('produto_id', 'produto')):
+        if params.get(k):
+            nome = next((r['nome'] for r in listas[lista_k] if str(r['id']) == str(params.get(k))), None)
+            if nome:
+                partes.append(nome.title())
+    mesmo_ano = de and ate and de.year == ate.year
+    nome_arq = 'Comissao %s %s a %s.pdf' % (
+        ' - '.join(partes),
+        de.strftime('%d.%m' if mesmo_ano else '%d.%m.%Y') if de else '',
+        ate.strftime('%d.%m.%Y') if ate else '')
+    nome_arq = _re.sub(r'[\\/:*?"<>|]+', ' ', nome_arq)
+    nome_arq = _re.sub(r'\s+', ' ', nome_arq)
     return Response(pdf, mimetype='application/pdf', headers={
         'Content-Disposition': "inline; filename=\"%s\"; filename*=UTF-8''%s"
                                % (_re.sub(r'[^A-Za-z0-9 ._-]', '_', nome_arq), quote(nome_arq))})
