@@ -2510,6 +2510,13 @@ function pfnSalvarEd(botao, freteId){
   var q = cx.querySelector('.ed__qtd');
   var litros = q ? parseFloat(q.getAttribute('data-litros')) || 0 : 0;
   if (!litros){ alert('Escolha a quantidade.'); return; }
+  var plEd = pfnNum(cx.querySelector('.ed__pl')) || 0;
+  if (pfnFreteBaixo(plEd) && !botao._freteOk){
+    pfnAvisoBaixo.acao = 'SALVAR';
+    pfnAvisoBaixo(['Frete por litro: ' + pfnBrlL(plEd)], function(){
+      botao._freteOk = true; pfnSalvarEd(botao, freteId); botao._freteOk = false; });
+    return;
+  }
   pfnEnvia(botao, '/ped-frete-novo/editar', {
     frete_id: freteId,
     fornecedor_id: val('.ed__forn'),
@@ -2730,6 +2737,19 @@ function pfnLancar(botao){
     });
   }
   if (!payload.length){ alert('Adicione ao menos um produto.'); return; }
+  var baixos = [];
+  for (var b = 0; b < payload.length; b++){
+    if (pfnFreteBaixo(payload[b].preco_litro)){
+      baixos.push((payload.length > 1 ? 'Produto ' + (b + 1) + ': ' : '') +
+                  'frete por litro ' + pfnBrlL(payload[b].preco_litro));
+    }
+  }
+  if (baixos.length && !botao._freteOk){
+    pfnAvisoBaixo.acao = 'SALVAR';
+    pfnAvisoBaixo(baixos, function(){
+      botao._freteOk = true; pfnLancar(botao); botao._freteOk = false; });
+    return;
+  }
 
   pfnEnvia(botao, '/ped-frete-novo/lancar', {
     data: form.getAttribute('data-data'),
@@ -2743,6 +2763,58 @@ function pfnLancar(botao){
     nova_carga: form.getAttribute('data-nova-carga') === '1',
     itens: payload
   });
+}
+
+// ─── aviso de frete baixo ───────────────────────────────────────────────
+// Pedido 04/11/2026: frete por litro abaixo de R$ 0,10 (e acima de zero — o
+// zero e o posto que nao paga) pede DOIS sim seguidos, a segunda caixa em
+// vermelho, ao salvar o frete e ao emitir o boleto. Erro de atencao: o etanol
+// do #3248 saiu a R$ 0,01/L.
+var PFN_FRETE_MIN = 0.10;
+function pfnFreteBaixo(v){ v = parseFloat(v) || 0; return v > 0 && v < PFN_FRETE_MIN - 1e-9; }
+function pfnBrlL(v){ return 'R$ ' + (parseFloat(v) || 0).toFixed(3).replace('.', ',') + '/L'; }
+function pfnAvisoBaixo(linhas, depois){
+  if (!document.getElementById('pfnAvCss')){
+    var st = document.createElement('style'); st.id = 'pfnAvCss';
+    st.textContent =
+      '.pfnav{position:fixed;inset:0;z-index:99999;background:rgba(15,25,40,.55);display:flex;align-items:center;justify-content:center;padding:16px}' +
+      '.pfnav__c{max-width:460px;width:100%;border-radius:16px;padding:20px 20px 16px;box-shadow:0 20px 50px rgba(0,0,0,.35);border:3px solid}' +
+      '.pfnav--1 .pfnav__c{background:#fff8e1;border-color:#e0a100;color:#5a4100}' +
+      '.pfnav--2 .pfnav__c{background:#fdecec;border-color:#c62828;color:#7a1010}' +
+      '.pfnav__t{font-weight:900;font-size:1.08rem;line-height:1.3;margin-bottom:.4rem}' +
+      '.pfnav__p{font-size:.8rem;font-weight:800;opacity:.75;margin-bottom:.5rem;text-transform:uppercase}' +
+      '.pfnav__l{font-size:.86rem;margin:0 0 .9rem;padding-left:1.1rem}' +
+      '.pfnav__b{display:flex;gap:.6rem;justify-content:flex-end}' +
+      '.pfnav__b button{border:0;border-radius:10px;padding:.6rem 1.3rem;font-weight:900;font-size:.95rem;cursor:pointer}' +
+      '.pfnav__nao{background:#fff;color:#333;border:2px solid #bbb !important}' +
+      '.pfnav--1 .pfnav__sim{background:#e0a100;color:#fff}' +
+      '.pfnav--2 .pfnav__sim{background:#c62828;color:#fff}';
+    document.head.appendChild(st);
+  }
+  function passo(n){
+    var w = document.createElement('div');
+    w.className = 'pfnav pfnav--' + n;
+    var lis = '';
+    for (var i = 0; i < linhas.length; i++){
+      lis += '<li>' + String(linhas[i]).replace(/[<>&]/g, function(c){
+        return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c]; }) + '</li>';
+    }
+    w.innerHTML = '<div class="pfnav__c" role="alertdialog">' +
+      '<div class="pfnav__p">' + (n === 1 ? 'Aviso 1 de 2' : 'Aviso 2 de 2 — confirme de novo') + '</div>' +
+      '<div class="pfnav__t">CERTEZA QUE DESEJA ' + (pfnAvisoBaixo.acao || 'SALVAR') +
+      ' COM VALOR MENOR QUE 0,10?</div>' +
+      '<ul class="pfnav__l">' + lis + '</ul>' +
+      '<div class="pfnav__b"><button type="button" class="pfnav__nao">NÃO</button>' +
+      '<button type="button" class="pfnav__sim">SIM</button></div></div>';
+    document.body.appendChild(w);
+    w.querySelector('.pfnav__nao').focus();
+    w.querySelector('.pfnav__nao').onclick = function(){ w.remove(); };
+    w.querySelector('.pfnav__sim').onclick = function(){
+      w.remove();
+      if (n === 1) passo(2); else depois();
+    };
+  }
+  passo(1);
 }
 
 // ─── emissao de boleto ──────────────────────────────────────────────────
@@ -2800,6 +2872,22 @@ function pfnEmitir(botao, cliente){
     total += parseFloat(cks[i].getAttribute('data-valor')) || 0;
   }
   if (!ids.length){ alert('Marque pelo menos um frete.'); return; }
+  var baixosB = [];
+  for (var k = 0; k < cks.length; k++){
+    if (!cks[k].checked) continue;
+    var lt = parseFloat(cks[k].getAttribute('data-litros')) || 0;
+    var vl = parseFloat(cks[k].getAttribute('data-valor')) || 0;
+    if (lt > 0 && pfnFreteBaixo(vl / lt)){
+      baixosB.push(cks[k].getAttribute('data-dia') + ' · ' + cks[k].getAttribute('data-produto') +
+                   ' ' + lt.toLocaleString('pt-BR') + ' L · ' + pfnBrlL(vl / lt));
+    }
+  }
+  if (baixosB.length && !botao._freteOk){
+    pfnAvisoBaixo.acao = 'EMITIR';
+    pfnAvisoBaixo(baixosB, function(){
+      botao._freteOk = true; pfnEmitir(botao, cliente); botao._freteOk = false; });
+    return;
+  }
 
   var campoVenc = painel.querySelector('.ef__venc');
   var venc = campoVenc ? campoVenc.value : '';
