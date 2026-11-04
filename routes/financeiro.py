@@ -258,6 +258,13 @@ def recebimentos():
                 if (r.get('status') or '').lower() != 'cancelado')
             diferenca = total_fretes - total_boletos
         # -------------------------------------------------------------------
+        try:
+            _fretes_dos_boletos(cursor, recebimentos_lista)
+        except Exception:
+            current_app.logger.exception('[recebimentos] fretes dos boletos')
+        for r in recebimentos_lista:
+            dv = r.get('data_vencimento')
+            r['dias'] = (date.today() - dv).days if hasattr(dv, 'toordinal') else None
 
         # --- o que a gaveta do relatório precisa saber ----------------------
         # Contagem de TODOS os boletos por situação (não só os da tela) e a
@@ -389,7 +396,8 @@ def _fretes_dos_boletos(cursor, linhas):
     cursor.execute(
         'SELECT x.cobranca_id, f.id, f.data_frete, p.nome AS produto,'
         "       COALESCE(NULLIF(TRIM(fo.nome_fantasia),''), fo.razao_social) AS distribuidora,"
-        '       COALESCE(f.quantidade_manual, q.valor) AS quantidade, f.valor_total_frete'
+        '       COALESCE(f.quantidade_manual, q.valor) AS quantidade, f.valor_total_frete,'
+        '       f.preco_por_litro'
         '  FROM (SELECT cobranca_id, frete_id FROM cobrancas_freites WHERE cobranca_id IN (%s)'
         '        UNION'
         '        SELECT id, frete_id FROM cobrancas WHERE id IN (%s) AND frete_id IS NOT NULL) x'
@@ -400,6 +408,10 @@ def _fretes_dos_boletos(cursor, linhas):
         ' ORDER BY f.data_frete, f.id' % (ph, ph), ids + ids)
     for f in cursor.fetchall():
         f['distribuidora'] = _nome_curto_distribuidora(f['distribuidora'])
+        ppl = float(f.get('preco_por_litro') or 0)
+        if not ppl and f.get('valor_total_frete') and f.get('quantidade'):
+            ppl = float(f['valor_total_frete']) / float(f['quantidade'])
+        f['ppl'] = ppl or None
         por_id[f.pop('cobranca_id')]['fretes'].append(f)
 
 
@@ -1007,6 +1019,23 @@ def visualizar_boleto(charge_id):
         if not pdf_url:
             flash("URL do PDF não encontrada na resposta do provedor.", "danger")
             return redirect(url_for('financeiro.recebimentos'))
+
+        # 04/11/2026: "clico no boleto e não abre". O arquivo ficava em
+        # /tmp/boletos, que o Railway apaga a cada deploy. O link do PDF do
+        # EFI abre sem login: guarda e manda o navegador direto para ele.
+        try:
+            conn2 = get_db_connection()
+            cur2 = conn2.cursor()
+            cur2.execute("UPDATE cobrancas SET link_boleto=%s WHERE charge_id=%s "
+                         "AND (link_boleto IS NULL OR link_boleto NOT LIKE 'http%%')",
+                         (pdf_url, str(charge_id)))
+            conn2.commit()
+            cur2.close()
+            conn2.close()
+        except Exception:
+            current_app.logger.exception("visualizar_boleto: guardar link falhou")
+        if str(pdf_url).startswith(('http://', 'https://')):
+            return redirect(pdf_url)
 
         resp = fetch_boleto_pdf_stream(credentials, pdf_url)
         if not resp or getattr(resp, "status_code", None) != 200:

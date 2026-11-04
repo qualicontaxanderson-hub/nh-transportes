@@ -52,7 +52,7 @@ COLS       = [15 * mm, UTIL - 15 * mm - 23 * mm - 17 * mm - 26 * mm,
               23 * mm, 17 * mm, 26 * mm]
 # pedido 04/11/2026: uma linha por frete -- boleto, dia do frete, produto,
 # distribuidora, litros, valor do frete, vencimento, pago em/prazo e valor
-COLS_F     = [12 * mm, 15 * mm, 24 * mm, 0, 15 * mm, 17 * mm, 19 * mm, 14 * mm, 19 * mm]
+COLS_F     = [12 * mm, 15 * mm, 22 * mm, 0, 14 * mm, 13 * mm, 16 * mm, 17 * mm, 14 * mm, 18 * mm]
 COLS_F[3]  = UTIL - sum(COLS_F)
 
 # ── Situações, na ordem em que saem no papel ─────────────────────────────
@@ -377,7 +377,7 @@ def _tabela(itens, rot_prazo, hoje, est):
         cab_c = ParagraphStyle('cabc', parent=cab, alignment=1)
         corpo = [[Paragraph('Nº', cab), Paragraph('DATA', cab), Paragraph('PRODUTO', cab),
                   Paragraph('DISTRIBUIDORA', cab), Paragraph('LITROS', cab_d),
-                  Paragraph('FRETE', cab_d), Paragraph('VENC.', cab_c),
+                  Paragraph('R$/L', cab_d), Paragraph('FRETE', cab_d), Paragraph('VENC.', cab_c),
                   Paragraph((rot_prazo or '').upper(), cab_d),
                   Paragraph('BOLETO R$', cab_d)]]
         fim_boleto = []
@@ -402,13 +402,14 @@ def _tabela(itens, rot_prazo, hoje, est):
                    Paragraph('<b>%s</b>' % _moeda(b.get('valor')), num)]
             if not fretes:
                 corpo.append(boleto + [Paragraph('<font color="#8794a3">sem frete vinculado</font>', cel),
-                                       '', '', '', ''] + fim)
+                                       '', '', '', '', ''] + fim)
             for i, f in enumerate(fretes):
                 corpo.append((boleto if i == 0 else ['']) + [
                     Paragraph(_data_curta(f.get('data_frete')), cel),
                     Paragraph(_escapar(f.get('produto') or '—'), cel),
                     Paragraph(_escapar(f.get('distribuidora') or '—'), cel),
                     Paragraph(_litros(f.get('quantidade')) or '—', num),
+                    Paragraph(_preco_litro_txt(_preco_litro(f)).replace('R$ ', '').replace('/L', '') or '—', num),
                     Paragraph(_moeda(f.get('valor_total_frete')) if f.get('valor_total_frete') else '—', num),
                 ] + (fim if i == 0 else ['', '', '']))
             fim_boleto.append(len(corpo) - 1)
@@ -435,7 +436,7 @@ def _tabela(itens, rot_prazo, hoje, est):
     n_fretes = sum(len(b.get('fretes') or []) for b in itens)
     total = Table([[Paragraph('<b>Soma</b> &middot; %d frete%s' % (n_fretes, '' if n_fretes == 1 else 's'),
                               est['cel']), '', '', '',
-                    Paragraph('<b>%s</b>' % (_litros(litros) or '—'), est['num']), '', '', '',
+                    Paragraph('<b>%s</b>' % (_litros(litros) or '—'), est['num']), '', '', '', '',
                     Paragraph('<b>%s</b>' % _moeda(soma_faixa), est['num'])]],
                   colWidths=COLS_F,
                   style=TableStyle([
@@ -445,7 +446,7 @@ def _tabela(itens, rot_prazo, hoje, est):
                       ('LEFTPADDING', (0, 0), (-1, -1), 4),
                       ('RIGHTPADDING', (0, 0), (-1, -1), 4),
                       ('SPAN', (0, 0), (3, 0)),
-                      ('SPAN', (5, 0), (7, 0)),
+                      ('SPAN', (5, 0), (8, 0)),
                   ]))
     blocos.append(total)
     return blocos, soma_faixa

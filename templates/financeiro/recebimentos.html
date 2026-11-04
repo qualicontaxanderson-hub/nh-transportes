@@ -43,9 +43,51 @@
   #frt .n--c.neg{ background:linear-gradient(135deg,#C2504A,#A32D2D); }
   #frt .n--d{ background:linear-gradient(135deg,#D79A2B,#B8791C); }
 
-  /* Lista */
-  #frt .lst{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
-    overflow:hidden; }
+  /* Lista em cards (pedido 04/11/2026: "precisa de um TOP em CARDS") */
+  #frt .lst{ background:var(--surface); border:1px solid var(--line-2); border-radius:14px;
+    overflow:visible; }
+  #frt .cards{ display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+    gap:.75rem; padding:.75rem; }
+  @media (max-width:575px){ #frt .cards{ grid-template-columns:1fr; padding:.55rem; gap:.55rem; } }
+  #frt .cards .lin{ display:flex; flex-direction:column; gap:.5rem; background:#fff;
+    border:1px solid var(--line-2); border-left:5px solid var(--azul); border-radius:14px;
+    padding:.7rem .8rem .6rem; box-shadow:0 1px 3px rgba(20,35,60,.06);
+    transition:box-shadow .15s, transform .15s; cursor:pointer; position:relative; }
+  #frt .cards .lin:hover{ box-shadow:0 8px 22px rgba(20,35,60,.13); transform:translateY(-1px); }
+  #frt .cards .lin.st-vencido{ border-left-color:#c23b3b; }
+  #frt .cards .lin.st-pendente{ border-left-color:#d59a1f; }
+  #frt .cards .lin.st-pago, #frt .cards .lin.st-quitado{ border-left-color:#1f9a4a; }
+  #frt .cards .lin.st-cancelado{ border-left-color:#9aa4b1; opacity:.8; }
+  #frt .cards .lin.row-selected{ background:var(--azul-claro); }
+  #frt .cb-top{ display:flex; align-items:flex-start; gap:.55rem; }
+  #frt .cb-cli{ min-width:0; flex:1; }
+  #frt .cb-cli .c-desc{ display:block; font-size:.92rem; font-weight:800; line-height:1.22; }
+  #frt .cb-cli .ids{ display:block; margin-top:.1rem; }
+  #frt .cb-meio{ display:flex; align-items:flex-end; justify-content:space-between; gap:.5rem; }
+  #frt .cb-meio .c-valor{ margin:0; font-size:1.32rem; }
+  #frt .cb-datas{ text-align:right; font-size:.74rem; color:var(--muted); line-height:1.4; }
+  #frt .cb-datas b{ color:var(--ink-2); font-variant-numeric:tabular-nums; }
+  #frt .cb-datas .tarde, #frt .cb-datas .tarde b{ color:var(--danger); }
+  #frt .cb-datas .ok, #frt .cb-datas .ok b{ color:var(--ok); }
+  #frt .cb-fretes{ border-top:1px dashed var(--line-2); padding-top:.45rem;
+    display:flex; flex-direction:column; gap:.32rem; }
+  #frt .fr{ display:grid; grid-template-columns:auto auto minmax(0,1fr) auto; gap:.4rem;
+    align-items:center; font-size:.76rem; }
+  #frt .fr-d{ font-weight:800; color:var(--ink-2); font-variant-numeric:tabular-nums; }
+  #frt .fr-p{ font-size:.64rem; font-weight:800; border-radius:5px; padding:.08rem .4rem;
+    background:#eef3fb; color:var(--azul-deep); white-space:nowrap; text-transform:uppercase; }
+  #frt .fr-dist{ color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #frt .fr-l{ text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums;
+    color:var(--ink-2); font-weight:700; }
+  #frt .fr-l small{ display:block; font-weight:600; color:var(--muted); font-size:.68rem; }
+  #frt .sem-fr{ font-size:.74rem; color:var(--muted); font-style:italic; }
+  #frt .cards .c-baixo{ margin-top:auto; border-top:1px solid var(--line); padding-top:.5rem; }
+  #frt .bt-abrir{ display:inline-flex; align-items:center; gap:.35rem; background:var(--azul);
+    color:#fff !important; border-radius:9px; padding:.32rem .7rem; font-size:.78rem;
+    font-weight:800; text-decoration:none; white-space:nowrap; }
+  #frt .bt-abrir:hover{ filter:brightness(1.1); }
+  #frt .cards .c-acao{ margin-left:auto; gap:.25rem; }
+  #frt .cards .menu{ right:.5rem; top:auto; bottom:2.8rem; }
   #frt .topo-lst{ display:flex; align-items:center; gap:.55rem; padding:.55rem .7rem;
     border-bottom:1px solid var(--line); font-size:.8rem; font-weight:700;
     color:var(--muted); cursor:pointer; user-select:none; margin:0; }
@@ -373,36 +415,31 @@
         <span class="tot">{{ faixa.itens | length }} · R$ {{ "{:,.2f}".format(faixa.itens | sum(attribute='valor') | float).replace(',','X').replace('.',',').replace('X','.') }}</span>
       </div>
 
+      <div class="cards">
       {% for r in faixa.itens %}
       {% set ds = r.display_status %}
       {% set boleto_url = url_for('financeiro.visualizar_boleto', charge_id=r.charge_id) if r.charge_id else '' %}
       {% set nome = r.cliente_fantasia or r.cliente_nome or '—' %}
-      <div class="lin" id="cobranca-row-{{ r.charge_id or r.id }}"
+      <div class="lin st-{{ ds }}" id="cobranca-row-{{ r.charge_id or r.id }}"
            data-cobranca-id="{{ r.id }}"
            data-charge-id="{{ r.charge_id or '' }}"
            data-display-status="{{ ds }}"
            data-cliente="{{ nome }}"
            {% if boleto_url %}data-boleto-url="{{ boleto_url }}"{% endif %}>
 
-        <span class="c-chk">
-          <input type="checkbox" class="row-chk marca"
-                 data-cobranca-id="{{ r.id }}"
-                 data-charge-id="{{ r.charge_id or '' }}"
-                 data-display-status="{{ ds }}"
-                 data-cliente="{{ nome }}"
-                 aria-label="Selecionar o boleto de {{ nome }}">
-        </span>
-
-        <div class="c-desc">{{ nome }}</div>
-
-        <div class="c-meio">
-          <span class="ids">#{{ r.id }}{% if r.frete_numero or r.frete_id %} · frete {{ r.frete_numero or r.frete_id }}{% endif %}</span>
-          {# Era "%.2f" com replace do ponto pela virgula: 1430,00 sem o ponto
-             do milhar. O filtro formatar_moeda ja separa e ja poe o R$. #}
-          <span class="c-valor">{{ r.valor | formatar_moeda if r.valor is not none else 'R$ 0,00' }}</span>
-        </div>
-
-        <div class="c-baixo">
+        <div class="cb-top">
+          <span class="c-chk">
+            <input type="checkbox" class="row-chk marca"
+                   data-cobranca-id="{{ r.id }}"
+                   data-charge-id="{{ r.charge_id or '' }}"
+                   data-display-status="{{ ds }}"
+                   data-cliente="{{ nome }}"
+                   aria-label="Selecionar o boleto de {{ nome }}">
+          </span>
+          <div class="cb-cli">
+            <span class="c-desc">{{ nome }}</span>
+            <span class="ids">Boleto #{{ r.id }}{% if r.fretes %} · {{ r.fretes|length }} frete{{ 's' if r.fretes|length != 1 }}{% endif %}</span>
+          </div>
           <span class="selo selo--{{ ds }}">
             {%- if ds == 'pago' -%}Pago
             {%- elif ds == 'quitado' -%}Baixado
@@ -410,17 +447,43 @@
             {%- elif ds == 'cancelado' -%}Cancelado
             {%- else -%}A vencer{%- endif -%}
           </span>
-          <span class="venc{{ ' venc--tarde' if ds == 'vencido' }}">
-            venc. {{ r.data_vencimento_fmt or '—' }}
-          </span>
-          {% if r.recebido_via and ds in ('pago', 'quitado') %}
-          <span class="venc" title="recebido por fora">· via {{ r.recebido_via }}</span>
-          {% endif %}
+        </div>
 
+        <div class="cb-meio">
+          <span class="c-valor">{{ r.valor | formatar_moeda if r.valor is not none else 'R$ 0,00' }}</span>
+          <div class="cb-datas">
+            <div{% if ds == 'vencido' %} class="tarde"{% endif %}>vence <b>{{ r.data_vencimento_fmt or '—' }}</b></div>
+            {% if ds in ('pago', 'quitado') %}
+              <div class="ok">pago <b>{{ r.data_pagamento.strftime('%d/%m/%Y') if r.data_pagamento else '—' }}</b>{% if r.recebido_via %} · {{ r.recebido_via }}{% endif %}</div>
+            {% elif ds == 'vencido' and r.dias %}
+              <div class="tarde"><b>{{ r.dias }} dia{{ 's' if r.dias != 1 }}</b> de atraso</div>
+            {% elif ds == 'pendente' and r.dias is not none %}
+              <div>{% if r.dias == 0 %}vence <b>hoje</b>{% else %}faltam <b>{{ -r.dias }} dia{{ 's' if r.dias != -1 }}</b>{% endif %}</div>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if r.fretes %}
+        <div class="cb-fretes">
+          {% for f in r.fretes %}
+          <div class="fr">
+            <span class="fr-d">{{ f.data_frete.strftime('%d/%m') if f.data_frete else '—' }}</span>
+            <span class="fr-p">{{ f.produto or '—' }}</span>
+            <span class="fr-dist" title="{{ f.distribuidora }}">{{ f.distribuidora or '—' }}</span>
+            <span class="fr-l">{{ '{:,.0f}'.format(f.quantidade|float).replace(',', '.') if f.quantidade else '—' }} L
+              <small>{% if f.ppl %}{% set c = f.ppl * 100 %}R$ {{ (('%.2f' if (c - c|round)|abs < 0.0001 else '%.4f')|format(f.ppl)).replace('.', ',') }}/L{% endif %}</small></span>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="sem-fr">sem frete vinculado</div>
+        {% endif %}
+
+        <div class="c-baixo">
           <span class="c-acao">
             {% if r.charge_id %}
-            <a class="ic" href="{{ boleto_url }}" target="_blank" title="Abrir o boleto">
-              <i class="bi bi-file-earmark-pdf"></i>
+            <a class="bt-abrir" href="{{ boleto_url }}" target="_blank" title="Abrir o boleto">
+              <i class="bi bi-file-earmark-pdf"></i> Abrir boleto
             </a>
             <button type="button" class="ic ic--zap btn-whatsapp-boleto"
                     data-charge-id="{{ r.charge_id }}"
@@ -485,6 +548,7 @@
         </div>
       </div>
       {% endfor %}
+      </div>
       {% endif %}
     {% endfor %}
   </div>
