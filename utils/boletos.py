@@ -297,6 +297,40 @@ def _fone_efi(telefone):
     return None
 
 
+def _item_frete(r):
+    """Item do boleto (pedido 04/11/2026): descricao com produto e
+    distribuidora; preco unitario = frete por litro e quantidade = litros
+    (3.000 x R$ 0,10 = R$ 300,00). Se a conta nao fechar no centavo, volta
+    ao jeito antigo (1 x valor do frete)."""
+    cent = int(round(float(r.get("valor_total_frete") or 0) * 100))
+    partes = ["Frete #%s" % r.get("id")]
+    df = r.get("data_frete")
+    if df:
+        partes.append(df.strftime("%d/%m/%Y") if hasattr(df, "strftime") else str(df)[:10])
+    if (r.get("produto_nome") or "").strip():
+        partes.append(r["produto_nome"].strip())
+    dist = (r.get("distribuidora") or "").strip()
+    if dist:
+        try:
+            from routes.relatorios import _nome_curto_distribuidora
+            dist = _nome_curto_distribuidora(dist) or dist
+        except Exception:
+            pass
+        partes.append(dist)
+    nome = " - ".join(partes)[:80]
+    qtd = r.get("quantidade_manual") if r.get("quantidade_manual") not in (None, "") else r.get("quantidade_valor")
+    try:
+        litros = float(qtd or 0)
+    except Exception:
+        litros = 0
+    if litros > 0 and litros == int(litros) and cent > 0:
+        litros = int(litros)
+        por_litro = int(round(cent / litros))
+        if por_litro > 0 and por_litro * litros == cent:
+            return {"name": nome, "amount": litros, "value": por_litro}
+    return {"name": nome, "amount": 1, "value": cent}
+
+
 def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
     cpf_cnpj = (frete.get("cliente_cnpj") or "").replace(".", "").replace("-", "").replace("/", "").strip()
     telefone = _fone_efi(frete.get("cliente_telefone"))
@@ -304,7 +338,7 @@ def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
     if not cep or len(cep) != 8:
         cep = "74000000"
     nome_cliente = (frete.get("cliente_nome") or frete.get("cliente_fantasia") or "Cliente")[:80]
-    items = [{"name": descricao_frete[:80], "amount": 1, "value": valor_total_centavos}]
+    items = [_item_frete(frete)]
     banking_billet = {
         "expire_at": data_vencimento.strftime("%Y-%m-%d"),
         "customer": {
@@ -331,7 +365,7 @@ def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
 
 
 def _build_charge_payload(frete, descricao_frete, data_vencimento, valor_total_centavos):
-    items = [{"name": descricao_frete[:80], "amount": 1, "value": valor_total_centavos}]
+    items = [_item_frete(frete)]
     metadata = {"custom_id": str(frete["id"]), "notification_url": _notification_url()}
     return {"items": items, "metadata": metadata}
 
@@ -1267,6 +1301,7 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
             SELECT f.id, f.clientes_id, f.valor_total_frete,
                    o.nome AS origem_nome, d.nome AS destino_nome,
                    p.nome AS produto_nome,
+                   COALESCE(NULLIF(TRIM(fo.nome_fantasia),''), fo.razao_social) AS distribuidora,
                    f.quantidade_manual, q.valor AS quantidade_valor,
                    f.data_frete,
                    c.razao_social AS cliente_nome, c.nome_fantasia AS cliente_fantasia,
@@ -1279,6 +1314,7 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
             LEFT JOIN destinos d ON f.destino_id = d.id
             LEFT JOIN produto p ON f.produto_id = p.id
             LEFT JOIN quantidades q ON f.quantidade_id = q.id
+            LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
             WHERE f.id IN ({format_ids})
         """
         cursor.execute(sql, tuple(ids))
@@ -1381,7 +1417,7 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
                     pass
 
             desc = " - ".join(desc_parts)
-            items.append({"name": desc[:80], "amount": 1, "value": cent})
+            items.append(_item_frete(r))
 
         if total_centavos <= 0:
             return {"success": False, "error": "Soma dos fretes inválida/zerada"}
@@ -1589,6 +1625,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                 f.id, f.clientes_id, f.valor_total_frete,
                 o.nome AS origem_nome, d.nome AS destino_nome,
                 p.nome AS produto_nome,
+                COALESCE(NULLIF(TRIM(fo.nome_fantasia),''), fo.razao_social) AS distribuidora,
                 f.quantidade_manual, q.valor AS quantidade_valor,
                 f.data_frete,
                 c.razao_social AS cliente_nome, c.nome_fantasia AS cliente_fantasia,
@@ -1601,6 +1638,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
             LEFT JOIN destinos d ON f.destino_id = d.id
             LEFT JOIN produto p ON f.produto_id = p.id
             LEFT JOIN quantidades q ON f.quantidade_id = q.id
+            LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
             WHERE f.id = %s""", (frete_id,))
         frete = cursor.fetchone()
 
