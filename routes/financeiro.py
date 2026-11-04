@@ -958,6 +958,36 @@ def quitar_frete():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def _pdf_do_link_efi(url):
+    """O link do EFI .../v1/A/B abre a pagina 'Boleto Digital'; o PDF do
+    boleto e o mesmo endereco sem o /v1 e com .pdf (pedido 04/11/2026:
+    "quero que abre o nosso boleto")."""
+    u = str(url or '')
+    if ('sejaefi.com.br/v1/' in u or 'gerencianet.com.br/v1/' in u) and not u.lower().endswith('.pdf'):
+        u = u.replace('.com.br/v1/', '.com.br/', 1) + '.pdf'
+    return u
+
+
+def _abrir_pdf_efi(url, charge_id):
+    """Baixa o PDF do EFI, guarda no BOLETOS_DIR e abre na tela. None se falhar."""
+    from utils.boletos import BOLETOS_DIR, _save_pdf_stream_to_path
+    pdf = _pdf_do_link_efi(url)
+    if not pdf.lower().endswith('.pdf'):
+        return None
+    try:
+        resp = requests.get(pdf, timeout=30, stream=True)
+        if resp.status_code != 200 or 'pdf' not in (resp.headers.get('Content-Type') or '').lower():
+            return None
+        dest = os.path.join(BOLETOS_DIR, f"boleto_{charge_id}.pdf")
+        os.makedirs(BOLETOS_DIR, exist_ok=True)
+        if _save_pdf_stream_to_path(resp, dest) and os.path.exists(dest):
+            return send_file(dest, mimetype='application/pdf', as_attachment=False,
+                             download_name=f"boleto_{charge_id}.pdf")
+    except Exception:
+        current_app.logger.exception("visualizar_boleto: baixar PDF do EFI falhou")
+    return redirect(pdf)
+
+
 @financeiro_bp.route('/visualizar-boleto/<int:charge_id>/')
 @login_required
 def visualizar_boleto(charge_id):
@@ -1006,6 +1036,9 @@ def visualizar_boleto(charge_id):
                     except Exception:
                         pass
             if link_boleto and isinstance(link_boleto, str) and (link_boleto.startswith('http://') or link_boleto.startswith('https://')):
+                aberto = _abrir_pdf_efi(link_boleto, charge_id)
+                if aberto is not None:
+                    return aberto
                 return redirect(link_boleto)
 
         credentials = _get_efi_credentials()
@@ -1015,7 +1048,9 @@ def visualizar_boleto(charge_id):
             return redirect(url_for('financeiro.recebimentos'))
 
         data = charge.get("data") or charge
-        pdf_url = (data.get("pdf") or {}).get("charge") or (data.get("payment") or {}).get("banking_billet", {}).get("link") or data.get("link")
+        _bb = (data.get("payment") or {}).get("banking_billet") or {}
+        pdf_url = ((data.get("pdf") or {}).get("charge") or (_bb.get("pdf") or {}).get("charge")
+                   or _bb.get("link") or data.get("link"))
         if not pdf_url:
             flash("URL do PDF não encontrada na resposta do provedor.", "danger")
             return redirect(url_for('financeiro.recebimentos'))
@@ -1035,6 +1070,9 @@ def visualizar_boleto(charge_id):
         except Exception:
             current_app.logger.exception("visualizar_boleto: guardar link falhou")
         if str(pdf_url).startswith(('http://', 'https://')):
+            aberto = _abrir_pdf_efi(pdf_url, charge_id)
+            if aberto is not None:
+                return aberto
             return redirect(pdf_url)
 
         resp = fetch_boleto_pdf_stream(credentials, pdf_url)
