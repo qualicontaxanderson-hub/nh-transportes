@@ -163,7 +163,7 @@
     {% for g in grupos %}
     <div class="cm-rm__l" data-nome="{{ g.nome }}" data-qt="{{ n(g.litros) }}" data-qc="{{ n(g.litros_com) }}" data-com="{{ brl(g.comissao) }}">
       <span class="cm-rm__n">{{ g.nome|title }}</span>
-      <span>{{ g.fretes }} fretes</span><span>{{ n(g.litros) }} L</span><span>{{ n(g.litros_com) }} L com.</span>
+      <span>{{ g.fretes }} frete{{ 's' if g.fretes != 1 }}</span><span>{{ n(g.litros) }} L</span><span>{{ n(g.litros_com) }} L com.</span>
       <b>{{ brl(g.comissao) }}</b>
     </div>
     {% endfor %}
