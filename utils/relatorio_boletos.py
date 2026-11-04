@@ -50,6 +50,10 @@ RODAPE     = 12 * mm
 UTIL       = A4[0] - 2 * MARGEM
 COLS       = [15 * mm, UTIL - 15 * mm - 23 * mm - 17 * mm - 26 * mm,
               23 * mm, 17 * mm, 26 * mm]
+# pedido 04/11/2026: uma linha por frete -- boleto, dia do frete, produto,
+# distribuidora, litros, valor do frete, vencimento, pago em/prazo e valor
+COLS_F     = [12 * mm, 15 * mm, 24 * mm, 0, 15 * mm, 17 * mm, 19 * mm, 14 * mm, 19 * mm]
+COLS_F[3]  = UTIL - sum(COLS_F)
 
 # ── Situações, na ordem em que saem no papel ─────────────────────────────
 FAIXAS = [
@@ -109,6 +113,12 @@ def _data_br(d):
         return datetime.strptime(str(d)[:10], '%Y-%m-%d').strftime('%d/%m/%Y')
     except ValueError:
         return str(d)[:10]
+
+
+def _data_curta(d):
+    """dd/mm/aa -- cabe na coluna estreita."""
+    s = _data_br(d) if not isinstance(d, str) or '-' in d[:10] else d
+    return s[:6] + s[8:] if len(s) == 10 and s[2] == '/' else s
 
 
 def _dias(d, hoje):
@@ -361,12 +371,17 @@ def _tabela(itens, rot_prazo, hoje, est):
                 ('VALIGN', (0, 0), (-1, -1), 'BOTTOM'),
             ])))
 
-        corpo = [[Paragraph('BOLETO', cab), Paragraph('FRETE', cab),
-                  Paragraph('VENCIMENTO', cab),
+        cel = ParagraphStyle('celf', parent=est['cel'], fontSize=7.2, leading=8.6)
+        num = ParagraphStyle('numf', parent=cel, alignment=TA_RIGHT)
+        centro = ParagraphStyle('cenf', parent=cel, alignment=1)
+        cab_c = ParagraphStyle('cabc', parent=cab, alignment=1)
+        corpo = [[Paragraph('Nº', cab), Paragraph('DATA', cab), Paragraph('PRODUTO', cab),
+                  Paragraph('DISTRIBUIDORA', cab), Paragraph('LITROS', cab_d),
+                  Paragraph('FRETE', cab_d), Paragraph('VENC.', cab_c),
                   Paragraph((rot_prazo or '').upper(), cab_d),
-                  Paragraph('VALOR', cab_d)]]
+                  Paragraph('BOLETO R$', cab_d)]]
+        fim_boleto = []
         for b in linhas_cli:
-            frase = _frase_frete(b) or 'sem frete vinculado'
             d = _dias(b.get('data_vencimento'), hoje)
             if b.get('display_status') in ('pago', 'quitado'):
                 prazo, cor = (_data_br(b.get('data_pagamento'))
@@ -379,30 +394,50 @@ def _tabela(itens, rot_prazo, hoje, est):
                 prazo, cor = 'hoje', ABER
             else:
                 prazo, cor = '%d d' % (-d), TINTA
-            corpo.append([
-                Paragraph('#%s' % _escapar(b.get('id')), est['cel']),
-                Paragraph(frase, est['det']),
-                Paragraph(_data_br(b.get('data_vencimento')), est['cel']),
-                Paragraph('<font color="#%s">%s</font>'
-                          % (cor.hexval()[2:], prazo), est['num']),
-                Paragraph(_moeda(b.get('valor')), est['num']),
-            ])
+            fretes = b.get('fretes') or []
+            boleto = [Paragraph('#%s' % _escapar(b.get('id')), cel)]
+            fim = [Paragraph(_data_curta(b.get('data_vencimento')), centro),
+                   Paragraph('<font color="#%s">%s</font>'
+                             % (cor.hexval()[2:], _data_curta(prazo) if '/' in prazo else prazo), num),
+                   Paragraph('<b>%s</b>' % _moeda(b.get('valor')), num)]
+            if not fretes:
+                corpo.append(boleto + [Paragraph('<font color="#8794a3">sem frete vinculado</font>', cel),
+                                       '', '', '', ''] + fim)
+            for i, f in enumerate(fretes):
+                corpo.append((boleto if i == 0 else ['']) + [
+                    Paragraph(_data_curta(f.get('data_frete')), cel),
+                    Paragraph(_escapar(f.get('produto') or '—'), cel),
+                    Paragraph(_escapar(f.get('distribuidora') or '—'), cel),
+                    Paragraph(_litros(f.get('quantidade')) or '—', num),
+                    Paragraph(_moeda(f.get('valor_total_frete')) if f.get('valor_total_frete') else '—', num),
+                ] + (fim if i == 0 else ['', '', '']))
+            fim_boleto.append(len(corpo) - 1)
 
-        t = Table(corpo, colWidths=COLS)
-        t.setStyle(TableStyle([
+        t = Table(corpo, colWidths=COLS_F, repeatRows=1)
+        estilo = [
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 2.5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
-            ('LEFTPADDING', (0, 0), (-1, -1), 4),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
-            ('LINEBELOW', (0, 1), (-1, -2), .4, LINHA_2),
-        ]))
-        # o nome e a primeira linha do cliente nao se separam na quebra
-        blocos.append(KeepTogether([blocos.pop(), t]))
+            ('TOPPADDING', (0, 0), (-1, -1), 2.2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2.2),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+        ]
+        for n in fim_boleto[:-1]:
+            estilo.append(('LINEBELOW', (0, n), (-1, n), .5, LINHA))
+        t.setStyle(TableStyle(estilo))
+        # o nome e a primeira linha do cliente nao se separam na quebra; a
+        # tabela comprida quebra de pagina (o cabecalho se repete)
+        if len(corpo) <= 15:
+            blocos.append(KeepTogether([blocos.pop(), t]))
+        else:
+            blocos.append(t)
 
-    total = Table([[Paragraph('<b>Soma</b>', est['cel']), '', '', '',
+    litros = sum(float(f.get('quantidade') or 0) for b in itens for f in (b.get('fretes') or []))
+    n_fretes = sum(len(b.get('fretes') or []) for b in itens)
+    total = Table([[Paragraph('<b>Soma</b> &middot; %d frete%s' % (n_fretes, '' if n_fretes == 1 else 's'),
+                              est['cel']), '', '', '',
+                    Paragraph('<b>%s</b>' % (_litros(litros) or '—'), est['num']), '', '', '',
                     Paragraph('<b>%s</b>' % _moeda(soma_faixa), est['num'])]],
-                  colWidths=COLS,
+                  colWidths=COLS_F,
                   style=TableStyle([
                       ('LINEABOVE', (0, 0), (-1, 0), .9, TINTA),
                       ('TOPPADDING', (0, 0), (-1, -1), 4),
@@ -410,6 +445,7 @@ def _tabela(itens, rot_prazo, hoje, est):
                       ('LEFTPADDING', (0, 0), (-1, -1), 4),
                       ('RIGHTPADDING', (0, 0), (-1, -1), 4),
                       ('SPAN', (0, 0), (3, 0)),
+                      ('SPAN', (5, 0), (7, 0)),
                   ]))
     blocos.append(total)
     return blocos, soma_faixa

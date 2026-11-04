@@ -374,6 +374,35 @@ def _situacao_do_boleto(r, hoje):
     return 'pendente'
 
 
+def _fretes_dos_boletos(cursor, linhas):
+    """Os fretes de cada boleto, em r['fretes'] (pedido 04/11/2026: o
+    relatório mostrava "sem frete vinculado"). O boleto que junta vários
+    fretes guarda a ligação em cobrancas_freites, não em cobrancas.frete_id."""
+    from routes.relatorios import _nome_curto_distribuidora
+    for r in linhas:
+        r['fretes'] = []
+    if not linhas:
+        return
+    por_id = {r['id']: r for r in linhas}
+    ph = ','.join(['%s'] * len(por_id))
+    ids = list(por_id)
+    cursor.execute(
+        'SELECT x.cobranca_id, f.id, f.data_frete, p.nome AS produto,'
+        "       COALESCE(NULLIF(TRIM(fo.nome_fantasia),''), fo.razao_social) AS distribuidora,"
+        '       COALESCE(f.quantidade_manual, q.valor) AS quantidade, f.valor_total_frete'
+        '  FROM (SELECT cobranca_id, frete_id FROM cobrancas_freites WHERE cobranca_id IN (%s)'
+        '        UNION'
+        '        SELECT id, frete_id FROM cobrancas WHERE id IN (%s) AND frete_id IS NOT NULL) x'
+        '  JOIN fretes f ON f.id = x.frete_id'
+        '  LEFT JOIN quantidades q ON f.quantidade_id = q.id'
+        '  LEFT JOIN produto p ON f.produto_id = p.id'
+        '  LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id'
+        ' ORDER BY f.data_frete, f.id' % (ph, ph), ids + ids)
+    for f in cursor.fetchall():
+        f['distribuidora'] = _nome_curto_distribuidora(f['distribuidora'])
+        por_id[f.pop('cobranca_id')]['fretes'].append(f)
+
+
 def _consultar_relatorio(cursor):
     """A consulta e os filtros do relatorio, em um lugar so.
 
@@ -390,6 +419,7 @@ def _consultar_relatorio(cursor):
     sql = (
         'SELECT cb.id, cb.valor, cb.data_vencimento, cb.status,'
         '       cb.charge_id, cb.pago_via_provedor,'
+        '       cb.data_pagamento, cb.data_emissao,'
         '       COALESCE(cl.nome_fantasia, cl.razao_social) AS cliente,'
         '       f.id AS frete_id, f.data_frete, f.preco_por_litro,'
         '       f.valor_total_frete, p.nome AS produto,'
@@ -420,6 +450,7 @@ def _consultar_relatorio(cursor):
     hoje = date.today()
     for r in linhas:
         r['display_status'] = _situacao_do_boleto(r, hoje)
+    _fretes_dos_boletos(cursor, linhas)
 
     if situacoes:
         alvo = set(situacoes)
