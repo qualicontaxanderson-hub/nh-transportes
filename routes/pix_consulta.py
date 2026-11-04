@@ -3,7 +3,7 @@ com protocolo (utils/pix_consulta). Liberado em 29/10/2026: a consulta
 completa (todos os dias, reenvio) para Admin/Supervisor/Gerente; a da Pista
 (só o dia, com o frentista) para esses e a Pista."""
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
@@ -70,6 +70,8 @@ def buscar():
     conn = get_db_connection()
     try:
         dia = _dia(request.args.get('dia'))
+        if dia >= hoje_brasilia() - timedelta(days=1):
+            pix_consulta.ler_agora()
         pix = pix_consulta.buscar(conn, dia, _valor(request.args.get('valor')),
                                   request.args.get('quem'))
         return jsonify({'pix': pix})
@@ -156,6 +158,7 @@ def pista_buscar():
     # a Pista não navega na lista do dia: precisa do valor e de um nome/documento
     if valor is None or len(quem) < 3:
         return jsonify({'erro': 'Digite o valor e um nome (ou CPF/CNPJ) do pagador.'}), 400
+    pix_consulta.ler_agora()
     conn = get_db_connection()
     try:
         pix = pix_consulta.buscar(conn, hoje_brasilia(), valor, quem)

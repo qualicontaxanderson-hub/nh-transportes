@@ -21,6 +21,8 @@ extrato (cortado), sem documento e sem hora.
 import logging
 import re
 import secrets
+import threading
+import time
 import unicodedata
 from datetime import timedelta
 
@@ -160,6 +162,61 @@ def anotar(conn, account_id, api_txs):
         return novos
     finally:
         cur.close()
+
+
+# Tempo real (pedido 04/11/2026: "quando cai no Extrato On-Line tem que
+# aparecer na Consulta"): antes de buscar o dia de hoje, lê o Sicoob NA HORA
+# -- a mesma leitura do agendador de 10 min (grava o extrato e anota). No
+# máximo uma leitura a cada LER_A_CADA segundos por processo; se o agendador
+# (ou outra consulta) já está lendo, não espera: busca com o que tem.
+LER_A_CADA = 15
+_ultima_leitura = [0.0]
+_trava_leitura = threading.Lock()
+
+
+def ler_agora():
+    agora = time.monotonic()
+    if agora - _ultima_leitura[0] < LER_A_CADA or not _trava_leitura.acquire(blocking=False):
+        return
+    conn = cur = None
+    got = 0
+    try:
+        _ultima_leitura[0] = agora
+        from integrations import sicoob_extrato as mod
+        from integrations.banco_api import SemCredencial, proximo_dia_util
+        from integrations.extrato_grava import sincronizar
+        from utils.db import get_db_connection
+        from utils.fuso import hoje_brasilia
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT GET_LOCK('extrato_online_grava', 0) AS g")
+        got = (cur.fetchone() or {}).get('g') or 0
+        if got != 1:
+            return
+        hoje = hoje_brasilia()
+        try:
+            api = mod.ler(hoje - timedelta(days=1), proximo_dia_util(hoje), incluir_hoje=True)
+        except SemCredencial:
+            return
+        sincronizar(mod, api, cur, conn)
+        anotar(conn, mod.account_id, api)
+    except Exception:
+        # a consulta segue com o que já está gravado
+        logger.exception('[pix_consulta] leitura na hora falhou')
+    finally:
+        try:
+            if got == 1 and cur is not None:
+                cur.execute("SELECT RELEASE_LOCK('extrato_online_grava')")
+                cur.fetchall()
+        except Exception:
+            pass
+        for c in (cur, conn):
+            try:
+                if c is not None:
+                    c.close()
+            except Exception:
+                pass
+        _trava_leitura.release()
 
 
 # ── busca ────────────────────────────────────────────────────────────────────

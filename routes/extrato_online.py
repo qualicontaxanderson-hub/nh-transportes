@@ -253,11 +253,23 @@ def _gravar(banco, mod, api):
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
-        return sincronizar(mod, api, cur, conn)
+        res = sincronizar(mod, api, cur, conn)
     except Exception:
         conn.rollback()
         logger.exception('[extrato-online] gravar pela API falhou (%s)', banco['rotulo'])
         return {'erro': True}
+    try:
+        # PIX Consulta em tempo real (04/11/2026): o que caiu aqui já aparece lá
+        from utils import pix_consulta
+        from utils.fuso import hoje_brasilia
+        if mod.account_id == pix_consulta.ACCOUNT_ID:
+            corte = str(hoje_brasilia() - timedelta(days=3))
+            recentes = [t for t in api if str(t.get('data_transacao'))[:10] >= corte]
+            if recentes:
+                pix_consulta.anotar(conn, mod.account_id, recentes)
+    except Exception:
+        logger.exception('[extrato-online] anotar PIX Consulta falhou')
+    return res
     finally:
         cur.close()
         conn.close()
