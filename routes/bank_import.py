@@ -1977,6 +1977,9 @@ def upload():
 
         _ensure_descricao_chave()
         inseridos, duplicados, duplicados_lista = _save_transactions(cursor, conn, account_id, transactions)
+        # saldo do banco no fim do arquivo -> Extrato (04/11/2026); nunca levanta
+        from utils.extrato_saldos import guardar_do_ofx
+        guardar_do_ofx(account_id, content, nome_arquivo)
 
         # Atualiza a data do último extrato importado para esta conta
         _atualizar_ultima_data_importacao(cursor, conn, account_id, data_arquivo)
@@ -5065,6 +5068,9 @@ def scan_inbox():
 
     _ensure_descricao_chave()
     inseridos, duplicados, duplicados_lista = _save_transactions(cursor, conn, account_id, transactions)
+    # saldo do banco no fim do arquivo -> Extrato (04/11/2026); nunca levanta
+    from utils.extrato_saldos import guardar_do_ofx
+    guardar_do_ofx(account_id, content, nome_arquivo)
 
     # Atualiza a data do último extrato importado para esta conta
     _atualizar_ultima_data_importacao(cursor, conn, account_id, data_arquivo)
@@ -5494,6 +5500,9 @@ def importar_dropbox():
 
         _ensure_descricao_chave()
         inseridos, duplicados, duplicados_lista = _save_transactions(cursor, conn, account_id, transactions)
+        # saldo do banco no fim do arquivo -> Extrato (04/11/2026); nunca levanta
+        from utils.extrato_saldos import guardar_do_ofx
+        guardar_do_ofx(account_id, content, nome_arquivo)
 
         # Atualiza a data do último extrato importado para esta conta
         _atualizar_ultima_data_importacao(cursor, conn, account_id, data_arquivo)

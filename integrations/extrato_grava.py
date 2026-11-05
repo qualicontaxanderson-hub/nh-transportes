@@ -114,6 +114,10 @@ def sincronizar(mod, api_txs, cursor, conn, hoje=None):
     {'novos', 'casados_ofx', 'ja_tinha'}.
     """
     conta = mod.account_id
+    # saldo que o banco mandou junto -> Extrato (04/11/2026); conexão
+    # própria, nunca levanta
+    from utils.extrato_saldos import guardar_da_api
+    guardar_da_api(conta, api_txs)
     garantir_tabela(cursor)
     txs = [t for t in api_txs if t.get('id_banco')]
     r = {'novos': 0, 'casados_ofx': 0, 'ja_tinha': 0, 'antigos_fora': 0}

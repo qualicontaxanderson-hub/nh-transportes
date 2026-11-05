@@ -131,6 +131,9 @@ def importar(conteudo, nome):
             r.update(situacao='sem_conta', mensagem=erro)
             return r
         r['account_id'] = conta
+        # saldo do banco no fim do arquivo -> Extrato (04/11/2026); nunca levanta
+        from utils.extrato_saldos import guardar_do_ofx
+        guardar_do_ofx(conta, conteudo, nome)
         txs = OFXParser(conteudo).get_transactions()
         if not txs:
             r['mensagem'] = 'nenhum lançamento no arquivo'
