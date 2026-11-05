@@ -273,7 +273,7 @@ def _classe(l):
     if tc:
         t = ROTULO_TIPO.get(tc, tc.replace('_', ' ').capitalize())
         if tc == 'transferencia' and l.get('conta_destino'):
-            t += (' → ' if l['tipo'] == 'DEBIT' else ' ← ') + l['conta_destino']
+            t += (' para ' if l['tipo'] == 'DEBIT' else ' de ') + l['conta_destino']
         partes.append(t)
     if l.get('despesa'):
         partes.append(l['despesa'])

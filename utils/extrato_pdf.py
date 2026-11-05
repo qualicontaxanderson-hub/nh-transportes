@@ -106,97 +106,104 @@ def gerar(blocos, ini, fim, rotulo_origem, mostra_corrido=True, logo=None, quand
         'bold': ParagraphStyle('bo', parent=base, fontName='Helvetica-Bold'),
         'boldd': ParagraphStyle('bod', parent=base, fontName='Helvetica-Bold', alignment=TA_RIGHT),
     }
-    corpo = []
-    for n, b in enumerate(blocos):
-        c = b['conta']
-        if n and corpo:
-            corpo.append(PageBreak())
-        t = b['tot']
-        corpo.append(Paragraph(_escapar(c['apelido'] or c['banco_nome']), est['tit']))
-        corpo.append(Paragraph('%s · Ag %s · Conta %s · saldo de partida: %s%s' % (
-            _escapar(c.get('empresa') or ''), _escapar(c.get('agencia') or '—'), _escapar(c.get('conta') or '—'),
-            _escapar(b['base']),
-            (' · %d espelho(s) de transferência fora (não existem no banco)' % b['espelhos']) if b['espelhos'] else ''),
-            est['sub']))
-        corpo.append(Spacer(1, 2 * mm))
-        resumo = Table([[
-            Paragraph('SALDO INICIAL<br/><b>%s</b>' % (_moeda(b['saldo_inicial'], True) if b['saldo_inicial'] is not None else '—'), est['cel']),
-            Paragraph('ENTRADAS<br/><b><font color="#186c37">%s</font></b>' % _moeda(t['entradas'], True), est['cel']),
-            Paragraph('SAÍDAS<br/><b><font color="#a3262b">%s</font></b>' % _moeda(t['saidas'], True), est['cel']),
-            Paragraph('SALDO FINAL<br/><b>%s</b>' % (_moeda(b['saldo_final'], True) if b['saldo_final'] is not None else '—'), est['cel']),
-            Paragraph('PENDENTES / DIFERENÇAS<br/><b>%d / %d</b>' % (t['pendentes'], t['divergencias']), est['cel']),
-        ]], colWidths=[UTIL / 5] * 5)
-        resumo.setStyle(TableStyle([('BOX', (0, 0), (-1, -1), .6, LINHA), ('INNERGRID', (0, 0), (-1, -1), .6, LINHA),
-                                    ('BACKGROUND', (0, 0), (-1, -1), LINHA_2),
-                                    ('TOPPADDING', (0, 0), (-1, -1), 4), ('BOTTOMPADDING', (0, 0), (-1, -1), 4)]))
-        corpo.append(resumo)
-        corpo.append(Spacer(1, 3 * mm))
-        if not b['dias']:
-            corpo.append(Paragraph('Sem movimento no período.', est['det']))
-            continue
-        for d in b['dias']:
-            linhas = [[Paragraph('<b>%s %s</b> — saldo inicial' % (_sem(d['data']), _br(d['data'])), est['bold']),
-                       '', '', '',
-                       Paragraph('<b>%s</b>' % (_moeda(d['saldo_ini']) if d['saldo_ini'] is not None else '—'), est['boldd'])]]
-            corrido = d['saldo_ini']
-            for l in d['linhas']:
-                ent = l['tipo'] == 'CREDIT'
-                if corrido is not None and mostra_corrido:
-                    corrido += l['valor'] if ent else -l['valor']
-                sit = {'conciliado': '<font color="#186c37">✓ conciliado</font>',
-                       'pendente': '<font color="#8a5a00">pendente</font>',
-                       'ignorado': '<font color="#6c7784">ignorado</font>'}.get(l['status'], l['status'])
-                desc = _escapar(l['descricao'] or '')
-                if l['classe']:
-                    desc += '<br/><font size="6.4" color="#5a6675">%s</font>' % _escapar(l['classe'])
-                linhas.append([
-                    Paragraph(desc, est['cel']),
-                    Paragraph(sit.replace('✓ ', ''), est['det']),
-                    Paragraph('<font color="#186c37">%s</font>' % _moeda(l['valor']) if ent else '', est['num']),
-                    Paragraph('<font color="#a3262b">%s</font>' % _moeda(l['valor']) if not ent else '', est['num']),
-                    Paragraph(_moeda(corrido) if (mostra_corrido and corrido is not None) else '', est['num']),
-                ])
-            selo = ('<font color="#186c37">dia conciliado</font>' if d['conciliado'] else
-                    ('<font color="#8a5a00">%d pendente(s)</font>' % d['pendentes']) if d['pendentes'] else '')
-            linhas.append([Paragraph('<b>Saldo final</b> %s' % selo, est['bold']), '',
-                           Paragraph('<b>%s</b>' % _moeda(d['entradas']), est['num']),
-                           Paragraph('<b>%s</b>' % _moeda(d['saidas']), est['num']),
-                           Paragraph('<b>%s</b>' % (_moeda(d['saldo_fim']) if d['saldo_fim'] is not None else '—'), est['boldd'])])
-            n_fim = len(linhas) - 1
-            n_dif = None
-            if d['banco'] is not None:
-                if d['dif']:
-                    linhas.append([Paragraph('<font color="#a3262b"><b>Banco informou %s — DIFERENÇA %s</b> (falta ou sobra lançamento neste dia)</font>'
-                                             % (_moeda(d['banco'], True), _moeda(d['dif'], True)), est['cel']), '', '', '', ''])
-                    n_dif = len(linhas) - 1
-                else:
-                    linhas.append([Paragraph('<font color="#186c37">✓ confere com o saldo do banco (%s)</font>'
-                                             % ('OFX' if d['banco_origem'] == 'ofx' else 'On-Line'), est['det']), '', '', '', ''])
-            tb = Table(linhas, colWidths=COLS)
-            st = [('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                  ('TOPPADDING', (0, 0), (-1, -1), 2), ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-                  ('LEFTPADDING', (0, 0), (-1, -1), 3), ('RIGHTPADDING', (0, 0), (-1, -1), 3),
-                  ('BACKGROUND', (0, 0), (-1, 0), DIA_BG), ('SPAN', (0, 0), (3, 0)),
-                  ('BACKGROUND', (0, n_fim), (-1, n_fim), FIM_BG), ('SPAN', (0, n_fim), (1, n_fim)),
-                  ('LINEBELOW', (0, 1), (-1, n_fim - 1), .3, LINHA)]
-            if len(linhas) > n_fim + 1:
-                st.append(('SPAN', (0, n_fim + 1), (-1, n_fim + 1)))
-            if n_dif is not None:
-                st.append(('BACKGROUND', (0, n_dif), (-1, n_dif), VENC_BG))
-            tb.setStyle(TableStyle(st))
-            corpo.append(KeepTogether([tb]) if len(linhas) <= 25 else tb)
-            corpo.append(Spacer(1, 2.2 * mm))
+    # a historia e montada de novo em cada passada: o reportlab marca na
+    # tabela que ela foi adiada (_postponed) e, reaproveitada na segunda
+    # passada, a mesma tabela dava LayoutError "too large on page 1"
+    def _historia():
+        corpo = []
+        for n, b in enumerate(blocos):
+            c = b['conta']
+            if n and corpo:
+                corpo.append(PageBreak())
+            t = b['tot']
+            corpo.append(Paragraph(_escapar(c['apelido'] or c['banco_nome']), est['tit']))
+            corpo.append(Paragraph('%s · Ag %s · Conta %s · saldo de partida: %s%s' % (
+                _escapar(c.get('empresa') or ''), _escapar(c.get('agencia') or '—'), _escapar(c.get('conta') or '—'),
+                _escapar(b['base']),
+                (' · %d espelho(s) de transferência fora (não existem no banco)' % b['espelhos']) if b['espelhos'] else ''),
+                est['sub']))
+            corpo.append(Spacer(1, 2 * mm))
+            resumo = Table([[
+                Paragraph('SALDO INICIAL<br/><b>%s</b>' % (_moeda(b['saldo_inicial'], True) if b['saldo_inicial'] is not None else '—'), est['cel']),
+                Paragraph('ENTRADAS<br/><b><font color="#186c37">%s</font></b>' % _moeda(t['entradas'], True), est['cel']),
+                Paragraph('SAÍDAS<br/><b><font color="#a3262b">%s</font></b>' % _moeda(t['saidas'], True), est['cel']),
+                Paragraph('SALDO FINAL<br/><b>%s</b>' % (_moeda(b['saldo_final'], True) if b['saldo_final'] is not None else '—'), est['cel']),
+                Paragraph('PENDENTES / DIFERENÇAS<br/><b>%d / %d</b>' % (t['pendentes'], t['divergencias']), est['cel']),
+            ]], colWidths=[UTIL / 5] * 5)
+            resumo.setStyle(TableStyle([('BOX', (0, 0), (-1, -1), .6, LINHA), ('INNERGRID', (0, 0), (-1, -1), .6, LINHA),
+                                        ('BACKGROUND', (0, 0), (-1, -1), LINHA_2),
+                                        ('TOPPADDING', (0, 0), (-1, -1), 4), ('BOTTOMPADDING', (0, 0), (-1, -1), 4)]))
+            corpo.append(resumo)
+            corpo.append(Spacer(1, 3 * mm))
+            if not b['dias']:
+                corpo.append(Paragraph('Sem movimento no período.', est['det']))
+                continue
+            for d in b['dias']:
+                linhas = [[Paragraph('<b>%s %s</b> — saldo inicial' % (_sem(d['data']), _br(d['data'])), est['bold']),
+                           '', '', '',
+                           Paragraph('<b>%s</b>' % (_moeda(d['saldo_ini']) if d['saldo_ini'] is not None else '—'), est['boldd'])]]
+                corrido = d['saldo_ini']
+                for l in d['linhas']:
+                    ent = l['tipo'] == 'CREDIT'
+                    if corrido is not None and mostra_corrido:
+                        corrido += l['valor'] if ent else -l['valor']
+                    sit = {'conciliado': '<font color="#186c37">conciliado</font>',
+                           'pendente': '<font color="#8a5a00">pendente</font>',
+                           'ignorado': '<font color="#6c7784">ignorado</font>'}.get(l['status'], l['status'])
+                    desc = _escapar(l['descricao'] or '')
+                    if l['classe']:
+                        desc += '<br/><font size="6.4" color="#5a6675">%s</font>' % _escapar(l['classe'])
+                    linhas.append([
+                        Paragraph(desc, est['cel']),
+                        Paragraph(sit, est['det']),
+                        Paragraph('<font color="#186c37">%s</font>' % _moeda(l['valor']) if ent else '', est['num']),
+                        Paragraph('<font color="#a3262b">%s</font>' % _moeda(l['valor']) if not ent else '', est['num']),
+                        Paragraph(_moeda(corrido) if (mostra_corrido and corrido is not None) else '', est['num']),
+                    ])
+                selo = ('<font color="#186c37">dia conciliado</font>' if d['conciliado'] else
+                        ('<font color="#8a5a00">%d pendente(s)</font>' % d['pendentes']) if d['pendentes'] else '')
+                linhas.append([Paragraph('<b>Saldo final</b> %s' % selo, est['bold']), '',
+                               Paragraph('<b>%s</b>' % _moeda(d['entradas']), est['num']),
+                               Paragraph('<b>%s</b>' % _moeda(d['saidas']), est['num']),
+                               Paragraph('<b>%s</b>' % (_moeda(d['saldo_fim']) if d['saldo_fim'] is not None else '—'), est['boldd'])])
+                n_fim = len(linhas) - 1
+                n_dif = None
+                if d['banco'] is not None:
+                    if d['dif']:
+                        linhas.append([Paragraph('<font color="#a3262b"><b>Banco informou %s — DIFERENÇA %s</b> (falta ou sobra lançamento neste dia)</font>'
+                                                 % (_moeda(d['banco'], True), _moeda(d['dif'], True)), est['cel']), '', '', '', ''])
+                        n_dif = len(linhas) - 1
+                    else:
+                        linhas.append([Paragraph('<font color="#186c37">confere com o saldo do banco (%s)</font>'
+                                                 % ('OFX' if d['banco_origem'] == 'ofx' else 'On-Line'), est['det']), '', '', '', ''])
+                tb = Table(linhas, colWidths=COLS)
+                st = [('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                      ('TOPPADDING', (0, 0), (-1, -1), 2), ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+                      ('LEFTPADDING', (0, 0), (-1, -1), 3), ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+                      ('BACKGROUND', (0, 0), (-1, 0), DIA_BG), ('SPAN', (0, 0), (3, 0)),
+                      ('BACKGROUND', (0, n_fim), (-1, n_fim), FIM_BG), ('SPAN', (0, n_fim), (1, n_fim)),
+                      ('LINEBELOW', (0, 1), (-1, n_fim - 1), .3, LINHA)]
+                if len(linhas) > n_fim + 1:
+                    st.append(('SPAN', (0, n_fim + 1), (-1, n_fim + 1)))
+                if n_dif is not None:
+                    st.append(('BACKGROUND', (0, n_dif), (-1, n_dif), VENC_BG))
+                tb.setStyle(TableStyle(st))
+                # espaço depois da tabela pelo spaceAfter: um Spacer solto no pé
+                # da página dava LayoutError no reportlab
+                tb.spaceAfter = 2.2 * mm
+                corpo.append(KeepTogether([tb]) if len(linhas) <= 25 else tb)
 
-    if not corpo:
-        corpo.append(Paragraph('Nenhuma conta escolhida.', est['cel']))
+        if not corpo:
+            corpo.append(Paragraph('Nenhuma conta escolhida.', est['cel']))
+        return corpo
     cab = {'logo': logo, 'quando': quando,
            'filtro': 'Período %s a %s · %s · %d conta(s)' % (_br(ini), _br(fim), rotulo_origem, len(blocos))}
     buf = io.BytesIO()
     doc = _Doc(buf, cab)
-    doc.build(list(corpo))
+    doc.build(_historia())
     paginas = doc.page
     buf = io.BytesIO()
     doc = _Doc(buf, cab)
     doc.total_paginas = paginas
-    doc.build(list(corpo))
+    doc.build(_historia())
     return buf.getvalue()
