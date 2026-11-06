@@ -71,6 +71,16 @@
                 <div id="funcionarios-container" style="display:none;">
                     <h5 class="mb-3">Funcionários e Lançamentos</h5>
                     <p class="text-muted mb-3">Preencha os valores para cada rubrica. Deixe em branco ou 0 para rubricas não aplicáveis.</p>
+
+                    <!-- Importar a folha (PDF): preenche a tela, nada é gravado antes do Salvar -->
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                        <label class="btn btn-outline-primary btn-sm mb-0" for="folha-pdf">
+                            <i class="bi bi-file-earmark-arrow-up"></i> Importar folha (PDF)
+                        </label>
+                        <input type="file" id="folha-pdf" accept=".pdf,application/pdf" multiple class="d-none">
+                        <small class="text-muted">Relação de Cálculo da contabilidade + recibo avulso de quem não é registrado. Motoristas não são preenchidos.</small>
+                    </div>
+                    <div id="folha-resultado" class="mb-3" style="display:none;"></div>
                     
                     <div class="table-responsive">
                         <table class="table table-bordered table-sm" id="lancamentos-table">
@@ -122,6 +132,9 @@
     .table-sm input {
         font-size: 0.8rem;
         padding: 0.25rem;
+    }
+    .table-sm input.folha-importado {
+        background-color: #fff3cd;
     }
 </style>
 
@@ -284,6 +297,8 @@ function checkAndLoadFuncionarios() {
             funcionarios.forEach(func => {
                 console.log(`Processando funcionário: ${func.nome} (ID: ${func.id}, Tipo: ${func.tipo})`);
                 const row = document.createElement('tr');
+                row.dataset.nome = func.nome || '';   // usado pelo Importar folha
+                row.dataset.tipo = func.tipo || '';
                 const isMotorista = func.tipo === 'motorista';
 
                 // Use the per-type lookup to prevent ID collisions between
@@ -443,6 +458,81 @@ function checkAndLoadFuncionarios() {
 
 document.getElementById('clienteid').addEventListener('change', checkAndLoadFuncionarios);
 document.getElementById('mes').addEventListener('change', checkAndLoadFuncionarios);
+
+// ---- Importar folha (PDF) — 06/11/2026 ------------------------------------
+// O servidor lê os PDFs e devolve os valores por pessoa; aqui casamos pelo
+// nome com as linhas da tela e preenchemos. Motorista não é preenchido.
+// Nada é gravado: o usuário confere e clica em Salvar.
+function folhaTokens(nome) {
+    const fora = ['DA', 'DE', 'DO', 'DOS', 'DAS', 'E'];
+    return (nome || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
+        .replace(/[^A-Z ]/g, ' ').split(/\s+/).filter(t => t && !fora.includes(t));
+}
+function folhaMesmoNome(a, b) {
+    if (!a.length || !b.length || a[0] !== b[0]) return false;
+    return a.every(t => b.includes(t)) || b.every(t => a.includes(t));
+}
+function folhaEsc(s) {
+    return String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+}
+function folhaBrl(v) {
+    return Number(v).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+function folhaPoe(row, rubricaNome, valor) {
+    const inp = row.querySelector(`.valor-input[data-rubrica-nome="${rubricaNome}"]`);
+    if (!inp || inp.readOnly) return false;
+    const cents = Math.round(valor * 100);
+    inp.dataset.rawValue = String(cents);
+    inp.value = cents ? formatCurrency(cents) : '';
+    inp.classList.add('folha-importado');
+    return true;
+}
+document.getElementById('folha-pdf').addEventListener('change', function () {
+    const arquivos = Array.from(this.files || []);
+    this.value = '';
+    if (!arquivos.length) return;
+    const caixa = document.getElementById('folha-resultado');
+    caixa.style.display = 'block';
+    caixa.innerHTML = '<div class="alert alert-info py-2 mb-0">Lendo a folha…</div>';
+    const fd = new FormData();
+    arquivos.forEach(f => fd.append('arquivos', f));
+    fetch('/lancamentos-funcionarios/importar-folha', {method: 'POST', body: fd})
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(dados => {
+            const linhas = Array.from(document.querySelectorAll('#funcionarios-tbody tr'))
+                .map(tr => ({tr, tok: folhaTokens(tr.dataset.nome)}));
+            const preenchidos = [], motoristas = [], foraDaTela = [], usados = new Set();
+            (dados.pessoas || []).forEach(p => {
+                const tok = folhaTokens(p.nome);
+                const achou = linhas.filter(l => folhaMesmoNome(tok, l.tok));
+                if (achou.length !== 1) { foraDaTela.push(p.nome + (achou.length > 1 ? ' (mais de um nome parecido)' : '')); return; }
+                const tr = achou[0].tr;
+                usados.add(tr);
+                if (tr.dataset.tipo === 'motorista') { motoristas.push(tr.dataset.nome); return; }
+                const partes = [];
+                if (folhaPoe(tr, 'SALÁRIO BASE', p.salario_base || 0)) partes.push('Salário ' + folhaBrl(p.salario_base || 0));
+                if (p.fgts && folhaPoe(tr, 'FGTS', p.fgts)) partes.push('FGTS ' + folhaBrl(p.fgts));
+                if (p.rescisao && folhaPoe(tr, 'Rescisão', p.rescisao)) partes.push('Rescisão ' + folhaBrl(p.rescisao));
+                if (p.va && folhaPoe(tr, 'Vale Alimentação', p.va)) partes.push('VA ' + folhaBrl(p.va));
+                preenchidos.push(`<b>${folhaEsc(tr.dataset.nome)}</b>: ${partes.join(' · ')}`
+                                 + (p.origem === 'recibo' ? ' <span class="text-muted">(recibo avulso)</span>' : ''));
+            });
+            const semFolha = linhas.filter(l => !usados.has(l.tr)).map(l => l.tr.dataset.nome);
+            calculateTotals();
+            let h = `<div class="alert alert-success py-2 mb-2"><b>${preenchidos.length} preenchido(s)</b> — confira e clique em <b>Salvar Lançamentos</b>.`
+                  + (preenchidos.length ? '<ul class="mb-0 mt-1">' + preenchidos.map(x => `<li>${x}</li>`).join('') + '</ul>' : '') + '</div>';
+            const obs = [];
+            if (motoristas.length) obs.push('<b>Motorista (não preenchido):</b> ' + motoristas.map(folhaEsc).join(', '));
+            if (semFolha.length) obs.push('<b>Na tela e não na folha (não mexi):</b> ' + semFolha.map(folhaEsc).join(', '));
+            if (foraDaTela.length) obs.push('<b>Na folha e não nesta tela (ignorado):</b> ' + foraDaTela.map(folhaEsc).join(', '));
+            (dados.arquivos || []).filter(a => a.aviso).forEach(a => obs.push(`<b>${folhaEsc(a.arquivo)}:</b> ${folhaEsc(a.aviso)}`));
+            if (obs.length) h += '<div class="alert alert-warning py-2 mb-0 small">' + obs.join('<br>') + '</div>';
+            caixa.innerHTML = h;
+        })
+        .catch(e => {
+            caixa.innerHTML = `<div class="alert alert-danger py-2 mb-0">Não consegui ler a folha (${folhaEsc(e.message)}).</div>`;
+        });
+});
 
 // In edit mode, automatically load funcionarios
 if (modoEdicao) {

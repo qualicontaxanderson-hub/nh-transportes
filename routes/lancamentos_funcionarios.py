@@ -355,6 +355,23 @@ def _limites_do_mes(mes):
         return None, None
 
 
+@bp.route('/importar-folha', methods=['POST'])
+@login_required
+@admin_required
+def importar_folha():
+    """Lê os PDFs da folha e devolve os valores por pessoa; quem preenche a
+    tela é o navegador e nada é gravado até o usuário clicar em Salvar."""
+    from utils.folha_pdf import ler
+    pessoas, arquivos = [], []
+    for f in request.files.getlist('arquivos'):
+        if not f or not f.filename:
+            continue
+        lidas, aviso = ler(f.read(), f.filename)
+        arquivos.append({'arquivo': f.filename, 'pessoas': len(lidas), 'aviso': aviso})
+        pessoas.extend(lidas)
+    return jsonify({'pessoas': pessoas, 'arquivos': arquivos})
+
+
 @bp.route('/get-funcionarios/<int:cliente_id>')
 @login_required
 def get_funcionarios(cliente_id):

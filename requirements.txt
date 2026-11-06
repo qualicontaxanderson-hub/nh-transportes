@@ -25,3 +25,6 @@ pillow==12.3.0
 segno==1.6.1
 
 # Force rebuild 2026-01-29T16:02 - Ensure troco_pix blueprint loads
+
+# Importar folha (PDF) na tela de Lancamento de Funcionarios. Puro Python.
+pypdf==6.16.0
