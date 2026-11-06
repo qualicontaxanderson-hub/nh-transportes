@@ -2074,10 +2074,68 @@ def _get_titulos_despesas(cursor):
     return result
 
 
+class TransferenciaSemPar(ValueError):
+    """Transferência entre contas do mesmo CNPJ sem a outra ponta no extrato."""
+
+
+def _mesmo_dono(cursor, conta_a, conta_b):
+    """As duas contas são da mesma empresa (mesmo cliente_id)?"""
+    try:
+        cursor.execute("SELECT id, cliente_id FROM bank_accounts WHERE id IN (%s, %s)",
+                       (int(conta_a), int(conta_b)))
+        donos = {r['id']: r['cliente_id'] for r in cursor.fetchall()}
+    except (TypeError, ValueError):
+        return False
+    a, b = donos.get(int(conta_a)), donos.get(int(conta_b))
+    return a is not None and a == b
+
+
+def _nome_conta(cursor, conta_id):
+    cursor.execute("SELECT apelido, banco_nome FROM bank_accounts WHERE id=%s", (conta_id,))
+    r = cursor.fetchone() or {}
+    return r.get('apelido') or r.get('banco_nome') or f'conta {conta_id}'
+
+
+def _outra_ponta(cursor, tx, outra_conta_id, tipo_ponta):
+    """A linha VERDADEIRA do extrato da outra conta (não espelho TRANSFER_):
+    mesmo valor, até 3 dias, pendente ou já conciliada como transferência
+    desta conta. Regra de 06/11/2026: entre contas do mesmo CNPJ não se
+    vincula transferência sem a outra ponta confirmada."""
+    col = 'conta_origem_id' if tipo_ponta == 'CREDIT' else 'conta_destino_id'
+    cursor.execute(
+        f"""SELECT id, status FROM bank_transactions
+             WHERE account_id=%s AND tipo=%s AND valor=%s AND id<>%s
+               AND ABS(DATEDIFF(data_transacao, %s)) <= 3
+               AND NOT (hash_dedup LIKE 'TRANSFER%%' AND COALESCE(fitid,'')='')
+               AND (status='pendente'
+                    OR (tipo_conciliacao='transferencia' AND {col}=%s))
+             ORDER BY ABS(DATEDIFF(data_transacao, %s)), status='pendente' DESC, id
+             LIMIT 1""",
+        (outra_conta_id, tipo_ponta, tx['valor'], tx['id'], tx['data_transacao'],
+         tx['account_id'], tx['data_transacao']))
+    return cursor.fetchone()
+
+
+def _msg_sem_par(cursor, tx, outra_conta_id, saiu):
+    v = f"{float(tx['valor']):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    d = tx['data_transacao'].strftime('%d/%m/%Y') if hasattr(tx['data_transacao'], 'strftime') else tx['data_transacao']
+    onde = _nome_conta(cursor, outra_conta_id)
+    if saiu:
+        o_que = f"a entrada de R$ {v} no {onde}"
+    else:
+        o_que = f"a saída de R$ {v} no {onde}"
+    return (f"Transferência de {d} não vinculada: não achei {o_que} (até 3 dias). "
+            "Fale com o Anderson sobre esse lançamento.")
+
+
 def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
                              salvar_mapeamento=True):
     """Registra transferência entre contas: concilia a origem e cria um CREDIT na conta destino.
     Salva mapeamento CNPJ→conta_destino apenas se salvar_mapeamento=True.
+
+    Entre contas do MESMO CNPJ (06/11/2026): exige a entrada verdadeira no
+    extrato da conta destino; liga as duas pontas e não cria espelho. Sem a
+    entrada, levanta TransferenciaSemPar e nada é gravado.
     """
     agora = _dt.datetime.now()
     cursor.execute(
@@ -2088,6 +2146,11 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
     tx = cursor.fetchone()
     if not tx:
         return
+    ponta = None
+    if _mesmo_dono(cursor, tx['account_id'], conta_destino_id):
+        ponta = _outra_ponta(cursor, tx, conta_destino_id, 'CREDIT')
+        if not ponta:
+            raise TransferenciaSemPar(_msg_sem_par(cursor, tx, conta_destino_id, saiu=True))
     # Marca a tx de origem como conciliada.
     # Tenta com tipo_conciliacao (coluna nova); se não existir usa UPDATE básico.
     try:
@@ -2116,6 +2179,17 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
     except mysql.connector.errors.ProgrammingError:
         # Coluna pode não existir ainda (migration pendente) — ignora
         logger.debug("conta_destino_id column not yet available; skipping")
+    if ponta:
+        # Mesmo CNPJ: a entrada verdadeira já está no extrato — liga e pronto
+        if ponta['status'] == 'pendente':
+            cursor.execute(
+                """UPDATE bank_transactions
+                      SET status='conciliado', conciliado_em=%s, conciliado_por=%s,
+                          tipo_conciliacao='transferencia', conta_origem_id=%s
+                    WHERE id=%s AND status='pendente'""",
+                (agora, usuario, tx['account_id'], ponta['id']))
+        conn.commit()
+        return
     # Cria CREDIT na conta destino. Usa TRANSFER_<id> para garantir que cabe
     # em VARCHAR(64) (SHA-256 = 64 chars; '_transfer' causaria overflow).
     # Cria como 'pendente' para que apareça na fila de conciliação da conta destino.
@@ -2209,6 +2283,51 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
 
     if tipo_tx == 'CREDIT':
         if tipo_debito == 'transferencia':
+            # Mesmo CNPJ (06/11/2026): exige a saída verdadeira na outra conta
+            # e liga as duas pontas; sem ela, não vincula
+            cursor.execute(
+                """SELECT bt.id, bt.account_id, bt.data_transacao, bt.valor, bt.descricao,
+                          bt.cnpj_cpf, ba.cliente_id, cl.cnpj
+                     FROM bank_transactions bt
+                     JOIN bank_accounts ba ON ba.id = bt.account_id
+                     LEFT JOIN clientes cl ON cl.id = ba.cliente_id
+                    WHERE bt.id=%s""", (tx_id,))
+            tx_c = cursor.fetchone()
+            ponta_d = None
+            if tx_c:
+                if conta_origem_id:
+                    if _mesmo_dono(cursor, tx_c['account_id'], conta_origem_id):
+                        ponta_d = _outra_ponta(cursor, tx_c, conta_origem_id, 'DEBIT')
+                        if not ponta_d:
+                            raise TransferenciaSemPar(
+                                _msg_sem_par(cursor, tx_c, conta_origem_id, saiu=False))
+                else:
+                    # Sem conta de origem: se o texto traz o CNPJ da própria
+                    # empresa, procura a saída nas outras contas dela
+                    cnpj = re.sub(r'\D', '', tx_c['cnpj'] or '')
+                    texto = re.sub(r'\D', '', f"{tx_c['cnpj_cpf'] or ''} {tx_c['descricao'] or ''}")
+                    if len(cnpj) == 14 and (cnpj in texto or (cnpj[:8] in texto and cnpj[8:12] in texto)):
+                        cursor.execute(
+                            "SELECT id FROM bank_accounts WHERE cliente_id=%s AND id<>%s",
+                            (tx_c['cliente_id'], tx_c['account_id']))
+                        for r in cursor.fetchall():
+                            ponta_d = _outra_ponta(cursor, tx_c, r['id'], 'DEBIT')
+                            if ponta_d:
+                                conta_origem_id = r['id']
+                                break
+                        if not ponta_d:
+                            raise TransferenciaSemPar(
+                                f"Transferência de {tx_c['data_transacao'].strftime('%d/%m/%Y')} "
+                                "não vinculada: veio do mesmo CNPJ e não achei a saída em "
+                                "nenhuma outra conta da empresa (até 3 dias). "
+                                "Fale com o Anderson sobre esse lançamento.")
+            if ponta_d and ponta_d['status'] == 'pendente':
+                cursor.execute(
+                    """UPDATE bank_transactions
+                          SET status='conciliado', conciliado_em=%s, conciliado_por=%s,
+                              tipo_conciliacao='transferencia', conta_destino_id=%s
+                        WHERE id=%s AND status='pendente'""",
+                    (agora, usuario, tx_c['account_id'], ponta_d['id']))
             # Crédito de transferência recebida — confirma a entrada e marca como conciliado
             try:
                 cursor.execute(
@@ -2620,6 +2739,7 @@ def conciliar():
             # tx_N_forma_recebimento_id, tx_N_fornecedor_id, tx_N_conta_destino_id,
             # tx_N_titulo_id, tx_N_categoria_id, tx_N_subcategoria_id, tx_N_valor
             # para N = 0, 1, 2, ... enquanto tx_N_id estiver presente.
+            sem_par = []
             try:
                 n = 0
                 while True:
@@ -2635,13 +2755,20 @@ def conciliar():
                     t_categ    = request.form.get(f'tx_{n}_categoria_id') or None
                     t_sub      = request.form.get(f'tx_{n}_subcategoria_id') or None
                     t_valor    = request.form.get(f'tx_{n}_valor') or None
-                    if t_tipo_deb == 'transferencia' and t_conta:
-                        _conciliar_transferencia(cursor, conn, tid, t_conta, usuario,
-                                                 salvar_mapeamento=True)
-                    elif t_tipo_deb == 'transferencia_recebida':
-                        _conciliar_tx(cursor, conn, tid, 'conciliar', 'CREDIT',
-                                      None, None, usuario, tipo_debito='transferencia',
-                                      salvar_mapeamento=True)
+                    if (t_tipo_deb == 'transferencia' and t_conta) or t_tipo_deb == 'transferencia_recebida':
+                        try:
+                            if t_tipo_deb == 'transferencia':
+                                _conciliar_transferencia(cursor, conn, tid, t_conta, usuario,
+                                                         salvar_mapeamento=True)
+                            else:
+                                _conciliar_tx(cursor, conn, tid, 'conciliar', 'CREDIT',
+                                              None, None, usuario, tipo_debito='transferencia',
+                                              salvar_mapeamento=True)
+                        except TransferenciaSemPar as sp:
+                            conn.rollback()
+                            sem_par.append(str(sp))
+                            n += 1
+                            continue
                     elif t_tipo_deb == 'despesa' and t_titulo and t_categ and t_valor:
                         try:
                             val_f = float(str(t_valor).replace(',', '.'))
@@ -2680,6 +2807,8 @@ def conciliar():
                 flash('Erro ao aprovar sugestões. Tente novamente ou contacte o suporte.', 'danger')
                 return redirect(request.url)
             flash(f'{ok} sugestão(ões) aprovada(s) com sucesso!', 'success')
+            for m in sem_par:
+                flash(m, 'warning')
             _close_db()
             return redirect(request.url)
 
@@ -2730,19 +2859,26 @@ def conciliar():
         salvar_mapeamento = (acao != 'lancamento_unico')
         # Lançamento Único usa a mesma lógica de conciliação, apenas sem salvar mapeamento
         acao_conciliar = 'conciliar' if acao == 'lancamento_unico' else acao
+        sem_par = []
         try:
             for tx_id in tx_ids:
-                if tipo_debito == 'transferencia' and conta_destino_id:
-                    _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
-                                             salvar_mapeamento=salvar_mapeamento)
-                else:
-                    _conciliar_tx(cursor, conn, tx_id, acao_conciliar, tipo_tx,
-                                  fornecedor_id, forma_recebimento_id, usuario,
-                                  tipo_debito=tipo_debito, despesas=despesas or None,
-                                  troco_pix_id=troco_pix_id,
-                                  salvar_mapeamento=salvar_mapeamento,
-                                  conta_origem_id=conta_origem_id,
-                                  devolucao_lancamento_id=devolucao_lancamento_id)
+                try:
+                    if tipo_debito == 'transferencia' and conta_destino_id:
+                        _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
+                                                 salvar_mapeamento=salvar_mapeamento)
+                    else:
+                        _conciliar_tx(cursor, conn, tx_id, acao_conciliar, tipo_tx,
+                                      fornecedor_id, forma_recebimento_id, usuario,
+                                      tipo_debito=tipo_debito, despesas=despesas or None,
+                                      troco_pix_id=troco_pix_id,
+                                      salvar_mapeamento=salvar_mapeamento,
+                                      conta_origem_id=conta_origem_id,
+                                      devolucao_lancamento_id=devolucao_lancamento_id)
+                except TransferenciaSemPar as sp:
+                    # Não vincula esta; as outras do lote seguem
+                    conn.rollback()
+                    sem_par.append(str(sp))
+                    continue
                 ok += 1
         except Exception as exc:
             try:
@@ -2756,8 +2892,10 @@ def conciliar():
 
         if acao == 'ignorar':
             flash(f'{ok} transação(ões) ignorada(s).', 'info')
-        else:
+        elif ok or not sem_par:
             flash(f'{ok} transação(ões) conciliada(s) com sucesso!', 'success')
+        for m in sem_par:
+            flash(m, 'warning')
 
         _close_db()
         # Mantém filtros após POST
