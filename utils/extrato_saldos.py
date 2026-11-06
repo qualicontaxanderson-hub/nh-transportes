@@ -63,6 +63,13 @@ def saldo_do_ofx(conteudo):
         v = v.replace('.', '').replace(',', '.')
     try:
         d = m.group(2)
+        # Santander (BANKID 033): DTASOF é a hora do download, mas o BALAMT é
+        # o saldo ao fim do último dia do arquivo (DTEND). Medido 06/11/2026
+        # nos OFX de ago/set/out contra o PDF do banco.
+        if re.search(r'<BANKID>\s*0*33\b', conteudo, re.I):
+            fim = re.search(r'<DTEND>\s*(\d{8})', conteudo, re.I)
+            if fim and fim.group(1) < d:
+                d = fim.group(1)
         return date(int(d[:4]), int(d[4:6]), int(d[6:8])), round(float(v), 2)
     except Exception:
         return None

@@ -800,6 +800,42 @@ def _get_fornecedores(cursor):
     return cursor.fetchall()
 
 
+def _santander_ja_gravados(cursor, account_id, transactions, existing_hashes):
+    """hashes do arquivo que já estão no banco por outro FITID (só Santander)."""
+    cursor.execute("SELECT banco_nome FROM bank_accounts WHERE id=%s", (account_id,))
+    r = cursor.fetchone()
+    if not r or 'SANTANDER' not in (r['banco_nome'] or '').upper():
+        return set()
+
+    def chave(d, tipo, valor, desc):
+        return (str(d), tipo, f"{float(valor):.2f}", (desc or '').strip())
+
+    datas = [t['data_transacao'] for t in transactions]
+    cursor.execute(
+        """SELECT data_transacao, tipo, valor, descricao, COUNT(*) AS n
+             FROM bank_transactions
+            WHERE account_id=%s AND data_transacao BETWEEN %s AND %s
+              AND NOT (hash_dedup LIKE 'TRANSFER%%' AND COALESCE(fitid,'')='')
+            GROUP BY data_transacao, tipo, valor, descricao""",
+        (account_id, min(datas), max(datas)))
+    no_banco = Counter()
+    for x in cursor.fetchall():
+        no_banco[chave(x['data_transacao'], x['tipo'], x['valor'], x['descricao'])] += x['n']
+    no_arquivo = Counter(chave(t['data_transacao'], t['tipo'], t['valor'], t['descricao'])
+                         for t in transactions)
+    pode_entrar = {k: max(0, n - no_banco[k]) for k, n in no_arquivo.items()}
+    repetidos = set()
+    for t in transactions:
+        if t['hash_dedup'] in existing_hashes:
+            continue
+        k = chave(t['data_transacao'], t['tipo'], t['valor'], t['descricao'])
+        if pode_entrar[k] > 0:
+            pode_entrar[k] -= 1
+        else:
+            repetidos.add(t['hash_dedup'])
+    return repetidos
+
+
 def _save_transactions(cursor, conn, account_id, transactions):
     """
     Insere em lote as *transactions* (saída de OFXParser.get_transactions()) na tabela
@@ -837,6 +873,16 @@ def _save_transactions(cursor, conn, account_id, transactions):
     except Exception:
         conn.rollback()
         logger.exception("_save_transactions: reconhecer o que veio pela API falhou (conta %s)", account_id)
+    # 1c. Santander: o FITID leva a hora do download e muda a cada arquivo, então
+    #     o hash não pega o mesmo lançamento baixado duas vezes (TED 627,49 de
+    #     28/09 e PIX 2.620,66 de 22/10 entraram em dobro). Conta quantas vezes
+    #     cada (dia, tipo, valor, texto) aparece no arquivo e no banco e só
+    #     deixa entrar o que passa da conta. 06/11/2026.
+    try:
+        existing_hashes |= _santander_ja_gravados(cursor, account_id, transactions, existing_hashes)
+    except Exception:
+        conn.rollback()
+        logger.exception("_save_transactions: dedup do Santander falhou (conta %s)", account_id)
 
     # 2. Busca de mapeamento de fornecedores/formas/despesas em lote (por CNPJ)
     cnpj_list = list({tx['cnpj_cpf'] for tx in transactions if tx.get('cnpj_cpf')})
