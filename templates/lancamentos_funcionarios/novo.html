@@ -508,8 +508,15 @@ document.getElementById('folha-pdf').addEventListener('change', function () {
                 if (achou.length !== 1) { foraDaTela.push(p.nome + (achou.length > 1 ? ' (mais de um nome parecido)' : '')); return; }
                 const tr = achou[0].tr;
                 usados.add(tr);
-                if (tr.dataset.tipo === 'motorista') { motoristas.push(tr.dataset.nome); return; }
                 const partes = [];
+                if (tr.dataset.tipo === 'motorista') {
+                    // motorista: o resto é lançado de outra forma; só FGTS e o
+                    // INSS (que não descontamos dele) entram como despesa
+                    if (p.fgts && folhaPoe(tr, 'FGTS', p.fgts)) partes.push('FGTS ' + folhaBrl(p.fgts));
+                    if (p.inss && folhaPoe(tr, 'INSS', p.inss)) partes.push('INSS ' + folhaBrl(p.inss));
+                    motoristas.push(`<b>${folhaEsc(tr.dataset.nome)}</b>: ${partes.join(' · ') || 'nada'}`);
+                    return;
+                }
                 if (folhaPoe(tr, 'SALÁRIO BASE', p.salario_base || 0)) partes.push('Salário ' + folhaBrl(p.salario_base || 0));
                 if (p.fgts && folhaPoe(tr, 'FGTS', p.fgts)) partes.push('FGTS ' + folhaBrl(p.fgts));
                 if (p.rescisao && folhaPoe(tr, 'Rescisão', p.rescisao)) partes.push('Rescisão ' + folhaBrl(p.rescisao));

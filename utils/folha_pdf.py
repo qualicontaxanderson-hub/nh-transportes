@@ -52,8 +52,11 @@ def _relacao_calculo(txt):
         rescisao = 0.0
         if demitido:
             rescisao = round(sum(v for t, d, v in eventos if t == '1' and _RESCISAO.search(d)), 2)
+        # INSS do empregado (1950 normal, 1951 s/ 13º): só vai para a tela
+        # nos motoristas, de quem a empresa não desconta (vira despesa)
+        inss = round(sum(v for t, d, v in eventos if t == '3' and d.upper().startswith('INSS')), 2)
         p = {'nome': nome.group(1).strip(), 'origem': 'folha',
-             'salario_base': round(proventos - rescisao, 2), 'fgts': fgts}
+             'salario_base': round(proventos - rescisao, 2), 'fgts': fgts, 'inss': inss}
         if rescisao:
             p['rescisao'] = rescisao
             p['demitido'] = True
