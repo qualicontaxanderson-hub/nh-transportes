@@ -2108,8 +2108,9 @@ def _outra_ponta(cursor, tx, outra_conta_id, tipo_ponta):
                AND ABS(DATEDIFF(data_transacao, %s)) <= 3
                AND NOT (hash_dedup LIKE 'TRANSFER%%' AND COALESCE(fitid,'')='')
                AND (status='pendente'
-                    OR (tipo_conciliacao='transferencia' AND {col}=%s))
-             ORDER BY ABS(DATEDIFF(data_transacao, %s)), status='pendente' DESC, id
+                    OR (tipo_conciliacao='transferencia' AND ({col}=%s OR {col} IS NULL)))
+             ORDER BY (status<>'pendente' AND {col} IS NOT NULL),
+                      ABS(DATEDIFF(data_transacao, %s)), id
              LIMIT 1""",
         (outra_conta_id, tipo_ponta, tx['valor'], tx['id'], tx['data_transacao'],
          tx['account_id'], tx['data_transacao']))
@@ -2188,6 +2189,11 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
                           tipo_conciliacao='transferencia', conta_origem_id=%s
                     WHERE id=%s AND status='pendente'""",
                 (agora, usuario, tx['account_id'], ponta['id']))
+        else:
+            # já conciliada como transferência sem dizer de onde veio
+            cursor.execute(
+                "UPDATE bank_transactions SET conta_origem_id=%s WHERE id=%s AND conta_origem_id IS NULL",
+                (tx['account_id'], ponta['id']))
         conn.commit()
         return
     # Cria CREDIT na conta destino. Usa TRANSFER_<id> para garantir que cabe
@@ -2328,6 +2334,10 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                               tipo_conciliacao='transferencia', conta_destino_id=%s
                         WHERE id=%s AND status='pendente'""",
                     (agora, usuario, tx_c['account_id'], ponta_d['id']))
+            elif ponta_d:
+                cursor.execute(
+                    "UPDATE bank_transactions SET conta_destino_id=%s WHERE id=%s AND conta_destino_id IS NULL",
+                    (tx_c['account_id'], ponta_d['id']))
             # Crédito de transferência recebida — confirma a entrada e marca como conciliado
             try:
                 cursor.execute(
