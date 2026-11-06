@@ -78,7 +78,7 @@
                             <i class="bi bi-file-earmark-arrow-up"></i> Importar folha (PDF)
                         </label>
                         <input type="file" id="folha-pdf" accept=".pdf,application/pdf" multiple class="d-none">
-                        <small class="text-muted">Relação de Cálculo da contabilidade + recibo avulso de quem não é registrado. Motoristas não são preenchidos.</small>
+                        <small class="text-muted">Relação de Cálculo da contabilidade + recibo avulso de quem não é registrado. Motorista: só FGTS e INSS.</small>
                     </div>
                     <div id="folha-resultado" class="mb-3" style="display:none;"></div>
                     
@@ -529,7 +529,7 @@ document.getElementById('folha-pdf').addEventListener('change', function () {
             let h = `<div class="alert alert-success py-2 mb-2"><b>${preenchidos.length} preenchido(s)</b> — confira e clique em <b>Salvar Lançamentos</b>.`
                   + (preenchidos.length ? '<ul class="mb-0 mt-1">' + preenchidos.map(x => `<li>${x}</li>`).join('') + '</ul>' : '') + '</div>';
             const obs = [];
-            if (motoristas.length) obs.push('<b>Motorista (não preenchido):</b> ' + motoristas.map(folhaEsc).join(', '));
+            if (motoristas.length) obs.push('<b>Motorista (só FGTS e INSS):</b> ' + motoristas.join('; '));
             if (semFolha.length) obs.push('<b>Na tela e não na folha (não mexi):</b> ' + semFolha.map(folhaEsc).join(', '));
             if (foraDaTela.length) obs.push('<b>Na folha e não nesta tela (ignorado):</b> ' + foraDaTela.map(folhaEsc).join(', '));
             (dados.arquivos || []).filter(a => a.aviso).forEach(a => obs.push(`<b>${folhaEsc(a.arquivo)}:</b> ${folhaEsc(a.aviso)}`));
