@@ -3065,9 +3065,34 @@ def transferencias():
             params.append(f_valor_max)
 
         where_sql = ' AND '.join(where)
+        # Pares ligados direto (sem o CREDIT TRANSFER_): a saída tem
+        # conta_destino_id e a entrada verdadeira do extrato tem
+        # conta_origem_id — _auto_ligar_transferencia (25/10/2026) e a regra
+        # do mesmo CNPJ (06/11/2026). Mesmos filtros, "bt" = a entrada.
+        where_par = ' AND '.join(where[3:]) or '1=1'
+        _par_sql = """
+            FROM (SELECT d.id AS orig_id, d.conta_destino_id AS account_id,
+                         COALESCE(c.data_transacao, d.data_transacao) AS data_transacao,
+                         d.valor, c.descricao, c.id AS id,
+                         IF(c.id IS NULL, 'pendente', 'conciliado') AS status
+                    FROM bank_transactions d
+                    LEFT JOIN bank_transactions c ON c.id = (
+                         SELECT MIN(x.id) FROM bank_transactions x
+                          WHERE x.account_id = d.conta_destino_id AND x.tipo = 'CREDIT'
+                            AND x.valor = d.valor AND x.conta_origem_id = d.account_id
+                            AND ABS(DATEDIFF(x.data_transacao, d.data_transacao)) <= 3)
+                   WHERE d.tipo = 'DEBIT' AND d.status = 'conciliado'
+                     AND d.tipo_conciliacao = 'transferencia'
+                     AND d.conta_destino_id IS NOT NULL
+                     AND NOT EXISTS (SELECT 1 FROM bank_transactions e
+                                      WHERE e.hash_dedup = CONCAT('TRANSFER_', d.id))) bt
+            INNER JOIN bank_transactions bt_orig ON bt_orig.id = bt.orig_id
+            INNER JOIN bank_accounts ba_dest ON ba_dest.id = bt.account_id
+            LEFT  JOIN bank_accounts ba_orig ON ba_orig.id = bt_orig.account_id"""
 
         cursor.execute(
-            f"""SELECT bt.id AS id_credit, bt_orig.id AS id,
+            f"""SELECT * FROM (
+                SELECT bt.id AS id_credit, bt_orig.id AS id,
                        bt.data_transacao, bt.valor, bt_orig.descricao AS descricao,
                        bt.status AS credit_status,
                        ba_orig.apelido AS conta_orig_apelido, ba_orig.banco_nome AS banco_orig,
@@ -3078,22 +3103,35 @@ def transferencias():
                 INNER JOIN bank_accounts ba_dest ON ba_dest.id = bt.account_id
                 LEFT  JOIN bank_accounts ba_orig ON ba_orig.id = bt_orig.account_id
                 WHERE {where_sql}
-                ORDER BY bt.data_transacao DESC
+                UNION ALL
+                SELECT bt.id AS id_credit, bt_orig.id AS id,
+                       bt.data_transacao, bt.valor, bt_orig.descricao AS descricao,
+                       bt.status AS credit_status,
+                       ba_orig.apelido AS conta_orig_apelido, ba_orig.banco_nome AS banco_orig,
+                       ba_dest.apelido AS conta_dest_apelido, ba_dest.banco_nome AS banco_dest
+                {_par_sql}
+                WHERE {where_par}) todas
+                ORDER BY data_transacao DESC
                 LIMIT 5000""",
-            params,
+            params + params,
         )
         lista = cursor.fetchall()
 
         # Totais
         cursor.execute(
-            f"""SELECT SUM(bt.valor) AS total_valor, COUNT(*) AS total_qtd
+            f"""SELECT SUM(v) AS total_valor, SUM(n) AS total_qtd FROM (
+                SELECT SUM(bt.valor) AS v, COUNT(*) AS n
                 FROM bank_transactions bt
                 LEFT JOIN bank_transactions bt_orig
                        ON bt_orig.id = CAST(SUBSTRING(bt.hash_dedup, 10) AS UNSIGNED)
                 INNER JOIN bank_accounts ba_dest ON ba_dest.id = bt.account_id
                 LEFT  JOIN bank_accounts ba_orig ON ba_orig.id = bt_orig.account_id
-                WHERE {where_sql}""",
-            params,
+                WHERE {where_sql}
+                UNION ALL
+                SELECT SUM(bt.valor), COUNT(*)
+                {_par_sql}
+                WHERE {where_par}) t""",
+            params + params,
         )
         totais = cursor.fetchone() or {}
 
@@ -3130,6 +3168,7 @@ def transferencias():
                    WHERE bt.tipo = 'DEBIT'
                      AND bt.status = 'conciliado'
                      AND bt.tipo_conciliacao = 'transferencia'
+                     AND bt.conta_destino_id IS NULL
                      AND NOT EXISTS (
                          SELECT 1 FROM bank_transactions cr
                          WHERE cr.hash_dedup = CONCAT('TRANSFER_', bt.id)
@@ -3164,6 +3203,7 @@ def transferencias():
                          AND bt.descricao LIKE '%Transf%'
                        )
                      )
+                     AND bt.conta_destino_id IS NULL
                      AND NOT EXISTS (
                          SELECT 1 FROM bank_transactions cr
                          WHERE cr.hash_dedup = CONCAT('TRANSFER_', bt.id)
