@@ -3644,10 +3644,19 @@ def exportar_contabil():
     data_ini   = request.args.get('data_ini', '')
     data_fim   = request.args.get('data_fim', '')
 
+    from utils import contabil_transf as _ct
+    _ct.ensure_tables(cursor)   # DDL antes de qualquer leitura (commit implícito)
     where_parts = ['bt.status = %s',
                    # Exclui as linhas espelho CREDIT criadas automaticamente em transferências;
                    # a linha DEBIT já contém toda a informação contábil (débito+crédito).
-                   "NOT (bt.tipo = 'CREDIT' AND COALESCE(bt.tipo_conciliacao,'') = 'transferencia')"]
+                   # 08/11/2026: entrada que veio de OUTRA empresa (ou classificada uma a uma
+                   # na Migração Contábil) entra no livro de quem recebeu.
+                   "NOT (bt.tipo = 'CREDIT' AND COALESCE(bt.tipo_conciliacao,'') = 'transferencia'"
+                   " AND NOT (NOT (bt.hash_dedup LIKE 'TRANSFER%%' AND COALESCE(bt.fitid,'') = '')"
+                   "  AND (EXISTS (SELECT 1 FROM bank_accounts _bo WHERE _bo.id = bt.conta_origem_id"
+                   "               AND _bo.cliente_id <> ba.cliente_id)"
+                   "   OR EXISTS (SELECT 1 FROM contabil_transf_excecoes _ex"
+                   "              WHERE _ex.bank_transaction_id = bt.id))))"]
     params      = ['conciliado']
 
     if account_id:
@@ -3740,6 +3749,26 @@ def exportar_contabil():
     except Exception:
         logger.warning("exportar_contabil: falha ao carregar bank_account_coligadas", exc_info=True)
         coligada_map = {}
+
+    # Migração Contábil (08/11/2026): regra/exceção da transferência entre empresas
+    try:
+        _ct_regras, _ct_exc = _ct.mapas(cursor)
+    except Exception:
+        logger.warning("exportar_contabil: falha ao carregar regras da Migração Contábil", exc_info=True)
+        _ct_regras, _ct_exc = {}, {}
+
+    def _resolver_linha(r):
+        d_cod, d_nome, c_cod, c_nome = _resolver_contas_contabeis(
+            r, despesa_conta_map, coligada_map, fornecedor_conta_map, cnpj_conta_map,
+            troco_pix_conta_map=troco_pix_conta_map)
+        m = _ct.para_exportar(cursor, r, _ct_regras, _ct_exc)
+        if m:
+            lado, cod, nome = m
+            if lado == 'debito':
+                d_cod, d_nome = cod, nome
+            else:
+                c_cod, c_nome = cod, nome
+        return d_cod, d_nome, c_cod, c_nome
 
     # Fetch categoria/subcategoria accounting codes for despesas
     # Build a mapping: bank_transaction_id → conta_contabil code
@@ -4148,9 +4177,7 @@ def exportar_contabil():
                     r['debito_nome'],
                 ])
             else:
-                debito_cod, debito_nome, credito_cod, credito_nome = \
-                    _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map, cnpj_conta_map,
-                                               troco_pix_conta_map=troco_pix_conta_map)
+                debito_cod, debito_nome, credito_cod, credito_nome = _resolver_linha(r)
                 valor = r['valor']
                 w.writerow([
                     r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else '',
@@ -4248,9 +4275,7 @@ def exportar_contabil():
             for col in range(1, 8):
                 ws.cell(row=row_idx, column=col).fill = fee_fill
         else:
-            debito_cod, debito_nome, credito_cod, credito_nome = \
-                _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map, cnpj_conta_map,
-                                           troco_pix_conta_map=troco_pix_conta_map)
+            debito_cod, debito_nome, credito_cod, credito_nome = _resolver_linha(r)
             valor = r['valor']
             data_str = r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else ''
 
