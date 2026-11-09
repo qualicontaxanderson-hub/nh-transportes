@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+{% block title %}Migração Contábil - {{ app_name }}{% endblock %}
+
+{% block styles %}
+<style>
+  .mc { --azul:#1D63A5; --linha:#e5e7eb; --suave:#6b7280; font-size:13px; color:#1f2937; max-width:1100px; margin:0 auto; padding:0 12px; }
+  .mc-topo { background:linear-gradient(135deg,#1D63A5,#154070); color:#fff; border-radius:14px; padding:14px 18px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  .mc-topo h1 { margin:0; font-size:18px; font-weight:700; }
+  .mc-topo .sub { opacity:.8; font-size:12px; max-width:620px; }
+  .mc-topo form { margin-left:auto; }
+  .mc-topo select { border-radius:8px; border:0; padding:5px 8px; font:inherit; }
+  .mc-res { display:flex; gap:10px; margin:12px 0; flex-wrap:wrap; }
+  .mc-res div { background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.07); padding:8px 14px; }
+  .mc-res b { font-size:18px; display:block; }
+  .mc-abas { display:flex; gap:6px; margin:6px 0 12px; }
+  .mc-abas button { border:1px solid var(--linha); background:#fff; border-radius:99px; padding:6px 14px; font-size:12px; font-weight:600; }
+  .mc-abas button.on { background:#1f2937; color:#fff; border-color:#1f2937; }
+  .mc-card { background:#fff; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.07); padding:12px 16px; margin-bottom:10px; border-left:5px solid #f59e0b; }
+  .mc-card.ok { border-left-color:#16a34a; }
+  .mc-card h3 { font-size:15px; font-weight:700; margin:0; }
+  .mc-card h3 .seta { color:var(--suave); font-weight:400; }
+  .mc-meta { color:var(--suave); font-size:12px; margin:2px 0 8px; }
+  .mc-meta .atual { color:#166534; font-weight:600; }
+  .mc-meta .falta { color:#92400e; font-weight:600; }
+  .mc-ant { font-size:11px; color:var(--suave); background:#f3f4f6; border-radius:8px; padding:3px 8px; margin-bottom:8px; }
+  .mc-linha { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .mc-linha select { flex:1; min-width:240px; border:1px solid #d1d5db; border-radius:8px; padding:6px 8px; font:inherit; }
+  .mc-b { border:1px solid var(--linha); background:#fff; border-radius:8px; padding:6px 12px; font-weight:600; font-size:12px; }
+  .mc-b.ok { background:#16a34a; border-color:#16a34a; color:#fff; }
+  .mc-b.lnk { border:0; background:none; color:var(--azul); padding:6px 4px; }
+  table.mc-t { width:100%; border-collapse:collapse; margin-top:8px; font-size:12px; }
+  table.mc-t th { text-align:left; color:var(--suave); font-weight:600; border-bottom:1px solid var(--linha); padding:4px 6px; }
+  table.mc-t td { border-bottom:1px solid #f3f4f6; padding:4px 6px; vertical-align:middle; }
+  table.mc-t td.v { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  table.mc-t select { width:100%; min-width:200px; border:1px solid #d1d5db; border-radius:6px; padding:3px 6px; font:inherit; font-size:12px; }
+  .mc-tag { font-size:11px; border-radius:99px; padding:1px 8px; background:#fef3c7; color:#92400e; }
+  .mc-tag.ok { background:#dcfce7; color:#166534; }
+  .mc-vazio { text-align:center; color:var(--suave); padding:30px; background:#fff; border-radius:14px; }
+  .mc-msg { position:fixed; right:16px; bottom:16px; background:#1f2937; color:#fff; border-radius:10px; padding:8px 14px; display:none; z-index:2000; }
+  @media (max-width:640px) { .mc-topo form { margin-left:0; } table.mc-t .esc { display:none; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mc">
+  <div class="mc-topo">
+    <div>
+      <h1><i class="bi bi-diagram-3"></i> Migração Contábil</h1>
+      <div class="sub">Transferências entre empresas do grupo. No financeiro é uma linha só; no contábil sai no livro das duas,
+        cada uma com a sua conta. Escolha a conta e aplique a todos; abra a linha para trocar só um lançamento.</div>
+    </div>
+    <form method="get">
+      <select name="ano" onchange="this.form.submit()">
+        {% for a in anos %}<option value="{{ a }}" {{ 'selected' if a == ano }}>{{ a }}</option>{% endfor %}
+      </select>
+    </form>
+  </div>
+
+  <div class="mc-res">
+    <div><b>{{ resumo.grupos }}</b>operações</div>
+    <div><b>{{ resumo.sem_regra }}</b>sem conta escolhida</div>
+    <div><b>{{ resumo.sem_origem_ok }}/{{ resumo.sem_origem }}</b>sem origem classificados</div>
+  </div>
+
+  <div class="mc-abas">
+    <button type="button" class="on" data-aba="regras">Operações</button>
+    <button type="button" data-aba="semorigem">Sem origem ({{ resumo.sem_origem }})</button>
+  </div>
+
+  <div id="aba-regras">
+    {% for g in grupos %}
+    <div class="mc-card {{ 'ok' if g.regra }}" data-emp="{{ g.empresa_id }}" data-outra="{{ g.contraparte_id }}" data-sentido="{{ g.sentido }}">
+      <h3>{{ g.empresa }} <span class="seta">{{ 'envia para' if g.sentido == 'envia' else 'recebe de' }}</span> {{ g.contraparte }}</h3>
+      <div class="mc-meta">
+        {{ g.linhas|length }} lançamento(s) · R$ {{ '{:,.2f}'.format(g.total).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+        · no livro de {{ g.empresa }} vai a
+        {{ 'débito' if g.sentido == 'envia' else 'crédito' }}:
+        <span class="regra-txt {{ 'atual' if g.regra else 'falta' }}">{{ (g.regra.codigo ~ ' ' ~ g.regra.nome) if g.regra else 'nenhuma conta escolhida' }}</span>
+        {% if g.n_exc %}· {{ g.n_exc }} exceção(ões){% endif %}
+      </div>
+      {% if g.antigos %}<div class="mc-ant">Vínculo antigo (Gerenciar contas): {{ g.antigos|join(' | ') }}</div>{% endif %}
+      <div class="mc-linha">
+        <select class="sel-conta" data-emp="{{ g.empresa_id }}" data-atual="{{ g.regra.id if g.regra else '' }}"></select>
+        <button type="button" class="mc-b ok bt-regra">Aplicar a todos</button>
+        <button type="button" class="mc-b lnk bt-abre">ver lançamentos</button>
+      </div>
+      <table class="mc-t" style="display:none">
+        <thead><tr><th>Data</th><th>Conta</th><th class="esc">Descrição</th><th class="v">Valor</th><th>Conta contábil (só este)</th></tr></thead>
+        <tbody>
+        {% for l in g.linhas %}
+          <tr><td>{{ l.data_transacao.strftime('%d/%m/%Y') }}</td><td>{{ l.conta }}</td>
+              <td class="esc">{{ (l.descricao or '')[:60] }}</td>
+              <td class="v">{{ '{:,.2f}'.format(l.valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+              <td><select class="sel-exc" data-bt="{{ l.id }}" data-emp="{{ l.empresa_id }}" data-atual="{{ l.excecao.id if l.excecao else '' }}" data-regra="1"></select></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="mc-vazio">Nenhuma transferência entre empresas em {{ ano }}.</div>
+    {% endfor %}
+  </div>
+
+  <div id="aba-semorigem" style="display:none">
+    <div class="mc-card">
+      <div class="mc-meta">Entraram ou saíram como "transferência", mas sem a conta do outro lado (ex.: Qualicontax, que não manda extrato para cá).
+        Só vão para o arquivo do contador depois de classificados aqui.</div>
+      <table class="mc-t">
+        <thead><tr><th>Data</th><th>Empresa</th><th>Conta</th><th class="esc">Descrição</th><th class="v">Valor</th><th>Conta contábil</th></tr></thead>
+        <tbody>
+        {% for l in sem_origem %}
+          <tr><td>{{ l.data_transacao.strftime('%d/%m/%Y') }}</td><td>{{ l.empresa }}</td><td>{{ l.conta }}</td>
+              <td class="esc">{{ (l.descricao or '')[:60] }}</td>
+              <td class="v">{{ '-' if l.sentido == 'envia' }}{{ '{:,.2f}'.format(l.valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+              <td><select class="sel-exc" data-bt="{{ l.id }}" data-emp="{{ l.empresa_id }}" data-atual="{{ l.excecao.id if l.excecao else '' }}"></select></td></tr>
+        {% else %}
+          <tr><td colspan="6" class="mc-vazio">Nada sem origem em {{ ano }}.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div class="mc-msg" id="mc-msg"></div>
+
+<script>
+(function () {
+  var CONTAS = {{ contas|tojson }};
+  var URL_REGRA = "{{ url_for('migracao_contabil.salvar_regra') }}";
+  var URL_EXC = "{{ url_for('migracao_contabil.salvar_excecao') }}";
+  var TIPOS = ['ATIVO', 'PASSIVO', 'RECEITAS', 'DESPESAS', 'CUSTOS', 'OUTROS'];
+
+  function msg(t) { var m = document.getElementById('mc-msg'); m.textContent = t; m.style.display = 'block';
+                    clearTimeout(m._t); m._t = setTimeout(function () { m.style.display = 'none'; }, 2500); }
+
+  function encher(sel, vazio) {
+    if (sel._cheio) return;
+    var lista = CONTAS[sel.dataset.emp] || [];
+    var atual = sel.dataset.atual;
+    var h = '<option value="">' + vazio + '</option>';
+    TIPOS.forEach(function (tp) {
+      var g = lista.filter(function (c) { return (c.tipo_grupo || 'OUTROS') === tp; });
+      if (!g.length) return;
+      h += '<optgroup label="' + tp + '">';
+      g.forEach(function (c) {
+        h += '<option value="' + c.id + '"' + (String(c.id) === atual ? ' selected' : '') + '>' +
+             c.codigo + ' - ' + String(c.nome).replace(/</g, '&lt;') + '</option>';
+      });
+      h += '</optgroup>';
+    });
+    if (!lista.length) h = '<option value="">(empresa sem plano de contas)</option>';
+    sel.innerHTML = h; sel._cheio = true;
+  }
+
+  function post(url, dados) {
+    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados) })
+      .then(function (r) { return r.json(); });
+  }
+
+  document.querySelectorAll('.sel-conta').forEach(function (s) { encher(s, '— escolha a conta —'); });
+  document.querySelectorAll('#aba-semorigem .sel-exc').forEach(function (s) { encher(s, '— não classificado —'); });
+
+  document.querySelectorAll('.mc-abas button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.mc-abas button').forEach(function (x) { x.classList.toggle('on', x === b); });
+      document.getElementById('aba-regras').style.display = b.dataset.aba === 'regras' ? '' : 'none';
+      document.getElementById('aba-semorigem').style.display = b.dataset.aba === 'semorigem' ? '' : 'none';
+    });
+  });
+
+  document.querySelectorAll('.bt-abre').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var t = b.closest('.mc-card').querySelector('table');
+      var abrir = t.style.display === 'none';
+      t.style.display = abrir ? '' : 'none';
+      b.textContent = abrir ? 'esconder' : 'ver lançamentos';
+      if (abrir) t.querySelectorAll('.sel-exc').forEach(function (s) { encher(s, '(usa a regra)'); });
+    });
+  });
+
+  document.querySelectorAll('.bt-regra').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var card = b.closest('.mc-card'), sel = card.querySelector('.sel-conta');
+      if (!sel.value) { msg('Escolha a conta primeiro'); return; }
+      b.disabled = true;
+      post(URL_REGRA, { empresa_id: card.dataset.emp, contraparte_id: card.dataset.outra,
+                        sentido: card.dataset.sentido, conta_id: sel.value })
+        .then(function (r) {
+          b.disabled = false;
+          if (!r.ok) { msg(r.erro || 'Erro'); return; }
+          var t = card.querySelector('.regra-txt');
+          t.textContent = r.conta.codigo + ' ' + r.conta.nome; t.className = 'regra-txt atual';
+          card.classList.add('ok'); sel.dataset.atual = sel.value;
+          msg('Aplicado a todos os lançamentos desta operação');
+        }).catch(function () { b.disabled = false; msg('Erro de conexão'); });
+    });
+  });
+
+  document.addEventListener('change', function (e) {
+    var s = e.target;
+    if (!s.classList || !s.classList.contains('sel-exc')) return;
+    s.disabled = true;
+    post(URL_EXC, { bt_id: s.dataset.bt, conta_id: s.value || null }).then(function (r) {
+      s.disabled = false;
+      if (!r.ok) { msg(r.erro || 'Erro'); s.value = s.dataset.atual || ''; return; }
+      s.dataset.atual = s.value;
+      msg(s.value ? 'Gravado só para este lançamento' : (s.dataset.regra ? 'Volta a usar a regra' : 'Desclassificado'));
+    }).catch(function () { s.disabled = false; msg('Erro de conexão'); });
+  });
+})();
+</script>
+{% endblock %}
