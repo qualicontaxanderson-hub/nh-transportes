@@ -1415,7 +1415,7 @@ def _auto_ligar_transferencia(cursor, conn, dias=60):
             return 0
         ph = ','.join(['%s'] * len(dono))
         cursor.execute(
-            f"""SELECT id, account_id, data_transacao, tipo, valor, descricao, cnpj_cpf
+            f"""SELECT id, account_id, data_transacao, tipo, valor, descricao, cnpj_cpf, memo
                   FROM bank_transactions
                  WHERE status='pendente' AND account_id IN ({ph})
                    AND data_transacao >= CURDATE() - INTERVAL %s DAY
@@ -1440,7 +1440,9 @@ def _auto_ligar_transferencia(cursor, conn, dias=60):
                 c for c in entradas[f"{float(d['valor']):.2f}"]
                 if c['account_id'] != d['account_id']
                 and abs((c['data_transacao'] - d['data_transacao']).days) <= 3
-                and traz(d, dono[c['account_id']]) and traz(c, dono[d['account_id']])])
+                and traz(d, dono[c['account_id']])
+                and (traz(c, dono[d['account_id']])
+                     or (_mesma_tit(c) and dono[c['account_id']] == dono[d['account_id']]))])
         disputa = Counter(c['id'] for _d, cs in pares.values() for c in cs)
 
         agora = _dt.datetime.now()
@@ -1736,7 +1738,7 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
     # Busca transações ainda pendentes com dados da conta
     if account_id:
         cursor.execute(
-            """SELECT bt.id, bt.descricao, bt.tipo, bt.cnpj_cpf,
+            """SELECT bt.id, bt.descricao, bt.tipo, bt.cnpj_cpf, bt.memo,
                       bt.data_transacao, bt.valor, bt.account_id,
                       ba.cliente_id AS conta_cliente_id
                FROM bank_transactions bt
@@ -1747,7 +1749,7 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
         )
     else:
         cursor.execute(
-            """SELECT bt.id, bt.descricao, bt.tipo, bt.cnpj_cpf,
+            """SELECT bt.id, bt.descricao, bt.tipo, bt.cnpj_cpf, bt.memo,
                       bt.data_transacao, bt.valor, bt.account_id,
                       ba.cliente_id AS conta_cliente_id
                FROM bank_transactions bt
@@ -1777,6 +1779,8 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
     for tx in pendentes:
         descricao = (tx.get('descricao') or '').upper()
         tipo = tx.get('tipo') or ''
+        if tipo == 'CREDIT' and _mesma_tit(tx):
+            continue  # mesmo titular = transferência, nunca regra de recebimento (14/11/2026)
         for regra in regras:
             # Filtra por conta bancária: se a regra for específica para uma conta,
             # só aplica a transações dessa conta
@@ -2163,6 +2167,26 @@ def _outra_ponta(cursor, tx, outra_conta_id, tipo_ponta):
     return cursor.fetchone()
 
 
+_RE_MESMA_TIT = re.compile(r'MESMA\s*TIT', re.I)
+
+
+def _mesma_tit(tx):
+    """O banco marca a entrada como vinda do MESMO titular ("PIX RECEBIDO -
+    OUTRA IF - MESMA TIT.", Sicoob): é transferência entre contas da casa,
+    nunca recebimento (14/11/2026)."""
+    return bool(_RE_MESMA_TIT.search(f"{tx.get('memo') or ''} {tx.get('descricao') or ''}"))
+
+
+def _conta_tem_extrato(cursor, conta_id):
+    """A conta recebe extrato no sistema (OFX/API nos últimos 90 dias)? Sem
+    extrato (ex.: Qualicontax) a entrada não tem como ser conferida."""
+    cursor.execute(
+        """SELECT 1 FROM bank_transactions
+            WHERE account_id=%s AND data_transacao >= CURDATE() - INTERVAL 90 DAY
+              AND COALESCE(fitid,'')<>'' LIMIT 1""", (conta_id,))
+    return cursor.fetchone() is not None
+
+
 def _destino_pela_outra_ponta(cursor, transacoes):
     """Sugestão de destino da transferência (tela Conciliação): a conta onde
     está a entrada VERDADEIRA — mesmo valor, até 3 dias, não espelho, livre
@@ -2215,7 +2239,10 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
     if not tx:
         return
     ponta = None
-    if _mesmo_dono(cursor, tx['account_id'], conta_destino_id):
+    # Mesmo CNPJ (06/11) ou outra empresa cuja conta tem extrato (14/11/2026):
+    # só vincula com a entrada verdadeira; espelho só p/ conta sem extrato.
+    if (_mesmo_dono(cursor, tx['account_id'], conta_destino_id)
+            or _conta_tem_extrato(cursor, conta_destino_id)):
         ponta = _outra_ponta(cursor, tx, conta_destino_id, 'CREDIT')
         if not ponta:
             raise TransferenciaSemPar(_msg_sem_par(cursor, tx, conta_destino_id, saiu=True))
@@ -2360,7 +2387,7 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
             # e liga as duas pontas; sem ela, não vincula
             cursor.execute(
                 """SELECT bt.id, bt.account_id, bt.data_transacao, bt.valor, bt.descricao,
-                          bt.cnpj_cpf, ba.cliente_id, cl.cnpj
+                          bt.cnpj_cpf, bt.memo, ba.cliente_id, cl.cnpj
                      FROM bank_transactions bt
                      JOIN bank_accounts ba ON ba.id = bt.account_id
                      LEFT JOIN clientes cl ON cl.id = ba.cliente_id
@@ -2379,7 +2406,7 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                     # empresa, procura a saída nas outras contas dela
                     cnpj = re.sub(r'\D', '', tx_c['cnpj'] or '')
                     texto = re.sub(r'\D', '', f"{tx_c['cnpj_cpf'] or ''} {tx_c['descricao'] or ''}")
-                    if len(cnpj) == 14 and (cnpj in texto or (cnpj[:8] in texto and cnpj[8:12] in texto)):
+                    if _mesma_tit(tx_c) or (len(cnpj) == 14 and (cnpj in texto or (cnpj[:8] in texto and cnpj[8:12] in texto))):
                         cursor.execute(
                             "SELECT id FROM bank_accounts WHERE cliente_id=%s AND id<>%s",
                             (tx_c['cliente_id'], tx_c['account_id']))
@@ -2497,6 +2524,13 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
             # Crédito → Forma de Recebimento
             if not forma_recebimento_id:
                 raise ValueError("Selecione uma forma de recebimento para conciliar este crédito.")
+            cursor.execute("SELECT data_transacao, valor, descricao, memo FROM bank_transactions WHERE id=%s", (tx_id,))
+            _cr = cursor.fetchone() or {}
+            if _mesma_tit(_cr):
+                raise TransferenciaSemPar(
+                    f"Entrada de R$ {float(_cr['valor']):,.2f} em {_cr['data_transacao']:%d/%m/%Y} "
+                    "veio do MESMO TITULAR: é transferência entre contas, não recebimento. "
+                    "Concilie como transferência recebida.")
             cursor.execute(
                 """UPDATE bank_transactions
                    SET status='conciliado', forma_recebimento_id=%s,
@@ -2865,6 +2899,9 @@ def conciliar():
                                           tipo_debito=t_tipo_deb or 'fornecedor',
                                           salvar_mapeamento=True)
                         except ValueError as ve:
+                            if isinstance(ve, TransferenciaSemPar):
+                                conn.rollback()
+                                sem_par.append(str(ve))
                             logger.debug("aprovar_sugestoes_pagina: ignorando tx %s — %s", tid, ve)
                             n += 1
                             continue
@@ -3320,6 +3357,14 @@ def conciliar():
                     tx['sugestao_despesa_label'] = (
                         (tx.get('sugestao_titulo_nome') or '') + ' › ' + (tx.get('sugestao_categoria_nome') or '')
                     )
+
+            # Entrada do MESMO TITULAR: nunca recebimento — palpite é transferência (14/11/2026)
+            for tx in transacoes:
+                if tx.get('tipo') == 'CREDIT' and _mesma_tit(tx):
+                    for k in ('sugestao_forma_id', 'sugestao_forma_nome', 'sugestao_fornecedor_id',
+                              'sugestao_fornecedor_nome', 'sugestao_titulo_id', 'sugestao_regra'):
+                        tx[k] = None
+                    tx['sugestao_tipo_debito'] = 'transferencia'
 
             # Marca CREDITs que são transferências recebidas (sintéticas ou por CNPJ aprendido)
             for tx in transacoes:
@@ -4621,7 +4666,7 @@ def api_auto_reconcile():
         # 2. Auto-conciliação por CNPJ (apenas para os que ficaram pendentes após as regras)
         try:
             cursor.execute(
-                """SELECT bt.id, bt.tipo, bsm.fornecedor_id, bsm.forma_recebimento_id
+                """SELECT bt.id, bt.tipo, bt.memo, bt.descricao, bsm.fornecedor_id, bsm.forma_recebimento_id
                    FROM bank_transactions bt
                    INNER JOIN bank_supplier_mapping bsm ON bsm.id = (
                        SELECT s.id FROM bank_supplier_mapping s
@@ -4638,7 +4683,7 @@ def api_auto_reconcile():
             # Fallback when descricao_chave column does not yet exist in the DB
             logger.warning("api_auto_reconcile: descricao_chave column missing, using simple join fallback")
             cursor.execute(
-                """SELECT bt.id, bt.tipo, bsm.fornecedor_id, bsm.forma_recebimento_id
+                """SELECT bt.id, bt.tipo, bt.memo, bt.descricao, bsm.fornecedor_id, bsm.forma_recebimento_id
                    FROM bank_transactions bt
                    INNER JOIN bank_supplier_mapping bsm ON bsm.cnpj_cpf = bt.cnpj_cpf
                    WHERE bt.status = 'pendente' AND bt.cnpj_cpf IS NOT NULL AND bt.cnpj_cpf != ''"""
@@ -4649,9 +4694,12 @@ def api_auto_reconcile():
         batch_credit = []
         batch_debit  = []
         for row in rows:
+            # 14/11/2026: memorização de transferência (sem forma/fornecedor)
+            # não concilia "no vazio", e entrada do MESMO TITULAR nunca vira recebimento
             if row['tipo'] == 'CREDIT':
-                batch_credit.append((row['forma_recebimento_id'], agora, row['id']))
-            else:
+                if row['forma_recebimento_id'] and not _mesma_tit(row):
+                    batch_credit.append((row['forma_recebimento_id'], agora, row['id']))
+            elif row['fornecedor_id']:
                 batch_debit.append((row['fornecedor_id'], agora, row['id']))
         if batch_credit:
             cursor.executemany(
