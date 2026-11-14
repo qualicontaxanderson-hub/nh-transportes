@@ -2163,6 +2163,27 @@ def _outra_ponta(cursor, tx, outra_conta_id, tipo_ponta):
     return cursor.fetchone()
 
 
+def _destino_pela_outra_ponta(cursor, transacoes):
+    """Sugestão de destino da transferência (tela Conciliação): a conta onde
+    está a entrada VERDADEIRA — mesmo valor, até 3 dias, não espelho, livre
+    (mesmas condições de _outra_ponta). Exatamente uma conta → sugere; nenhuma
+    ou várias → None. A memorização não decide o destino (14/11/2026)."""
+    for tx in transacoes:
+        if tx.get('tipo') != 'DEBIT' or tx.get('sugestao_tipo_debito') != 'transferencia':
+            continue
+        cursor.execute(
+            """SELECT DISTINCT account_id FROM bank_transactions
+                WHERE tipo='CREDIT' AND valor=%s AND account_id<>%s
+                  AND ABS(DATEDIFF(data_transacao, %s)) <= 3
+                  AND NOT (hash_dedup LIKE 'TRANSFER%%' AND COALESCE(fitid,'')='')
+                  AND (status='pendente'
+                       OR (tipo_conciliacao='transferencia'
+                           AND (conta_origem_id=%s OR conta_origem_id IS NULL)))""",
+            (tx['valor'], tx['account_id'], tx['data_transacao'], tx['account_id']))
+        contas = [r['account_id'] for r in cursor.fetchall()]
+        tx['sugestao_conta_destino_id'] = contas[0] if len(contas) == 1 else None
+
+
 def _msg_sem_par(cursor, tx, outra_conta_id, saiu):
     v = f"{float(tx['valor']):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
     d = tx['data_transacao'].strftime('%d/%m/%Y') if hasattr(tx['data_transacao'], 'strftime') else tx['data_transacao']
@@ -3185,6 +3206,17 @@ def conciliar():
                             tx['sugestao_categoria_nome']      = bsm.get('sugestao_categoria_nome')
                 except Exception:
                     logger.warning("conciliar: description-only BSM lookup failed", exc_info=True)
+
+            # Transferência: a conta de destino NÃO vem da memorização (14/11/2026).
+            # Só sugere a conta onde está a entrada verdadeira; nenhuma ou mais
+            # de uma → destino em branco, o usuário escolhe.
+            try:
+                _destino_pela_outra_ponta(cursor, transacoes)
+            except Exception:
+                logger.warning("conciliar: destino pela outra ponta falhou", exc_info=True)
+                for tx in transacoes:
+                    if tx.get('sugestao_tipo_debito') == 'transferencia':
+                        tx['sugestao_conta_destino_id'] = None
 
             # -----------------------------------------------------------------------
             # Aplicar regras por padrão de descrição a transações sem sugestão de CNPJ
