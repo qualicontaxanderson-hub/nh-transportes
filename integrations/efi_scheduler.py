@@ -59,6 +59,17 @@ def _job(app):
             logger.info("[efi_sched] outro worker já está reconciliando; pulando.")
             return
 
+        # Boletos do Cora (desde 18/11/2026): mesma baixa, pergunta boleto a
+        # boleto pelos que estão em aberto aqui. Isolado: se o Cora falhar, a
+        # baixa da Efí roda igual.
+        try:
+            from integrations import cora_boleto
+            rc = cora_boleto.reconciliar(conn, 'prest', logger)
+            if rc["pagos"] or rc["cancelados"]:
+                logger.info("[efi_sched] Cora: %d pago(s), %d cancelado(s).", rc["pagos"], rc["cancelados"])
+        except Exception:
+            logger.exception("[efi_sched] baixa do Cora falhou (segue a da Efí).")
+
         try:
             dias = int(os.environ.get("EFI_SCHED_DIAS", "45"))
         except ValueError:
