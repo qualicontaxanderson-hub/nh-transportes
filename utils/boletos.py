@@ -1265,7 +1265,72 @@ def _build_pay_payload_multi(client_data, data_vencimento):
     return payment
 
 
-def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
+def _emitir_cora_fretes(conn, cursor, rows, ids, client_data, items, total_centavos, data_vencimento):
+    """Emite pelo Cora da Prest os fretes já conferidos por emitir_boleto_multiplo
+    (trava, boleto_emitido, cobrança ativa, mesmo cliente, valores). Grava a
+    cobrança igual à da Efí; o id do Cora ('inv_...') vai em charge_id."""
+    from integrations import cora_boleto as cora
+    cliente = {
+        "nome": client_data.get("cliente_nome") or client_data.get("cliente_fantasia"),
+        "documento": client_data.get("cliente_cnpj"),
+        "email": client_data.get("cliente_email"),
+        "endereco": client_data.get("cliente_endereco"),
+        "numero": client_data.get("cliente_numero"),
+        "complemento": client_data.get("cliente_complemento"),
+        "bairro": client_data.get("cliente_bairro"),
+        "cidade": client_data.get("cliente_cidade"),
+        "uf": client_data.get("cliente_estado"),
+        "cep": client_data.get("cliente_cep"),
+    }
+    nome_servico = ("Frete #%s" % ids[0]) if len(ids) == 1 else ("Fretes " + ", ".join("#%s" % i for i in ids))
+    descricao = "; ".join(it["name"] for it in items)
+    venc = data_vencimento.date() if hasattr(data_vencimento, "date") else data_vencimento
+    try:
+        corpo = cora.montar_corpo(cliente, total_centavos, venc, nome_servico, descricao,
+                                  codigo="fretes-" + "-".join(map(str, ids)))
+    except ValueError as e:
+        return {"success": False, "error": str(e)}
+    try:
+        inv = cora.emitir("prest", corpo)
+    except Exception as e:
+        logger.exception("Cora: falha ao emitir boleto fretes %s", ids)
+        return {"success": False, "error": f"Cora recusou: {e}"}
+    f = cora.campos(inv)
+    charge_id = f["charge_id"]
+    try:
+        cursor.execute("""
+            INSERT INTO cobrancas
+              (frete_id, id_cliente, valor, data_vencimento, status,
+               charge_id, link_boleto, pdf_boleto, data_emissao, barcode, pix_qrcode, observacao)
+            VALUES (%s, %s, %s, %s, 'pendente', %s, %s, %s, %s, %s, %s, %s)
+        """, (None, client_data["clientes_id"], total_centavos / 100.0, venc, charge_id,
+              f["pdf_url"], f["pdf_url"], datetime.today().date(), f["barcode"], f["pix"],
+              "Cora Prest"))
+        cobranca_id = cursor.lastrowid
+        for fid in ids:
+            cursor.execute("INSERT INTO cobrancas_freites (cobranca_id, frete_id) VALUES (%s, %s)",
+                           (cobranca_id, fid))
+        cursor.execute(f"UPDATE fretes SET boleto_emitido = TRUE WHERE id IN ({','.join(['%s'] * len(ids))})",
+                       tuple(ids))
+        conn.commit()
+    except Exception:
+        logger.exception("Cora: boleto %s criado mas falhou gravar no banco", charge_id)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        try:
+            _registrar_charge_orfa(conn, client_data, charge_id, data_vencimento, "Cora: emitido, falha ao gravar")
+        except Exception:
+            logger.exception("Cora: registrar órfã falhou")
+        return {"success": False,
+                "error": f"Boleto {charge_id} foi criado no Cora mas não foi gravado aqui. Não emita de novo: cancele no Cora ou avise."}
+    return {"success": True, "cobranca_id": cobranca_id, "charge_id": charge_id,
+            "boleto_url": f["pdf_url"], "barcode": f["barcode"], "pix_qrcode": f["pix"],
+            "pdf_boleto": f["pdf_url"], "banco": "cora"}
+
+
+def emitir_boleto_multiplo(frete_ids, vencimento_str=None, banco=None):
     """
     Emite UM boleto agregando vários fretes (todos pertencentes ao mesmo cliente).
     - frete_ids: lista de inteiros
@@ -1421,6 +1486,10 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
 
         if total_centavos <= 0:
             return {"success": False, "error": "Soma dos fretes inválida/zerada"}
+
+        if (banco or "").strip().lower() == "cora":
+            return _emitir_cora_fretes(conn, cursor, rows, ids, client_data, items,
+                                       total_centavos, data_vencimento)
 
         # montar payloads
         raw_cid = "multi-" + "-".join(map(str, ids)) + "-" + datetime.utcnow().strftime("%Y%m%d%H%M%S")

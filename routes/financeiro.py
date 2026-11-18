@@ -11,8 +11,25 @@ import os
 import re
 import requests
 import mysql.connector
+from integrations import cora_boleto as _cora
 
 financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
+
+# O Cora não tem "alterar vencimento" na API (conferido 18/11/2026).
+_CORA_SEM_PRORROGAR = ("Boleto do Cora não permite alterar o vencimento. "
+                       "Cancele e emita outro com a data nova.")
+
+
+def _banco_do_pedido():
+    """'cora' ou 'efi', vindo do JSON ou do form. Sem nada: 'cora' (pedido
+    18/11/2026 — a Prest passa a emitir pelo Cora)."""
+    try:
+        v = ((request.get_json(silent=True) or {}).get('banco') if request.is_json
+             else request.form.get('banco'))
+    except Exception:
+        v = None
+    v = (v or '').strip().lower()
+    return v if v in ('cora', 'efi') else 'cora'
 
 
 def _to_bool(value, default=True):
@@ -649,7 +666,10 @@ def emitir_boleto_route(frete_id):
         else:
             vencimento = request.form.get('vencimento') or request.form.get('new_vencimento') or None
 
-        resultado = emitir_boleto_frete(frete_id, vencimento_str=vencimento)
+        if _banco_do_pedido() == 'cora':
+            resultado = emitir_boleto_multiplo([frete_id], vencimento_str=vencimento, banco='cora')
+        else:
+            resultado = emitir_boleto_frete(frete_id, vencimento_str=vencimento)
         if not isinstance(resultado, dict):
             msg = "Erro inesperado ao emitir boleto: resposta inválida"
             current_app.logger.error(f"[emitir_boleto] resposta inválida: {repr(resultado)}")
@@ -714,7 +734,7 @@ def emitir_boleto_multiple_route():
         if not isinstance(frete_ids, (list, tuple)) or len(frete_ids) == 0:
             return jsonify({"success": False, "error": "frete_ids ausentes ou inválidos"}), 400
 
-        resultado = emitir_boleto_multiplo(frete_ids, vencimento_str=vencimento)
+        resultado = emitir_boleto_multiplo(frete_ids, vencimento_str=vencimento, banco=_banco_do_pedido())
         if not isinstance(resultado, dict):
             current_app.logger.error("emitir_boleto_multiple_route: resposta inválida")
             return jsonify({"success": False, "error": "Resposta inválida do utilitário"}), 500
@@ -757,6 +777,8 @@ def prorrogar_boleto(charge_id):
 
         if not new_date:
             return jsonify({"success": False, "error": "new_date ausente"}), 400
+        if _cora.eh_cora(charge_id):
+            return jsonify({"success": False, "error": _CORA_SEM_PRORROGAR}), 400
 
         credentials = _get_efi_credentials()
         success, resp = update_billet_expire(credentials, charge_id, new_date)
@@ -820,7 +842,7 @@ def reemitir_boleto(charge_id):
                 fid = int(override_frete_id)
                 cur.close()
                 conn.close()
-                resultado = emitir_boleto_frete(fid)
+                resultado = (emitir_boleto_multiplo([fid], banco='cora') if _cora.eh_cora(charge_id) else emitir_boleto_frete(fid))
                 return jsonify(resultado), (200 if resultado.get("success") else 400)
             except Exception:
                 pass
@@ -830,7 +852,7 @@ def reemitir_boleto(charge_id):
                 fid = int(cobr.get("frete_id"))
                 cur.close()
                 conn.close()
-                resultado = emitir_boleto_frete(fid)
+                resultado = (emitir_boleto_multiplo([fid], banco='cora') if _cora.eh_cora(charge_id) else emitir_boleto_frete(fid))
                 return jsonify(resultado), (200 if resultado.get("success") else 400)
             except Exception:
                 pass
@@ -843,7 +865,7 @@ def reemitir_boleto(charge_id):
             cur.close()
             conn.close()
             if frete_ids:
-                resultado = emitir_boleto_multiplo(frete_ids)
+                resultado = emitir_boleto_multiplo(frete_ids, banco=('cora' if _cora.eh_cora(charge_id) else None))
                 return jsonify(resultado), (200 if resultado.get("success") else 400)
         except Exception:
             # tentar com nome alternativo da tabela se usar outro nome
@@ -854,7 +876,7 @@ def reemitir_boleto(charge_id):
                 cur.close()
                 conn.close()
                 if frete_ids:
-                    resultado = emitir_boleto_multiplo(frete_ids)
+                    resultado = emitir_boleto_multiplo(frete_ids, banco=('cora' if _cora.eh_cora(charge_id) else None))
                     return jsonify(resultado), (200 if resultado.get("success") else 400)
             except Exception:
                 current_app.logger.debug("reemitir_boleto: cobrancas_freites não existe ou falhou a query")
@@ -988,7 +1010,7 @@ def _abrir_pdf_efi(url, charge_id):
     return redirect(pdf)
 
 
-@financeiro_bp.route('/visualizar-boleto/<int:charge_id>/')
+@financeiro_bp.route('/visualizar-boleto/<charge_id>/')
 @login_required
 def visualizar_boleto(charge_id):
     """
@@ -997,6 +1019,26 @@ def visualizar_boleto(charge_id):
     - se pdf_boleto for uma URL -> redireciona para a URL (abrir no provedor)
     Se não houver pdf_boleto ou estiver inválido, faz fetch ao provedor e stream (com fetch_boleto_pdf_stream).
     """
+    if _cora.eh_cora(charge_id):
+        # PDF do Cora: link público do próprio Cora, guardado na emissão.
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor(dictionary=True)
+            cur.execute("SELECT pdf_boleto FROM cobrancas WHERE charge_id=%s LIMIT 1", (charge_id,))
+            row = cur.fetchone() or {}
+            cur.close()
+            conn.close()
+            url = row.get('pdf_boleto') or _cora.campos(_cora.consultar('prest', charge_id))['pdf_url']
+            if url:
+                return redirect(url)
+        except Exception as e:
+            current_app.logger.exception("visualizar_boleto Cora %s", charge_id)
+            flash(f"Não foi possível abrir o boleto do Cora: {e}", "danger")
+            return redirect(url_for('financeiro.recebimentos'))
+        flash("PDF do boleto não encontrado no Cora.", "danger")
+        return redirect(url_for('financeiro.recebimentos'))
+    if not str(charge_id).isdigit():
+        abort(404)
     try:
         row = None
         try:
@@ -1092,10 +1134,12 @@ def visualizar_boleto(charge_id):
         return redirect(url_for('financeiro.recebimentos'))
 
 
-@financeiro_bp.route('/download-boleto/<int:charge_id>/')
+@financeiro_bp.route('/download-boleto/<charge_id>/')
 @login_required
 def download_boleto(charge_id):
     """Serve boleto PDF como attachment com nome CLIENTE_DD-MM-YYYY.pdf."""
+    if not (_cora.eh_cora(charge_id) or str(charge_id).isdigit()):
+        abort(404)
     try:
         conn = get_db_connection()
         cur = conn.cursor(dictionary=True)
@@ -1134,6 +1178,18 @@ def download_boleto(charge_id):
 
         link = (pdf_boleto if (pdf_boleto and isinstance(pdf_boleto, str) and pdf_boleto.startswith('http'))
                 else row.get("link_boleto"))
+        if _cora.eh_cora(charge_id):
+            try:
+                if not link:
+                    link = _cora.campos(_cora.consultar('prest', charge_id))['pdf_url']
+                r = requests.get(link, timeout=30, stream=True)
+                if r.status_code == 200:
+                    return Response(stream_with_context(r.iter_content(chunk_size=8192)),
+                                    headers={'Content-Type': 'application/pdf',
+                                             'Content-Disposition': f'attachment; filename="{filename}"'})
+            except Exception:
+                current_app.logger.exception("download_boleto Cora %s", charge_id)
+            abort(404)
         if link:
             credentials = _get_efi_credentials()
             stream_resp = fetch_boleto_pdf_stream(credentials, link)
@@ -1150,13 +1206,18 @@ def download_boleto(charge_id):
         abort(500)
 
 
-@financeiro_bp.route('/alterar-vencimento/<int:charge_id>/', methods=['GET', 'POST'])
+@financeiro_bp.route('/alterar-vencimento/<charge_id>/', methods=['GET', 'POST'])
 @login_required
 def alterar_vencimento(charge_id):
     """
     GET: mostra formulário para alterar data de vencimento.
     POST: chama o provedor para atualizar expire_at e atualiza tabela cobrancas.
     """
+    if _cora.eh_cora(charge_id):
+        flash(_CORA_SEM_PRORROGAR, "warning")
+        return redirect(url_for('financeiro.recebimentos'))
+    if not str(charge_id).isdigit():
+        abort(404)
     conn = None
     cursor = None
     try:
@@ -1266,7 +1327,13 @@ def registrar_pagamento_manual():
         # entrou) — só avisa que o boleto continua vivo lá.
         aviso_efi = None
         cancelou_efi = False
-        if cancelar_efi and cobr.get('charge_id'):
+        if cancelar_efi and _cora.eh_cora(cobr.get('charge_id')):
+            try:
+                _cora.cancelar('prest', cobr['charge_id'])
+                cancelou_efi = True
+            except Exception as e:
+                aviso_efi = str(e)[:200]
+        elif cancelar_efi and cobr.get('charge_id'):
             try:
                 credentials = _get_efi_credentials()
                 ok_efi, resp_efi = cancel_charge(credentials, cobr['charge_id'], liberar_fretes=False)
@@ -1338,7 +1405,7 @@ def registrar_pagamento_manual():
     return redirect(url_for('financeiro.recebimentos'))
 
 
-@financeiro_bp.route('/marcar-pago/<int:charge_id>/', methods=['POST'])
+@financeiro_bp.route('/marcar-pago/<charge_id>/', methods=['POST'])
 @login_required
 def marcar_pago(charge_id):
     """
@@ -1409,7 +1476,7 @@ def marcar_pago(charge_id):
     return redirect(url_for('financeiro.recebimentos'))
 
 
-@financeiro_bp.route('/cancelar-boleto/<int:charge_id>/', methods=['POST'])
+@financeiro_bp.route('/cancelar-boleto/<charge_id>/', methods=['POST'])
 @login_required
 def cancelar_boleto(charge_id):
     """
@@ -1418,6 +1485,28 @@ def cancelar_boleto(charge_id):
     """
     conn = None
     cursor = None
+    if _cora.eh_cora(charge_id):
+        try:
+            _cora.cancelar('prest', charge_id)
+            conn = get_db_connection()
+            cur = conn.cursor(dictionary=True)
+            cur.execute("SELECT id FROM cobrancas WHERE charge_id=%s LIMIT 1", (charge_id,))
+            row = cur.fetchone()
+            cur.close()
+            if row:
+                _cora.marcar_cancelado(conn, row['id'], 'cancelado pelo sistema (Cora)')
+                flash("Boleto cancelado com sucesso (Cora + local).", "success")
+            else:
+                flash("Boleto cancelado no Cora, mas cobrança não encontrada no banco local.", "warning")
+        except Exception as e:
+            current_app.logger.exception("cancelar_boleto Cora %s", charge_id)
+            flash(f"Falha ao cancelar no Cora: {e}", "danger")
+        finally:
+            if conn:
+                conn.close()
+        return redirect(url_for('financeiro.recebimentos'))
+    if not str(charge_id).isdigit():
+        abort(404)
     try:
         credentials = _get_efi_credentials()
         success, resp = cancel_charge(credentials, charge_id)
@@ -1684,13 +1773,30 @@ def _guardar_barcode_pix(charge_id, barcode, pix_qrcode):
             pass
 
 
-@financeiro_bp.route('/consultar-status-efi/<int:charge_id>/', methods=['GET'])
+@financeiro_bp.route('/consultar-status-efi/<charge_id>/', methods=['GET'])
 @login_required
 def consultar_status_efi(charge_id):
     """
     Consulta o status atual da cobrança no provedor EFI (Efipay).
     Retorna JSON com informações atualizadas da charge.
     """
+    if _cora.eh_cora(charge_id):
+        try:
+            inv = _cora.consultar('prest', charge_id)
+            f = _cora.campos(inv)
+            rot = {'OPEN': 'Aguardando', 'LATE': 'Vencido', 'PAID': 'Pago', 'CANCELLED': 'Cancelado',
+                   'IN_PAYMENT': 'Em pagamento', 'DRAFT': 'Rascunho', 'INITIATED': 'Iniciado'}
+            _guardar_barcode_pix(charge_id, f['barcode'], f['pix'])
+            return jsonify({"success": True, "charge_id": charge_id, "status": f['status'],
+                            "status_label": rot.get(f['status'], f['status']),
+                            "total": inv.get('total_amount'),
+                            "expire_at": (inv.get('payment_terms') or {}).get('due_date'),
+                            "paid_at": f['data_pagamento'], "payment_method": "boleto/pix (Cora)",
+                            "link": f['pdf_url'], "barcode": f['barcode']}), 200
+        except Exception as e:
+            return jsonify({"success": False, "error": f"Erro ao consultar no Cora: {e}"}), 200
+    if not str(charge_id).isdigit():
+        abort(404)
     try:
         credentials = _get_efi_credentials()
         
