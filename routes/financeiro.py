@@ -21,15 +21,15 @@ _CORA_SEM_PRORROGAR = ("Boleto do Cora não permite alterar o vencimento. "
 
 
 def _banco_do_pedido():
-    """'cora' ou 'efi', vindo do JSON ou do form. Sem nada: 'cora' (pedido
-    18/11/2026 — a Prest passa a emitir pelo Cora)."""
+    """'cora' ou 'efi', vindo do JSON ou do form. Sem nada: 'efi' (19/11/2026:
+    a Efí volta a ser a principal; o Cora fica como opção)."""
     try:
         v = ((request.get_json(silent=True) or {}).get('banco') if request.is_json
              else request.form.get('banco'))
     except Exception:
         v = None
     v = (v or '').strip().lower()
-    return v if v in ('cora', 'efi') else 'cora'
+    return v if v in ('cora', 'efi') else 'efi'
 
 
 def _to_bool(value, default=True):

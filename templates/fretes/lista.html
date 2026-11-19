@@ -932,8 +932,8 @@
           <div class="mb-3">
             <label for="modal_banco" class="form-label">Banco</label>
             <select id="modal_banco" name="banco" class="form-select">
-              <option value="cora" selected>Cora (incluso na mensalidade)</option>
-              <option value="efi">Efí (R$ 1,45 por boleto)</option>
+              <option value="efi" selected>Efí (R$ 1,45 por boleto)</option>
+              <option value="cora">Cora (incluso na mensalidade)</option>
             </select>
           </div>
           <div id="emit-boleto-feedback" style="display:none;" class="alert"></div>
@@ -1148,7 +1148,7 @@ document.addEventListener('DOMContentLoaded', function () {
           method: 'POST',
           credentials: 'same-origin',
           headers: {'Content-Type':'application/json', 'X-Requested-With':'XMLHttpRequest'},
-          body: JSON.stringify({frete_ids: ids, vencimento: vencimento, banco: (document.getElementById('modal_banco')||{}).value || 'cora'})
+          body: JSON.stringify({frete_ids: ids, vencimento: vencimento, banco: (document.getElementById('modal_banco')||{}).value || 'efi'})
         });
         const j = await resp.json();
         if (resp.ok && j.success){
@@ -1171,7 +1171,7 @@ document.addEventListener('DOMContentLoaded', function () {
           method: 'POST',
           credentials: 'same-origin',
           headers: {'Content-Type':'application/json', 'X-Requested-With':'XMLHttpRequest'},
-          body: JSON.stringify({vencimento: vencimento, banco: (document.getElementById('modal_banco')||{}).value || 'cora'})
+          body: JSON.stringify({vencimento: vencimento, banco: (document.getElementById('modal_banco')||{}).value || 'efi'})
         });
         const j = await resp.json();
         if (resp.ok && j.success){

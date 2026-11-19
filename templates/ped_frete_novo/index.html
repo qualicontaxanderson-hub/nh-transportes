@@ -873,8 +873,8 @@ body > .container-fluid:has(#pfn){
             </label>
             <label class="emis__venc">Banco
               <select class="ef__banco">
-                <option value="cora" selected>Cora</option>
-                <option value="efi">Efí</option>
+                <option value="efi" selected>Efí</option>
+                <option value="cora">Cora</option>
               </select>
             </label>
             <span class="emis__tot">Total: <b class="ef__tot">—</b></span>
@@ -1384,8 +1384,8 @@ body > .container-fluid:has(#pfn){
                   </label>
                   <label class="emis__venc">Banco
                     <select class="ef__banco">
-                      <option value="cora" selected>Cora</option>
-                      <option value="efi">Efí</option>
+                      <option value="efi" selected>Efí</option>
+                      <option value="cora">Cora</option>
                     </select>
                   </label>
                   <span class="emis__tot">Total: <b class="ef__tot">—</b></span>
@@ -2905,7 +2905,7 @@ function pfnEmitir(botao, cliente){
   var venc = campoVenc ? campoVenc.value : '';
   if (!venc){ alert('Informe o vencimento.'); return; }
   var campoBanco = painel.querySelector('.ef__banco');
-  var banco = campoBanco ? campoBanco.value : 'cora';
+  var banco = campoBanco ? campoBanco.value : 'efi';
 
   var brl = total.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
   var vencBr = venc.split('-').reverse().join('/');
