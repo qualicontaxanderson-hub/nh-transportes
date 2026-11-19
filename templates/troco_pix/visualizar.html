@@ -139,6 +139,13 @@ body > .container-fluid:has(#tpv){
        href="{{ url_for('troco_pix.editar', troco_pix_id=transacao.id, origem=origem) }}">
       <i class="bi bi-pencil"></i> Corrigir</a>
     {% endif %}
+    {% if tem_pix and (current_user.nivel or '')|upper == 'ADMIN' %}
+    {# Pix pronto do troco (QR / copia e cola) — so o ADMIN. Se ja foi pago,
+       a tela diz e nao mostra codigo. #}
+    <a class="bt" style="background:#e3f4ec;border-color:#a9dcc3;color:#0f6b4c;font-weight:700"
+       href="{{ url_for('troco_pix.pagar', troco_pix_id=transacao.id) }}">
+      <i class="bi bi-qr-code"></i> Pagar (QR / copia e cola)</a>
+    {% endif %}
     <a class="bt" href="{{ voltar }}"><i class="bi bi-arrow-left"></i> Voltar</a>
   </div>
 
