@@ -594,6 +594,67 @@ def visualizar(troco_pix_id):
         flash(f'Erro ao visualizar transação: {str(e)}', 'danger')
         return redirect(url_for('troco_pix.listar'))
 
+@troco_pix_bp.route('/pagar/<int:troco_pix_id>')
+@login_required
+def pagar(troco_pix_id):
+    """QR e Pix copia e cola do troco (19/11/2026). SÓ o ADMIN abre: quem lança
+    o troco não paga. Depois de pago (ligado ao extrato, ou com o aviso do banco
+    de que o PIX saiu) o código some, para ninguém pagar duas vezes."""
+    if (getattr(current_user, 'nivel', '') or '').upper() != 'ADMIN':
+        flash('Só o ADMIN pode abrir o Pix do troco.', 'warning')
+        return redirect(url_for('troco_pix.listar'))
+    from utils import pix_brcode
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT tp.id, tp.data, tp.numero_sequencial, tp.status, tp.troco_pix,
+                   tp.troco_pix_cliente_id, tp.bank_transaction_id,
+                   tpc.nome_completo AS cliente_pix_nome, tpc.tipo_chave_pix, tpc.chave_pix,
+                   bt.data_transacao AS banco_data, bt.descricao AS banco_descricao,
+                   ba.apelido AS banco_conta,
+                   cp.enviado_em AS pix_enviado_em,
+                   (SELECT MAX(e.estornado_em) FROM troco_pix_estornos e
+                        WHERE e.troco_pix_id = tp.id) AS pix_estornado_em
+            FROM troco_pix tp
+            LEFT JOIN troco_pix_clientes tpc ON tpc.id = tp.troco_pix_cliente_id
+            LEFT JOIN bank_transactions bt ON bt.id = tp.bank_transaction_id
+            LEFT JOIN bank_accounts ba ON ba.id = bt.account_id
+            LEFT JOIN troco_pix_comprovantes cp ON cp.troco_pix_id = tp.id
+            WHERE tp.id = %s
+        """, (troco_pix_id,))
+        t = cursor.fetchone()
+    finally:
+        cursor.close()
+        conn.close()
+    if not t:
+        flash('Troco não encontrado.', 'warning')
+        return redirect(url_for('troco_pix.listar'))
+
+    valor = float(t['troco_pix'] or 0)
+    enviado = t['pix_enviado_em'] and not (
+        t['pix_estornado_em'] and t['pix_estornado_em'] >= t['pix_enviado_em'])
+    chave = pix_brcode.chave_normalizada(t['tipo_chave_pix'], t['chave_pix'])
+    situacao, codigo, qr = None, None, None
+    if (t['status'] or '').upper() == 'CANCELADO':
+        situacao = 'cancelado'
+    elif valor <= 0:
+        situacao = 'sem_troco'
+    elif t['bank_transaction_id']:
+        situacao = 'pago'
+    elif enviado:
+        situacao = 'enviado'
+    elif not chave:
+        situacao = 'chave_invalida'
+    else:
+        situacao = 'a_pagar'
+        codigo = pix_brcode.copia_e_cola(
+            chave, t['cliente_pix_nome'], valor,
+            mensagem='TROCO ' + (t['numero_sequencial'] or str(t['id'])))
+        qr = pix_brcode.qr_svg_data_uri(codigo)
+    return render_template('troco_pix/pagar.html', t=t, valor=valor, chave=chave,
+                           situacao=situacao, codigo=codigo, qr=qr)
+
 # ==================== ROTAS DE CRIAÇÃO ====================
 
 @troco_pix_bp.route('/novo', methods=['GET', 'POST'])

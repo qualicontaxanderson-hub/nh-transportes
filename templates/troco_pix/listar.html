@@ -209,6 +209,7 @@ body > .container-fluid:has(#tpx){
     display:inline-flex; gap:.3rem; align-items:center; }
   #tpx .bt:hover{ background:#dfeaf8; color:var(--blue-deep); }
   #tpx .bt--ed{ background:#fdf0d6; border-color:#f0d8a8; color:var(--ambar); }
+  #tpx .bt--pagar{ background:#e3f4ec; border-color:#a9dcc3; color:#0f6b4c; font-weight:700; }
   #tpx .bt--del{ background:#fbe9e9; border-color:#f0c8c8; color:var(--danger); }
   #tpx .bt--ghost{ background:#eef1f5; border-color:var(--borda); color:#495057; }
   #tpx .nada{ padding:1.4rem .8rem; text-align:center; color:var(--muted);
@@ -403,6 +404,16 @@ body > .container-fluid:has(#tpx){
             {% endif %}
             {% if st == 'CANCELADO' %}
             <span class="selo selo--canc">cancelado</span>{% endif %}
+        {# Pix pronto (QR / copia e cola) — so o ADMIN paga. Some quando ja
+           ligou ao extrato ou o banco avisou que o PIX saiu. #}
+        {% set ja_saiu = t.get('pix_enviado_em') and not (t.get('pix_estornado_em')
+             and t.pix_estornado_em >= t.pix_enviado_em) %}
+        {% if tem_troco and not conc and not ja_saiu and st != 'CANCELADO'
+              and (current_user.nivel or '')|upper == 'ADMIN' %}
+        <a class="bt bt--pagar" href="{{ url_for('troco_pix.pagar', troco_pix_id=t.id) }}"
+           onclick="event.stopPropagation()" title="QR e Pix copia e cola para pagar no app do Cora">
+          <i class="bi bi-qr-code"></i> Pagar</a>
+        {% endif %}
         <a class="bt" href="{{ url_for('troco_pix.visualizar', troco_pix_id=t.id) }}">
           <i class="bi bi-eye"></i> Ver</a>
         <a class="bt bt--ed" href="{{ url_for('troco_pix.editar', troco_pix_id=t.id) }}">
