@@ -61,6 +61,8 @@ NIVEIS = {
             '/troco_pix/cliente',
             # fotos dos cheques (tirar, gerar QR, ver)
             '/troco_pix/foto',
+            # cupom fiscal da venda (ligar/soltar na tela Ver)
+            '/troco_pix/cupom',
             # PIX Consulta da Pista (29/10/2026): so a tela do dia, nao a completa
             '/banco/pix-consulta/pista',
         ),

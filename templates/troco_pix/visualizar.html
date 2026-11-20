@@ -242,6 +242,43 @@ body > .container-fluid:has(#tpv){
       <span class="v">{{ venda | formatar_moeda }}</span></div>
   </div>
 
+  {# cupom fiscal da venda (20/11/2026): liga sozinho quando ha um so candidato #}
+  <div class="bloco">
+    <div class="bloco__t"><i class="bi bi-receipt-cutoff"></i> Cupom fiscal da venda</div>
+    {% if cupom %}
+    <div class="li li--txt"><span class="k">{{ 'NF-e' if cupom.modelo == 55 else 'Cupom' }} nº {{ cupom.numero }}
+      · {{ cupom.dh_emissao.strftime('%d/%m %H:%M') }}</span>
+      <span class="v">{{ cupom.valor_total | formatar_moeda }}</span></div>
+    <div class="li li--txt"><span class="k">{{ cupom.forma_pagamento or '—' }}</span>
+      <span class="v">{{ cupom.cliente_nome or '' }}{% if cupom.placa %} · {{ cupom.placa }}{% endif %}</span></div>
+    <form method="post" action="{{ url_for('troco_pix.cupom_ligar', troco_pix_id=transacao.id) }}" style="margin:.4rem 0 0;font-size:.8rem;color:#6b7684">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {{ 'ligado sozinho' if cupom.modo == 'auto' else 'ligado na mão' }} ·
+      <button type="submit" name="soltar" value="1" style="border:0;background:none;color:#a12a2a;padding:0;text-decoration:underline;cursor:pointer">não é este</button>
+    </form>
+    {% else %}
+      {% if cupons_cand %}
+      <div class="li li--txt"><span class="k">Mais de um cupom pode ser desta venda. Qual é?</span></div>
+      {% for c in cupons_cand %}
+      <form method="post" action="{{ url_for('troco_pix.cupom_ligar', troco_pix_id=transacao.id) }}" class="li li--txt">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="vendas_xml_id" value="{{ c.id }}">
+        <span class="k">nº {{ c.numero }} · {{ c.dh_emissao.strftime('%H:%M') }} · {{ c.valor_total | formatar_moeda }}
+          <br><small>{{ c.cliente_nome or '' }}{% if c.placa %} · {{ c.placa }}{% endif %}</small></span>
+        <span class="v"><button type="submit" class="btn btn-sm btn-outline-primary">É este</button></span>
+      </form>
+      {% endfor %}
+      {% else %}
+      <div class="li li--txt"><span class="k">Ainda não achei o cupom (dia, cheque e valor).</span></div>
+      {% endif %}
+      <form method="post" action="{{ url_for('troco_pix.cupom_ligar', troco_pix_id=transacao.id) }}" style="display:flex;gap:.4rem;margin-top:.4rem">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input name="numero" inputmode="numeric" pattern="[0-9]*" placeholder="Nº do cupom" class="form-control form-control-sm" style="max-width:9rem">
+        <button type="submit" class="btn btn-sm btn-outline-primary">Ligar</button>
+      </form>
+    {% endif %}
+  </div>
+
   <div class="bloco">
     <div class="bloco__t"><i class="bi bi-arrow-left-right"></i> Como o troco voltou</div>
     <div class="li"><span class="k">Em dinheiro, na hora</span>
@@ -327,6 +364,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 tipo_chave_pix: {{ (transacao.tipo_chave_pix or "")|tojson }},
                 chave_pix: {{ (transacao.chave_pix or "")|tojson }},
                 frentista_nome: {{ (transacao.frentista_nome or "")|tojson }},
+                cupom: {{ ((('NF-e ' if cupom.modelo == 55 else 'Cupom ') ~ cupom.numero ~ ' · ' ~ cupom.dh_emissao.strftime('%H:%M')) if cupom else '')|tojson }},
                 cheques: [{% for ch in cheques %}{valor: {{ ch.valor or 0 }}, venc: {{ (ch.vencimento.strftime("%d/%m/%Y") if ch.vencimento else "")|tojson }}, frente: {{ 'true' if ch.foto_frente_id else 'false' }}, verso: {{ 'true' if ch.foto_verso_id else 'false' }}}{{ ',' if not loop.last }}{% endfor %}]
             };
 
@@ -356,7 +394,9 @@ document.addEventListener('DOMContentLoaded', function() {
             message += '🏪 *VENDA: ' + r$(data.venda_total) + '*\n';
             message += '├ Abastecimento: ' + ou(data.venda_abastecimento) + '\n';
             message += '├ Arla: ' + ou(data.venda_arla) + '\n';
-            message += '└ Produtos: ' + ou(data.venda_produtos) + '\n\n';
+            message += (data.cupom ? '├ ' : '└ ') + 'Produtos: ' + ou(data.venda_produtos) + '\n';
+            if (data.cupom) message += '└ 🧾 ' + data.cupom + '\n';
+            message += '\n';
 
             if (data.cheques.length) {
                 // cheque a cheque, dizendo se a foto da frente e do verso

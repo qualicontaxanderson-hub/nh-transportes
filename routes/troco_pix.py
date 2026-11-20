@@ -592,17 +592,61 @@ def visualizar(troco_pix_id):
             print('[troco_pix] cheques do troco %s: %s' % (troco_pix_id, e))
             cheques = []
 
+        cupom, cupons_cand = None, []
+        try:
+            from utils import troco_cupom
+            cupom = troco_cupom.tentar_auto(conn, troco_pix_id)
+            if not cupom:
+                cupons_cand = troco_cupom.candidatos(conn, troco_pix_id)
+        except Exception as e:
+            print('[troco_pix] cupom do troco %s: %s' % (troco_pix_id, e))
+
         cursor.close()
         conn.close()
 
         return render_template('troco_pix/visualizar.html',
                              cheques=cheques,
+                             cupom=cupom,
+                             cupons_cand=cupons_cand,
                              transacao=transacao,
                              titulo='Visualizar TROCO PIX')
         
     except Exception as e:
         flash(f'Erro ao visualizar transação: {str(e)}', 'danger')
         return redirect(url_for('troco_pix.listar'))
+
+# ==================== CUPOM FISCAL DA VENDA (20/11/2026) ====================
+@troco_pix_bp.route('/cupom/<int:troco_pix_id>', methods=['POST'])
+@login_required
+def cupom_ligar(troco_pix_id):
+    """Liga o cupom escolhido (vendas_xml_id) ou digitado (numero); 'soltar' desliga."""
+    from utils import troco_cupom
+    conn = get_db_connection()
+    try:
+        if request.form.get('soltar'):
+            troco_cupom.desligar(conn, troco_pix_id)
+            flash('Cupom desligado deste troco.', 'info')
+        else:
+            vid = request.form.get('vendas_xml_id', '')
+            numero = (request.form.get('numero') or '').strip()
+            if not vid.isdigit() and numero.isdigit():
+                achados = troco_cupom.por_numero(conn, troco_pix_id, int(numero))
+                if len(achados) == 1:
+                    vid = str(achados[0]['id'])
+                elif not achados:
+                    flash('Não achei o cupom %s perto do dia deste troco.' % numero, 'warning')
+                else:
+                    flash('Há mais de um cupom %s perto desse dia; escolha pela lista.' % numero, 'warning')
+            if vid.isdigit():
+                erro = troco_cupom.ligar(conn, troco_pix_id, int(vid), 'manual',
+                                         getattr(current_user, 'id', None))
+                flash(erro or 'Cupom ligado.', 'warning' if erro else 'success')
+    except Exception as e:
+        flash('Não consegui ligar o cupom: %s' % e, 'danger')
+    finally:
+        conn.close()
+    return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
+
 
 # ==================== FOTOS DOS CHEQUES (20/11/2026) ====================
 # Celular logado manda direto (/foto/enviar). No computador, /foto/qr gera um
@@ -1015,6 +1059,12 @@ def novo():
                 print('[troco_pix] gravar cheques de %s falhou: %s' % (troco_pix_id, e))
                 flash('Atenção: o troco foi salvo, mas a lista de cheques/fotos não. Abra em Corrigir e salve de novo.', 'warning')
 
+        # cupom fiscal da venda (20/11/2026): liga sozinho se houver um so
+        try:
+            from utils import troco_cupom
+            troco_cupom.revisar(conn, troco_pix_id)
+        except Exception as e:
+            print('[troco_pix] cupom de %s: %s' % (troco_pix_id, e))
         cursor.close()
         conn.close()
         
@@ -1259,6 +1309,12 @@ def editar(troco_pix_id):
             except Exception as e:
                 print('[troco_pix] gravar cheques de %s falhou: %s' % (troco_pix_id, e))
                 flash('Atenção: o troco foi salvo, mas a lista de cheques/fotos não. Salve de novo.', 'warning')
+        # cupom fiscal da venda (20/11/2026): liga sozinho se houver um so
+        try:
+            from utils import troco_cupom
+            troco_cupom.revisar(conn, troco_pix_id)
+        except Exception as e:
+            print('[troco_pix] cupom de %s: %s' % (troco_pix_id, e))
         cursor.close()
         conn.close()
         
