@@ -108,9 +108,9 @@ def _renomear(de, para):
         a = os.path.join(loc, de.lstrip('/').replace('/', os.sep))
         b = os.path.join(loc, para.lstrip('/').replace('/', os.sep))
         os.replace(a, b)
-        return
-    import dropbox
-    _dbx().files_move_v2(de, para, autorename=True)
+        return para
+    r = _dbx().files_move_v2(de, para, autorename=True)
+    return r.metadata.path_display or para
 
 
 def normalizar_imagem(dados):
@@ -264,8 +264,8 @@ def gravar_cheques(conn, troco_pix_id, numero, cheques):
         if os.path.basename(caminho).startswith('foto_'):
             novo = '%s/%s - cheque %d %s.jpg' % (os.path.dirname(caminho), numero or ('troco %d' % troco_pix_id), n, lado)
             try:
-                _renomear(caminho, novo)
-                cur.execute("UPDATE troco_pix_fotos SET caminho=%s WHERE id=%s", (novo, fid))
+                final = _renomear(caminho, novo)
+                cur.execute("UPDATE troco_pix_fotos SET caminho=%s WHERE id=%s", (final, fid))
                 conn.commit()
             except Exception as e:
                 print('[cheque_fotos] renomear %s falhou: %s' % (caminho, e))

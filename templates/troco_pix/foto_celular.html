@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<meta name="robots" content="noindex">
+<title>Foto do cheque</title>
+<style>
+  body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #eef3f8; color: #1d2733; }
+  .box { max-width: 420px; margin: 0 auto; padding: 28px 16px; text-align: center; }
+  h1 { font-size: 1.25rem; margin: 0 0 6px; }
+  p { color: #4a5563; margin: 0 0 18px; }
+  .bt { display: block; width: 100%; border: 0; border-radius: 14px; padding: 18px; font-size: 1.15rem; font-weight: 700;
+        background: #1f5fa8; color: #fff; cursor: pointer; }
+  .bt2 { background: #fff; color: #1f5fa8; border: 1px solid #b9cde6; margin-top: 10px; font-size: 1rem; padding: 14px; }
+  img { width: 100%; border-radius: 12px; margin: 14px 0; display: none; }
+  .msg { border-radius: 12px; padding: 16px; font-weight: 600; }
+  .ok { background: #e3f4ec; color: #0f6b4c; }
+  .ruim { background: #fdecec; color: #a12a2a; }
+  .esp { color: #4a5563; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="box">
+  {% if situacao == 'aguardando' %}
+  <h1>📷 Foto do cheque</h1>
+  <p>Tire a foto com o cheque inteiro aparecendo, bem iluminado.</p>
+  <input type="file" id="arq" accept="image/*" capture="environment" hidden>
+  <button class="bt" id="tirar">Tirar foto</button>
+  <img id="prev" alt="">
+  <button class="bt" id="enviar" style="display:none">Enviar esta foto</button>
+  <button class="bt bt2" id="outra" style="display:none">Tirar outra</button>
+  <div class="esp" id="esp"></div>
+  <div class="msg ok" id="feito" style="display:none">✅ Foto enviada! Já aparece no computador. Pode fechar esta tela.</div>
+  {% elif situacao == 'enviado' %}
+  <div class="msg ok">✅ A foto deste código já foi enviada. Para outra foto, gere um novo QR no computador.</div>
+  {% elif situacao == 'expirado' %}
+  <div class="msg ruim">⏱️ Este código venceu (vale 30 minutos). Gere um novo QR no computador.</div>
+  {% else %}
+  <div class="msg ruim">Código inválido. Gere um novo QR no computador.</div>
+  {% endif %}
+</div>
+{% if situacao == 'aguardando' %}
+<script>
+(function(){
+  var arq = document.getElementById('arq'), prev = document.getElementById('prev');
+  var tirar = document.getElementById('tirar'), enviar = document.getElementById('enviar');
+  var outra = document.getElementById('outra'), esp = document.getElementById('esp');
+  var blob = null;
+  tirar.onclick = outra.onclick = function(){ arq.value = ''; arq.click(); };
+  // encolhe no celular (máx. 1600 px) para subir rápido mesmo no 4G
+  function encolhe(file, cb){
+    var img = new Image(), url = URL.createObjectURL(file);
+    img.onload = function(){
+      var k = Math.min(1, 1600 / Math.max(img.width, img.height));
+      var c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(function(b){ cb(b || file); }, 'image/jpeg', 0.8);
+    };
+    img.onerror = function(){ cb(file); };
+    img.src = url;
+  }
+  arq.onchange = function(){
+    var f = arq.files && arq.files[0];
+    if (!f) return;
+    esp.textContent = 'Preparando…';
+    encolhe(f, function(b){
+      blob = b; prev.src = URL.createObjectURL(b); prev.style.display = 'block';
+      tirar.style.display = 'none'; enviar.style.display = 'block'; outra.style.display = 'block';
+      esp.textContent = '';
+    });
+  };
+  enviar.onclick = function(){
+    if (!blob) return;
+    enviar.disabled = true; outra.disabled = true; esp.textContent = 'Enviando…';
+    var fd = new FormData(); fd.append('foto', blob, 'cheque.jpg');
+    fetch(location.pathname, {method: 'POST', body: fd,
+          headers: {'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content}})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (!d.ok) throw new Error(d.erro || 'falhou');
+        enviar.style.display = 'none'; outra.style.display = 'none'; esp.textContent = '';
+        document.getElementById('feito').style.display = 'block';
+      })
+      .catch(function(e){
+        esp.textContent = 'Não foi: ' + e.message;
+        enviar.disabled = false; outra.disabled = false;
+      });
+  };
+})();
+</script>
+{% endif %}
+</body>
+</html>

@@ -209,6 +209,29 @@ body > .container-fluid:has(#tpn){
     #tpn .lado__sair:hover{ color:var(--ink); }
   }
 
+  /* varios cheques com foto (20/11/2026) */
+  #tpn .chq{ border:1px solid var(--line, #e3e8ee); border-radius:12px; padding:.6rem .7rem; margin-bottom:.6rem; background:#fbfcfe; }
+  #tpn .chq__cab{ display:flex; justify-content:space-between; align-items:center; margin-bottom:.2rem; }
+  #tpn .chq__n{ font-size:.85rem; }
+  #tpn .chq__x{ border:0; background:none; color:#a12a2a; cursor:pointer; padding:.1rem .3rem; }
+  #tpn .chq:only-child .chq__x{ display:none; }
+  #tpn .chq__fotos{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-top:.4rem; }
+  #tpn .fto{ text-align:center; }
+  #tpn .fto__b{ width:100%; border:1px dashed #9db6d6; background:#fff; color:#1f5fa8; border-radius:10px;
+                padding:.55rem .3rem; font-weight:700; font-size:.85rem; cursor:pointer; }
+  #tpn .fto.tem .fto__b{ border-style:solid; border-color:#a9dcc3; color:#0f6b4c; background:#e3f4ec; }
+  #tpn .fto__i{ width:100%; max-height:110px; object-fit:cover; border-radius:8px; margin-top:.35rem; cursor:zoom-in; }
+  #tpn .chq__mais{ width:100%; border:1px dashed #9db6d6; background:#fff; color:#1f5fa8; border-radius:10px;
+                   padding:.5rem; font-weight:700; cursor:pointer; }
+  #tpn .chq__tot{ text-align:right; font-size:.88rem; margin-top:.5rem; color:var(--muted, #6b7785); }
+  #tpn .chq__tot b{ color:#1d2733; }
+  /* janela do QR (computador) */
+  .tpq{ position:fixed; inset:0; background:rgba(15,25,40,.55); display:flex; align-items:center; justify-content:center; z-index:2000; padding:16px; }
+  .tpq__c{ background:#fff; border-radius:16px; padding:1.2rem; max-width:360px; width:100%; text-align:center; }
+  .tpq__c img{ width:240px; max-width:100%; image-rendering:pixelated; }
+  .tpq__c p{ font-size:.9rem; color:#4a5563; margin:.5rem 0; }
+  .tpq__c .st{ font-weight:700; color:#1f5fa8; min-height:1.3em; }
+  .tpq__c button{ border:0; border-radius:10px; padding:.55rem 1rem; font-weight:700; cursor:pointer; margin:.25rem; }
 </style>
 {% endblock %}
 
@@ -286,20 +309,52 @@ body > .container-fluid:has(#tpn){
                    onchange="tpnCheque()"><span>A prazo</span></label>
         </div>
       </div>
-      <label class="campo" id="tpn-venc" hidden>
-        <span class="campo__r">Vence em</span>
-        <input type="date" id="cheque_data_vencimento" name="cheque_data_vencimento"
-               value="{{ transacao.cheque_data_vencimento.strftime('%Y-%m-%d') if edit_mode and transacao.cheque_data_vencimento else '' }}">
-        <span class="campo__d">Obrigatório para cheque a prazo.</span>
-      </label>
-      <label class="campo">
-        <span class="campo__r">Valor do cheque</span>
-        <div class="din"><span>R$</span>
-          <input type="text" inputmode="decimal" class="money" id="cheque_valor"
-                 name="cheque_valor" required
-                 value="{{ '%.2f'|format(transacao.cheque_valor or 0)|replace('.', ',') if edit_mode else '0,00' }}"
-                 data-raw-value="{{ transacao.cheque_valor or 0 if edit_mode else 0 }}"></div>
-      </label>
+      {# Varios cheques (20/11/2026): cada um com valor, vencimento (se a
+         prazo) e foto da frente e do verso. O troco usa a SOMA. #}
+      <input type="hidden" id="cheque_valor" name="cheque_valor"
+             value="{{ '%.2f'|format(transacao.cheque_valor or 0) if edit_mode else '0.00' }}"
+             data-raw-value="{{ transacao.cheque_valor or 0 if edit_mode else 0 }}">
+      <input type="hidden" id="cheque_data_vencimento" name="cheque_data_vencimento"
+             value="{{ transacao.cheque_data_vencimento.strftime('%Y-%m-%d') if edit_mode and transacao.cheque_data_vencimento else '' }}">
+      {% set lista = cheques if cheques else [
+           {'valor': (transacao.cheque_valor or 0) if edit_mode else 0,
+            'vencimento': transacao.cheque_data_vencimento if edit_mode else None,
+            'foto_frente_id': None, 'foto_verso_id': None}] %}
+      <div id="tpn-cheques">
+        {% for ch in lista %}
+        <div class="chq">
+          <div class="chq__cab"><b class="chq__n">Cheque {{ loop.index }}</b>
+            <button type="button" class="chq__x" onclick="tpnChqTira(this)" title="Tirar este cheque">
+              <i class="bi bi-x-lg"></i></button></div>
+          <label class="campo chq-venc-l" hidden>
+            <span class="campo__r">Vence em</span>
+            <input type="date" class="chq-venc" name="cheque_venc_item"
+                   value="{{ ch.vencimento.strftime('%Y-%m-%d') if ch.vencimento else '' }}">
+          </label>
+          <label class="campo">
+            <span class="campo__r">Valor</span>
+            <div class="din"><span>R$</span>
+              <input type="text" inputmode="decimal" class="money chq-valor" name="cheque_valor_item"
+                     value="{{ '%.2f'|format(ch.valor or 0)|replace('.', ',') }}"
+                     data-raw-value="{{ ch.valor or 0 }}"></div>
+          </label>
+          <div class="chq__fotos">
+            {% for lado, fid in (('frente', ch.foto_frente_id), ('verso', ch.foto_verso_id)) %}
+            <div class="fto {{ 'tem' if fid }}" data-lado="{{ lado }}">
+              <input type="hidden" name="cheque_foto_{{ lado }}_item" value="{{ fid or '' }}">
+              <button type="button" class="fto__b" onclick="tpnFoto(this)">
+                <i class="bi bi-camera"></i> <span>{{ 'Refazer' if fid else 'Foto' }} {{ lado }}</span></button>
+              <img class="fto__i" alt="{{ lado }}" {% if fid %}src="{{ url_for('troco_pix.foto_ver', foto_id=fid) }}"{% else %}hidden{% endif %}
+                   onclick="if(this.src) window.open(this.src, '_blank')">
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <button type="button" class="chq__mais" onclick="tpnChqMais()">
+        <i class="bi bi-plus-lg"></i> Outro cheque</button>
+      <div class="chq__tot">Total dos cheques: <b id="tpn-chq-tot">R$ 0,00</b></div>
     </div>
 
     </div><!-- /col -->
@@ -485,6 +540,7 @@ function tpnValor(id){
 
 // ─── a conta ─────────────────────────────────────────────────────────────
 function tpnConta(){
+  tpnChqSoma();
   var venda = tpnValor('venda_abastecimento') + tpnValor('venda_arla')
             + tpnValor('venda_produtos');
   var pix = tpnValor('cheque_valor') - venda - tpnValor('troco_especie')
@@ -531,17 +587,155 @@ function tpnConta(){
 // ─── cheque a prazo ──────────────────────────────────────────────────────
 function tpnCheque(){
   var prazo = document.querySelector('input[name="cheque_tipo"][value="A_PRAZO"]');
-  var venc = document.getElementById('tpn-venc');
-  var campo = document.getElementById('cheque_data_vencimento');
   var eh = prazo && prazo.checked;
   var labels = document.querySelectorAll('#tpn .duo label');
   for (var i = 0; i < labels.length; i++){
     var r = labels[i].querySelector('input');
     labels[i].classList.toggle('on', !!(r && r.checked));
   }
-  venc.hidden = !eh;
-  campo.required = !!eh;      // cheque a prazo sem vencimento o servidor recusa
-  if (!eh) campo.value = '';
+  // cada cheque tem o seu vencimento (so a prazo)
+  var vls = document.querySelectorAll('#tpn-cheques .chq-venc-l');
+  for (var j = 0; j < vls.length; j++){
+    vls[j].hidden = !eh;
+    var inp = vls[j].querySelector('input');
+    if (!eh) inp.value = '';
+  }
+  tpnConta();
+}
+
+// ─── varios cheques ──────────────────────────────────────────────────────
+function tpnChqSoma(){
+  var vs = document.querySelectorAll('#tpn-cheques .chq-valor');
+  var soma = 0;
+  for (var i = 0; i < vs.length; i++) soma += parseFloat(vs[i].getAttribute('data-raw-value') || '0') || 0;
+  var h = document.getElementById('cheque_valor');
+  h.setAttribute('data-raw-value', soma.toFixed(2));
+  h.value = soma.toFixed(2);
+  tpnTexto('tpn-chq-tot', 'R$ ' + tpnFmt(soma));
+  // vencimento do cabecalho = o mais cedo dos cheques
+  var ds = document.querySelectorAll('#tpn-cheques .chq-venc'), menor = '';
+  for (var j = 0; j < ds.length; j++) if (ds[j].value && (!menor || ds[j].value < menor)) menor = ds[j].value;
+  document.getElementById('cheque_data_vencimento').value = menor;
+  return soma;
+}
+function tpnChqNumera(){
+  var ns = document.querySelectorAll('#tpn-cheques .chq__n');
+  for (var i = 0; i < ns.length; i++) ns[i].textContent = 'Cheque ' + (i + 1);
+}
+function tpnChqMais(){
+  var lista = document.getElementById('tpn-cheques');
+  var novo = lista.querySelector('.chq').cloneNode(true);
+  var v = novo.querySelector('.chq-valor');
+  v.value = '0,00'; v.setAttribute('data-raw-value', '0');
+  novo.querySelector('.chq-venc').value = '';
+  var ftos = novo.querySelectorAll('.fto');
+  for (var i = 0; i < ftos.length; i++) tpnFotoLimpa(ftos[i]);
+  lista.appendChild(novo);
+  tpnLigaMoeda(v);
+  tpnChqNumera();
+  tpnCheque();
+  v.focus();
+}
+function tpnChqTira(bt){
+  var lista = document.getElementById('tpn-cheques');
+  if (lista.querySelectorAll('.chq').length <= 1) return;
+  bt.closest('.chq').remove();
+  tpnChqNumera();
+  tpnConta();
+}
+
+// ─── fotos do cheque ─────────────────────────────────────────────────────
+// No celular o botao abre a camera. No computador abre um QR: qualquer
+// celular le, tira a foto e ela aparece aqui sozinha (vale 30 minutos).
+var TPN_TOQUE = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+function tpnFotoLimpa(fto){
+  fto.classList.remove('tem');
+  fto.querySelector('input[type=hidden]').value = '';
+  var img = fto.querySelector('.fto__i'); img.hidden = true; img.removeAttribute('src');
+  fto.querySelector('.fto__b span').textContent = 'Foto ' + fto.getAttribute('data-lado');
+}
+function tpnFotoPronta(fto, id){
+  fto.classList.add('tem');
+  fto.querySelector('input[type=hidden]').value = id;
+  var img = fto.querySelector('.fto__i');
+  img.src = '{{ url_for("troco_pix.foto_ver", foto_id=0) }}'.replace(/0$/, id);
+  img.hidden = false;
+  fto.querySelector('.fto__b span').textContent = 'Refazer ' + fto.getAttribute('data-lado');
+}
+function tpnEncolhe(file, cb){
+  var img = new Image(), url = URL.createObjectURL(file);
+  img.onload = function(){
+    var k = Math.min(1, 1600 / Math.max(img.width, img.height));
+    var c = document.createElement('canvas');
+    c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(url);
+    c.toBlob(function(b){ cb(b || file); }, 'image/jpeg', 0.8);
+  };
+  img.onerror = function(){ cb(file); };
+  img.src = url;
+}
+function tpnFotoArquivo(fto, aoTerminar){
+  var inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  if (TPN_TOQUE) inp.setAttribute('capture', 'environment');
+  inp.onchange = function(){
+    var f = inp.files && inp.files[0];
+    if (!f) return;
+    var sp = fto.querySelector('.fto__b span'); sp.textContent = 'Enviando…';
+    tpnEncolhe(f, function(b){
+      var fd = new FormData(); fd.append('foto', b, 'cheque.jpg');
+      fetch('{{ url_for("troco_pix.foto_enviar") }}', {method: 'POST', body: fd})
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          if (!d.ok) throw new Error(d.erro || 'falhou');
+          tpnFotoPronta(fto, d.id);
+          if (aoTerminar) aoTerminar();
+        })
+        .catch(function(e){
+          alert('A foto não foi: ' + e.message);
+          sp.textContent = (fto.classList.contains('tem') ? 'Refazer ' : 'Foto ') + fto.getAttribute('data-lado');
+        });
+    });
+  };
+  inp.click();
+}
+function tpnFoto(bt){
+  var fto = bt.closest('.fto');
+  if (TPN_TOQUE) { tpnFotoArquivo(fto); return; }
+  tpnFotoQR(fto);
+}
+function tpnFotoQR(fto){
+  var cx = document.createElement('div');
+  cx.className = 'tpq';
+  cx.innerHTML = '<div class="tpq__c"><b>Foto do cheque — ' + fto.getAttribute('data-lado') + '</b>' +
+    '<p>Aponte a câmera de qualquer celular para o QR, tire a foto e envie. Ela aparece aqui sozinha.</p>' +
+    '<img alt="QR" hidden><div class="st">Gerando o código…</div>' +
+    '<p style="font-size:.8rem">O código vale 30 minutos e serve para uma foto.</p>' +
+    '<button type="button" class="arq" style="background:#eef3f8;color:#1f5fa8">Escolher arquivo do computador</button>' +
+    '<button type="button" class="fecha" style="background:#f1f3f6;color:#4a5563">Cancelar</button></div>';
+  document.body.appendChild(cx);
+  var timer = null;
+  function fecha(){ if (timer) clearInterval(timer); cx.remove(); }
+  cx.querySelector('.fecha').onclick = fecha;
+  cx.querySelector('.arq').onclick = function(){ tpnFotoArquivo(fto, fecha); };
+  var st = cx.querySelector('.st');
+  fetch('{{ url_for("troco_pix.foto_qr") }}', {method: 'POST'})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.ok) throw new Error(d.erro || 'falhou');
+      var img = cx.querySelector('img'); img.src = d.qr; img.hidden = false;
+      st.textContent = 'Aguardando a foto do celular…';
+      timer = setInterval(function(){
+        fetch('{{ url_for("troco_pix.foto_status", foto_id=0) }}'.replace(/0$/, d.id))
+          .then(function(r){ return r.json(); })
+          .then(function(s){
+            if (s.situacao === 'enviado'){ tpnFotoPronta(fto, d.id); fecha(); }
+            else if (s.situacao === 'expirado'){ clearInterval(timer); st.textContent = 'O código venceu. Feche e gere outro.'; }
+          }).catch(function(){});
+      }, 2500);
+    })
+    .catch(function(e){ st.textContent = 'Não consegui gerar o código: ' + e.message; });
 }
 
 // ─── cliente PIX: busca entre 264 ────────────────────────────────────────
@@ -621,17 +815,19 @@ function tpnFrentistas(){
 }
 
 // ─── ligar tudo ──────────────────────────────────────────────────────────
+function tpnLigaMoeda(inp){
+  inp.addEventListener('input', function(){ tpnMascara(inp); tpnConta(); });
+  inp.addEventListener('focus', function(){ inp.select(); });
+  // o que vem do banco na edicao ja chega formatado; normaliza mesmo assim
+  var cru = parseFloat(inp.getAttribute('data-raw-value') || '0') || 0;
+  inp.value = tpnFmt(cru);
+}
 document.addEventListener('DOMContentLoaded', function(){
   var moedas = document.querySelectorAll('#tpn input.money[type=text]');
-  for (var i = 0; i < moedas.length; i++){
-    (function(inp){
-      inp.addEventListener('input', function(){ tpnMascara(inp); tpnConta(); });
-      inp.addEventListener('focus', function(){ inp.select(); });
-      // o que vem do banco na edicao ja chega formatado; normaliza mesmo assim
-      var cru = parseFloat(inp.getAttribute('data-raw-value') || '0') || 0;
-      inp.value = tpnFmt(cru);
-    })(moedas[i]);
-  }
+  for (var i = 0; i < moedas.length; i++) tpnLigaMoeda(moedas[i]);
+  document.getElementById('tpn-cheques').addEventListener('change', function(ev){
+    if (ev.target.classList.contains('chq-venc')) tpnConta();
+  });
 
   var sel = document.getElementById('funcionario_id');
   if (sel){
@@ -663,8 +859,14 @@ document.addEventListener('DOMContentLoaded', function(){
     if (!document.getElementById('funcionario_id').value)
       falta.push('escolha o frentista');
     var prazo = document.querySelector('input[name="cheque_tipo"][value="A_PRAZO"]');
-    if (prazo && prazo.checked && !document.getElementById('cheque_data_vencimento').value)
-      falta.push('informe o vencimento do cheque a prazo');
+    var chqs = document.querySelectorAll('#tpn-cheques .chq'), semVenc = [], semValor = [];
+    for (var k = 0; k < chqs.length; k++){
+      var val = parseFloat(chqs[k].querySelector('.chq-valor').getAttribute('data-raw-value') || '0') || 0;
+      if (val <= 0) semValor.push(k + 1);
+      else if (prazo && prazo.checked && !chqs[k].querySelector('.chq-venc').value) semVenc.push(k + 1);
+    }
+    if (semVenc.length) falta.push('informe o vencimento do cheque ' + semVenc.join(', '));
+    if (semValor.length && chqs.length > 1) falta.push('informe o valor do cheque ' + semValor.join(', ') + ' (ou tire-o da lista)');
     if (tpnValor('cheque_valor') <= 0) falta.push('informe o valor do cheque');
     // Troco negativo o banco aceitaria e ninguem perceberia — e o erro mais
     // comum da tela. Barra aqui, com o motivo escrito.

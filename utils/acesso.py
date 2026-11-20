@@ -37,6 +37,9 @@ COMUM = (
     '/auth/login',
     '/health',
     '/favicon.ico',
+    # foto do cheque pelo QR (20/11/2026): pagina publica de token de 30 min;
+    # um PISTA logado no celular tambem precisa chegar nela
+    '/troco_pix/f/',
 )
 
 # ---------------------------------------------------------------------------
@@ -56,6 +59,8 @@ NIVEIS = {
             '/troco_pix/visualizar',
             '/troco_pix/clientes',
             '/troco_pix/cliente',
+            # fotos dos cheques (tirar, gerar QR, ver)
+            '/troco_pix/foto',
             # PIX Consulta da Pista (29/10/2026): so a tela do dia, nao a completa
             '/banco/pix-consulta/pista',
         ),

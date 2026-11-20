@@ -205,7 +205,28 @@ body > .container-fluid:has(#tpv){
     <div class="li li--txt"><span class="k">Vence em</span>
       <span class="v">{{ transacao.cheque_data_vencimento.strftime('%d/%m/%Y') }}</span></div>
     {% endif %}
-    <div class="li li--tot"><span class="k">Valor do cheque</span>
+    {% if cheques %}
+    {# cheque a cheque, com as fotos (20/11/2026) #}
+    {% for ch in cheques %}
+    <div class="li li--txt"><span class="k">Cheque {{ ch.ordem }}
+      {%- if ch.vencimento %} · vence {{ ch.vencimento.strftime('%d/%m/%Y') }}{% endif %}</span>
+      <span class="v">{{ ch.valor | formatar_moeda }}</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin:.2rem 0 .6rem">
+      {% for lado, fid in (('frente', ch.foto_frente_id), ('verso', ch.foto_verso_id)) %}
+      {% if fid %}
+      <a href="{{ url_for('troco_pix.foto_ver', foto_id=fid) }}" target="_blank" style="text-align:center;font-size:.8rem">
+        <img src="{{ url_for('troco_pix.foto_ver', foto_id=fid) }}" alt="{{ lado }}" loading="lazy"
+             style="width:100%;max-height:160px;object-fit:cover;border-radius:8px;border:1px solid #e3e8ee">
+        {{ lado }}</a>
+      {% else %}
+      <div style="border:1px dashed #d6dde6;border-radius:8px;padding:.8rem;text-align:center;font-size:.8rem;color:#a12a2a">
+        sem foto do {{ lado }}</div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endfor %}
+    {% endif %}
+    <div class="li li--tot"><span class="k">{{ 'Total dos cheques' if cheques|length > 1 else 'Valor do cheque' }}</span>
       <span class="v">{{ (transacao.cheque_valor or 0) | formatar_moeda }}</span></div>
   </div>
 
@@ -305,7 +326,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 cliente_pix_nome: {{ (transacao.cliente_pix_nome or "")|tojson }},
                 tipo_chave_pix: {{ (transacao.tipo_chave_pix or "")|tojson }},
                 chave_pix: {{ (transacao.chave_pix or "")|tojson }},
-                frentista_nome: {{ (transacao.frentista_nome or "")|tojson }}
+                frentista_nome: {{ (transacao.frentista_nome or "")|tojson }},
+                cheques: [{% for ch in cheques %}{valor: {{ ch.valor or 0 }}, venc: {{ (ch.vencimento.strftime("%d/%m/%Y") if ch.vencimento else "")|tojson }}, frente: {{ 'true' if ch.foto_frente_id else 'false' }}, verso: {{ 'true' if ch.foto_verso_id else 'false' }}}{{ ',' if not loop.last }}{% endfor %}]
             };
 
             // Texto do WhatsApp (19/11/2026): as mesmas informacoes de antes,
@@ -336,7 +358,20 @@ document.addEventListener('DOMContentLoaded', function() {
             message += '├ Arla: ' + ou(data.venda_arla) + '\n';
             message += '└ Produtos: ' + ou(data.venda_produtos) + '\n\n';
 
-            if (data.cheque_tipo || data.cheque_valor > 0) {
+            if (data.cheques.length) {
+                // cheque a cheque, dizendo se a foto da frente e do verso
+                // foram incluidas (20/11/2026)
+                const n = data.cheques.length;
+                const tipoTxt = data.cheque_tipo === 'A_PRAZO' ? 'a prazo' : 'à vista';
+                message += '💵 *' + (n > 1 ? n + ' CHEQUES' : 'CHEQUE') + ': ' + r$(data.cheque_valor) + '* (' + tipoTxt + ')\n';
+                data.cheques.forEach(function(c, i) {
+                    message += (i === n - 1 ? '└ ' : '├ ') + 'Cheque ' + (i + 1) + ': ' + ou(c.valor) +
+                               (c.venc ? ' · vence ' + c.venc : '') +
+                               ' · 📷 frente ' + (c.frente ? '✅' : '❌') +
+                               ' verso ' + (c.verso ? '✅' : '❌') + '\n';
+                });
+                message += '\n';
+            } else if (data.cheque_tipo || data.cheque_valor > 0) {
                 let tipo = '';
                 if (data.cheque_tipo === 'A_VISTA') tipo = ' (à vista)';
                 else if (data.cheque_tipo === 'A_PRAZO') tipo = ' (a prazo' + (data.cheque_data_vencimento ? ', vence ' + data.cheque_data_vencimento : '') + ')';

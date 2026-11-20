@@ -583,16 +583,152 @@ def visualizar(troco_pix_id):
             conn.close()
             return redirect(url_for('troco_pix.listar'))
         
+        try:
+            from utils import cheque_fotos
+            cheques = cheque_fotos.cheques_do_troco(conn, troco_pix_id)
+        except Exception as e:
+            print('[troco_pix] cheques do troco %s: %s' % (troco_pix_id, e))
+            cheques = []
+
         cursor.close()
         conn.close()
-        
-        return render_template('troco_pix/visualizar.html', 
+
+        return render_template('troco_pix/visualizar.html',
+                             cheques=cheques,
                              transacao=transacao,
                              titulo='Visualizar TROCO PIX')
         
     except Exception as e:
         flash(f'Erro ao visualizar transação: {str(e)}', 'danger')
         return redirect(url_for('troco_pix.listar'))
+
+# ==================== FOTOS DOS CHEQUES (20/11/2026) ====================
+# Celular logado manda direto (/foto/enviar). No computador, /foto/qr gera um
+# QR que qualquer celular abre SEM login (/f/<token>): vale 30 min, uma vez.
+_FOTO_MAX = 15 * 1024 * 1024
+
+
+def _foto_do_request():
+    f = request.files.get('foto')
+    if not f:
+        raise ValueError('Nenhuma foto recebida.')
+    dados = f.read(_FOTO_MAX + 1)
+    if len(dados) > _FOTO_MAX:
+        raise ValueError('Foto grande demais.')
+    return dados
+
+
+def _cheques_do_form(cheque_tipo):
+    """Cheques que vieram da tela. ([], None) quando a tela é antiga (sem a
+    lista): aí vale o cheque_valor de sempre."""
+    from utils import cheque_fotos
+    cheques = cheque_fotos.ler_cheques_do_form(request.form)
+    if cheque_tipo == 'A_PRAZO':
+        if any(not c[1] for c in cheques):
+            return [], 'Cada cheque a prazo precisa do vencimento.'
+    else:
+        cheques = [(v, None, fr, ve) for v, _venc, fr, ve in cheques]
+    return cheques, None
+
+
+def _url_publica(endpoint, **kw):
+    """URL absoluta como o navegador vê (o Railway entrega https por proxy)."""
+    proto = (request.headers.get('X-Forwarded-Proto') or request.scheme).split(',')[0].strip()
+    return '%s://%s%s' % (proto, request.host, url_for(endpoint, **kw))
+
+
+@troco_pix_bp.route('/foto/qr', methods=['POST'])
+@login_required
+def foto_qr():
+    from flask import jsonify
+    from utils import cheque_fotos, pix_brcode
+    conn = get_db_connection()
+    try:
+        fid, token = cheque_fotos.criar_slot(conn, current_user.id)
+    finally:
+        conn.close()
+    url = _url_publica('troco_pix.foto_celular', token=token)
+    return jsonify(ok=True, id=fid, url=url, qr=pix_brcode.qr_svg_data_uri(url),
+                   minutos=cheque_fotos.VALIDADE_MIN)
+
+
+@troco_pix_bp.route('/foto/enviar', methods=['POST'])
+@login_required
+def foto_enviar():
+    from flask import jsonify
+    from utils import cheque_fotos
+    conn = get_db_connection()
+    try:
+        dados = _foto_do_request()
+        fid, _tok = cheque_fotos.criar_slot(conn, current_user.id)
+        cheque_fotos.guardar_foto(conn, cheque_fotos.slot_por_id(conn, fid), dados, 'logado')
+        return jsonify(ok=True, id=fid)
+    except ValueError as e:
+        return jsonify(ok=False, erro=str(e)), 400
+    except Exception as e:
+        print('[troco_pix] foto/enviar falhou: %s' % e)
+        return jsonify(ok=False, erro='Não consegui guardar a foto. Tente de novo.'), 500
+    finally:
+        conn.close()
+
+
+@troco_pix_bp.route('/foto/status/<int:foto_id>')
+@login_required
+def foto_status(foto_id):
+    from flask import jsonify
+    from utils import cheque_fotos
+    conn = get_db_connection()
+    try:
+        return jsonify(situacao=cheque_fotos.situacao(cheque_fotos.slot_por_id(conn, foto_id)))
+    finally:
+        conn.close()
+
+
+@troco_pix_bp.route('/foto/<int:foto_id>')
+@login_required
+def foto_ver(foto_id):
+    from flask import Response, abort
+    from utils import cheque_fotos
+    conn = get_db_connection()
+    try:
+        slot = cheque_fotos.slot_por_id(conn, foto_id)
+    finally:
+        conn.close()
+    if not slot or not slot['caminho']:
+        abort(404)
+    try:
+        dados = cheque_fotos.ler(slot['caminho'])
+    except Exception as e:
+        print('[troco_pix] ler foto %s falhou: %s' % (foto_id, e))
+        abort(404)
+    return Response(dados, mimetype='image/jpeg',
+                    headers={'Cache-Control': 'private, max-age=86400'})
+
+
+@troco_pix_bp.route('/f/<token>', methods=['GET', 'POST'])
+def foto_celular(token):
+    """Página do celular que leu o QR. Sem login: quem tem o código (30 min,
+    uso único) só consegue mandar UMA foto, e não vê nada do sistema."""
+    from flask import jsonify
+    from utils import cheque_fotos
+    conn = get_db_connection()
+    try:
+        slot = cheque_fotos.slot_por_token(conn, token) if len(token) <= 64 else None
+        if request.method == 'GET':
+            return render_template('troco_pix/foto_celular.html',
+                                   situacao=cheque_fotos.situacao(slot))
+        try:
+            dados = _foto_do_request()
+            cheque_fotos.guardar_foto(conn, slot, dados, 'qr')
+            return jsonify(ok=True)
+        except ValueError as e:
+            return jsonify(ok=False, erro=str(e)), 400
+        except Exception as e:
+            print('[troco_pix] foto pelo QR falhou: %s' % e)
+            return jsonify(ok=False, erro='Não consegui guardar a foto. Tente de novo.'), 500
+    finally:
+        conn.close()
+
 
 @troco_pix_bp.route('/pagar/<int:troco_pix_id>')
 @login_required
@@ -824,10 +960,24 @@ def novo():
             flash('Por favor, preencha todos os campos obrigatórios.', 'warning')
             return redirect(url_for('troco_pix.novo'))
         
+        # Vários cheques (20/11/2026): o valor do troco é a SOMA; o vencimento
+        # do cabeçalho é o mais cedo. O tipo (à vista / a prazo) vale para
+        # todos — é o que o lançamento de caixa automático separa.
+        from utils import cheque_fotos
+        cheque_fotos.garantir_tabelas(conn)
+        cheques, erro_chq = _cheques_do_form(cheque_tipo)
+        if erro_chq:
+            flash(erro_chq, 'warning')
+            return redirect(url_for('troco_pix.novo'))
+        if cheques:
+            cheque_valor = '%.2f' % sum(c[0] for c in cheques)
+            if cheque_tipo == 'A_PRAZO':
+                cheque_data_vencimento = min(c[1] for c in cheques)
+
         if cheque_tipo == 'A_PRAZO' and not cheque_data_vencimento:
             flash('Para cheque A PRAZO, a data de vencimento é obrigatória.', 'warning')
             return redirect(url_for('troco_pix.novo'))
-        
+
         # Gerar número sequencial
         numero_sequencial = gerar_numero_troco_pix(data_transacao)
         
@@ -855,7 +1005,14 @@ def novo():
         
         conn.commit()
         troco_pix_id = cursor.lastrowid
-        
+
+        if cheques:
+            try:
+                cheque_fotos.gravar_cheques(conn, troco_pix_id, numero_sequencial, cheques)
+            except Exception as e:
+                print('[troco_pix] gravar cheques de %s falhou: %s' % (troco_pix_id, e))
+                flash('Atenção: o troco foi salvo, mas a lista de cheques/fotos não. Abra em Corrigir e salve de novo.', 'warning')
+
         cursor.close()
         conn.close()
         
@@ -984,10 +1141,20 @@ def editar(troco_pix_id):
             clientes_pix_json = json.dumps(clientes_pix_clean)
             frentistas_json = json.dumps(frentistas_clean)
             
+            # cheques já gravados (troco antigo, de antes de 20/11/2026, não
+            # tem: a tela monta um cheque só com o valor do cabeçalho)
+            try:
+                from utils import cheque_fotos
+                cheques_edit = cheque_fotos.cheques_do_troco(conn, troco_pix_id)
+            except Exception as e:
+                print('[troco_pix] cheques do troco %s: %s' % (troco_pix_id, e))
+                cheques_edit = []
+
             cursor.close()
             conn.close()
-            
+
             return render_template('troco_pix/novo.html',
+                                 cheques=cheques_edit,
                                  transacao=transacao,
                                  transacao_json=transacao_json,
                                  postos=postos,
@@ -1011,7 +1178,7 @@ def editar(troco_pix_id):
         cursor = conn.cursor(dictionary=True)
         
         # Verificar permissão novamente
-        cursor.execute("SELECT criado_em FROM troco_pix WHERE id = %s", (troco_pix_id,))
+        cursor.execute("SELECT criado_em, numero_sequencial FROM troco_pix WHERE id = %s", (troco_pix_id,))
         result = cursor.fetchone()
         
         if not result:
@@ -1047,7 +1214,21 @@ def editar(troco_pix_id):
         troco_credito = request.form.get('troco_credito_vda_programada', 0)
         troco_pix_cliente_id = request.form.get('troco_pix_cliente_id')
         funcionario_id = request.form.get('funcionario_id')
-        
+
+        # Vários cheques: mesma regra do lançar (soma; vencimento mais cedo)
+        from utils import cheque_fotos
+        cheque_fotos.garantir_tabelas(conn)
+        cheques, erro_chq = _cheques_do_form(cheque_tipo)
+        if erro_chq:
+            flash(erro_chq, 'warning')
+            cursor.close()
+            conn.close()
+            return redirect(url_for('troco_pix.editar', troco_pix_id=troco_pix_id,
+                                    origem=request.args.get('origem') or request.form.get('origem')))
+        if cheques:
+            cheque_valor = '%.2f' % sum(c[0] for c in cheques)
+            cheque_data_vencimento = min(c[1] for c in cheques) if cheque_tipo == 'A_PRAZO' else None
+
         # Atualizar transação
         query = """
             UPDATE troco_pix SET
@@ -1068,8 +1249,14 @@ def editar(troco_pix_id):
             troco_pix_cliente_id, funcionario_id, user_id,
             troco_pix_id
         ))
-        
+
         conn.commit()
+        if cheques:
+            try:
+                cheque_fotos.gravar_cheques(conn, troco_pix_id, result.get('numero_sequencial'), cheques)
+            except Exception as e:
+                print('[troco_pix] gravar cheques de %s falhou: %s' % (troco_pix_id, e))
+                flash('Atenção: o troco foi salvo, mas a lista de cheques/fotos não. Salve de novo.', 'warning')
         cursor.close()
         conn.close()
         
