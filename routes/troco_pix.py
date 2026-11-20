@@ -826,6 +826,11 @@ def _pix_concretizado(conn, troco_pix_id, bank_transaction_id=None):
 _MSG_PIX_FEITO = 'O PIX deste troco já foi feito: não dá mais para corrigir.'
 
 
+def _so_admin():
+    """O ADMIN ainda corrige depois do PIX feito (caso extremo)."""
+    return (getattr(current_user, 'nivel', '') or '').upper() == 'ADMIN'
+
+
 def _fotos_obrigatorias(criado_em=None):
     return criado_em is None or criado_em >= FOTOS_OBRIG_DESDE
 
@@ -1297,7 +1302,7 @@ def editar(troco_pix_id):
                 cursor.close()
                 conn.close()
                 return redirect(url_for('troco_pix.listar'))
-            if _pix_concretizado(conn, troco_pix_id, transacao.get('bank_transaction_id')):
+            if not _so_admin() and _pix_concretizado(conn, troco_pix_id, transacao.get('bank_transaction_id')):
                 flash(_MSG_PIX_FEITO, 'warning')
                 cursor.close()
                 conn.close()
@@ -1430,7 +1435,7 @@ def editar(troco_pix_id):
         # Verificar se usuário é administrador
         is_admin = (current_user.nivel.upper() in ['ADMIN', 'GERENTE', 'SUPERVISOR'])
         
-        if _pix_concretizado(conn, troco_pix_id, result.get('bank_transaction_id')):
+        if not _so_admin() and _pix_concretizado(conn, troco_pix_id, result.get('bank_transaction_id')):
             flash(_MSG_PIX_FEITO, 'warning')
             cursor.close()
             conn.close()
@@ -2421,7 +2426,9 @@ def utility_processor():
             bool: True se pode editar, False caso contrário
         """
         try:
-            # PIX já feito: ninguém corrige (20/11/2026)
+            # PIX já feito: só o ADMIN ainda corrige (20/11/2026)
+            if _so_admin():
+                return True
             if transacao.get('bank_transaction_id'):
                 return False
             if transacao.get('id') and float(transacao.get('troco_pix') or 0) > 0:
