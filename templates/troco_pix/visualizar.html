@@ -325,6 +325,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (btnCopyWhatsApp) {
         btnCopyWhatsApp.addEventListener('click', function() {
+            // Salvo parcial: so copia completo, com o cheque (20/11/2026)
+            const ZAP_FALTA = {{ (zap_falta or [])|tojson }};
+            if (ZAP_FALTA.length) {
+                alert('Ainda não dá para mandar no WhatsApp.\n\nFalta:\n• ' +
+                      ZAP_FALTA.join('\n• ') + '\n\nToque em Corrigir e complete.');
+                return;
+            }
             // Helper function to format currency values
             function formatCurrency(value) {
                 if (!value || value === 0 || value === '0') {

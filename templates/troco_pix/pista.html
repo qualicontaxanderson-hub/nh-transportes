@@ -180,8 +180,8 @@ body > .container-fluid:has(#tpp){
 
   <div class="aviso">
     <i class="bi bi-clock-history"></i>
-    <span>Dá para corrigir a sua solicitação por <b>15 minutos</b> depois de
-      lançar. Passou disso, fale com o administrativo.</span>
+    <span>Dá para corrigir a sua solicitação por <b>2 horas</b> depois de
+      lançar, enquanto o PIX não for feito. Passou disso, fale com o administrativo.</span>
   </div>
 
   <div class="dia"><i class="bi bi-calendar-day"></i> Hoje
@@ -238,14 +238,17 @@ body > .container-fluid:has(#tpp){
         {% endif %}
         <a class="bt" href="{{ url_for('troco_pix.visualizar', troco_pix_id=t.id, origem='pista') }}">
           <i class="bi bi-eye"></i> Ver</a>
-        {% if pode_editar(t) %}
+        {% set pode = pode_editar(t) %}
+        {% if pode %}
         <a class="bt bt--ed" href="{{ url_for('troco_pix.editar', troco_pix_id=t.id, origem='pista') }}">
           <i class="bi bi-pencil"></i> Corrigir</a>
         {% endif %}
         {# O relogio de cada uma: quem esta com o cheque na mao quer saber se
            AINDA da tempo, e a conta e feita pelo relogio do proprio celular. #}
-        {% if t.edita_ate %}
+        {% if t.edita_ate and pode %}
         <span class="prazo prazo--fim" data-ate="{{ t.edita_ate }}">—</span>
+        {% elif t.edita_ate %}
+        <span class="prazo prazo--fim">prazo de correção encerrado</span>
         {% endif %}
       </div>
     </div>
@@ -345,10 +348,10 @@ function tppPrazos(){
     var s = selos[i];
     var falta = (new Date(s.getAttribute('data-ate')) - new Date()) / 60000;
     if (falta > 0){
-      var m = Math.ceil(falta);
+      var m = Math.ceil(falta), hh = Math.floor(m / 60), mm = m % 60;
       s.className = 'prazo prazo--vivo';
-      s.textContent = m === 1 ? 'dá para corrigir por mais 1 min'
-                              : 'dá para corrigir por mais ' + m + ' min';
+      s.textContent = 'dá para corrigir por mais ' +
+        (hh ? hh + 'h' + (mm ? ' ' + mm + ' min' : '') : m + ' min');
     } else {
       s.className = 'prazo prazo--fim';
       s.textContent = 'prazo de correção encerrado';

@@ -604,7 +604,19 @@ def visualizar(troco_pix_id):
         cursor.close()
         conn.close()
 
+        # Salvou parcial? O WhatsApp só sai completo, com o cheque (20/11/2026)
+        zap_falta = []
+        if _fotos_obrigatorias(transacao.get('criado_em')):
+            if not cheques:
+                zap_falta.append('o cheque (valor e fotos)')
+            for n, ch in enumerate(cheques, start=1):
+                lados = [l for l, f in (('frente', ch.get('foto_frente_id')),
+                                        ('verso', ch.get('foto_verso_id'))) if not f]
+                if lados:
+                    zap_falta.append('foto %s do cheque %d' % (' e '.join(lados), n))
+
         return render_template('troco_pix/visualizar.html',
+                             zap_falta=zap_falta,
                              cheques=cheques,
                              cupom=cupom,
                              cupons_cand=cupons_cand,
@@ -778,10 +790,40 @@ def _erro_sem_pix(conn, troco_pix_cliente_id, troco_pix):
     return None
 
 
-# Fotos do cheque obrigatórias (20/11/2026): frente e verso de cada cheque.
-# Vale para todo lançamento novo; no corrigir, só para os lançados a partir
-# desta data (os antigos não têm como tirar a foto de cheque já depositado).
+# Fotos do cheque (20/11/2026): pode salvar sem (parcial), mas o "Copiar
+# para o WhatsApp" só libera com frente e verso de cada cheque. Vale para os
+# lançados a partir desta data (os antigos não têm como tirar a foto).
 FOTOS_OBRIG_DESDE = datetime(2026, 11, 21)
+
+# Quem lança (PISTA) corrige por 2 horas (era 15 min, 20/11/2026).
+EDITA_MINUTOS = 120
+
+
+def _pix_concretizado(conn, troco_pix_id, bank_transaction_id=None):
+    """PIX do troco já saiu: ligado ao extrato, ou com o aviso do banco (e sem
+    estorno depois). Aí ninguém corrige mais (20/11/2026)."""
+    if bank_transaction_id:
+        return True
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT tp.bank_transaction_id, cp.enviado_em,
+                   (SELECT MAX(e.estornado_em) FROM troco_pix_estornos e
+                     WHERE e.troco_pix_id = tp.id)
+            FROM troco_pix tp
+            LEFT JOIN troco_pix_comprovantes cp ON cp.troco_pix_id = tp.id
+            WHERE tp.id = %s
+        """, (troco_pix_id,))
+        r = cur.fetchone()
+    finally:
+        cur.close()
+    if not r:
+        return False
+    btid, enviado, estornado = r
+    return bool(btid) or bool(enviado and not (estornado and estornado >= enviado))
+
+
+_MSG_PIX_FEITO = 'O PIX deste troco já foi feito: não dá mais para corrigir.'
 
 
 def _fotos_obrigatorias(criado_em=None):
@@ -1093,7 +1135,6 @@ def novo():
                                  cliente_nome=cliente_nome,
                                  data_hoje=data_hoje,
                                  edit_mode=False,
-                                 fotos_obrig=True,
                                  titulo='Novo TROCO PIX')
         
         except Exception as e:
@@ -1163,11 +1204,6 @@ def novo():
         erro_sp = _erro_sem_pix(conn, troco_pix_cliente_id, troco_pix)
         if erro_sp:
             flash(erro_sp, 'warning')
-            return redirect(url_for('troco_pix.novo'))
-
-        erro_ft = _erro_falta_foto(cheques) if cheques else 'Tire a foto da frente e do verso do cheque.'
-        if erro_ft:
-            flash(erro_ft, 'warning')
             return redirect(url_for('troco_pix.novo'))
 
         # Gerar número sequencial
@@ -1261,7 +1297,11 @@ def editar(troco_pix_id):
                 cursor.close()
                 conn.close()
                 return redirect(url_for('troco_pix.listar'))
-            criado_em_edit = transacao.get('criado_em')
+            if _pix_concretizado(conn, troco_pix_id, transacao.get('bank_transaction_id')):
+                flash(_MSG_PIX_FEITO, 'warning')
+                cursor.close()
+                conn.close()
+                return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
             
             # Verificar permissão de edição (15 minutos para frentistas)
             user_id = current_user.id
@@ -1270,8 +1310,8 @@ def editar(troco_pix_id):
             
             if not is_admin:
                 tempo_decorrido = datetime.now() - transacao['criado_em']
-                if tempo_decorrido > timedelta(minutes=15):
-                    flash('Você só pode editar transações até 15 minutos após a criação. Entre em contato com o administrador.', 'warning')
+                if tempo_decorrido > timedelta(minutes=EDITA_MINUTOS):
+                    flash('Você só pode corrigir até 2 horas após o lançamento. Fale com o administrativo.', 'warning')
                     return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
             
             # Buscar dados para o formulário
@@ -1364,7 +1404,6 @@ def editar(troco_pix_id):
                                  frentistas=frentistas,  # Mantido para compatibilidade
                                  frentistas_json=frentistas_json,
                                  edit_mode=True,
-                                 fotos_obrig=_fotos_obrigatorias(criado_em_edit),
                                  troco_pix_id=troco_pix_id,
                                  titulo='Editar TROCO PIX')
         
@@ -1391,10 +1430,16 @@ def editar(troco_pix_id):
         # Verificar se usuário é administrador
         is_admin = (current_user.nivel.upper() in ['ADMIN', 'GERENTE', 'SUPERVISOR'])
         
+        if _pix_concretizado(conn, troco_pix_id, result.get('bank_transaction_id')):
+            flash(_MSG_PIX_FEITO, 'warning')
+            cursor.close()
+            conn.close()
+            return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
+
         if not is_admin:
             tempo_decorrido = datetime.now() - result['criado_em']
-            if tempo_decorrido > timedelta(minutes=15):
-                flash('Tempo limite de edição excedido (15 minutos).', 'warning')
+            if tempo_decorrido > timedelta(minutes=EDITA_MINUTOS):
+                flash('Tempo limite para corrigir excedido (2 horas).', 'warning')
                 cursor.close()
                 conn.close()
                 origem = request.args.get('origem') or request.form.get('origem')
@@ -1430,8 +1475,6 @@ def editar(troco_pix_id):
             cheque_data_vencimento = min(c[1] for c in cheques) if cheque_tipo == 'A_PRAZO' else None
 
         erro_sp = _erro_sem_pix(conn, troco_pix_cliente_id, troco_pix)
-        if not erro_sp and cheques and _fotos_obrigatorias(result.get('criado_em')):
-            erro_sp = _erro_falta_foto(cheques)
         if erro_sp:
             flash(erro_sp, 'warning')
             cursor.close()
@@ -2115,13 +2158,13 @@ def pista():
                 t['criado_em_br'] = None
         
         # Ate quando cada uma pode ser editada por quem lancou. A regra e a
-        # de pode_editar(): 15 minutos da criacao. Vai em UTC com Z para o
+        # de pode_editar(): 2 horas da criacao. Vai em UTC com Z para o
         # relogio do proprio celular fazer a conta — assim o "faltam 8 min" e
         # verdade mesmo que servidor e aparelho discordem de fuso.
         for t in transacoes:
             if t.get('criado_em'):
                 t['edita_ate'] = (pytz.utc.localize(t['criado_em'])
-                                  + timedelta(minutes=15)).strftime('%Y-%m-%dT%H:%M:%SZ')
+                                  + timedelta(minutes=EDITA_MINUTOS)).strftime('%Y-%m-%dT%H:%M:%SZ')
             else:
                 t['edita_ate'] = None
 
@@ -2378,6 +2421,17 @@ def utility_processor():
             bool: True se pode editar, False caso contrário
         """
         try:
+            # PIX já feito: ninguém corrige (20/11/2026)
+            if transacao.get('bank_transaction_id'):
+                return False
+            if transacao.get('id') and float(transacao.get('troco_pix') or 0) > 0:
+                _c = get_db_connection()
+                try:
+                    if _pix_concretizado(_c, transacao['id']):
+                        return False
+                finally:
+                    _c.close()
+
             # Administradores podem sempre editar
             if hasattr(current_user, 'nivel') and current_user.nivel.upper() in ['ADMIN', 'GERENTE', 'SUPERVISOR']:
                 return True
@@ -2389,10 +2443,10 @@ def utility_processor():
                     if current_user.cliente_id != transacao.get('cliente_id'):
                         return False
                 
-                # Verificar tempo (15 minutos)
+                # Verificar tempo (2 horas)
                 if transacao.get('criado_em'):
                     tempo_decorrido = datetime.now() - transacao['criado_em']
-                    return tempo_decorrido <= timedelta(minutes=15)
+                    return tempo_decorrido <= timedelta(minutes=EDITA_MINUTOS)
                 
                 # Se não tem criado_em, não pode editar por segurança
                 return False
