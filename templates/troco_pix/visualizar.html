@@ -308,74 +308,53 @@ document.addEventListener('DOMContentLoaded', function() {
                 frentista_nome: {{ (transacao.frentista_nome or "")|tojson }}
             };
 
-            // Build WhatsApp message with bold formatting and icons
-            let message = '';
-
-            // Check if this is a "SEM PIX" transaction
+            // Texto do WhatsApp (19/11/2026): as mesmas informacoes de antes,
+            // com o troco PIX e a chave no topo (e o que quem paga procura) e
+            // o link da tela de pagar no fim (QR / copia e cola, so ADMIN). A chave
+            // vai crua (so digitos), como antes, para colar no banco sem erro.
             const isSemPix = data.cliente_pix_nome === 'SEM PIX';
+            const temPix = !isSemPix && data.troco_pix > 0;
+            const r$ = function(v) { return 'R$ ' + (formatCurrency(v) || '0,00'); };
+            const ou = function(v) { return formatCurrency(v) || '—'; };
+            const tipoChave = (data.tipo_chave_pix || '').replace('_', ' ').toLowerCase();
 
-            // Add sequential number if available
-            if (data.numero_sequencial) {
-                message += '🔢 *' + data.numero_sequencial + '*\n\n';
-            }
-
-            // Different title for SEM PIX transactions
-            if (isSemPix) {
-                message += '💰 *VENDA EM CHEQUE* 💰\n';
-            } else {
-                message += '💰 *TROCO PIX* 💰\n';
-            }
+            let message = '';
+            message += '🔢 *' + (data.numero_sequencial || 'TROCO PIX') + '* · 📅 ' + data.data + '\n';
             message += '━━━━━━━━━━━━━━━━━━━━\n';
-            message += '📅 *Data:* ' + data.data + '\n\n';
-
-            message += '🏪 *VENDA*\n';
-            message += '├ Abastecimento: ' + (formatCurrency(data.venda_abastecimento) || '—') + '\n';
-            message += '├ Arla: ' + (formatCurrency(data.venda_arla) || '—') + '\n';
-            message += '├ Produtos: ' + (formatCurrency(data.venda_produtos) || '—') + '\n';
-            message += '└ *TOTAL:* ' + formatCurrency(data.venda_total) + '\n\n';
-
-            // CHEQUE section - only if there's cheque data
-            if (data.cheque_tipo || data.cheque_valor > 0) {
-                message += '💵 *CHEQUE*\n';
-                if (data.cheque_tipo === 'A_VISTA') {
-                    message += '├ Tipo: À Vista\n';
-                } else if (data.cheque_tipo === 'A_PRAZO') {
-                    message += '├ Tipo: A Prazo';
-                    if (data.cheque_data_vencimento) {
-                        message += ' (Venc: ' + data.cheque_data_vencimento + ')';
-                    }
-                    message += '\n';
-                }
-                message += '└ *Valor:* ' + formatCurrency(data.cheque_valor) + '\n\n';
-            }
-
-            message += '💸 *TROCO*\n';
-            message += '├ Em Espécie: ' + (formatCurrency(data.troco_especie) || '—') + '\n';
-            message += '├ Crédito Vda. Programada: ' + (formatCurrency(data.troco_credito) || '—') + '\n';
-            message += '└ *TOTAL:* ' + formatCurrency(data.troco_total) + '\n';
-
-            // Only show PIX details if NOT "SEM PIX"
-            if (!isSemPix) {
-                message += '\n🔑 *TROCO PIX:* ' + formatCurrency(data.troco_pix) + '\n';
-                message += '━━━━━━━━━━━━━━━━━━━━\n';
-                // Only show chave info if there's actual data
-                if (data.chave_pix) {
-                    message += '📱 Chave Pix: ' + (data.tipo_chave_pix ? '*' + data.tipo_chave_pix + '*' + ' - ' : '') + data.chave_pix + '\n';
-                } else {
-                    message += '📱 Chave Pix: —\n';
-                }
-                message += '👤 Cliente: ' + (data.cliente_pix_nome ? '*' + data.cliente_pix_nome + '*' : '—') + '\n\n';
+            if (isSemPix) {
+                message += '💰 *VENDA EM CHEQUE* (sem troco PIX)\n';
             } else {
-                // For SEM PIX, just add the separator line
-                message += '━━━━━━━━━━━━━━━━━━━━\n';
+                message += '💸 *TROCO PIX: ' + r$(data.troco_pix) + '*\n';
+                message += '👤 *' + (data.cliente_pix_nome || '—') + '*\n';
+                message += '📱 Chave' + (tipoChave ? ' (' + tipoChave + ')' : '') + ': *' +
+                           (data.chave_pix || '—') + '*\n';
             }
+            message += '━━━━━━━━━━━━━━━━━━━━\n\n';
+
+            message += '🏪 *VENDA: ' + r$(data.venda_total) + '*\n';
+            message += '├ Abastecimento: ' + ou(data.venda_abastecimento) + '\n';
+            message += '├ Arla: ' + ou(data.venda_arla) + '\n';
+            message += '└ Produtos: ' + ou(data.venda_produtos) + '\n\n';
+
+            if (data.cheque_tipo || data.cheque_valor > 0) {
+                let tipo = '';
+                if (data.cheque_tipo === 'A_VISTA') tipo = ' (à vista)';
+                else if (data.cheque_tipo === 'A_PRAZO') tipo = ' (a prazo' + (data.cheque_data_vencimento ? ', vence ' + data.cheque_data_vencimento : '') + ')';
+                message += '💵 *CHEQUE: ' + r$(data.cheque_valor) + '*' + tipo + '\n\n';
+            }
+
+            message += '💰 *TROCO TOTAL: ' + r$(data.troco_total) + '*\n';
+            message += '├ Em espécie: ' + ou(data.troco_especie) + '\n';
+            message += '├ Crédito vda. programada: ' + ou(data.troco_credito) + '\n';
+            message += '└ PIX: ' + ou(data.troco_pix) + '\n\n';
 
             message += '⛽ Frentista: ' + (data.frentista_nome ? '*' + data.frentista_nome + '*' : '—');
 
-            // Link da tela de pagar (QR / copia e cola). So o ADMIN abre;
-            // depois de pago a tela mostra "ja pago" e nao da o codigo.
-            if (!isSemPix && data.troco_pix > 0) {
-                message += '\n\n👉 *Pagar (QR / copia e cola):*\n' + window.location.origin +
+            // Link da tela de pagar. Sozinho na linha e sem asterisco, para o
+            // WhatsApp deixar tocavel. So o ADMIN ve o codigo; depois de pago
+            // a tela mostra "ja pago".
+            if (temPix) {
+                message += '\n\n👉 Pagar (QR / copia e cola):\n' + window.location.origin +
                            {{ url_for('troco_pix.pagar', troco_pix_id=transacao.id)|tojson }};
             }
 
