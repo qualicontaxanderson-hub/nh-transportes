@@ -624,7 +624,7 @@ def cupom_ligar(troco_pix_id):
     conn = get_db_connection()
     try:
         if request.form.get('soltar'):
-            troco_cupom.desligar(conn, troco_pix_id)
+            troco_cupom.desligar(conn, troco_pix_id, recusar=True)
             flash('Cupom desligado deste troco.', 'info')
         else:
             vid = request.form.get('vendas_xml_id', '')

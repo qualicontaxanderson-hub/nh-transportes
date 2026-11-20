@@ -32,6 +32,15 @@ def garantir_tabela(conn):
             UNIQUE KEY uk_cupom (vendas_xml_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """)
+    # "não é este": o cupom recusado não volta a ser ligado sozinho
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS troco_pix_cupom_recusa (
+            troco_pix_id INT NOT NULL,
+            vendas_xml_id INT NOT NULL,
+            criado_em DATETIME NOT NULL,
+            PRIMARY KEY (troco_pix_id, vendas_xml_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """)
     conn.commit()
     cur.close()
     _tabela_ok = True
@@ -67,8 +76,10 @@ def candidatos(conn, troco_pix_id):
                 "AND ABS(v.valor_total - %s) <= %s "
                 "AND NOT EXISTS (SELECT 1 FROM troco_pix_cupom tc WHERE tc.vendas_xml_id = v.id "
                 "                AND tc.troco_pix_id <> %s) "
+                "AND NOT EXISTS (SELECT 1 FROM troco_pix_cupom_recusa r WHERE r.vendas_xml_id = v.id "
+                "                AND r.troco_pix_id = %s) "
                 "ORDER BY v.dh_emissao",
-                (t['data'], t['data'], t['venda_total'], TOLERANCIA, troco_pix_id))
+                (t['data'], t['data'], t['venda_total'], TOLERANCIA, troco_pix_id, troco_pix_id))
     rows = cur.fetchall()
     cur.close()
     return rows
@@ -89,7 +100,10 @@ def por_numero(conn, troco_pix_id, numero):
                 "ORDER BY v.dh_emissao", (numero, t['data'], t['data']))
     rows = cur.fetchall()
     cur.close()
-    return rows
+    # o mesmo número existe em séries diferentes (NF-e 3, NFC-e 2/4/6/8/9/10):
+    # se só um deles foi pago com cheque, é ele
+    chq = [r for r in rows if 'Cheque' in (r['forma_pagamento'] or '')]
+    return chq if chq else rows
 
 
 def ligar(conn, troco_pix_id, vendas_xml_id, modo, usuario_id=None):
@@ -112,9 +126,13 @@ def ligar(conn, troco_pix_id, vendas_xml_id, modo, usuario_id=None):
     return None
 
 
-def desligar(conn, troco_pix_id):
+def desligar(conn, troco_pix_id, recusar=False):
     garantir_tabela(conn)
     cur = conn.cursor()
+    if recusar:
+        cur.execute("INSERT IGNORE INTO troco_pix_cupom_recusa (troco_pix_id, vendas_xml_id, criado_em) "
+                    "SELECT troco_pix_id, vendas_xml_id, %s FROM troco_pix_cupom WHERE troco_pix_id = %s",
+                    (datetime.now(), troco_pix_id))
     cur.execute("DELETE FROM troco_pix_cupom WHERE troco_pix_id = %s", (troco_pix_id,))
     conn.commit()
     cur.close()
