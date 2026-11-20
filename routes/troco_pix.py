@@ -759,6 +759,25 @@ def _foto_do_request():
     return dados
 
 
+def _erro_sem_pix(conn, troco_pix_cliente_id, troco_pix):
+    """SEM PIX com troco por PIX não existe (20/11/2026): não há quem receba e
+    a mensagem do grupo saía contraditória. Devolve o aviso ou None."""
+    try:
+        valor = float(str(troco_pix or 0).replace(',', '.'))
+    except ValueError:
+        valor = 0.0
+    if valor <= 0.004 or not troco_pix_cliente_id:
+        return None
+    cur = conn.cursor()
+    cur.execute("SELECT nome_completo FROM troco_pix_clientes WHERE id = %s", (troco_pix_cliente_id,))
+    r = cur.fetchone()
+    cur.close()
+    if r and (r[0] or '').strip().upper() == 'SEM PIX':
+        return ('Foi escolhido SEM PIX, mas sobrou troco por PIX de R$ %s. Lance esse valor em '
+                '"Em dinheiro" ou escolha quem recebe o PIX.' % ('%.2f' % valor).replace('.', ','))
+    return None
+
+
 def _cheques_do_form(cheque_tipo):
     """Cheques que vieram da tela. ([], None) quando a tela é antiga (sem a
     lista): aí vale o cheque_valor de sempre."""
@@ -1119,6 +1138,11 @@ def novo():
             flash('Para cheque A PRAZO, a data de vencimento é obrigatória.', 'warning')
             return redirect(url_for('troco_pix.novo'))
 
+        erro_sp = _erro_sem_pix(conn, troco_pix_cliente_id, troco_pix)
+        if erro_sp:
+            flash(erro_sp, 'warning')
+            return redirect(url_for('troco_pix.novo'))
+
         # Gerar número sequencial
         numero_sequencial = gerar_numero_troco_pix(data_transacao)
         
@@ -1375,6 +1399,14 @@ def editar(troco_pix_id):
         if cheques:
             cheque_valor = '%.2f' % sum(c[0] for c in cheques)
             cheque_data_vencimento = min(c[1] for c in cheques) if cheque_tipo == 'A_PRAZO' else None
+
+        erro_sp = _erro_sem_pix(conn, troco_pix_cliente_id, troco_pix)
+        if erro_sp:
+            flash(erro_sp, 'warning')
+            cursor.close()
+            conn.close()
+            return redirect(url_for('troco_pix.editar', troco_pix_id=troco_pix_id,
+                                    origem=request.args.get('origem') or request.form.get('origem')))
 
         # Atualizar transação
         query = """

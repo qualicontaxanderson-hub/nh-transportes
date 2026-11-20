@@ -871,6 +871,15 @@ document.addEventListener('DOMContentLoaded', function(){
     // Troco negativo o banco aceitaria e ninguem perceberia — e o erro mais
     // comum da tela. Barra aqui, com o motivo escrito.
     if (pix < -0.004) falta.push('o troco ficou negativo: o cheque não cobre a venda mais os trocos');
+    // SEM PIX com troco por PIX nao existe (20/11/2026): ninguem para
+    // receber. Ou o troco foi em dinheiro, ou falta escolher o cliente PIX.
+    var cid = document.getElementById('troco_pix_cliente_id').value;
+    for (var s = 0; s < TPN_CLIENTES.length; s++){
+      if (String(TPN_CLIENTES[s].id) === String(cid) &&
+          (TPN_CLIENTES[s].nome_completo || '').trim().toUpperCase() === 'SEM PIX' && pix > 0.004)
+        falta.push('foi escolhido SEM PIX, mas sobrou troco por PIX de R$ ' + tpnFmt(pix) +
+                   ': lance esse valor em "Em dinheiro" ou escolha quem recebe o PIX');
+    }
 
     if (falta.length){
       ev.preventDefault();
