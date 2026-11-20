@@ -371,30 +371,30 @@ document.addEventListener('DOMContentLoaded', function() {
                 cheques: [{% for ch in cheques %}{valor: {{ ch.valor or 0 }}, venc: {{ (ch.vencimento.strftime("%d/%m/%Y") if ch.vencimento else "")|tojson }}, frente: {{ 'true' if ch.foto_frente_id else 'false' }}, verso: {{ 'true' if ch.foto_verso_id else 'false' }}}{{ ',' if not loop.last }}{% endfor %}]
             };
 
-            // Texto do WhatsApp (19/11/2026): as mesmas informacoes de antes,
-            // com o troco PIX e a chave no topo (e o que quem paga procura) e
-            // o link da tela de pagar no fim (QR / copia e cola, so ADMIN). A chave
-            // vai crua (so digitos), como antes, para colar no banco sem erro.
+            // Texto do WhatsApp (refeito 20/11/2026): as mesmas informacoes,
+            // sem as barras de tracos (quebravam em duas linhas no celular),
+            // com linhas curtas e o frentista no topo. A chave vai crua (so
+            // digitos), para colar no banco sem erro.
             const isSemPix = data.cliente_pix_nome === 'SEM PIX';
             const temPix = !isSemPix && data.troco_pix > 0;
             const r$ = function(v) { return 'R$ ' + (formatCurrency(v) || '0,00'); };
-            const ou = function(v) { return formatCurrency(v) || '—'; };
+            const ou = function(v) { return (v > 0) ? r$(v) : '—'; };
             const tipoChave = (data.tipo_chave_pix || '').replace('_', ' ').toLowerCase();
+            const tipoTxt = data.cheque_tipo === 'A_PRAZO' ? 'a prazo' : 'à vista';
 
             let message = '';
-            message += '🔢 *' + (data.numero_sequencial || 'TROCO PIX') + '* · 📅 ' + data.data + '\n';
-            message += '━━━━━━━━━━━━━━━━━━━━\n';
-            if (isSemPix) {
-                message += '💰 *VENDA EM CHEQUE* (sem troco PIX)\n';
-            } else {
-                message += '💸 *TROCO PIX: ' + r$(data.troco_pix) + '*\n';
-                message += '👤 *' + (data.cliente_pix_nome || '—') + '*\n';
-                message += '📱 Chave' + (tipoChave ? ' (' + tipoChave + ')' : '') + ': *' +
-                           (data.chave_pix || '—') + '*\n';
-            }
-            message += '━━━━━━━━━━━━━━━━━━━━\n\n';
+            message += '🔢 *' + (data.numero_sequencial || 'TROCO PIX') + '*\n';
+            message += '📅 ' + data.data + (data.frentista_nome ? ' · ⛽ ' + data.frentista_nome : '') + '\n\n';
 
-            message += '🏪 *VENDA: ' + r$(data.venda_total) + '*\n';
+            if (!temPix) {
+                message += '💰 *Venda em cheque* (sem troco PIX)\n\n';
+            } else {
+                message += '💸 *Troco PIX: ' + r$(data.troco_pix) + '*\n';
+                message += '👤 ' + (data.cliente_pix_nome || '—') + '\n';
+                message += '📱 ' + (tipoChave ? tipoChave + ': ' : 'Chave: ') + '*' + (data.chave_pix || '—') + '*\n\n';
+            }
+
+            message += '🏪 *Venda: ' + r$(data.venda_total) + '*\n';
             message += '├ Abastecimento: ' + ou(data.venda_abastecimento) + '\n';
             message += '├ Arla: ' + ou(data.venda_arla) + '\n';
             message += (data.cupom ? '├ ' : '└ ') + 'Produtos: ' + ou(data.venda_produtos) + '\n';
@@ -402,38 +402,33 @@ document.addEventListener('DOMContentLoaded', function() {
             message += '\n';
 
             if (data.cheques.length) {
-                // cheque a cheque, dizendo se a foto da frente e do verso
-                // foram incluidas (20/11/2026)
+                // cheque a cheque; as fotos numa linha propria para nao quebrar
                 const n = data.cheques.length;
-                const tipoTxt = data.cheque_tipo === 'A_PRAZO' ? 'a prazo' : 'à vista';
-                message += '💵 *' + (n > 1 ? n + ' CHEQUES' : 'CHEQUE') + ': ' + r$(data.cheque_valor) + '* (' + tipoTxt + ')\n';
+                message += '💵 *' + (n > 1 ? n + ' cheques ' : 'Cheque ') + tipoTxt + ': ' + r$(data.cheque_valor) + '*\n';
                 data.cheques.forEach(function(c, i) {
-                    message += (i === n - 1 ? '└ ' : '├ ') + 'Cheque ' + (i + 1) + ': ' + ou(c.valor) +
-                               (c.venc ? ' · vence ' + c.venc : '') +
-                               ' · 📷 frente ' + (c.frente ? '✅' : '❌') +
-                               ' verso ' + (c.verso ? '✅' : '❌') + '\n';
+                    const ult = i === n - 1;
+                    message += (ult ? '└ ' : '├ ') + 'Cheque ' + (i + 1) + ': ' + r$(c.valor) +
+                               (c.venc ? ' · vence ' + c.venc : '') + '\n';
+                    message += (ult ? '    ' : '│   ') + '📷 frente ' + (c.frente ? '✅' : '❌') +
+                               ' · verso ' + (c.verso ? '✅' : '❌') + '\n';
                 });
                 message += '\n';
             } else if (data.cheque_tipo || data.cheque_valor > 0) {
-                let tipo = '';
-                if (data.cheque_tipo === 'A_VISTA') tipo = ' (à vista)';
-                else if (data.cheque_tipo === 'A_PRAZO') tipo = ' (a prazo' + (data.cheque_data_vencimento ? ', vence ' + data.cheque_data_vencimento : '') + ')';
-                message += '💵 *CHEQUE: ' + r$(data.cheque_valor) + '*' + tipo + '\n\n';
+                message += '💵 *Cheque ' + tipoTxt + ': ' + r$(data.cheque_valor) + '*\n';
+                if (data.cheque_tipo === 'A_PRAZO' && data.cheque_data_vencimento)
+                    message += '└ vence ' + data.cheque_data_vencimento + '\n';
+                message += '\n';
             }
 
-            message += '💰 *TROCO TOTAL: ' + r$(data.troco_total) + '*\n';
-            message += '├ Em espécie: ' + ou(data.troco_especie) + '\n';
+            message += '💰 *Troco total: ' + r$(data.troco_total) + '*\n';
+            message += '├ Espécie: ' + ou(data.troco_especie) + '\n';
             message += '├ Crédito vda. programada: ' + ou(data.troco_credito) + '\n';
-            message += '└ PIX: ' + ou(data.troco_pix) + '\n\n';
+            message += '└ PIX: ' + ou(data.troco_pix) + '\n';
 
-            message += '⛽ Frentista: ' + (data.frentista_nome ? '*' + data.frentista_nome + '*' : '—');
-
-            // Link da solicitacao (20/11/2026): em TODA mensagem, com ou sem
-            // troco PIX. Abre o resumo com cupom, cheques (fotos) e o Pix do
-            // troco (este so o ADMIN). Sozinho na linha e sem asterisco, para
-            // o WhatsApp deixar tocavel.
-            message += '\n\n👉 Abrir no app (cupom, cheques' + (temPix ? ', troco PIX' : '') + '):\n' +
-                       window.location.origin +
+            // Link da solicitacao (20/11/2026): em TODA mensagem. Abre o resumo
+            // com cupom, cheques (fotos) e o Pix do troco (este so o ADMIN).
+            // Sozinho na linha e sem asterisco, para o WhatsApp deixar tocavel.
+            message += '\n👉 Abrir no app:\n' + window.location.origin +
                        {{ url_for('troco_pix.resumo', troco_pix_id=transacao.id)|tojson }};
 
             // Copy to clipboard
