@@ -664,6 +664,17 @@ def cupom_ver(troco_pix_id):
             return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
         cur.execute("SELECT * FROM vendas_xml WHERE id = %s", (cupom['id'],))
         nota = cur.fetchone()
+        # 20/11/2026: o PDF igual ao da Qualicontax (DANFCE / DANFE do XML).
+        # Sem o XML ainda no Dropbox, cai no layout de antes.
+        from utils.cupom_pdf import pdf_da_chave
+        pdf, motivo = pdf_da_chave(nota['chave'])
+        if pdf:
+            from flask import Response
+            nome = '%s %s.pdf' % ('NF-e' if str(nota['modelo']) == '55' else 'NFC-e', nota['numero'])
+            return Response(pdf, mimetype='application/pdf', headers={
+                'Content-Disposition': 'inline; filename="%s"' % nome,
+                'Cache-Control': 'private, max-age=3600'})
+        flash(motivo + ' Mostrando o resumo do cupom.', 'info')
         cur.execute("SELECT * FROM vendas_xml_itens WHERE venda_id = %s ORDER BY n_item", (cupom['id'],))
         itens = cur.fetchall()
         danfe, pagamentos = _do_xml(cur, nota['chave'])

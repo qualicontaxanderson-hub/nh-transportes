@@ -28,3 +28,6 @@ segno==1.6.1
 
 # Importar folha (PDF) na tela de Lancamento de Funcionarios. Puro Python.
 pypdf==6.16.0
+# DANFE (NF-e 55) igual ao da Qualicontax (utils/cupom_pdf.py, 20/11/2026)
+brazilfiscalreport==1.0.1
+fpdf2==2.9.0
