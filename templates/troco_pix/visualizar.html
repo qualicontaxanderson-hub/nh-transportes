@@ -425,13 +425,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
             message += '⛽ Frentista: ' + (data.frentista_nome ? '*' + data.frentista_nome + '*' : '—');
 
-            // Link da tela de pagar. Sozinho na linha e sem asterisco, para o
-            // WhatsApp deixar tocavel. So o ADMIN ve o codigo; depois de pago
-            // a tela mostra "ja pago".
-            if (temPix) {
-                message += '\n\n👉 Pagar (QR / copia e cola):\n' + window.location.origin +
-                           {{ url_for('troco_pix.pagar', troco_pix_id=transacao.id)|tojson }};
-            }
+            // Link da solicitacao (20/11/2026): em TODA mensagem, com ou sem
+            // troco PIX. Abre o resumo com cupom, cheques (fotos) e o Pix do
+            // troco (este so o ADMIN). Sozinho na linha e sem asterisco, para
+            // o WhatsApp deixar tocavel.
+            message += '\n\n👉 Abrir no app (cupom, cheques' + (temPix ? ', troco PIX' : '') + '):\n' +
+                       window.location.origin +
+                       {{ url_for('troco_pix.resumo', troco_pix_id=transacao.id)|tojson }};
 
             // Copy to clipboard
             if (navigator.clipboard && navigator.clipboard.writeText) {

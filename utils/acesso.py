@@ -63,6 +63,8 @@ NIVEIS = {
             '/troco_pix/foto',
             # cupom fiscal da venda (ligar/soltar na tela Ver)
             '/troco_pix/cupom',
+            # tela do link do WhatsApp (resumo com cupom, cheques e troco PIX)
+            '/troco_pix/s/',
             # PIX Consulta da Pista (29/10/2026): so a tela do dia, nao a completa
             '/banco/pix-consulta/pista',
         ),

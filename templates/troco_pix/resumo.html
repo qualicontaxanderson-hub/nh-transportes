@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t.numero_sequencial or ('#' ~ t.id) }} – Troco PIX{% endblock %}
+
+{% block content %}
+{# Tela do link do WhatsApp (20/11/2026): toda solicitação, com ou sem troco PIX #}
+<style>
+  #tps { max-width: 460px; margin: 0 auto; padding: 1rem 16px 2rem; }
+  #tps .topo__n { font-weight: 700; font-size: 1.05rem; }
+  #tps .topo__s { color: #6b7785; font-size: .85rem; margin-bottom: .8rem; }
+  #tps .card2 { background: #fff; border: 1px solid #e3e8ee; border-radius: 14px; padding: 1rem; }
+  #tps .centro { text-align: center; }
+  #tps .valor { font-size: 2rem; font-weight: 800; color: #0f6b4c; line-height: 1.1; }
+  #tps .valor--zero { color: #6b7785; font-size: 1.3rem; }
+  #tps .quem { font-weight: 700; margin-top: .3rem; }
+  #tps .chave { color: #4a5563; font-size: .9rem; word-break: break-all; }
+  #tps .selo { display: inline-block; margin-top: .6rem; border-radius: 999px; padding: .25rem .7rem; font-size: .8rem; font-weight: 600; }
+  #tps .selo--ok { background: #e8f6ef; color: #0f6b4c; }
+  #tps .selo--warn { background: #fff7e0; color: #8a5a00; }
+  #tps .selo--neutro { background: #f1f3f6; color: #4a5563; }
+  #tps .li { display: flex; justify-content: space-between; gap: .6rem; padding: .35rem 0; border-bottom: 1px solid #f0f2f5; font-size: .92rem; }
+  #tps .li:last-child { border-bottom: 0; }
+  #tps .li .k { color: #6b7785; }
+  #tps .li .v { font-weight: 600; text-align: right; }
+  #tps .bts { display: grid; gap: .55rem; margin: 1rem 0; }
+  #tps .bt { display: flex; align-items: center; gap: .6rem; width: 100%; border: 1px solid #b9cde6; border-radius: 12px;
+             padding: .85rem 1rem; font-weight: 700; font-size: 1rem; background: #fff; color: #1f5fa8; text-decoration: none; cursor: pointer; }
+  #tps .bt small { display: block; font-weight: 400; color: #6b7785; font-size: .8rem; }
+  #tps .bt--pix { background: #0f6b4c; border-color: #0f6b4c; color: #fff; }
+  #tps .bt--pix small { color: #d5efe3; }
+  #tps .bt--off { opacity: .55; cursor: default; }
+  #tps .bt .ic { font-size: 1.4rem; }
+  #tps .chq { margin-top: .4rem; }
+  #tps .fotos { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin: .3rem 0 .8rem; }
+  #tps .fotos a { text-align: center; font-size: .8rem; color: #4a5563; text-decoration: none; }
+  #tps .fotos img { width: 100%; max-height: 170px; object-fit: cover; border-radius: 8px; border: 1px solid #e3e8ee; }
+  #tps .semfoto { border: 1px dashed #d6dde6; border-radius: 8px; padding: .8rem; text-align: center; font-size: .8rem; color: #a12a2a; }
+  #tps .voltar { display: inline-block; margin-top: 1rem; color: #4a5563; }
+</style>
+<div id="tps">
+  <div class="topo__n">{{ t.numero_sequencial or ('#' ~ t.id) }}</div>
+  <div class="topo__s">{{ t.data.strftime('%d/%m/%Y') if t.data else '—' }}
+    {%- if t.frentista_nome %} · ⛽ {{ t.frentista_nome }}{% endif %}</div>
+
+  <div class="card2 centro">
+    {% if situacao == 'sem_troco' %}
+    <div class="valor valor--zero">Sem troco PIX</div>
+    <div class="chave">Venda em cheque</div>
+    {% else %}
+    <div class="valor">{{ valor | formatar_moeda }}</div>
+    <div class="quem">{{ t.cliente_pix_nome or '—' }}</div>
+    <div class="chave">{{ (t.tipo_chave_pix or '')|replace('_', ' ')|lower }}: {{ t.chave_pix or '—' }}</div>
+    {% endif %}
+    {% if situacao == 'pago' %}<span class="selo selo--ok">✅ troco pago (conciliado)</span>
+    {% elif situacao == 'enviado' %}<span class="selo selo--ok">✉️ PIX enviado {{ t.pix_enviado_em.strftime('%d/%m %H:%M') }}</span>
+    {% elif situacao == 'a_pagar' %}<span class="selo selo--warn">⏳ troco PIX a pagar</span>
+    {% elif situacao == 'cancelado' %}<span class="selo selo--neutro">cancelado</span>
+    {% endif %}
+  </div>
+
+  <div class="card2" style="margin-top:.7rem">
+    <div class="li"><span class="k">Venda</span><span class="v">{{ (t.venda_total or 0) | formatar_moeda }}</span></div>
+    <div class="li"><span class="k">{{ (cheques|length ~ ' cheques') if cheques|length > 1 else 'Cheque' }}
+      ({{ 'a prazo' if t.cheque_tipo == 'A_PRAZO' else 'à vista' }})</span>
+      <span class="v">{{ (t.cheque_valor or 0) | formatar_moeda }}</span></div>
+    <div class="li"><span class="k">Troco total</span><span class="v">{{ (t.troco_total or 0) | formatar_moeda }}</span></div>
+  </div>
+
+  <div class="bts">
+    {% if cupom %}
+    <a class="bt" href="{{ url_for('troco_pix.cupom_ver', troco_pix_id=t.id) }}">
+      <span class="ic">🧾</span><span>Ver o cupom
+        <small>{{ 'NF-e' if cupom.modelo == 55 else 'Cupom' }} nº {{ cupom.numero }} · {{ cupom.dh_emissao.strftime('%d/%m %H:%M') }} · {{ cupom.valor_total | formatar_moeda }}</small></span></a>
+    {% else %}
+    <a class="bt" href="{{ url_for('troco_pix.visualizar', troco_pix_id=t.id) }}">
+      <span class="ic">🧾</span><span>Ver o cupom
+        <small>ainda não ligado — escolher ou digitar o número</small></span></a>
+    {% endif %}
+
+    <button type="button" class="bt" id="tpsChq">
+      <span class="ic">💵</span><span>Ver {{ 'os cheques' if cheques|length > 1 else 'o cheque' }}
+        <small>{% if cheques %}{{ cheques|length }} cheque{{ 's' if cheques|length > 1 }} ·
+          {% set nf = cheques|selectattr('foto_frente_id')|list|length + cheques|selectattr('foto_verso_id')|list|length %}
+          📷 {{ nf }} de {{ cheques|length * 2 }} fotos{% else %}sem cheques detalhados{% endif %}</small></span></button>
+
+    {% if situacao != 'sem_troco' and situacao != 'cancelado' %}
+      {% if admin %}
+      <a class="bt bt--pix" href="{{ url_for('troco_pix.pagar', troco_pix_id=t.id) }}">
+        <span class="ic">💸</span><span>Ver o troco PIX
+          <small>QR Code e Pix copia e cola</small></span></a>
+      {% else %}
+      <span class="bt bt--off"><span class="ic">💸</span><span>Ver o troco PIX
+        <small>só o ADMIN abre o QR / copia e cola</small></span></span>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  <div class="card2" id="tpsCheques" style="display:none">
+    {% if cheques %}
+    {% for ch in cheques %}
+    <div class="chq">
+      <div class="li"><span class="k">Cheque {{ ch.ordem }}{% if ch.vencimento %} · vence {{ ch.vencimento.strftime('%d/%m/%Y') }}{% endif %}</span>
+        <span class="v">{{ ch.valor | formatar_moeda }}</span></div>
+      <div class="fotos">
+        {% for lado, fid in (('frente', ch.foto_frente_id), ('verso', ch.foto_verso_id)) %}
+        {% if fid %}
+        <a href="{{ url_for('troco_pix.foto_ver', foto_id=fid) }}" target="_blank">
+          <img src="{{ url_for('troco_pix.foto_ver', foto_id=fid) }}" alt="{{ lado }}" loading="lazy">{{ lado }}</a>
+        {% else %}
+        <div class="semfoto">sem foto do {{ lado }}</div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="li"><span class="k">Valor do cheque</span><span class="v">{{ (t.cheque_valor or 0) | formatar_moeda }}</span></div>
+    {% if t.cheque_data_vencimento %}<div class="li"><span class="k">Vence em</span><span class="v">{{ t.cheque_data_vencimento.strftime('%d/%m/%Y') }}</span></div>{% endif %}
+    <div class="chave" style="margin-top:.4rem">Esta solicitação é de antes das fotos dos cheques.</div>
+    {% endif %}
+  </div>
+
+  <a class="voltar" href="{{ url_for('troco_pix.visualizar', troco_pix_id=t.id) }}"><i class="bi bi-eye"></i> Ver a solicitação completa</a>
+</div>
+<script>
+(function(){
+  var bt = document.getElementById('tpsChq'), box = document.getElementById('tpsCheques');
+  bt.addEventListener('click', function(){
+    var abrir = box.style.display === 'none';
+    box.style.display = abrir ? 'block' : 'none';
+    if (abrir) box.scrollIntoView({behavior: 'smooth', block: 'start'});
+  });
+})();
+</script>
+{% endblock %}

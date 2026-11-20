@@ -648,6 +648,90 @@ def cupom_ligar(troco_pix_id):
     return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
 
 
+@troco_pix_bp.route('/cupom/<int:troco_pix_id>', methods=['GET'])
+@login_required
+def cupom_ver(troco_pix_id):
+    """O cupom ligado ao troco, no layout da nota (o mesmo de /vendas/<id>),
+    para quem acessa o troco PIX (o /vendas é só do ADMIN)."""
+    from utils import troco_cupom
+    from routes.vendas import _do_xml
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cupom = troco_cupom.tentar_auto(conn, troco_pix_id)
+        if not cupom:
+            flash('Esta solicitação ainda não tem cupom ligado. Escolha ou digite o número abaixo.', 'warning')
+            return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
+        cur.execute("SELECT * FROM vendas_xml WHERE id = %s", (cupom['id'],))
+        nota = cur.fetchone()
+        cur.execute("SELECT * FROM vendas_xml_itens WHERE venda_id = %s ORDER BY n_item", (cupom['id'],))
+        itens = cur.fetchall()
+        danfe, pagamentos = _do_xml(cur, nota['chave'])
+        return render_template('vendas/detalhe.html', nota=nota, itens=itens,
+                               danfe=danfe, pagamentos=pagamentos)
+    finally:
+        cur.close()
+        conn.close()
+
+
+@troco_pix_bp.route('/s/<int:troco_pix_id>')
+@login_required
+def resumo(troco_pix_id):
+    """Tela do link do WhatsApp (20/11/2026): vai em TODA solicitação, com ou
+    sem troco PIX. Mostra o resumo e leva ao cupom, aos cheques (com fotos) e
+    ao Pix do troco (este, só o ADMIN)."""
+    from utils import cheque_fotos, troco_cupom
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""
+            SELECT tp.*, tpc.nome_completo AS cliente_pix_nome, tpc.tipo_chave_pix, tpc.chave_pix,
+                   f.nome AS frentista_nome, cp.enviado_em AS pix_enviado_em,
+                   (SELECT MAX(e.estornado_em) FROM troco_pix_estornos e
+                        WHERE e.troco_pix_id = tp.id) AS pix_estornado_em
+            FROM troco_pix tp
+            LEFT JOIN troco_pix_clientes tpc ON tpc.id = tp.troco_pix_cliente_id
+            LEFT JOIN funcionarios f ON f.id = tp.funcionario_id
+            LEFT JOIN troco_pix_comprovantes cp ON cp.troco_pix_id = tp.id
+            WHERE tp.id = %s
+        """, (troco_pix_id,))
+        t = cur.fetchone()
+        if not t:
+            flash('Solicitação não encontrada.', 'warning')
+            return redirect(url_for('troco_pix.listar'))
+        try:
+            cheques = cheque_fotos.cheques_do_troco(conn, troco_pix_id)
+        except Exception as e:
+            print('[troco_pix] resumo cheques %s: %s' % (troco_pix_id, e))
+            cheques = []
+        try:
+            cupom = troco_cupom.tentar_auto(conn, troco_pix_id)
+        except Exception as e:
+            print('[troco_pix] resumo cupom %s: %s' % (troco_pix_id, e))
+            cupom = None
+    finally:
+        cur.close()
+        conn.close()
+
+    valor = float(t['troco_pix'] or 0)
+    sem_pix = (t['cliente_pix_nome'] or '') == 'SEM PIX' or valor <= 0
+    enviado = t['pix_enviado_em'] and not (
+        t['pix_estornado_em'] and t['pix_estornado_em'] >= t['pix_enviado_em'])
+    if (t['status'] or '').upper() == 'CANCELADO':
+        situacao = 'cancelado'
+    elif sem_pix:
+        situacao = 'sem_troco'
+    elif t['bank_transaction_id']:
+        situacao = 'pago'
+    elif enviado:
+        situacao = 'enviado'
+    else:
+        situacao = 'a_pagar'
+    admin = (getattr(current_user, 'nivel', '') or '').upper() == 'ADMIN'
+    return render_template('troco_pix/resumo.html', t=t, valor=valor, situacao=situacao,
+                           cheques=cheques, cupom=cupom, admin=admin)
+
+
 # ==================== FOTOS DOS CHEQUES (20/11/2026) ====================
 # Celular logado manda direto (/foto/enviar). No computador, /foto/qr gera um
 # QR que qualquer celular abre SEM login (/f/<token>): vale 30 min, uma vez.
