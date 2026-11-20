@@ -372,6 +372,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
             message += '⛽ Frentista: ' + (data.frentista_nome ? '*' + data.frentista_nome + '*' : '—');
 
+            // Link da tela de pagar (QR / copia e cola). So o ADMIN abre;
+            // depois de pago a tela mostra "ja pago" e nao da o codigo.
+            if (!isSemPix && data.troco_pix > 0) {
+                message += '\n\n👉 *Pagar (QR / copia e cola):*\n' + window.location.origin +
+                           {{ url_for('troco_pix.pagar', troco_pix_id=transacao.id)|tojson }};
+            }
+
             // Copy to clipboard
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(message).then(function() {
