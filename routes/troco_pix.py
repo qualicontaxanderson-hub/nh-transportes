@@ -81,8 +81,10 @@ def gerar_numero_troco_pix(data_transacao):
     cursor.execute("""
         SELECT numero_sequencial 
         FROM troco_pix 
-        WHERE data = %s 
-        ORDER BY numero_sequencial DESC 
+        WHERE data = %s
+        -- pelo NUMERO, nao pelo texto: como texto "N9" > "N10" e do 10o troco
+        -- do dia em diante todos saiam N10 (corrigido 20/11/2026)
+        ORDER BY CAST(SUBSTRING_INDEX(numero_sequencial, '-N', -1) AS UNSIGNED) DESC
         LIMIT 1
     """, (data_obj.strftime('%Y-%m-%d'),))
     
