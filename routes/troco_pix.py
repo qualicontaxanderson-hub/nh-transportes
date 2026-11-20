@@ -778,6 +778,27 @@ def _erro_sem_pix(conn, troco_pix_cliente_id, troco_pix):
     return None
 
 
+# Fotos do cheque obrigatórias (20/11/2026): frente e verso de cada cheque.
+# Vale para todo lançamento novo; no corrigir, só para os lançados a partir
+# desta data (os antigos não têm como tirar a foto de cheque já depositado).
+FOTOS_OBRIG_DESDE = datetime(2026, 11, 21)
+
+
+def _fotos_obrigatorias(criado_em=None):
+    return criado_em is None or criado_em >= FOTOS_OBRIG_DESDE
+
+
+def _erro_falta_foto(cheques):
+    falta = []
+    for n, (_v, _venc, fr, ve) in enumerate(cheques, start=1):
+        lados = [l for l, f in (('frente', fr), ('verso', ve)) if not f]
+        if lados:
+            falta.append('cheque %d (%s)' % (n, ' e '.join(lados)))
+    if falta:
+        return 'Tire a foto do cheque: falta ' + '; '.join(falta) + '.'
+    return None
+
+
 def _cheques_do_form(cheque_tipo):
     """Cheques que vieram da tela. ([], None) quando a tela é antiga (sem a
     lista): aí vale o cheque_valor de sempre."""
@@ -1072,6 +1093,7 @@ def novo():
                                  cliente_nome=cliente_nome,
                                  data_hoje=data_hoje,
                                  edit_mode=False,
+                                 fotos_obrig=True,
                                  titulo='Novo TROCO PIX')
         
         except Exception as e:
@@ -1141,6 +1163,11 @@ def novo():
         erro_sp = _erro_sem_pix(conn, troco_pix_cliente_id, troco_pix)
         if erro_sp:
             flash(erro_sp, 'warning')
+            return redirect(url_for('troco_pix.novo'))
+
+        erro_ft = _erro_falta_foto(cheques) if cheques else 'Tire a foto da frente e do verso do cheque.'
+        if erro_ft:
+            flash(erro_ft, 'warning')
             return redirect(url_for('troco_pix.novo'))
 
         # Gerar número sequencial
@@ -1234,6 +1261,7 @@ def editar(troco_pix_id):
                 cursor.close()
                 conn.close()
                 return redirect(url_for('troco_pix.listar'))
+            criado_em_edit = transacao.get('criado_em')
             
             # Verificar permissão de edição (15 minutos para frentistas)
             user_id = current_user.id
@@ -1336,6 +1364,7 @@ def editar(troco_pix_id):
                                  frentistas=frentistas,  # Mantido para compatibilidade
                                  frentistas_json=frentistas_json,
                                  edit_mode=True,
+                                 fotos_obrig=_fotos_obrigatorias(criado_em_edit),
                                  troco_pix_id=troco_pix_id,
                                  titulo='Editar TROCO PIX')
         
@@ -1401,6 +1430,8 @@ def editar(troco_pix_id):
             cheque_data_vencimento = min(c[1] for c in cheques) if cheque_tipo == 'A_PRAZO' else None
 
         erro_sp = _erro_sem_pix(conn, troco_pix_cliente_id, troco_pix)
+        if not erro_sp and cheques and _fotos_obrigatorias(result.get('criado_em')):
+            erro_sp = _erro_falta_foto(cheques)
         if erro_sp:
             flash(erro_sp, 'warning')
             cursor.close()

@@ -850,6 +850,7 @@ document.addEventListener('DOMContentLoaded', function(){
   });
 
   // ─── envio ─────────────────────────────────────────────────────────────
+  var TPN_FOTOS_OBRIG = {{ 'true' if fotos_obrig else 'false' }};
   document.getElementById('tpn-form').addEventListener('submit', function(ev){
     var erro = document.getElementById('tpn-erro');
     var pix = tpnConta();
@@ -864,6 +865,18 @@ document.addEventListener('DOMContentLoaded', function(){
       var val = parseFloat(chqs[k].querySelector('.chq-valor').getAttribute('data-raw-value') || '0') || 0;
       if (val <= 0) semValor.push(k + 1);
       else if (prazo && prazo.checked && !chqs[k].querySelector('.chq-venc').value) semVenc.push(k + 1);
+    }
+    // fotos obrigatorias (20/11/2026): frente e verso de cada cheque
+    if (TPN_FOTOS_OBRIG){
+      var semFoto = [];
+      for (var f = 0; f < chqs.length; f++){
+        var ld = [];
+        var fs = chqs[f].querySelectorAll('.fto');
+        for (var g = 0; g < fs.length; g++)
+          if (!fs[g].querySelector('input[type="hidden"]').value) ld.push(fs[g].getAttribute('data-lado'));
+        if (ld.length) semFoto.push('cheque ' + (f + 1) + ' (' + ld.join(' e ') + ')');
+      }
+      if (semFoto.length) falta.push('tire a foto do ' + semFoto.join('; '));
     }
     if (semVenc.length) falta.push('informe o vencimento do cheque ' + semVenc.join(', '));
     if (semValor.length && chqs.length > 1) falta.push('informe o valor do cheque ' + semValor.join(', ') + ' (ou tire-o da lista)');
