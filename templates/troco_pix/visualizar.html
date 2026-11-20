@@ -242,7 +242,9 @@ body > .container-fluid:has(#tpv){
       <span class="v">{{ venda | formatar_moeda }}</span></div>
   </div>
 
-  {# cupom fiscal da venda (20/11/2026): liga sozinho quando ha um so candidato #}
+  {# cupom fiscal da venda (20/11/2026): liga sozinho quando ha um so candidato.
+     O PISTA nao ve ("Pista só lança"). #}
+  {% if (current_user.nivel or '')|upper != 'PISTA' %}
   <div class="bloco">
     <div class="bloco__t"><i class="bi bi-receipt-cutoff"></i> Cupom fiscal da venda</div>
     {% if cupom %}
@@ -278,6 +280,7 @@ body > .container-fluid:has(#tpv){
       </form>
     {% endif %}
   </div>
+  {% endif %}
 
   <div class="bloco">
     <div class="bloco__t"><i class="bi bi-arrow-left-right"></i> Como o troco voltou</div>

@@ -61,10 +61,9 @@ NIVEIS = {
             '/troco_pix/cliente',
             # fotos dos cheques (tirar, gerar QR, ver)
             '/troco_pix/foto',
-            # cupom fiscal da venda (ligar/soltar na tela Ver)
-            '/troco_pix/cupom',
-            # tela do link do WhatsApp (resumo com cupom, cheques e troco PIX)
-            '/troco_pix/s/',
+            # (20/11/2026) o link do WhatsApp (/troco_pix/s/) e o cupom
+            # (/troco_pix/cupom) NAO: "Pista só lança". Supervisor e gerente
+            # veem cheques/fotos e cupom; o Pix do troco, só o ADMIN.
             # PIX Consulta da Pista (29/10/2026): so a tela do dia, nao a completa
             '/banco/pix-consulta/pista',
         ),

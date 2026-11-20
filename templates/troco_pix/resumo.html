@@ -83,15 +83,11 @@
           {% set nf = cheques|selectattr('foto_frente_id')|list|length + cheques|selectattr('foto_verso_id')|list|length %}
           📷 {{ nf }} de {{ cheques|length * 2 }} fotos{% else %}sem cheques detalhados{% endif %}</small></span></button>
 
-    {% if situacao != 'sem_troco' and situacao != 'cancelado' %}
-      {% if admin %}
+    {# o Pix do troco: só o ADMIN (supervisor e gerente veem cheques e cupom) #}
+    {% if admin and situacao != 'sem_troco' and situacao != 'cancelado' %}
       <a class="bt bt--pix" href="{{ url_for('troco_pix.pagar', troco_pix_id=t.id) }}">
         <span class="ic">💸</span><span>Ver o troco PIX
           <small>QR Code e Pix copia e cola</small></span></a>
-      {% else %}
-      <span class="bt bt--off"><span class="ic">💸</span><span>Ver o troco PIX
-        <small>só o ADMIN abre o QR / copia e cola</small></span></span>
-      {% endif %}
     {% endif %}
   </div>
 
