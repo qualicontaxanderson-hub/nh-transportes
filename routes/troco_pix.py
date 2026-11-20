@@ -679,7 +679,7 @@ def cupom_ver(troco_pix_id):
         itens = cur.fetchall()
         danfe, pagamentos = _do_xml(cur, nota['chave'])
         return render_template('vendas/detalhe.html', nota=nota, itens=itens,
-                               danfe=danfe, pagamentos=pagamentos)
+                               danfe=danfe, pagamentos=pagamentos, sem_pdf=True)
     finally:
         cur.close()
         conn.close()

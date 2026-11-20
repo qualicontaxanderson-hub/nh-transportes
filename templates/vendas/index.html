@@ -647,6 +647,8 @@
   var badge   = document.getElementById('vendaModalBadge');
   var btnPdf  = document.getElementById('btnPdfVenda');
   var btnWpp  = document.getElementById('btnWppVenda');
+  var vendaAtual = null, pdfOk = false;
+  var TOQUE = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
 
   document.querySelectorAll('[data-venda-id]').forEach(function (el) {
     el.addEventListener('click', function () {
@@ -661,12 +663,36 @@
         '<div class="small text-muted mt-2">Carregando nota…</div></div>';
       modal.show();
 
-      fetch('/vendas/' + id + '?partial=1')
-        .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
-        .then(function (html) { body.innerHTML = html; })
-        .catch(function () {
-          body.innerHTML = '<div class="alert alert-danger m-3">Não foi possível carregar o detalhe. Tente novamente.</div>';
-        });
+      // 20/11/2026: o cupom/nota em PDF igual ao da Qualicontax (do XML).
+      // No computador o PDF aparece no modal; no celular (que não mostra PDF
+      // dentro da página) fica um botão para abrir. Sem XML: layout de sempre.
+      // O detalhe em HTML carrega junto (escondido no modo PDF) porque o
+      // WhatsApp e o PDF antigo leem dele.
+      vendaAtual = id; pdfOk = false;
+      var urlPdf = '/vendas/' + id + '/pdf';
+      Promise.all([
+        fetch('/vendas/' + id + '?partial=1').then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); }),
+        fetch(urlPdf, {method: 'GET'}).then(function (r) {
+          return (r.ok && (r.headers.get('Content-Type') || '').indexOf('application/pdf') === 0) ? r.blob() : null;
+        }).catch(function () { return null; })
+      ]).then(function (res) {
+        if (vendaAtual !== id) return;               // já clicou em outra
+        var html = res[0], blob = res[1];
+        pdfOk = !!blob;
+        if (blob && !TOQUE) {
+          var u = URL.createObjectURL(blob);
+          body.innerHTML = '<iframe src="' + u + '" title="Cupom em PDF" ' +
+            'style="width:100%;height:75vh;border:0;background:#fff;border-radius:.4rem"></iframe>' +
+            '<div style="display:none">' + html + '</div>';
+        } else if (blob) {
+          body.innerHTML = '<a class="btn btn-primary w-100 mb-3" target="_blank" href="' + urlPdf + '">' +
+            '<i class="bi bi-file-earmark-pdf"></i> Abrir o ' + (titulo.textContent || 'cupom') + ' em PDF</a>' + html;
+        } else {
+          body.innerHTML = html;
+        }
+      }).catch(function () {
+        body.innerHTML = '<div class="alert alert-danger m-3">Não foi possível carregar o detalhe. Tente novamente.</div>';
+      });
     });
   });
 
@@ -679,6 +705,8 @@
 
   // ---- PDF: gera e BAIXA o arquivo no cliente com html2pdf (nada vai ao servidor) ----
   btnPdf.addEventListener('click', function () {
+    // com o XML: baixa o PDF oficial (igual ao da Qualicontax)
+    if (pdfOk && vendaAtual) { window.location.href = '/vendas/' + vendaAtual + '/pdf?baixar=1'; return; }
     var alvo = body.querySelector('.venda-doc-wrap');
     if (!alvo) return;                              // ainda no spinner: não faz nada
     if (typeof html2pdf === 'undefined') return;    // lib do CDN não carregou

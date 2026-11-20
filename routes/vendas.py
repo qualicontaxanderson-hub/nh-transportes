@@ -403,6 +403,34 @@ def _do_xml(cur, chave):
     return danfe, pagamentos
 
 
+@vendas_bp.route('/<int:venda_id>/pdf', methods=['GET'])
+@login_required
+def pdf(venda_id):
+    """Cupom (DANFCE) / nota (DANFE) em PDF, igual ao do app Qualicontax,
+    montado do XML da pasta SAIDAS no Dropbox (utils/cupom_pdf). Sem o XML:
+    404 e a tela fica com o layout de sempre. ?baixar=1 baixa o arquivo."""
+    from flask import Response
+    from utils.cupom_pdf import pdf_da_chave
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT chave, modelo, numero FROM vendas_xml WHERE id = %s", (venda_id,))
+        nota = cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+    if not nota:
+        abort(404)
+    dados, motivo = pdf_da_chave(nota['chave'])
+    if not dados:
+        return motivo, 404
+    nome = '%s %s.pdf' % ('NF-e' if str(nota['modelo']) == '55' else 'NFC-e', nota['numero'])
+    modo = 'attachment' if request.args.get('baixar') else 'inline'
+    return Response(dados, mimetype='application/pdf', headers={
+        'Content-Disposition': '%s; filename="%s"' % (modo, nome),
+        'Cache-Control': 'private, max-age=3600'})
+
+
 @vendas_bp.route('/<int:venda_id>', methods=['GET'])
 @login_required
 def detalhe(venda_id):

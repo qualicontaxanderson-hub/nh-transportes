@@ -8,6 +8,11 @@
      voltar nesta aba — fecha e a pessoa cai na aba de onde veio. #}
   <a href="/vendas" onclick="if(history.length>1){history.back();}else{window.close();setTimeout(function(){location.href='/vendas';},300);}return false;"
      class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Voltar</a>
+  {# PDF igual ao da Qualicontax (do XML); sem XML a rota avisa (20/11/2026) #}
+  {% if not sem_pdf %}
+  <a href="/vendas/{{ nota.id }}/pdf" target="_blank" class="btn btn-sm btn-primary ms-auto me-2">
+    <i class="bi bi-file-earmark-pdf"></i> {{ 'Nota' if nota.modelo|string == '55' else 'Cupom' }} em PDF</a>
+  {% endif %}
   <span class="badge {{ 'bg-danger' if cancelada else 'bg-success' }}">
     {{ 'CANCELADA' if cancelada else nota.situacao }}
   </span>
