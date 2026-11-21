@@ -14,6 +14,11 @@
 {% macro brl0(v) -%}
   {%- if v|abs < 0.005 %}<span class="nd">—</span>{% else %}{{ brl(v) }}{% endif -%}
 {%- endmacro %}
+{#- célula de custo que abre os lançamentos ao clicar (v positivo = custo) -#}
+{% macro cel(v, src, q, nome, acum=False) -%}
+  {%- set ok = q and v|abs >= 0.005 -%}
+  <td class="{{ 'acum' if acum }}{{ ' dr' if ok }}"{% if ok %} data-src="{{ src }}" data-q="{{ q }}" data-v="{{ v }}" data-nome="{{ nome }}" title="Clique para ver os lançamentos"{% endif %}>{{ brl0(-v) }}</td>
+{%- endmacro %}
 {% macro lt(v) -%}
   {%- if v|abs < 0.5 %}<span class="nd">—</span>{% else %}{{ '{:,.0f}'.format(v).replace(',', '.') }} L{% endif -%}
 {%- endmacro %}
@@ -138,6 +143,26 @@ body > .container-fluid:has(#ctr){
 #ctr th.acum, #ctr td.acum{ background:#f7f3e6; font-weight:800; }
 #ctr td{ padding:.38rem .45rem; text-align:right; white-space:nowrap; border-bottom:1px solid var(--linha); }
 #ctr tr{ background:#fff; }
+#ctr td.dr{ cursor:pointer; }
+#ctr td.dr:hover{ background:#dbeafe !important; color:var(--blue); text-decoration:underline; }
+#ctr td.dr.sel{ outline:2px solid var(--blue); outline-offset:-2px; background:#dbeafe !important; }
+.ct-veu{ position:fixed; inset:0; background:rgba(15,23,42,.55); z-index:1050; display:none; }
+.ct-jan{ position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:min(820px,calc(100% - 32px));
+  max-height:calc(100vh - 48px); background:#fff; z-index:1051; border-radius:14px; box-shadow:0 20px 60px rgba(0,0,0,.3);
+  display:none; flex-direction:column; font-size:13px; color:#1f2937; overflow:hidden; }
+body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
+.ct-jan__cab{ padding:14px 18px; border-bottom:1px solid #e5e7eb; display:flex; gap:10px; align-items:flex-start; }
+.ct-jan__cab h2{ margin:0; font-size:15px; font-weight:700; }
+.ct-jan__sub{ color:#6b7280; font-size:12px; margin-top:2px; }
+.ct-jan__x{ margin-left:auto; border:0; background:none; font-size:22px; color:#6b7280; line-height:1; }
+.ct-jan__corpo{ overflow:auto; padding:12px 18px; flex:1; }
+.ct-jan__rod{ border-top:1px solid #e5e7eb; padding:10px 18px; display:flex; justify-content:space-between; font-weight:700; }
+.ct-it{ border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+.ct-it__l1{ display:flex; justify-content:space-between; gap:10px; }
+.ct-it__v{ font-weight:800; font-size:14px; white-space:nowrap; }
+.ct-it__m{ color:#6b7280; font-size:11px; margin-top:2px; }
+.ct-it__r{ color:#1D63A5; font-size:11px; margin-top:3px; }
+.ct-aviso{ background:#fffbeb; color:#92400e; border-radius:8px; padding:7px 10px; font-size:12px; margin-top:8px; }
 #ctr td:first-child{ min-width:190px; }
 #ctr tr.l-rec td{ color:var(--ok); font-weight:800; background:#f6fbf8; }
 #ctr tr.l-rec td.acum{ background:#eef6ef; }
@@ -296,9 +321,10 @@ body > .container-fluid:has(#ctr){
             {% for m in months %}<td>{{ brl0(-t.custos_bym[m.key]) }}</td>{% endfor %}
             <td class="acum">{{ brl0(-t.tot.custos) }}</td></tr>
           {% for c in t.custos %}
+          {% set dq = ('titulo_id=%s&categoria_id=%s&subcategoria_id=%s' % (c.drill.tit, c.drill.cat, c.drill.sub)) if c.drill and c.drill.sub else '' %}
           <tr class="l-it" data-pai="{{ gid }}" hidden><td>{{ c.nome|title }}</td>
-            {% for m in months %}<td>{{ brl0(-c.by_month.get(m.key, 0)) }}</td>{% endfor %}
-            <td class="acum">{{ brl0(-c.total) }}</td></tr>
+            {% for m in months %}{{ cel(c.by_month.get(m.key, 0), 'd', (dq ~ '&mes=' ~ m.key) if dq else '', (t.placa or '') ~ ' · ' ~ c.nome|title ~ ' · ' ~ m.label) }}{% endfor %}
+            {{ cel(c.total, 'd', (dq ~ '&mes=') if dq else '', (t.placa or '') ~ ' · ' ~ c.nome|title ~ ' · período', True) }}</tr>
           {% endfor %}
 
           {% set mid = 'm' ~ t.vid %}
@@ -312,9 +338,10 @@ body > .container-fluid:has(#ctr){
             {% for m in months %}<td>{{ brl0(-p.by_month.get(m.key, 0)) }}</td>{% endfor %}
             <td class="acum">{{ brl0(-p.total) }}</td></tr>
             {% for i in p.itens %}
+            {% set mq = ('tipo=%s&mid=%s&vid=%s&rid=%s' % (i.drill.tipo, i.drill.mid, i.drill.vid, i.drill.rid)) if i.drill else '' %}
             <tr class="l-it2" data-pai="{{ pid }}" hidden><td>{{ i.nome }}</td>
-              {% for m in months %}<td>{{ brl0(-i.by_month.get(m.key, 0)) }}</td>{% endfor %}
-              <td class="acum">{{ brl0(-i.total) }}</td></tr>
+              {% for m in months %}{{ cel(i.by_month.get(m.key, 0), 'm', (mq ~ '&mes=' ~ m.key) if mq else '', p.nome|title ~ ' · ' ~ i.nome ~ ' · ' ~ m.label) }}{% endfor %}
+              {{ cel(i.total, 'm', (mq ~ '&mes=') if mq else '', p.nome|title ~ ' · ' ~ i.nome ~ ' · período', True) }}</tr>
             {% endfor %}
           {% endfor %}
 
@@ -352,11 +379,20 @@ body > .container-fluid:has(#ctr){
 
   <div class="nota">Mesmos números do bloco Caminhões da Conf. Despesas: receita = fretes do caminhão;
     custos = despesas lançadas no caminhão; motoristas = comissão dos fretes + salário e encargos rateados pelos fretes.
-    Toque em “Custos do caminhão” ou “Motoristas” para abrir o detalhe.</div>
+    Toque em “Custos do caminhão” ou “Motoristas” para abrir o detalhe; clique num valor para ver os lançamentos.</div>
   {% endif %}
 
   <div class="dica" id="ctrDica"></div>
 </div>
+<div class="ct-veu" onclick="ctFecha()"></div>
+<aside class="ct-jan" aria-label="Lançamentos" data-sem-maiuscula>
+  <div class="ct-jan__cab">
+    <div><h2 id="ctTitulo"></h2><div class="ct-jan__sub" id="ctSub"></div></div>
+    <button type="button" class="ct-jan__x" onclick="ctFecha()" aria-label="Fechar">×</button>
+  </div>
+  <div class="ct-jan__corpo" id="ctCorpo"></div>
+  <div class="ct-jan__rod" id="ctRod"></div>
+</aside>
 {% endblock %}
 
 {% block scripts %}
@@ -399,6 +435,68 @@ body > .container-fluid:has(#ctr){
       dica.style.top = (e.clientY + 14) + 'px';
     });
     g.addEventListener('mouseleave', function () { dica.style.display = 'none'; });
+  });
+
+  /* clicar num número: os lançamentos que formam ele */
+  var INI = {{ data_inicio | tojson }}, FIM = {{ data_fim | tojson }};
+  var URLS = {d: '{{ url_for("conf_despesas.conf_despesas_lancamentos") }}',
+              m: '{{ url_for("conf_transportes.conf_transportes_motorista") }}'};
+  var tdSel = null;
+  function esc(x) {
+    return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function brlJ(v) { return Number(v || 0).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}); }
+  window.ctFecha = function () {
+    document.body.classList.remove('ct-aberta');
+    if (tdSel) tdSel.classList.remove('sel');
+  };
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') ctFecha(); });
+  raiz.querySelectorAll('td.dr').forEach(function (td) {
+    td.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (tdSel) tdSel.classList.remove('sel');
+      tdSel = td; td.classList.add('sel');
+      var v = Number(td.dataset.v), src = td.dataset.src;
+      document.getElementById('ctTitulo').textContent = td.dataset.nome;
+      document.getElementById('ctSub').textContent = 'carregando…';
+      document.getElementById('ctCorpo').innerHTML = '';
+      document.getElementById('ctRod').innerHTML = '';
+      document.body.classList.add('ct-aberta');
+      var q = 'data_inicio=' + encodeURIComponent(INI) + '&data_fim=' + encodeURIComponent(FIM) + '&' + td.dataset.q;
+      fetch(URLS[src] + '?' + q, {credentials: 'same-origin'})
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d || !d.ok) throw new Error((d && d.erro) || 'falhou');
+          var L = d.lancamentos, h = '';
+          document.getElementById('ctSub').textContent = L.length + ' lançamento(s)' +
+            (src === 'm' ? ' · só leitura (vem da folha / dos fretes)' : ' · para editar, use a Conf. Despesas');
+          if (!L.length) h = '<div class="text-muted p-2">Nenhum lançamento encontrado.</div>';
+          L.forEach(function (l) {
+            var tit = src === 'd' ? (l.fornecedor || '—') : l.titulo;
+            var obs = src === 'd' ? ((l.observacao && l.observacao !== l.fornecedor) ? l.observacao : '') : (l.obs || '');
+            var meta = src === 'd'
+              ? [l.data + (l.hora ? ' ' + l.hora : ''), l.subcategoria ? '↳ ' + l.subcategoria : '', l.banco ? '🏦 ' + l.banco : '', l.empresa].filter(Boolean).join(' · ')
+              : l.meta;
+            var rat = (src === 'm' && l.rateio) ? 'Lançado ' + brlJ(l.lancado) + ' · ' + l.rateio : '';
+            h += '<div class="ct-it"><div class="ct-it__l1"><b>' + esc(tit) + '</b><span class="ct-it__v">' + brlJ(l.valor) + '</span></div>'
+               + (obs ? '<div class="ct-it__m">' + esc(obs) + '</div>' : '')
+               + (meta ? '<div class="ct-it__m">' + esc(meta) + '</div>' : '')
+               + (rat ? '<div class="ct-it__r">' + esc(rat) + '</div>' : '')
+               + '</div>';
+          });
+          var dif = Math.round((v - d.total) * 100) / 100;
+          if (Math.abs(dif) >= 0.01)
+            h += '<div class="ct-aviso">' + brlJ(dif) + (src === 'm'
+              ? ' de diferença: centavos do rateio entre caminhões.'
+              : ' desta célula não vem de lançamento de despesa (caixa, fretes ou folha) e por isso não aparece na lista.') + '</div>';
+          document.getElementById('ctCorpo').innerHTML = h;
+          document.getElementById('ctRod').innerHTML = '<span>Total</span><span>' + brlJ(d.total) + '</span>';
+        })
+        .catch(function (e) {
+          document.getElementById('ctCorpo').innerHTML = '<div class="ct-aviso">Erro: ' + esc(e.message) + '</div>';
+        });
+    });
   });
 
   /* atalhos de período */

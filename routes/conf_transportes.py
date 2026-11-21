@@ -9,7 +9,10 @@ motoristas, e no fim o resultado (lucro ou prejuízo).
 Rota:
   GET /relatorios/conf_transportes
 """
-from flask import Blueprint, render_template, request
+from calendar import monthrange
+from datetime import date
+
+from flask import Blueprint, jsonify, render_template, request
 from flask_login import login_required
 
 from routes.auth import admin_required
@@ -40,6 +43,19 @@ def _placas(conn):
 
 def _z(months):
     return {m['key']: 0.0 for m in months}
+
+
+def _drill_mot(subcat_id):
+    """'comissao_<vid>_<mid>' / 'rub_<vid>_<mid>_<rid>' -> o que abrir ao clicar."""
+    try:
+        p = str(subcat_id).split('_')
+        if p[0] == 'comissao':
+            return {'tipo': 'com', 'vid': int(p[1]), 'mid': int(p[2]), 'rid': ''}
+        if p[0] == 'rub':
+            return {'tipo': 'rub', 'vid': int(p[1]), 'mid': int(p[2]), 'rid': int(p[3])}
+    except (ValueError, IndexError):
+        pass
+    return None
 
 
 def _caminhoes(blocks, months, veiculos, placas):
@@ -73,7 +89,10 @@ def _caminhoes(blocks, months, veiculos, placas):
                     mot = sc
                 else:
                     custos.append({'nome': sc['subcat_nome'], 'by_month': dict(sc['by_month']),
-                                   'total': sc['total']})
+                                   'total': sc['total'],
+                                   # clicar no número abre os lançamentos (mesma lista da Conf. Despesas)
+                                   'drill': ({'tit': block.get('titulo_id'), 'cat': row.get('categoria_id'),
+                                              'sub': sc.get('subcat_id')} if sc.get('drill') else None)})
                     for k, v in sc['by_month'].items():
                         soma_custos[k] += v
             mot_bym = dict(mot['by_month']) if mot else _z(months)
@@ -92,7 +111,8 @@ def _caminhoes(blocks, months, veiculos, placas):
                     pessoas.append({'nome': p['subcat_nome'], 'by_month': p['by_month'],
                                     'total': p['total'],
                                     'itens': [{'nome': i['subcat_nome'], 'by_month': i['by_month'],
-                                               'total': i['total']} for i in p.get('children', [])]})
+                                               'total': i['total'], 'drill': _drill_mot(i['subcat_id'])}
+                                              for i in p.get('children', [])]})
             lucro = {k: -row['by_month'].get(k, 0.0) for k in soma_custos}
             pv = placas.get(vid, {})
             t = {
@@ -161,3 +181,118 @@ def conf_transportes():
         months=ativos, trucks=trucks, outros=outros,
         frota=frota, frota_tot=frota_tot,
     )
+
+def _meses(ini, fim, mes):
+    """Lista de (ano, mes) do periodo, ou so o mes pedido (YYYYMM)."""
+    if mes:
+        return [(int(mes[:4]), int(mes[4:6]))]
+    out, a, m = [], ini.year, ini.month
+    while (a, m) <= (fim.year, fim.month):
+        out.append((a, m))
+        a, m = (a + 1, 1) if m == 12 else (a, m + 1)
+    return out
+
+
+def _moeda(v):
+    return '{:,.2f}'.format(v).replace(',', 'X').replace('.', ',').replace('X', '.')
+
+
+@bp.route('/conf_transportes/motorista', methods=['GET'])
+@login_required
+@admin_required
+def conf_transportes_motorista():
+    """De onde vem um número da linha do motorista (só leitura).
+
+    tipo=rub -> lançamentos da folha daquela rubrica + quanto ficou neste caminhão
+                (o mês é dividido entre os caminhões pelo nº de fretes);
+    tipo=com -> os fretes do motorista neste caminhão com a comissão de cada um.
+    """
+    a = request.args
+    try:
+        ini = date.fromisoformat(a.get('data_inicio', ''))
+        fim = date.fromisoformat(a.get('data_fim', ''))
+        mid, vid = int(a.get('mid')), int(a.get('vid'))
+        tipo = a.get('tipo')
+        rid = int(a.get('rid')) if tipo == 'rub' else None
+        meses = _meses(ini, fim, a.get('mes', ''))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'erro': 'filtro invalido'}), 400
+    if tipo not in ('rub', 'com'):
+        return jsonify({'ok': False, 'erro': 'tipo invalido'}), 400
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(dictionary=True)
+        linhas = []
+        if tipo == 'com':
+            d1 = max(ini, date(meses[0][0], meses[0][1], 1))
+            ul = meses[-1]
+            d2 = min(fim, date(ul[0], ul[1], monthrange(ul[0], ul[1])[1]))
+            cur.execute("""
+                SELECT f.id, f.data_frete, f.comissao_motorista, f.valor_total_frete,
+                       c.razao_social AS cliente
+                  FROM fretes f LEFT JOIN clientes c ON c.id = f.clientes_id
+                 WHERE f.motoristas_id = %s AND f.veiculos_id = %s
+                   AND f.data_frete BETWEEN %s AND %s
+                 ORDER BY f.data_frete, f.id
+            """, (mid, vid, d1, d2))
+            for r in cur.fetchall():
+                linhas.append({
+                    'titulo': 'Frete #%s' % r['id'] + (' · ' + r['cliente'] if r['cliente'] else ''),
+                    'valor': float(r['comissao_motorista'] or 0),
+                    'meta': '%s · frete R$ %s' % (r['data_frete'].strftime('%d/%m/%Y'),
+                                                  _moeda(float(r['valor_total_frete'] or 0))),
+                })
+        else:
+            cur.execute("SELECT veiculo_id FROM motoristas WHERE id = %s", (mid,))
+            mr = cur.fetchone() or {}
+            for (ano, m) in meses:
+                mm = '%02d/%d' % (m, ano)
+                cur.execute("""
+                    SELECT l.id, l.valor, l.referencia, l.observacao, l.statuslancamento,
+                           l.datapagamento, cl.razao_social AS empresa, r.nome AS rubrica
+                      FROM lancamentosfuncionarios_v2 l
+                      LEFT JOIN clientes cl ON cl.id = l.clienteid
+                      LEFT JOIN rubricas r ON r.id = l.rubricaid
+                     WHERE l.funcionarioid = %s AND l.tipo_funcionario = 'motorista'
+                       AND l.rubricaid = %s AND l.mes = %s
+                     ORDER BY l.id
+                """, (mid, rid, mm))
+                folha = cur.fetchall()
+                if not folha:
+                    continue
+                cur.execute("""
+                    SELECT veiculos_id AS vid, COUNT(*) AS n FROM fretes
+                     WHERE motoristas_id = %s AND YEAR(data_frete) = %s AND MONTH(data_frete) = %s
+                     GROUP BY veiculos_id
+                """, (mid, ano, m))
+                cont = {r['vid']: int(r['n']) for r in cur.fetchall()}
+                tot_n = sum(cont.values())
+                if tot_n:
+                    n = cont.get(vid, 0)
+                    frac = n / tot_n
+                    rateio = ('neste caminhão: %d de %d fretes dele no mês (%s%%)'
+                              % (n, tot_n, ('%.1f' % (frac * 100)).replace('.', ',')))
+                else:
+                    frac = 1.0 if mr.get('veiculo_id') == vid else 0.0
+                    rateio = 'sem frete no mês: vai inteiro para o caminhão fixo do motorista'
+                for r in folha:
+                    v = float(r['valor'] or 0)
+                    meta = [mm, r['empresa'] or '']
+                    if r['statuslancamento']:
+                        meta.append(r['statuslancamento'].title())
+                    if r['datapagamento']:
+                        meta.append('pago ' + r['datapagamento'].strftime('%d/%m/%Y'))
+                    linhas.append({
+                        'titulo': 'Folha #%s · %s' % (r['id'], r['rubrica'] or ''),
+                        'obs': ' · '.join(x for x in (r['referencia'], r['observacao']) if x),
+                        'meta': ' · '.join(x for x in meta if x),
+                        'lancado': v,
+                        'valor': round(v * frac, 2),
+                        'rateio': rateio if frac < 0.9999 else '',
+                    })
+        cur.close()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'lancamentos': linhas,
+                    'total': round(sum(l['valor'] for l in linhas), 2)})
