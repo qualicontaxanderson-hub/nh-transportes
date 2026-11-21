@@ -381,6 +381,12 @@ body > .container-fluid:has(#ctr){
     });
   });
 
+  /* #tudo no endereço abre todos os detalhes */
+  if (location.hash === '#tudo') {
+    raiz.querySelectorAll('tr[data-abre]').forEach(function (tr) { tr.classList.add('aberto'); });
+    raiz.querySelectorAll('tr[data-pai]').forEach(function (tr) { tr.hidden = false; });
+  }
+
   /* dica do gráfico */
   var dica = document.getElementById('ctrDica');
   raiz.querySelectorAll('.gm').forEach(function (g) {
