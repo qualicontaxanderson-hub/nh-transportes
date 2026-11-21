@@ -698,6 +698,9 @@ body > .container-fluid:has(#cnc){
                   data-sugestao-tipo-debito="{{ tx.sugestao_tipo_debito or '' }}"
                   data-sugestao-conta-destino="{{ tx.sugestao_conta_destino_id or '' }}"
                   data-sugestao-transf-recebida="{{ '1' if tx.sugestao_transferencia_recebida else '' }}"
+                  data-origem-tipo="{{ 'regra' if tx.sugestao_regra_id else ('memo' if tx.sugestao_bsm_id else ('sistema' if pronta else '')) }}"
+                  data-origem-id="{{ tx.sugestao_regra_id or tx.sugestao_bsm_id or '' }}"
+                  data-origem-palpite="{% if tx.tipo == 'CREDIT' and tx.sugestao_transferencia_recebida %}Transferência recebida{% elif tx.sugestao_forma_nome %}{{ tx.sugestao_forma_nome }}{% elif tx.sugestao_fornecedor_nome %}{{ tx.sugestao_fornecedor_nome }}{% elif tx.sugestao_titulo_id %}{{ tx.sugestao_despesa_label or tx.sugestao_titulo_nome or '' }}{% elif tx.sugestao_tipo_debito == 'transferencia' %}Transferência{% endif %}"
                   title="{{ 'Trocar o destino' if pronta else 'Escolher o destino' }}">
             <i class="bi bi-{{ 'pencil' if pronta else 'link-45deg' }}"></i>
           </button>
@@ -874,6 +877,7 @@ body > .container-fluid:has(#cnc){
           <input type="hidden" name="acao" value="conciliar">
           <input type="hidden" name="tipo_tx" id="modal_tipo_tx">
           <div class="alert alert-light border py-2 mb-3" id="modal_tx_info" style="font-size:0.88rem;"></div>
+          <div id="modal_origem" class="border rounded py-2 px-3 mb-3" style="display:none;font-size:0.88rem;"></div>
           <div id="secao_credito" style="display:none;">
             <div class="mp"><span class="on" id="mpc1"></span><span id="mpc2"></span></div>
             <div class="mp-nome">Passo <span id="mpcn">1</span> de 2 —
@@ -1747,6 +1751,8 @@ document.querySelectorAll('.btn-conciliar').forEach(btn => {
         alternarAbaCredito('');
       }
     }
+    if (tipo === 'CREDIT') mpcIr(1);
+    origemMostrar(this);
     if (tipo === 'DEBIT') {
       // Sempre pre-preenche o campo de valor da linha 1 com o total da transação
       const inp1 = document.getElementById('desp_1_valor');
@@ -1823,6 +1829,53 @@ document.querySelectorAll('.btn-conciliar').forEach(btn => {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConciliar')).show();
   });
 });
+
+/* Lapis (21/11/2026): mostra de onde veio o palpite — memorizacao, regra ou
+   nada (lancamento unico) — e deixa apagar a memorizacao/regra errada. */
+function origemMostrar(btn) {
+  var box = document.getElementById('modal_origem');
+  if (!box) return;
+  var t = btn.dataset.origemTipo || '', id = btn.dataset.origemId || '';
+  var palp = btn.dataset.origemPalpite || '';
+  box.innerHTML = '';
+  box.style.display = '';
+  box.style.background = '';
+  var linha = document.createElement('div');
+  if (t === 'memo' || t === 'regra') {
+    box.style.background = '#fff8e1';
+    var b = document.createElement('b');
+    b.textContent = t === 'memo' ? 'AUTOMÁTICO — memorização' : 'AUTOMÁTICO — regra';
+    linha.appendChild(b);
+    linha.appendChild(document.createTextNode(
+      ' : o sistema sugeriu "' + palp + '". Se estiver errado, exclua para não errar nos próximos.'));
+    box.appendChild(linha);
+    var bt = document.createElement('button');
+    bt.type = 'button';
+    bt.className = 'btn btn-sm btn-outline-danger mt-2';
+    bt.innerHTML = '<i class="bi bi-trash"></i> Excluir esta ' + (t === 'memo' ? 'memorização' : 'regra');
+    bt.onclick = function () {
+      if (!confirm('Excluir esta ' + (t === 'memo' ? 'memorização' : 'regra') +
+                   '?\n\nO sistema deixa de sugerir "' + palp + '" para lançamentos assim.')) return;
+      bt.disabled = true;
+      fetch('{{ url_for("bank_import.api_palpite_excluir") }}', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({tipo: t, id: id})
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (!d.ok) { alert(d.erro || 'Não deu para excluir.'); bt.disabled = false; return; }
+        btn.dataset.origemTipo = '';
+        box.style.background = '#e8f5e9';
+        box.textContent = '✓ ' + d.msg + ' Agora escolha abaixo de onde veio este lançamento.';
+      }).catch(function () { alert('Não deu para excluir.'); bt.disabled = false; });
+    };
+    box.appendChild(bt);
+  } else if (t === 'sistema') {
+    linha.innerHTML = '<b>AUTOMÁTICO — do sistema</b> : sugestão fixa, não tem o que excluir.';
+    box.appendChild(linha);
+  } else {
+    linha.innerHTML = '<b>LANÇAMENTO ÚNICO</b> : nenhuma regra ou memorização reconheceu este.';
+    box.appendChild(linha);
+  }
+}
 
 function filtrarFormas() {
   const t = document.getElementById('buscaForma').value.toLowerCase();

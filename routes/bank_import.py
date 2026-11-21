@@ -3150,6 +3150,8 @@ def conciliar():
                 tx['sugestao_conta_destino_id']    = None
                 tx['sugestao_tipo_debito']         = None
                 tx['sugestao_bsm_descricao_chave'] = None
+                tx['sugestao_bsm_id']              = None
+                tx['sugestao_regra_id']            = None
                 tx['sugestao_forma_nome']          = None
                 tx['sugestao_fornecedor_nome']     = None
                 tx['sugestao_titulo_nome']         = None
@@ -3160,7 +3162,7 @@ def conciliar():
                 ph = ','.join(['%s'] * len(cnpjs))
                 try:
                     cursor.execute(
-                        f"""SELECT bsm.cnpj_cpf, bsm.descricao_chave,
+                        f"""SELECT bsm.id AS bsm_id, bsm.cnpj_cpf, bsm.descricao_chave,
                                    bsm.fornecedor_id, bsm.forma_recebimento_id,
                                    bsm.titulo_id, bsm.categoria_id, bsm.subcategoria_id,
                                    bsm.conta_destino_id, bsm.tipo_debito,
@@ -3183,7 +3185,7 @@ def conciliar():
                         logger.warning("conciliar: descricao_chave column missing, using batch fallback")
                         try:
                             cursor.execute(
-                                f"""SELECT bsm.cnpj_cpf, '' AS descricao_chave,
+                                f"""SELECT bsm.id AS bsm_id, bsm.cnpj_cpf, '' AS descricao_chave,
                                            bsm.fornecedor_id, bsm.forma_recebimento_id,
                                            bsm.titulo_id, bsm.categoria_id, bsm.subcategoria_id,
                                            bsm.conta_destino_id, bsm.tipo_debito,
@@ -3232,6 +3234,7 @@ def conciliar():
                         tx['sugestao_categoria_id']        = bsm.get('categoria_id')
                         tx['sugestao_subcategoria_id']     = bsm.get('subcategoria_id')
                         tx['sugestao_bsm_descricao_chave'] = bsm.get('descricao_chave', '')
+                        tx['sugestao_bsm_id']              = bsm.get('bsm_id')
                         tx['sugestao_forma_nome']          = bsm.get('sugestao_forma_nome')
                         tx['sugestao_fornecedor_nome']     = bsm.get('sugestao_fornecedor_nome')
                         tx['sugestao_titulo_nome']         = bsm.get('sugestao_titulo_nome')
@@ -3252,7 +3255,7 @@ def conciliar():
                 ph_desc = ','.join(['%s'] * len(desc_chaves_sem_cnpj))
                 try:
                     cursor.execute(
-                        f"""SELECT bsm.descricao_chave,
+                        f"""SELECT bsm.id AS bsm_id, bsm.descricao_chave,
                                    bsm.fornecedor_id, bsm.forma_recebimento_id,
                                    bsm.titulo_id, bsm.categoria_id, bsm.subcategoria_id,
                                    bsm.conta_destino_id, bsm.tipo_debito,
@@ -3284,6 +3287,7 @@ def conciliar():
                             tx['sugestao_conta_destino_id']    = bsm.get('conta_destino_id')
                             tx['sugestao_tipo_debito']         = bsm.get('tipo_debito')
                             tx['sugestao_bsm_descricao_chave'] = bsm.get('descricao_chave', '')
+                            tx['sugestao_bsm_id']              = bsm.get('bsm_id')
                             tx['sugestao_forma_nome']          = bsm.get('sugestao_forma_nome')
                             tx['sugestao_fornecedor_nome']     = bsm.get('sugestao_fornecedor_nome')
                             tx['sugestao_titulo_nome']         = bsm.get('sugestao_titulo_nome')
@@ -3347,6 +3351,9 @@ def conciliar():
                     if padrao2 and padrao2 not in descricao:
                         continue
                     # Regras de descrição têm prioridade sobre mapeamento por CNPJ
+                    if regra['forma_recebimento_id'] or regra['fornecedor_id']:
+                        tx['sugestao_regra_id'] = regra['id']
+                        tx['sugestao_bsm_id']   = None
                     if regra['forma_recebimento_id']:
                         tx['sugestao_forma_id']   = regra['forma_recebimento_id']
                         tx['sugestao_forma_nome'] = regra['forma_nome']
@@ -3368,6 +3375,8 @@ def conciliar():
                     if not tx.get('sugestao_bsm_descricao_chave'):
                         tx['sugestao_forma_id']   = None
                         tx['sugestao_forma_nome'] = None
+                        if not tx.get('sugestao_tipo_debito'):
+                            tx['sugestao_bsm_id'] = None
 
             # Sugestão 'Compensação Cobrança' para créditos EFI sem outra sugestão de forma.
             # Detecta o padrão do extrato EFI: "Recebimento de cobrança: <charge_id> de ..."
@@ -3409,7 +3418,8 @@ def conciliar():
             for tx in transacoes:
                 if tx.get('tipo') == 'CREDIT' and _mesma_tit(tx):
                     for k in ('sugestao_forma_id', 'sugestao_forma_nome', 'sugestao_fornecedor_id',
-                              'sugestao_fornecedor_nome', 'sugestao_titulo_id', 'sugestao_regra'):
+                              'sugestao_fornecedor_nome', 'sugestao_titulo_id', 'sugestao_regra',
+                              'sugestao_regra_id', 'sugestao_bsm_id'):
                         tx[k] = None
                     tx['sugestao_tipo_debito'] = 'transferencia'
 
@@ -4639,6 +4649,49 @@ def api_transacoes_pendentes():
             row['valor'] = float(row['valor'])
 
     return jsonify(rows)
+
+
+@bp.route('/api/palpite/excluir', methods=['POST'])
+@login_required
+def api_palpite_excluir():
+    """Lápis (21/11/2026): apaga a memorização ou a regra que deu o palpite
+    errado, para não errar de novo nos próximos lançamentos. Regra já usada
+    só é desativada (igual à tela de Regras)."""
+    d = request.get_json(silent=True) or {}
+    tipo = d.get('tipo')
+    try:
+        oid = int(d.get('id') or 0)
+    except (TypeError, ValueError):
+        oid = 0
+    if tipo not in ('memo', 'regra') or oid <= 0:
+        return jsonify(ok=False, erro='Pedido inválido.'), 400
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        if tipo == 'memo':
+            cursor.execute("DELETE FROM bank_supplier_mapping WHERE id=%s", (oid,))
+            msg = 'Memorização excluída.'
+        else:
+            cursor.execute("SELECT total_aplicacoes FROM bank_conciliacao_regras WHERE id=%s", (oid,))
+            r = cursor.fetchone()
+            if not r:
+                return jsonify(ok=False, erro='Regra não encontrada.'), 404
+            if (r.get('total_aplicacoes') or 0) > 0:
+                cursor.execute("UPDATE bank_conciliacao_regras SET ativo=0 WHERE id=%s", (oid,))
+                msg = 'Regra desativada (já tinha sido usada).'
+            else:
+                cursor.execute("DELETE FROM bank_conciliacao_regras WHERE id=%s", (oid,))
+                msg = 'Regra excluída.'
+        conn.commit()
+        logger.info("palpite excluido: %s %s por %s", tipo, oid, getattr(current_user, 'id', None))
+        return jsonify(ok=True, msg=msg)
+    except Exception:
+        conn.rollback()
+        logger.exception("api_palpite_excluir")
+        return jsonify(ok=False, erro='Não deu para excluir.'), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 
 @bp.route('/api/estorno/candidatos')
