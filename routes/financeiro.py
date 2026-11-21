@@ -2221,6 +2221,26 @@ def auto_conciliar_efi():
 _destino_pos_acao = destino_pos_acao
 
 
+def _soltar_estorno(cursor_w, tx_id):
+    """Estorno (saída que voltou): reverter um lado solta os DOIS e apaga o
+    par (21/11/2026). Antes o outro lado ficava 'estorno' sozinho."""
+    try:
+        cursor_w.execute("SELECT original_id, estorno_id FROM bank_estornos "
+                         "WHERE original_id=%s OR estorno_id=%s", (tx_id, tx_id))
+        r = cursor_w.fetchone()
+    except Exception:
+        return
+    if not r:
+        return
+    outro = r[1] if int(r[0]) == int(tx_id) else r[0]
+    cursor_w.execute("DELETE FROM bank_estornos WHERE original_id=%s AND estorno_id=%s", (r[0], r[1]))
+    cursor_w.execute(
+        """UPDATE bank_transactions
+              SET status='pendente', forma_recebimento_id=NULL, fornecedor_id=NULL,
+                  conciliado_em=NULL, conciliado_por=NULL, tipo_conciliacao=NULL
+            WHERE id=%s AND tipo_conciliacao='estorno'""", (outro,))
+
+
 @financeiro_bp.route('/reverter-conciliacao/<int:tx_id>/', methods=['POST'])
 @login_required
 def reverter_conciliacao(tx_id):
@@ -2290,6 +2310,8 @@ def reverter_conciliacao(tx_id):
             )
         except Exception as exc_tp:
             current_app.logger.warning("reverter_conciliacao: não foi possível desvincular troco_pix tx=%s: %s", tx_id, exc_tp)
+
+        _soltar_estorno(cursor_w, tx_id)
 
         # Remover o CREDIT sintético TRANSFER_<id> criado por _conciliar_transferencia,
         # mas somente se ainda estiver pendente (se já foi conciliado na conta destino, preserva).
@@ -2439,6 +2461,8 @@ def reverter_conciliacao_lote():
                     )
                 except Exception as exc_tp:
                     current_app.logger.warning("reverter_lote: troco_pix tx=%s: %s", tx_id, exc_tp)
+
+                _soltar_estorno(cursor_w, tx_id)
 
                 # Remover CREDIT sintético TRANSFER_<id> ainda pendente
                 cursor_w.execute(

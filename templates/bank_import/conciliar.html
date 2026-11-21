@@ -917,6 +917,15 @@ body > .container-fluid:has(#cnc){
                       como despesa negativa no mês em que voltou. Não é receita.</span>
                   </span>
                 </button>
+                <button type="button" class="destino" id="tab_cr_estorno_btn"
+                        onclick="alternarAbaCredito('estorno')">
+                  <span class="destino__i"><i class="bi bi-arrow-repeat"></i></span>
+                  <span class="destino__t">
+                    <span class="destino__n">Estorno – a saída voltou</span>
+                    <span class="destino__d">Mandou um PIX/pagamento e ele voltou — liga a volta
+                      à saída e as duas se anulam. Não é receita nem despesa.</span>
+                  </span>
+                </button>
               </div>
             </div>
 
@@ -961,6 +970,16 @@ body > .container-fluid:has(#cnc){
                 despesa escolhida, na data em que o dinheiro voltou.
               </div>
               <div id="listaDevDesp" class="list-group small"
+                   style="max-height:320px; overflow:auto;"></div>
+            </div>
+            <!-- Aba Estorno: a saida voltou (21/11/2026) -->
+            <div id="aba_cr_estorno" style="display:none;">
+              <div class="alert alert-info py-2 px-3 small mb-2">
+                <i class="bi bi-arrow-repeat"></i>
+                <strong>Estorno</strong> — escolha a saída que voltou (mesma conta, mesmo
+                valor, até 30 dias antes). As duas ficam conciliadas e se anulam.
+              </div>
+              <div id="listaEstorno" class="list-group small"
                    style="max-height:320px; overflow:auto;"></div>
             </div>
             <!-- Aba Transferência Recebida -->
@@ -2234,7 +2253,9 @@ function mpcIr(n) {
        : (document.getElementById('tab_cr_dev_btn').classList.contains('active')
           ? 'Qual fornecedor devolveu?'
           : (document.getElementById('tab_cr_devdesp_btn').classList.contains('active')
-             ? 'Qual despesa voltou?' : 'Qual forma de recebimento?')));
+             ? 'Qual despesa voltou?'
+             : (document.getElementById('tab_cr_estorno_btn').classList.contains('active')
+                ? 'Qual saída voltou?' : 'Qual forma de recebimento?'))));
   mpRodape(n);
 }
 
@@ -2262,6 +2283,52 @@ function devSugerirPorCnpj() {
       return;
     }
   }
+}
+
+/* Estorno (21/11/2026): saidas da mesma conta e mesmo valor ate 30 dias
+   antes. Ja conciliada aparece travada, com o aviso de reverter antes. */
+function estornoCarregar() {
+  var box = document.getElementById('listaEstorno');
+  var tx = document.getElementById('modal_tx_id').value;
+  box.textContent = 'Carregando saídas…';
+  fetch('{{ url_for("bank_import.api_estorno_candidatos") }}?tx_id=' + encodeURIComponent(tx))
+    .then(function (r) { return r.json(); })
+    .then(function (rows) {
+      box.innerHTML = '';
+      if (!rows.length) {
+        box.textContent = 'Nenhuma saída de mesmo valor nesta conta nos 30 dias antes.';
+        return;
+      }
+      var livres = rows.filter(function (d) { return d.status === 'pendente'; });
+      rows.forEach(function (d) {
+        var lab = document.createElement('label');
+        lab.className = 'list-group-item d-flex gap-2 align-items-start';
+        var inp = document.createElement('input');
+        inp.type = 'radio'; inp.name = 'estorno_original_id'; inp.value = d.id;
+        inp.className = 'form-check-input mt-1';
+        var livre = d.status === 'pendente';
+        inp.disabled = !livre;
+        if (livre && livres.length === 1) inp.checked = true;
+        var txt = document.createElement('span');
+        txt.className = 'flex-grow-1';
+        var b = document.createElement('b');
+        b.textContent = d.data + ' · R$ ' + d.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+        txt.appendChild(b);
+        txt.appendChild(document.createElement('br'));
+        txt.appendChild(document.createTextNode(d.descricao || ''));
+        if (!livre) {
+          txt.appendChild(document.createElement('br'));
+          var w = document.createElement('small');
+          w.className = 'text-danger';
+          w.textContent = 'Já conciliada' + (d.tipo_conciliacao ? ' (' + d.tipo_conciliacao + ')' : '') +
+            (d.fornecedor ? ' · ' + d.fornecedor : '') + ' — reverta ela antes.';
+          txt.appendChild(w);
+        }
+        lab.appendChild(inp); lab.appendChild(txt);
+        box.appendChild(lab);
+      });
+    })
+    .catch(function () { box.textContent = 'Não consegui carregar as saídas.'; });
 }
 
 /* Devolucao de despesa: lista as despesas que o credito pode estar
@@ -2312,15 +2379,19 @@ function alternarAbaCredito(aba) {
   document.getElementById('modal_tipo_debito').value =
     aba === 'transferencia' ? 'transferencia'
       : (aba === 'devolucao' ? 'devolucao_fornecedor'
-      : (aba === 'devdesp' ? 'devolucao_despesa' : ''));
+      : (aba === 'devdesp' ? 'devolucao_despesa'
+      : (aba === 'estorno' ? 'estorno_saida' : '')));
   document.getElementById('aba_cr_forma').style.display        = aba === 'forma'        ? '' : 'none';
   document.getElementById('aba_cr_transferencia').style.display = aba === 'transferencia' ? '' : 'none';
   document.getElementById('aba_cr_devolucao').style.display     = aba === 'devolucao'     ? '' : 'none';
   document.getElementById('aba_cr_devdesp').style.display       = aba === 'devdesp'       ? '' : 'none';
+  document.getElementById('aba_cr_estorno').style.display       = aba === 'estorno'       ? '' : 'none';
   if (aba === 'devolucao') devSugerirPorCnpj();
   if (aba === 'devdesp') devDespCarregar();
+  if (aba === 'estorno') estornoCarregar();
   [['tab_cr_forma_btn', 'forma'], ['tab_cr_transf_btn', 'transferencia'],
-   ['tab_cr_dev_btn', 'devolucao'], ['tab_cr_devdesp_btn', 'devdesp']].forEach(function (par) {
+   ['tab_cr_dev_btn', 'devolucao'], ['tab_cr_devdesp_btn', 'devdesp'],
+   ['tab_cr_estorno_btn', 'estorno']].forEach(function (par) {
     var b = document.getElementById(par[0]);
     var eu = (par[1] === aba);
     b.classList.toggle('active', eu);
@@ -3269,6 +3340,16 @@ document.getElementById('formConciliar').addEventListener('submit', function(ev)
     return ln.offsetParent !== null && NHSub.falta(s);
   });
   if (falta) { ev.preventDefault(); ev.stopImmediatePropagation(); alert(NHSub.MSG); falta.focus(); }
+});
+
+// Estorno sem a saida escolhida nao vai pro servidor.
+document.getElementById('formConciliar').addEventListener('submit', function(ev) {
+  if (document.getElementById('modal_tipo_debito').value === 'estorno_saida'
+      && document.getElementById('modal_tipo_tx').value === 'CREDIT'
+      && !this.querySelector('input[name="estorno_original_id"]:checked')) {
+    ev.preventDefault(); ev.stopImmediatePropagation();
+    alert('Escolha a saída que voltou.');
+  }
 });
 
 // Devolucao de despesa sem a despesa escolhida nao vai pro servidor.

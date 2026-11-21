@@ -1498,6 +1498,13 @@ CREATE TABLE IF NOT EXISTS `bank_estornos` (
 _estornos_ok = False
 
 
+def _garantir_estornos(cursor):
+    global _estornos_ok
+    if not _estornos_ok:
+        cursor.execute(_DDL_ESTORNOS)
+        _estornos_ok = True
+
+
 def _eh_estorno_pix(descricao):
     t = _sem_acento_maiusculo(descricao)
     return 'PIX' in t and 'TARIFA' not in t and bool(_RE_ESTORNO_PIX.search(t))
@@ -2363,7 +2370,7 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                   fornecedor_id, forma_recebimento_id, usuario,
                   tipo_debito=None, despesas=None, troco_pix_id=None,
                   salvar_mapeamento=True, conta_origem_id=None,
-                  devolucao_lancamento_id=None):
+                  devolucao_lancamento_id=None, estorno_original_id=None):
     """Concilia (ou ignora) uma única transação e aprende mapeamentos.
 
     Para débitos com tipo_debito='despesa', *despesas* é uma lista de dicts:
@@ -2477,6 +2484,42 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
             )
             # Sem auto-aprendizado aqui, de propósito: gravar texto→fornecedor
             # no mapping contaminaria a sugestão dos DÉBITOS do mesmo CNPJ.
+        elif tipo_debito == 'estorno_saida':
+            # Crédito → Estorno: a SAÍDA voltou (21/11/2026). Liga à mão o
+            # par que o _auto_ligar_estorno não ligou (ex.: PIX do Cora que
+            # voltou sem o mesmo CPF/CNPJ no texto). Os dois ficam 'estorno':
+            # não é receita nem despesa. Reverter qualquer um solta os dois.
+            if not estorno_original_id:
+                raise ValueError("Escolha a saída que voltou.")
+            cursor.execute(
+                """SELECT id, account_id, tipo, valor, data_transacao, status
+                     FROM bank_transactions WHERE id IN (%s, %s)""",
+                (tx_id, estorno_original_id))
+            par = {int(r['id']): r for r in cursor.fetchall()}
+            cred, sai = par.get(int(tx_id)), par.get(int(estorno_original_id))
+            if not cred or not sai or sai['tipo'] != 'DEBIT':
+                raise ValueError("Saída não encontrada.")
+            if sai['account_id'] != cred['account_id']:
+                raise ValueError("A saída tem que ser da mesma conta.")
+            if f"{float(sai['valor']):.2f}" != f"{float(cred['valor']):.2f}":
+                raise ValueError("A saída tem que ter o mesmo valor da volta.")
+            if sai['status'] != 'pendente':
+                raise ValueError("A saída já está conciliada: reverta ela antes "
+                                 "(ou use Devolução de despesa / de fornecedor).")
+            cursor.execute(
+                """SELECT (SELECT COUNT(*) FROM bank_estornos WHERE original_id=%s OR estorno_id=%s)
+                        + (SELECT COUNT(*) FROM bank_estornos WHERE original_id=%s OR estorno_id=%s) AS n""",
+                (sai['id'], sai['id'], tx_id, tx_id))
+            if cursor.fetchone()['n']:
+                raise ValueError("Uma das duas já está num estorno.")
+            cursor.execute(
+                """UPDATE bank_transactions
+                      SET status='conciliado', conciliado_em=%s, conciliado_por=%s,
+                          tipo_conciliacao='estorno', fornecedor_id=NULL, forma_recebimento_id=NULL
+                    WHERE id IN (%s, %s)""",
+                (agora, usuario, sai['id'], tx_id))
+            cursor.execute("INSERT INTO bank_estornos (original_id, estorno_id) VALUES (%s, %s)",
+                           (sai['id'], tx_id))
         elif tipo_debito == 'devolucao_despesa':
             # Crédito → Devolução de despesa (pagou, o serviço não saiu, o
             # dinheiro voltou). NÃO é receita: vira despesa NEGATIVA no mesmo
@@ -2810,6 +2853,9 @@ def conciliar():
             # DEBITO deste mesmo form e os dois iriam juntos no POST.
             fornecedor_id = request.form.get('devolucao_fornecedor_id') or None
         devolucao_lancamento_id = request.form.get('devolucao_lancamento_id') or None
+        estorno_original_id = request.form.get('estorno_original_id') or None
+        if tipo_debito == 'estorno_saida':
+            _garantir_estornos(cursor)   # DDL faz COMMIT implícito: antes de gravar
 
         # Despesas: quantas vierem. Era range(1, 4) — teto de 3 — e a tela
         # tinha o mesmo teto. Agora quem manda é o formulário: lemos os
@@ -2987,7 +3033,8 @@ def conciliar():
                                       troco_pix_id=troco_pix_id,
                                       salvar_mapeamento=salvar_mapeamento,
                                       conta_origem_id=conta_origem_id,
-                                      devolucao_lancamento_id=devolucao_lancamento_id)
+                                      devolucao_lancamento_id=devolucao_lancamento_id,
+                                      estorno_original_id=estorno_original_id)
                 except TransferenciaSemPar as sp:
                     # Não vincula esta; as outras do lote seguem
                     conn.rollback()
@@ -4591,6 +4638,43 @@ def api_transacoes_pendentes():
         if row.get('valor') is not None:
             row['valor'] = float(row['valor'])
 
+    return jsonify(rows)
+
+
+@bp.route('/api/estorno/candidatos')
+@login_required
+def api_estorno_candidatos():
+    """API: saídas que um crédito pode ser a volta (21/11/2026): mesma conta,
+    mesmo valor, até 30 dias antes, sem estorno ligado. As já conciliadas vêm
+    marcadas (para reverter antes)."""
+    tx_id = request.args.get('tx_id', type=int)
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        _garantir_estornos(cursor)
+        cursor.execute("SELECT account_id, valor, data_transacao FROM bank_transactions WHERE id=%s",
+                       (tx_id,))
+        c = cursor.fetchone()
+        if not c:
+            return jsonify([])
+        cursor.execute(
+            """SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.status,
+                      bt.tipo_conciliacao, fo.razao_social AS fornecedor
+                 FROM bank_transactions bt
+                 LEFT JOIN fornecedores fo ON fo.id = bt.fornecedor_id
+                WHERE bt.account_id=%s AND bt.tipo='DEBIT' AND bt.valor=%s
+                  AND bt.data_transacao BETWEEN DATE_SUB(%s, INTERVAL 30 DAY) AND %s
+                  AND NOT EXISTS (SELECT 1 FROM bank_estornos e WHERE e.original_id=bt.id)
+                ORDER BY bt.status='pendente' DESC, bt.data_transacao DESC
+                LIMIT 30""",
+            (c['account_id'], c['valor'], c['data_transacao'], c['data_transacao']))
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+    for r in rows:
+        r['data'] = r.pop('data_transacao').strftime('%d/%m/%Y')
+        r['valor'] = float(r['valor'] or 0)
     return jsonify(rows)
 
 
