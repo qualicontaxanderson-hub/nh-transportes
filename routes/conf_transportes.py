@@ -195,44 +195,6 @@ def conf_transportes():
         det.sort(key=lambda d: (d['nome'] == 'Geral', -d['total']))
         t['litros_det'] = det if len(det) > 1 or (det and det[0]['nome'] != 'Geral') else []
 
-    # Custo real por litro (escolha do Anderson, 21/11/2026): tudo o que o
-    # caminhão gastou no mês (custos + motoristas) ÷ todos os litros que ele
-    # levou no mês. Litros de um cliente sem frete × esse custo = quanto
-    # aquele transporte nos custou. Mês sem litro não tem custo por litro (o
-    # gasto daquele mês fica só no resultado).
-    sem_cob = {}   # destino -> {'linhas': [...], 'litros': {mk}, 'custo': {mk}}
-    for t in trucks:
-        nome = t['nome'] or ''
-        t['curto'] = nome.split('MODELO', 1)[1].strip() if 'MODELO' in nome.upper() else nome
-        cpl, gasto_l, lit_l = {}, 0.0, 0.0
-        for m in months:
-            k = m['key']
-            lit = t['litros'].get(k, 0.0)
-            g = t['custos_bym'].get(k, 0.0) + t['mot_bym'].get(k, 0.0)
-            cpl[k] = (g / lit) if lit >= 0.5 else None
-            if lit >= 0.5:
-                gasto_l += g
-                lit_l += lit
-        t['cpl'] = cpl
-        t['cpl_tot'] = (gasto_l / lit_l) if lit_l >= 0.5 else None
-        for d in t['litros_det']:
-            d['custo'] = {m['key']: d['by_month'][m['key']] * (cpl[m['key']] or 0.0) for m in months}
-            d['custo_tot'] = sum(d['custo'].values())
-            if d['nome'] == 'Geral':
-                continue
-            sc = sem_cob.setdefault(d['nome'], {'nome': d['nome'], 'linhas': [],
-                                                'litros': _z(months), 'custo': _z(months)})
-            sc['linhas'].append({'caminhao': t['curto'], 'placa': t['placa'],
-                                 'litros': d['by_month'], 'custo': d['custo'],
-                                 'litros_tot': d['total'], 'custo_tot': d['custo_tot']})
-            for m in months:
-                sc['litros'][m['key']] += d['by_month'][m['key']]
-                sc['custo'][m['key']] += d['custo'][m['key']]
-    sem_cobranca = sorted(sem_cob.values(), key=lambda x: -sum(x['litros'].values()))
-    for sc in sem_cobranca:
-        sc['litros_tot'] = sum(sc['litros'].values())
-        sc['custo_tot'] = sum(sc['custo'].values())
-
     # Frota inteira = caminhões + outros custos de transporte (frete de terceiros…)
     frota = {'receita': _z(months), 'custos': _z(months), 'mot': _z(months),
              'lucro': _z(months), 'litros': _z(months)}
@@ -248,17 +210,73 @@ def conf_transportes():
             frota['custos'][k] += o['by_month'].get(k, 0.0)
             frota['lucro'][k] -= o['by_month'].get(k, 0.0)
     frota_tot = {k: sum(v.values()) for k, v in frota.items()}
-    # custo por litro da frota (só caminhões nossos, meses com litro)
-    frota_cpl = {}
+
+    # Custo dos transportes sem cobrança (conta do Anderson, 21/11/2026):
+    # o RESULTADO do caminhão no mês é o que custou levar os litros sem
+    # cobrança. Prejuízo 7.588,26 ÷ 279.000 L do NH = R$ 0,0272/L. Mês com
+    # lucro dá custo negativo (= o frete cobrado pagou tudo e ainda sobrou).
+    # Com mais de um cliente sem cobrança no caminhão, divide pelos litros.
+    # Na frota: resultado de todos ÷ litros sem cobrança de todos; o que não
+    # cabe num caminhão (caminhão sem litro sem cobrança no mês, frete de
+    # terceiros) entra numa linha de ajuste, para o total fechar.
+    sem_cob = {}
+    livre_f = _z(months)                       # litros sem cobrança da frota
+    alocado = _z(months)                       # custo já posto nos caminhões
+    for t in trucks:
+        nome = t['nome'] or ''
+        t['curto'] = nome.split('MODELO', 1)[1].strip() if 'MODELO' in nome.upper() else nome
+        livres = [d for d in t['litros_det'] if d['nome'] != 'Geral']
+        livre = {m['key']: sum(d['by_month'][m['key']] for d in livres) for m in months}
+        cpl, c_tot, l_tot = {}, 0.0, 0.0
+        for m in months:
+            k = m['key']
+            if livre[k] >= 0.5:
+                cpl[k] = -t['lucro'][k] / livre[k]
+                c_tot += -t['lucro'][k]
+                l_tot += livre[k]
+                alocado[k] += -t['lucro'][k]
+                livre_f[k] += livre[k]
+            else:
+                cpl[k] = None
+        t['cpl'] = cpl
+        t['cpl_tot'] = (c_tot / l_tot) if l_tot >= 0.5 else None
+        for d in t['litros_det']:
+            if d['nome'] == 'Geral':
+                d['custo'], d['custo_tot'] = _z(months), 0.0
+                continue
+            d['custo'] = {m['key']: d['by_month'][m['key']] * (cpl[m['key']] or 0.0) for m in months}
+            d['custo_tot'] = sum(d['custo'].values())
+            sc = sem_cob.setdefault(d['nome'], {'nome': d['nome'], 'linhas': [],
+                                                'litros': _z(months), 'custo': _z(months),
+                                                'ajuste': _z(months)})
+            sc['linhas'].append({'caminhao': t['curto'], 'placa': t['placa'],
+                                 'litros': d['by_month'], 'custo': d['custo'],
+                                 'litros_tot': d['total'], 'custo_tot': d['custo_tot']})
+            for m in months:
+                sc['litros'][m['key']] += d['by_month'][m['key']]
+                sc['custo'][m['key']] += d['custo'][m['key']]
+    # ajuste: resultado da frota que não ficou em nenhum caminhão, dividido
+    # entre os clientes sem cobrança pelos litros do mês
     for m in months:
         k = m['key']
-        lit = sum(t['litros'].get(k, 0.0) for t in trucks)
-        g = sum(t['custos_bym'].get(k, 0.0) + t['mot_bym'].get(k, 0.0) for t in trucks
-                if t['litros'].get(k, 0.0) >= 0.5)
-        frota_cpl[k] = (g / lit) if lit >= 0.5 else None
-    _g = sum(t['custos_bym'].get(m['key'], 0.0) + t['mot_bym'].get(m['key'], 0.0)
-             for t in trucks for m in months if t['litros'].get(m['key'], 0.0) >= 0.5)
-    frota_cpl_tot = (_g / frota_tot['litros']) if frota_tot['litros'] >= 0.5 else None
+        resto = -frota['lucro'][k] - alocado[k]
+        if livre_f[k] < 0.5 or abs(resto) < 0.005:
+            continue
+        for sc in sem_cob.values():
+            v = resto * sc['litros'][k] / livre_f[k]
+            sc['ajuste'][k] += v
+            sc['custo'][k] += v
+    sem_cobranca = sorted(sem_cob.values(), key=lambda x: -sum(x['litros'].values()))
+    for sc in sem_cobranca:
+        sc['litros_tot'] = sum(sc['litros'].values())
+        sc['custo_tot'] = sum(sc['custo'].values())
+        sc['ajuste_tot'] = sum(sc['ajuste'].values())
+        sc['tem_ajuste'] = any(abs(v) >= 0.005 for v in sc['ajuste'].values())
+    frota_cpl = {m['key']: (-frota['lucro'][m['key']] / livre_f[m['key']])
+                 if livre_f[m['key']] >= 0.5 else None for m in months}
+    _c = sum(-frota['lucro'][m['key']] for m in months if livre_f[m['key']] >= 0.5)
+    _l = sum(livre_f.values())
+    frota_cpl_tot = (_c / _l) if _l >= 0.5 else None
 
     # Só os meses com movimento
     ativos = [m for m in months
