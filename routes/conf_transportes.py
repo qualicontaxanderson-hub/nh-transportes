@@ -276,6 +276,8 @@ def conf_transportes_motorista():
                 else:
                     frac = 1.0 if mr.get('veiculo_id') == vid else 0.0
                     rateio = 'sem frete no mês: vai inteiro para o caminhão fixo do motorista'
+                if frac == 0:
+                    continue   # nada deste mes ficou neste caminhao
                 for r in folha:
                     v = float(r['valor'] or 0)
                     meta = [mm, r['empresa'] or '']
