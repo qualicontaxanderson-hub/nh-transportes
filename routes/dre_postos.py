@@ -34,7 +34,8 @@ from flask import Blueprint, render_template, request
 from flask_login import login_required
 
 from routes.auth import admin_required
-from routes.conf_despesas import _fetch_taxas_cartao
+from routes.conf_despesas import (_fetch_taxas_cartao, _aplicar_taxas_operadora,
+                                   _empresas_donas)
 from utils.db import get_db_connection
 
 bp = Blueprint('dre_postos', __name__, url_prefix='/relatorios')
@@ -1333,9 +1334,18 @@ def dre_postos():
         # Empresas sem maquininha vinculada resultam em _taxas_list vazio e a
         # linha CARTÕES não aparece no DRE.  Quando nenhuma empresa é filtrada
         # (todos), comporta-se como antes (global).
-        _taxas_list = _fetch_taxas_cartao(
-            conn, data_inicio, data_fim, empresa_ids, months
-        ) if months else []
+        # 21/11/2026: a MESMA conta da Conferência de Despesas — global (a
+        # maquininha é do Posto NH), corrigida pelo arquivo da operadora
+        # (SIPAG/X7/Baratão) e pelo Sicredi até jul/2026. Só entra se alguma
+        # empresa do filtro é dona das vendas de cartão.
+        _taxas_list = []
+        if months:
+            _emp_cartao, _ = _empresas_donas(conn, data_inicio, data_fim)
+            if not empresa_ids or (_emp_cartao & {str(e) for e in empresa_ids}):
+                _taxas_list = _fetch_taxas_cartao(conn, data_inicio, data_fim, [], months)
+                if _taxas_list:
+                    _taxas_list = _aplicar_taxas_operadora(
+                        conn, _taxas_list, data_inicio, data_fim, months)
         cartoes_by_month: dict = {m['key']: 0.0 for m in months}
         for band in _taxas_list:
             for mk, fee in band['fee_by_month'].items():

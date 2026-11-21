@@ -632,7 +632,7 @@
           </tr>
           {% for band in cartoes_taxas_list %}
           <tr class="row-item row-child" data-group="cartoes_block" style="display:none;">
-            <td class="col-desc">└ {{ band.nome }}</td>
+            <td class="col-desc">└ {{ band.nome }}{% if band.tipo == 'DEBITO' and 'BARAT' not in (band.nome|upper) and 'X7' not in (band.nome|upper) %} · débito{% elif band.tipo == 'CREDITO' and 'BARAT' not in (band.nome|upper) and 'X7' not in (band.nome|upper) %} · crédito{% endif %}</td>
             {% for m in months %}
               {% set v = band.fee_by_month.get(m.key, 0) %}
               <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
