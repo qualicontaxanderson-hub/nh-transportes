@@ -1503,22 +1503,9 @@ def _build_taxas_cartao_rows(taxas_data, months):
 # Route
 # ──────────────────────────────────────────────────────────────────────────────
 
-@bp.route('/conf_despesas', methods=['GET'])
-@login_required
-@admin_required
-def conf_despesas():
-    args = request.args
-
-    # ── Filters ──────────────────────────────────────────────────────────────
-    data_inicio = args.get('data_inicio', '').strip()
-    data_fim    = args.get('data_fim',    '').strip()
-
-    if not data_inicio and not data_fim:
-        data_inicio, data_fim = _default_period()
-
-    empresa_ids = [e for e in args.getlist('empresa_ids[]') if e]
-    titulo_ids  = [t for t in args.getlist('titulo_ids[]')  if t]
-
+def _montar_relatorio(data_inicio, data_fim, empresa_ids, titulo_ids):
+    """A conta inteira da Conferência de Despesas (21/11/2026: separada da rota
+    para a Conf. Transportes usar os MESMOS números). Devolve o contexto."""
     conn = get_db_connection()
     try:
         empresas = _empresas_list(conn)
@@ -1829,23 +1816,46 @@ def conf_despesas():
     finally:
         conn.close()
 
-    return render_template(
-        'relatorios/conf_despesas.html',
+
+    return dict(
         empresas=empresas,
         titulos=titulos,
         months=months,
         blocks=blocks,
         grand_by_month=grand_by_month,
         grand_total=grand_total,
-        data_inicio=data_inicio,
-        data_fim=data_fim,
-        empresa_ids=empresa_ids,
-        titulo_ids=titulo_ids,
         total_lancamentos=total_lancamentos,
         litros_comprados_by_month=litros_comprados_by_month,
         litros_comprados_total=litros_comprados_total,
         custo_por_litro_by_month=custo_por_litro_by_month,
         custo_por_litro_acum=custo_por_litro_acum,
+    )
+
+
+@bp.route('/conf_despesas', methods=['GET'])
+@login_required
+@admin_required
+def conf_despesas():
+    args = request.args
+
+    # ── Filters ──────────────────────────────────────────────────────────────
+    data_inicio = args.get('data_inicio', '').strip()
+    data_fim    = args.get('data_fim',    '').strip()
+
+    if not data_inicio and not data_fim:
+        data_inicio, data_fim = _default_period()
+
+    empresa_ids = [e for e in args.getlist('empresa_ids[]') if e]
+    titulo_ids  = [t for t in args.getlist('titulo_ids[]')  if t]
+
+    ctx = _montar_relatorio(data_inicio, data_fim, empresa_ids, titulo_ids)
+    return render_template(
+        'relatorios/conf_despesas.html',
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        empresa_ids=empresa_ids,
+        titulo_ids=titulo_ids,
+        **ctx,
     )
 
 @bp.route('/conf_despesas/lancamentos', methods=['GET'])

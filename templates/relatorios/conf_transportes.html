@@ -1,0 +1,414 @@
+{% extends "base.html" %}
+
+{% block title %}Conf. Transportes{% endblock %}
+
+{#- Quanto cada caminhão dá. Mesmos números do bloco CAMINHÕES da Conf.
+    Despesas; aqui a leitura é de DRE: receita do frete, menos o custo do
+    caminhão, menos os motoristas, igual ao resultado. -#}
+
+{% macro brl(v, sinal=False) -%}
+  {%- set a = v|abs -%}
+  {%- set s = '{:,.2f}'.format(a).replace(',', 'X').replace('.', ',').replace('X', '.') -%}
+  {%- if v < -0.004 %}−R$ {{ s }}{% elif sinal and v > 0.004 %}+R$ {{ s }}{% else %}R$ {{ s }}{% endif -%}
+{%- endmacro %}
+{% macro brl0(v) -%}
+  {%- if v|abs < 0.005 %}<span class="nd">—</span>{% else %}{{ brl(v) }}{% endif -%}
+{%- endmacro %}
+{% macro lt(v) -%}
+  {%- if v|abs < 0.5 %}<span class="nd">—</span>{% else %}{{ '{:,.0f}'.format(v).replace(',', '.') }} L{% endif -%}
+{%- endmacro %}
+{% macro pct(a, b) -%}
+  {%- if b|abs < 0.005 %}—{% else %}{{ '{:.1f}'.format(a / b * 100).replace('.', ',') }}%{% endif -%}
+{%- endmacro %}
+
+{% block styles %}
+<style>
+body > .container-fluid:has(#ctr){
+  background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none;
+}
+@media (min-width:992px){ body > .container-fluid:has(#ctr){ padding:.7rem 1rem 0; } }
+
+#ctr{ --blue:#1D63A5; --blue-deep:#0C4C86; --ok:#146c43; --ok-bg:#e9f5ee;
+      --danger:#b42318; --danger-bg:#fdeeec; --muted:#5b6573; --ink:#151d27;
+      --borda:#dde3ea; --linha:#eef1f5; --surface:#fff; --soft:#f6f8fb;
+      color:var(--ink); }
+#ctr .num{ font-variant-numeric:tabular-nums; }
+#ctr .nd{ color:#b7bfc9; }
+
+/* topo */
+#ctr .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86);
+  color:#fff; border-radius:14px; padding:.8rem 1rem; margin-bottom:.7rem;
+  display:flex; gap:.8rem; align-items:center; }
+#ctr .topo__i{ width:2.4rem; height:2.4rem; border-radius:.6rem;
+  background:rgba(255,255,255,.16); display:grid; place-items:center; font-size:1.25rem; }
+#ctr .topo__t{ font-weight:800; font-size:1.05rem; }
+#ctr .topo__s{ font-size:.77rem; opacity:.95; }
+
+/* filtro */
+#ctr .filtro{ background:var(--surface); border:1px solid var(--borda); border-radius:13px;
+  padding:.6rem .75rem; margin-bottom:.8rem; display:flex; gap:.5rem; flex-wrap:wrap; align-items:flex-end; }
+#ctr .campo{ display:flex; flex-direction:column; gap:.2rem; }
+#ctr .campo span{ font-size:.66rem; font-weight:800; color:var(--muted);
+  text-transform:uppercase; letter-spacing:.05em; }
+#ctr .campo input{ border:1px solid var(--borda); border-radius:9px; padding:.4rem .5rem;
+  font-size:.82rem; font-family:inherit; }
+#ctr .bt{ border:1px solid #bcd3ea; background:#eef5fd; color:var(--blue-deep);
+  border-radius:9px; padding:.42rem .75rem; font-size:.8rem; font-weight:700;
+  cursor:pointer; text-decoration:none; display:inline-flex; gap:.3rem; align-items:center; }
+#ctr .bt--sim{ background:var(--blue); border-color:var(--blue); color:#fff; }
+#ctr .atalhos{ display:flex; gap:.35rem; flex-wrap:wrap; }
+
+/* painel da frota */
+#ctr .painel{ background:var(--surface); border:1px solid var(--borda); border-radius:16px;
+  overflow:hidden; box-shadow:0 3px 14px rgba(20,35,60,.07); margin-bottom:1rem;
+  display:grid; }
+@media (min-width:992px){ #ctr .painel{ grid-template-columns:minmax(300px,.8fr) 1.4fr; } }
+#ctr .res{ padding:1rem 1.1rem; background:linear-gradient(160deg,#f3f9f5,#e9f4ed);
+  border-bottom:1px solid var(--linha); }
+@media (min-width:992px){ #ctr .res{ border-bottom:0; border-right:1px solid var(--linha); } }
+#ctr .res--neg{ background:linear-gradient(160deg,#fdf5f4,#fbecea); }
+#ctr .rot{ font-size:.66rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.07em; }
+#ctr .res__v{ font-size:2rem; font-weight:800; line-height:1.1; color:var(--ok); margin-top:.15rem; }
+#ctr .res--neg .res__v{ color:var(--danger); }
+#ctr .res__s{ font-size:.78rem; color:#3a4655; font-weight:600; margin-top:.2rem; }
+#ctr .tag{ display:inline-flex; gap:.25rem; align-items:center; font-size:.68rem; font-weight:800;
+  padding:.12rem .5rem; border-radius:99px; text-transform:uppercase; letter-spacing:.04em; }
+#ctr .tag--ok{ background:var(--ok-bg); color:var(--ok); }
+#ctr .tag--neg{ background:var(--danger-bg); color:var(--danger); }
+
+/* a conta em escada: receita - custos - motoristas = resultado */
+#ctr .escada{ margin-top:.8rem; display:flex; flex-direction:column; gap:.3rem; }
+#ctr .escada div{ display:flex; justify-content:space-between; align-items:baseline;
+  font-size:.84rem; padding:.3rem .55rem; background:rgba(255,255,255,.75);
+  border:1px solid var(--borda); border-radius:9px; }
+#ctr .escada b{ font-weight:800; }
+#ctr .escada .tot{ background:#fff; border-width:2px; }
+#ctr .escada .tot b{ font-size:.95rem; }
+#ctr .escada .info{ background:transparent; border-style:dashed; color:var(--muted); font-size:.76rem; }
+
+/* gráfico mês a mês */
+#ctr .graf{ padding:1rem 1.1rem .8rem; }
+#ctr .graf__c{ position:relative; display:flex; align-items:stretch; gap:4px; height:190px;
+  margin-top:.6rem; }
+#ctr .graf__zero{ position:absolute; left:0; right:0; height:1px; background:#c7cfd9; }
+#ctr .gm{ flex:1 1 0; position:relative; cursor:default; }
+#ctr .gm:hover{ background:rgba(29,99,165,.05); border-radius:6px; }
+#ctr .gm i{ position:absolute; left:22%; right:22%; display:block; }
+#ctr .gm i.pos{ background:#2f9e5d; border-radius:4px 4px 0 0; }
+#ctr .gm i.neg{ background:#d9534f; border-radius:0 0 4px 4px; }
+#ctr .gm .v{ position:absolute; left:-10px; right:-10px; text-align:center; font-size:.62rem;
+  font-weight:800; color:var(--ink); white-space:nowrap; }
+#ctr .graf__m{ display:flex; gap:4px; margin-top:.3rem; }
+#ctr .graf__m span{ flex:1 1 0; text-align:center; font-size:.64rem; font-weight:800; color:var(--muted); }
+#ctr .dica{ position:fixed; pointer-events:none; z-index:50; background:#151d27; color:#fff;
+  border-radius:9px; padding:.45rem .6rem; font-size:.74rem; line-height:1.45; display:none;
+  box-shadow:0 6px 18px rgba(0,0,0,.2); }
+#ctr .dica b{ font-weight:800; }
+
+/* quadro de cada caminhão */
+#ctr .cam{ background:var(--surface); border:1px solid var(--borda); border-radius:16px;
+  margin-bottom:1rem; overflow:hidden; box-shadow:0 2px 10px rgba(20,35,60,.06); }
+#ctr .cam__h{ display:flex; gap:.9rem; align-items:center; padding:.85rem 1rem; flex-wrap:wrap;
+  border-left:5px solid var(--ok); }
+#ctr .cam__h.neg{ border-left-color:var(--danger); }
+#ctr .cam__i{ width:2.6rem; height:2.6rem; border-radius:.7rem; background:#eef5fd;
+  color:var(--blue); display:grid; place-items:center; font-size:1.35rem; flex:0 0 auto; }
+#ctr .cam__n{ font-weight:800; font-size:1rem; }
+#ctr .cam__d{ font-size:.75rem; color:var(--muted); display:flex; gap:.6rem; flex-wrap:wrap; margin-top:.1rem; }
+#ctr .placa{ font-family:ui-monospace,Consolas,monospace; font-weight:700; background:var(--soft);
+  border:1px solid var(--borda); border-radius:5px; padding:0 .35rem; color:var(--ink); }
+#ctr .cam__r{ margin-left:auto; text-align:right; }
+#ctr .cam__v{ font-size:1.35rem; font-weight:800; color:var(--ok); }
+#ctr .cam__h.neg .cam__v{ color:var(--danger); }
+
+#ctr .kpis{ display:grid; gap:.5rem; padding:0 1rem .85rem; grid-template-columns:repeat(2,1fr); }
+@media (min-width:768px){ #ctr .kpis{ grid-template-columns:repeat(5,1fr); } }
+#ctr .k{ background:var(--soft); border:1px solid var(--linha); border-radius:11px; padding:.5rem .65rem; }
+#ctr .k b{ display:block; font-size:.95rem; font-weight:800; }
+#ctr .k small{ font-size:.7rem; color:var(--muted); }
+
+/* DRE do caminhão */
+#ctr .tab{ overflow-x:auto; border-top:1px solid var(--linha); }
+#ctr table{ width:100%; border-collapse:collapse; font-size:.78rem; font-variant-numeric:tabular-nums; }
+#ctr th{ background:#f0f4f8; color:#3d4854; font-size:.64rem; text-transform:uppercase;
+  letter-spacing:.05em; font-weight:800; padding:.45rem .6rem; text-align:right; white-space:nowrap;
+  border-bottom:1px solid var(--borda); }
+#ctr th:first-child, #ctr td:first-child{ text-align:left; position:sticky; left:0; background:inherit; z-index:1; }
+#ctr th.acum, #ctr td.acum{ background:#f7f3e6; font-weight:800; }
+#ctr td{ padding:.38rem .6rem; text-align:right; white-space:nowrap; border-bottom:1px solid var(--linha); }
+#ctr tr{ background:#fff; }
+#ctr td:first-child{ min-width:230px; }
+#ctr tr.l-rec td{ color:var(--ok); font-weight:800; background:#f6fbf8; }
+#ctr tr.l-rec td.acum{ background:#eef6ef; }
+#ctr tr.l-info td{ color:var(--muted); font-size:.72rem; font-style:italic; }
+#ctr tr.l-grp td{ font-weight:800; background:#fbfcfe; }
+#ctr tr.l-grp td:first-child{ cursor:pointer; }
+#ctr tr.l-grp .seta{ display:inline-block; width:1rem; color:var(--blue); transition:transform .15s; }
+#ctr tr.l-grp.aberto .seta{ transform:rotate(90deg); }
+#ctr tr.l-it td:first-child{ padding-left:1.9rem; color:#3a4655; }
+#ctr tr.l-it2 td:first-child{ padding-left:3rem; color:var(--muted); font-size:.74rem; }
+#ctr tr.l-it2 td{ font-size:.74rem; color:var(--muted); }
+#ctr tr.l-res td{ font-weight:800; font-size:.84rem; border-top:2px solid var(--ink); border-bottom:0; }
+#ctr tr.l-res td.pos{ color:var(--ok); background:var(--ok-bg); }
+#ctr tr.l-res td.neg{ color:var(--danger); background:var(--danger-bg); }
+#ctr tr.l-marg td{ font-size:.72rem; color:var(--muted); font-weight:700; border-bottom:0; }
+#ctr tr[hidden]{ display:none; }
+#ctr .vazio{ background:#fff; border:1px dashed var(--borda); border-radius:14px; padding:2rem;
+  text-align:center; color:var(--muted); }
+#ctr .nota{ font-size:.72rem; color:var(--muted); margin:.2rem .2rem 1rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="ctr">
+  <div class="topo">
+    <div class="topo__i"><i class="bi bi-truck"></i></div>
+    <div>
+      <div class="topo__t">Conf. Transportes</div>
+      <div class="topo__s">Quanto cada caminhão dá: a receita do frete, o que ele custa e o que sobra</div>
+    </div>
+  </div>
+
+  <form class="filtro" method="get">
+    <label class="campo"><span>De</span>
+      <input type="date" name="data_inicio" value="{{ data_inicio }}"></label>
+    <label class="campo"><span>Até</span>
+      <input type="date" name="data_fim" value="{{ data_fim }}"></label>
+    <button class="bt bt--sim" type="submit"><i class="bi bi-search"></i> Apurar</button>
+    <div class="atalhos">
+      <a class="bt" href="#" data-per="ano">Ano atual</a>
+      <a class="bt" href="#" data-per="anoant">Ano anterior</a>
+      <a class="bt" href="#" data-per="mes">Mês atual</a>
+      <a class="bt" href="#" data-per="mesant">Mês anterior</a>
+    </div>
+  </form>
+
+  {% if not trucks %}
+    <div class="vazio"><i class="bi bi-truck" style="font-size:2rem"></i><br>
+      Nenhum caminhão com movimento neste período.</div>
+  {% else %}
+
+  {# ── A frota inteira ──────────────────────────────────────────────── #}
+  {% set L = frota_tot.lucro %}
+  <div class="painel">
+    <div class="res{{ ' res--neg' if L < 0 }}">
+      <div class="rot">Resultado da frota no período</div>
+      <div class="res__v num">{{ brl(L) }}</div>
+      <div class="res__s">
+        <span class="tag {{ 'tag--neg' if L < 0 else 'tag--ok' }}">
+          <i class="bi bi-{{ 'arrow-down-right' if L < 0 else 'arrow-up-right' }}"></i>
+          {{ 'Prejuízo' if L < 0 else 'Lucro' }}</span>
+        &nbsp;margem de {{ pct(L, frota_tot.receita) }} sobre a receita
+      </div>
+      <div class="escada num">
+        <div><span>Receita de frete</span><b style="color:var(--ok)">{{ brl(frota_tot.receita) }}</b></div>
+        <div><span>(−) Custos dos caminhões</span><b>{{ brl(-frota_tot.custos) }}</b></div>
+        <div><span>(−) Motoristas</span><b>{{ brl(-frota_tot.mot) }}</b></div>
+        <div class="tot"><span><b>= Resultado</b></span>
+          <b style="color:var({{ '--danger' if L < 0 else '--ok' }})">{{ brl(L) }}</b></div>
+        <div class="info"><span>Litros transportados</span><span>{{ lt(frota_tot.litros) }}</span></div>
+      </div>
+    </div>
+
+    <div class="graf">
+      <div class="rot">Resultado mês a mês</div>
+      {% set ns = namespace(mx=0.01) %}
+      {% for m in months %}{% set v = frota.lucro[m.key]|abs %}{% if v > ns.mx %}{% set ns.mx = v %}{% endif %}{% endfor %}
+      {% set ns2 = namespace(pos=0, neg=0) %}
+      {% for m in months %}{% set v = frota.lucro[m.key] %}
+        {% if v > ns2.pos %}{% set ns2.pos = v %}{% endif %}{% if v < ns2.neg %}{% set ns2.neg = v %}{% endif %}
+      {% endfor %}
+      {% set faixa = (ns2.pos - ns2.neg) if (ns2.pos - ns2.neg) > 0 else 1 %}
+      {% set zero = 12 + 76 * ns2.pos / faixa %}
+      <div class="graf__c">
+        <div class="graf__zero" style="top:{{ zero }}%"></div>
+        {% for m in months %}{% set v = frota.lucro[m.key] %}
+          {% set h = 76 * (v|abs) / faixa %}
+          <div class="gm" data-mes="{{ m.label }}/{{ m.year }}"
+               data-rec="{{ brl(frota.receita[m.key]) }}" data-cus="{{ brl(-frota.custos[m.key]) }}"
+               data-mot="{{ brl(-frota.mot[m.key]) }}" data-res="{{ brl(v) }}">
+            {% if v >= 0 %}
+              <i class="pos" style="top:{{ zero - h }}%;height:{{ h }}%"></i>
+              <span class="v num" style="top:calc({{ zero - h }}% - 15px)">{{ '{:,.1f}'.format(v/1000).replace(',', 'X').replace('.', ',').replace('X', '.') }} mil</span>
+            {% else %}
+              <i class="neg" style="top:{{ zero }}%;height:{{ h }}%"></i>
+              <span class="v num" style="top:calc({{ zero + h }}% + 2px);color:var(--danger)">−{{ '{:,.1f}'.format(-v/1000).replace(',', 'X').replace('.', ',').replace('X', '.') }} mil</span>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+      <div class="graf__m">{% for m in months %}<span>{{ m.label }}</span>{% endfor %}</div>
+    </div>
+  </div>
+
+  {# ── Um quadro por caminhão ───────────────────────────────────────── #}
+  {% for t in trucks %}
+  {% set R = t.tot.lucro %}
+  <section class="cam">
+    <div class="cam__h{{ ' neg' if R < 0 }}">
+      <div class="cam__i"><i class="bi bi-truck-front-fill"></i></div>
+      <div>
+        <div class="cam__n">{{ t.nome }}</div>
+        <div class="cam__d">
+          {% if t.placa %}<span>Cavalo <span class="placa">{{ t.placa }}</span></span>{% endif %}
+          {% if t.placa_carreta %}<span>Carreta <span class="placa">{{ t.placa_carreta }}</span></span>{% endif %}
+          {% if t.motorista %}<span><i class="bi bi-person"></i> {{ t.motorista }}</span>{% endif %}
+        </div>
+      </div>
+      <div class="cam__r">
+        <div class="rot">{{ 'Prejuízo' if R < 0 else 'Lucro' }} no período</div>
+        <div class="cam__v num">{{ brl(R) }}</div>
+      </div>
+    </div>
+
+    <div class="kpis num">
+      <div class="k"><span class="rot">Receita</span><b style="color:var(--ok)">{{ brl(t.tot.receita) }}</b>
+        <small>{{ lt(t.tot.litros) }} transportados</small></div>
+      <div class="k"><span class="rot">Custos do caminhão</span><b>{{ brl(t.tot.custos) }}</b>
+        <small>{{ pct(t.tot.custos, t.tot.receita) }} da receita</small></div>
+      <div class="k"><span class="rot">Motoristas</span><b>{{ brl(t.tot.mot) }}</b>
+        <small>{{ pct(t.tot.mot, t.tot.receita) }} da receita</small></div>
+      <div class="k"><span class="rot">Margem</span>
+        <b style="color:var({{ '--danger' if R < 0 else '--ok' }})">{{ pct(R, t.tot.receita) }}</b>
+        <small>do que entrou, sobrou isso</small></div>
+      <div class="k"><span class="rot">Por mil litros</span>
+        {% if t.tot.litros > 0 %}
+        <b style="color:var({{ '--danger' if R < 0 else '--ok' }})">{{ brl(R / t.tot.litros * 1000) }}</b>
+        <small>frete {{ brl(t.tot.receita / t.tot.litros * 1000) }} / mil L</small>
+        {% else %}<b>—</b><small>sem litros</small>{% endif %}</div>
+    </div>
+
+    <div class="tab">
+      <table>
+        <thead><tr><th>{{ t.placa or 'Caminhão' }}</th>
+          {% for m in months %}<th>{{ m.label }}</th>{% endfor %}<th class="acum">Total</th></tr></thead>
+        <tbody>
+          <tr class="l-rec"><td>Receita de frete</td>
+            {% for m in months %}<td>{{ brl0(t.receita[m.key]) }}</td>{% endfor %}
+            <td class="acum">{{ brl0(t.tot.receita) }}</td></tr>
+          <tr class="l-info"><td>Litros transportados</td>
+            {% for m in months %}<td>{{ lt(t.litros[m.key]) }}</td>{% endfor %}
+            <td class="acum">{{ lt(t.tot.litros) }}</td></tr>
+
+          {% set gid = 'c' ~ t.vid %}
+          <tr class="l-grp" data-abre="{{ gid }}"><td><span class="seta">▸</span>(−) Custos do caminhão</td>
+            {% for m in months %}<td>{{ brl0(-t.custos_bym[m.key]) }}</td>{% endfor %}
+            <td class="acum">{{ brl0(-t.tot.custos) }}</td></tr>
+          {% for c in t.custos %}
+          <tr class="l-it" data-pai="{{ gid }}" hidden><td>{{ c.nome|title }}</td>
+            {% for m in months %}<td>{{ brl0(-c.by_month.get(m.key, 0)) }}</td>{% endfor %}
+            <td class="acum">{{ brl0(-c.total) }}</td></tr>
+          {% endfor %}
+
+          {% set mid = 'm' ~ t.vid %}
+          <tr class="l-grp" data-abre="{{ mid }}"><td><span class="seta">▸</span>(−) Motoristas</td>
+            {% for m in months %}<td>{{ brl0(-t.mot_bym[m.key]) }}</td>{% endfor %}
+            <td class="acum">{{ brl0(-t.tot.mot) }}</td></tr>
+          {% for p in t.pessoas %}
+          {% set pid = mid ~ '_' ~ loop.index %}
+          <tr class="l-it l-grp" data-pai="{{ mid }}" data-abre="{{ pid }}" hidden>
+            <td><span class="seta">▸</span>{{ p.nome|title }}</td>
+            {% for m in months %}<td>{{ brl0(-p.by_month.get(m.key, 0)) }}</td>{% endfor %}
+            <td class="acum">{{ brl0(-p.total) }}</td></tr>
+            {% for i in p.itens %}
+            <tr class="l-it2" data-pai="{{ pid }}" hidden><td>{{ i.nome }}</td>
+              {% for m in months %}<td>{{ brl0(-i.by_month.get(m.key, 0)) }}</td>{% endfor %}
+              <td class="acum">{{ brl0(-i.total) }}</td></tr>
+            {% endfor %}
+          {% endfor %}
+
+          <tr class="l-res"><td>= {{ 'Prejuízo' if R < 0 else 'Lucro' }}</td>
+            {% for m in months %}{% set v = t.lucro[m.key] %}
+              <td class="{{ 'neg' if v < -0.004 else ('pos' if v > 0.004 else '') }}">{{ brl0(v) }}</td>{% endfor %}
+            <td class="acum {{ 'neg' if R < 0 else 'pos' }}">{{ brl(R) }}</td></tr>
+          <tr class="l-marg"><td>Margem</td>
+            {% for m in months %}<td>{{ pct(t.lucro[m.key], t.receita[m.key]) }}</td>{% endfor %}
+            <td class="acum">{{ pct(R, t.tot.receita) }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endfor %}
+
+  {% if outros %}
+  <section class="cam">
+    <div class="cam__h neg">
+      <div class="cam__i" style="background:#fdf3e7;color:#8a5a00"><i class="bi bi-box-seam"></i></div>
+      <div><div class="cam__n">Outros custos de transporte</div>
+        <div class="cam__d">Não são de um caminhão nosso (ex.: frete de terceiros). Entram no resultado da frota.</div></div>
+      <div class="cam__r"><div class="rot">Total</div>
+        <div class="cam__v num">{{ brl(-(outros|sum(attribute='total'))) }}</div></div>
+    </div>
+    <div class="tab"><table>
+      <thead><tr><th>Item</th>{% for m in months %}<th>{{ m.label }}</th>{% endfor %}<th class="acum">Total</th></tr></thead>
+      <tbody>{% for o in outros %}
+        <tr class="l-it"><td>{{ o.nome|title }}</td>
+          {% for m in months %}<td>{{ brl0(-o.by_month.get(m.key, 0)) }}</td>{% endfor %}
+          <td class="acum">{{ brl0(-o.total) }}</td></tr>{% endfor %}
+      </tbody></table></div>
+  </section>
+  {% endif %}
+
+  <div class="nota">Mesmos números do bloco Caminhões da Conf. Despesas: receita = fretes do caminhão;
+    custos = despesas lançadas no caminhão; motoristas = comissão dos fretes + salário e encargos rateados pelos fretes.
+    Toque em “Custos do caminhão” ou “Motoristas” para abrir o detalhe.</div>
+  {% endif %}
+
+  <div class="dica" id="ctrDica"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var raiz = document.getElementById('ctr');
+  if (!raiz) return;
+
+  /* abre/fecha: fechar um grupo fecha tudo o que está embaixo dele */
+  function fechar(id) {
+    raiz.querySelectorAll('tr[data-pai="' + id + '"]').forEach(function (tr) {
+      tr.hidden = true;
+      if (tr.dataset.abre) { tr.classList.remove('aberto'); fechar(tr.dataset.abre); }
+    });
+  }
+  raiz.querySelectorAll('tr[data-abre]').forEach(function (tr) {
+    tr.addEventListener('click', function () {
+      var id = tr.dataset.abre, abrir = !tr.classList.contains('aberto');
+      tr.classList.toggle('aberto', abrir);
+      if (abrir) raiz.querySelectorAll('tr[data-pai="' + id + '"]').forEach(function (f) { f.hidden = false; });
+      else fechar(id);
+    });
+  });
+
+  /* dica do gráfico */
+  var dica = document.getElementById('ctrDica');
+  raiz.querySelectorAll('.gm').forEach(function (g) {
+    g.addEventListener('mousemove', function (e) {
+      dica.innerHTML = '<b>' + g.dataset.mes + '</b><br>Receita ' + g.dataset.rec +
+        '<br>Custos ' + g.dataset.cus + '<br>Motoristas ' + g.dataset.mot +
+        '<br><b>Resultado ' + g.dataset.res + '</b>';
+      dica.style.display = 'block';
+      dica.style.left = Math.min(e.clientX + 14, window.innerWidth - 200) + 'px';
+      dica.style.top = (e.clientY + 14) + 'px';
+    });
+    g.addEventListener('mouseleave', function () { dica.style.display = 'none'; });
+  });
+
+  /* atalhos de período */
+  function iso(d) { return d.toISOString().slice(0, 10); }
+  raiz.querySelectorAll('[data-per]').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      var h = new Date(), y = h.getFullYear(), m = h.getMonth(), ini, fim;
+      if (a.dataset.per === 'ano') { ini = new Date(Date.UTC(y, 0, 1)); fim = new Date(Date.UTC(y, 11, 31)); }
+      else if (a.dataset.per === 'anoant') { ini = new Date(Date.UTC(y - 1, 0, 1)); fim = new Date(Date.UTC(y - 1, 11, 31)); }
+      else if (a.dataset.per === 'mes') { ini = new Date(Date.UTC(y, m, 1)); fim = new Date(Date.UTC(y, m + 1, 0)); }
+      else { ini = new Date(Date.UTC(y, m - 1, 1)); fim = new Date(Date.UTC(y, m, 0)); }
+      var f = a.closest('form');
+      f.data_inicio.value = iso(ini); f.data_fim.value = iso(fim); f.submit();
+    });
+  });
+})();
+</script>
+{% endblock %}
