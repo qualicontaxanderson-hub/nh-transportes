@@ -2160,6 +2160,10 @@ function mpdPintar() {
       barra.appendChild(seg);
     }
   }
+  /* Na ENTRADA o rodape e do mpcIr: sem isto, abrir uma "pronta" (lapis)
+     de credito sumia com o Voltar e o Confirmar (21/11/2026). */
+  var sd = document.getElementById('secao_debito');
+  if (sd && sd.style.display === 'none') return;
   mpRodape(noDestino ? 1 : 2, despesa, interno);
 }
 
