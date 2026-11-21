@@ -143,6 +143,8 @@ body > .container-fluid:has(#ctr){
 #ctr th.acum, #ctr td.acum{ background:#f7f3e6; font-weight:800; }
 #ctr td{ padding:.38rem .45rem; text-align:right; white-space:nowrap; border-bottom:1px solid var(--linha); }
 #ctr tr{ background:#fff; }
+#ctr tr.l-lsub td{ font-size:.72rem; }
+#ctr tr.l-lsub td:first-child{ padding-left:1.5rem; }
 #ctr td.dr{ cursor:pointer; }
 #ctr td.dr:hover{ background:#dbeafe !important; color:var(--blue); text-decoration:underline; }
 #ctr td.dr.sel{ outline:2px solid var(--blue); outline-offset:-2px; background:#dbeafe !important; }
@@ -315,6 +317,11 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
           <tr class="l-info"><td>Litros transportados</td>
             {% for m in months %}<td>{{ lt(t.litros[m.key]) }}</td>{% endfor %}
             <td class="acum">{{ lt(t.tot.litros) }}</td></tr>
+          {% for d in t.litros_det %}
+          <tr class="l-info l-lsub"><td>Transportes - {{ d.nome }}</td>
+            {% for m in months %}<td>{{ lt(d.by_month[m.key]) }}</td>{% endfor %}
+            <td class="acum">{{ lt(d.total) }}</td></tr>
+          {% endfor %}
 
           {% set gid = 'c' ~ t.vid %}
           <tr class="l-grp" data-abre="{{ gid }}"><td><span class="seta">▸</span>(−) Custos do caminhão</td>

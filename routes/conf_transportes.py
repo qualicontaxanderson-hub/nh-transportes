@@ -41,6 +41,35 @@ def _placas(conn):
     return out
 
 
+def _litros_por_destino(conn, data_inicio, data_fim):
+    """Litros de cada caminhão por mês, separados por quem recebeu:
+    cada cliente que não paga frete (valor do frete = 0, ex.: NH GTBA) numa
+    linha, e todo o resto (frete cobrado) em "Geral". Mesma conta de litros
+    da Conf. Despesas (COALESCE(quantidade_manual, q.valor, 0)), então a soma
+    das linhas bate com o total.
+    Retorna {vid: {nome: {mk: litros}}}."""
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT f.veiculos_id AS vid, DATE_FORMAT(f.data_frete, '%Y%m') AS mk,
+               CASE WHEN COALESCE(f.valor_total_frete, 0) = 0
+                    THEN COALESCE(NULLIF(c.nome_fantasia, ''), c.razao_social, 'Sem cliente')
+                    ELSE NULL END AS destino,
+               COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)), 0) AS litros
+          FROM fretes f
+          LEFT JOIN quantidades q ON q.id = f.quantidade_id
+          LEFT JOIN clientes c ON c.id = f.clientes_id
+         WHERE f.data_frete BETWEEN %s AND %s AND f.veiculos_id IS NOT NULL
+         GROUP BY 1, 2, 3
+    """, (data_inicio, data_fim))
+    out = {}
+    for r in cur.fetchall():
+        nome = r['destino'] or 'Geral'
+        d = out.setdefault(r['vid'], {}).setdefault(nome, {})
+        d[r['mk']] = d.get(r['mk'], 0.0) + float(r['litros'])
+    cur.close()
+    return out
+
+
 def _z(months):
     return {m['key']: 0.0 for m in months}
 
@@ -148,12 +177,23 @@ def conf_transportes():
         titulo_ids = _titulos_caminhoes(conn)
         veiculos, _ = _fetch_veiculos_motoristas(conn)
         placas = _placas(conn)
+        litros_dest = _litros_por_destino(conn, data_inicio, data_fim)
     finally:
         conn.close()
 
     ctx = _montar_relatorio(data_inicio, data_fim, [], titulo_ids) if titulo_ids else {'months': [], 'blocks': []}
     months = ctx['months']
     trucks, outros = _caminhoes(ctx['blocks'], months, veiculos, placas)
+    # Litros transportados abertos por destino (sem frete primeiro, Geral por último)
+    for t in trucks:
+        det = []
+        for nome, bym in litros_dest.get(t['vid'], {}).items():
+            b = {m['key']: bym.get(m['key'], 0.0) for m in months}
+            tot = sum(b.values())
+            if abs(tot) >= 0.5:
+                det.append({'nome': nome, 'by_month': b, 'total': tot})
+        det.sort(key=lambda d: (d['nome'] == 'Geral', -d['total']))
+        t['litros_det'] = det if len(det) > 1 or (det and det[0]['nome'] != 'Geral') else []
 
     # Frota inteira = caminhões + outros custos de transporte (frete de terceiros…)
     frota = {'receita': _z(months), 'custos': _z(months), 'mot': _z(months),
