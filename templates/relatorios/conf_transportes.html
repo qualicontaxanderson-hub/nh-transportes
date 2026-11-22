@@ -343,6 +343,16 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
         <tr class="l-info"><td>Litros transportados</td>
           {% for m in months %}<td>{{ lt(frota.litros[m.key]) }}</td>{% endfor %}
           <td class="acum">{{ lt(frota_tot.litros) }}</td></tr>
+        {% if sem_cobranca %}
+        {% for sc in sem_cobranca %}
+        <tr class="l-info l-lsub"><td>Transportes - {{ sc.nome }} <small>(sem cobrança)</small></td>
+          {% for m in months %}<td>{{ lt(sc.litros[m.key]) }}</td>{% endfor %}
+          <td class="acum">{{ lt(sc.litros_tot) }}</td></tr>
+        {% endfor %}
+        <tr class="l-info l-lsub"><td>Transportes - Geral <small>(frete cobrado)</small></td>
+          {% for m in months %}<td>{{ lt(litros_cob[m.key]) }}</td>{% endfor %}
+          <td class="acum">{{ lt(litros_cob.values()|sum) }}</td></tr>
+        {% endif %}
         <tr class="l-cpl"><td>Custo por litro sem cobrança <small>(resultado ÷ litros sem cobrança)</small></td>
           {% for m in months %}<td>{{ cpl(frota_cpl[m.key]) }}</td>{% endfor %}
           <td class="acum">{{ cpl(frota_cpl_tot) }}</td></tr>
@@ -610,19 +620,30 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
 
   /* frete de terceiro simulado: digita o R$/litro do mês na própria célula */
   var URL_SIM = '{{ url_for("conf_transportes.conf_transportes_frete_simulado") }}';
-  function simGrava(cid, meses, valor) {
+  function simGrava(cid, meses, valor, td) {
+    /* o erro fica escrito na própria célula (e no alerta), para dar para ver o motivo */
+    function erro(msg) {
+      if (td) td.innerHTML = '<span style="color:#b42318;font-size:.68rem;white-space:normal;display:block;max-width:12rem">' + esc(msg) + '</span>';
+      alert(msg);
+    }
+    if (td) td.innerHTML = '<span class="sim-vz">gravando…</span>';
     return fetch(URL_SIM, {method: 'POST', credentials: 'same-origin',
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
         body: JSON.stringify({cliente_id: cid, meses: meses, valor: valor})})
       .then(function (r) {
-        return r.json().catch(function () { return {ok: false, erro: 'O servidor recusou (HTTP ' + r.status + '). Recarregue a página e tente de novo.'}; });
+        return r.text().then(function (t) {
+          try { return JSON.parse(t); } catch (e) {
+            var txt = t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140);
+            return {ok: false, erro: 'Não gravou: o servidor respondeu HTTP ' + r.status + (r.redirected ? ' (redirecionou)' : '') + ' — ' + txt};
+          }
+        });
       })
       .then(function (d) {
-        if (!d.ok) { alert(d.erro || 'Não foi possível gravar.'); location.reload(); return; }
+        if (!d.ok) { erro(d.erro || 'Não foi possível gravar.'); return; }
         try { sessionStorage.setItem('ct-y', String(window.scrollY)); } catch (e) {}
         location.reload();
       })
-      .catch(function () { alert('Falha de conexão — nada foi gravado.'); });
+      .catch(function (e) { erro('Não gravou: falha de conexão (' + (e && e.message || e) + ').'); });
   }
   raiz.querySelectorAll('td.sim').forEach(function (td) {
     td.addEventListener('click', function () {
@@ -636,7 +657,7 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
         if (feito) return; feito = true;
         if (gravar && inp.value.trim() !== td.dataset.v) {
           inp.disabled = ok.disabled = true; ok.innerHTML = '…';
-          simGrava(+td.dataset.cid, [td.dataset.mes], inp.value.trim());
+          simGrava(+td.dataset.cid, [td.dataset.mes], inp.value.trim(), td);
         } else td.innerHTML = ant;
       }
       ok.addEventListener('mousedown', function (e) { e.preventDefault(); fim(true); });

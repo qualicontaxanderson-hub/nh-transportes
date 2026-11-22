@@ -331,6 +331,10 @@ def conf_transportes():
     _l = sum(livre_f.values())
     frota_cpl_tot = (_c / _l) if _l >= 0.5 else None
 
+    # litros com frete cobrado (Geral) = total da frota − sem cobrança
+    litros_cob = {m['key']: frota['litros'][m['key']] - sum(sc['litros'][m['key']] for sc in sem_cobranca)
+                  for m in months}
+
     # Só os meses com movimento
     ativos = [m for m in months
               if any(abs(frota[x][m['key']]) >= 0.005 for x in ('receita', 'custos', 'mot'))]
@@ -341,7 +345,7 @@ def conf_transportes():
         months=ativos, trucks=trucks, outros=outros,
         frota=frota, frota_tot=frota_tot,
         frota_cpl=frota_cpl, frota_cpl_tot=frota_cpl_tot,
-        sem_cobranca=sem_cobranca,
+        sem_cobranca=sem_cobranca, litros_cob=litros_cob,
     )
 
 @bp.route('/conf_transportes/frete_simulado', methods=['POST'])
