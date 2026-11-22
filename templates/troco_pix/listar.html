@@ -164,6 +164,7 @@ body > .container-fluid:has(#tpx){
     font-size:.64rem; font-weight:800; white-space:nowrap; }
   #tpx .selo--pend{ background:#fdf0d6; color:var(--ambar); }
   #tpx .selo--proc{ background:#e4f4e8; color:#1c6b34; }
+  #tpx .selo--rep{ background:#f0a020; color:#fff; text-decoration:none; }
   #tpx .selo--canc{ background:#e7ebf0; color:#3d4854; }
   #tpx .selo--conc{ background:#e4f4e8; color:#1c6b34; }
   #tpx .selo--falta{ background:#eaf1f9; color:var(--blue-deep); }
@@ -404,11 +405,16 @@ body > .container-fluid:has(#tpx){
             {% endif %}
             {% if st == 'CANCELADO' %}
             <span class="selo selo--canc">cancelado</span>{% endif %}
+            {% if t.get('dup_status') == 'PENDENTE' %}
+            <a class="selo selo--rep" href="{{ url_for('troco_pix.aprovar_repetido', troco_pix_id=t.id) }}"
+               onclick="event.stopPropagation()" title="Igual a outro troco lançado em menos de 30 min">
+              <i class="bi bi-exclamation-triangle-fill"></i> repetido: aguarda admin</a>{% endif %}
         {# Pix pronto (QR / copia e cola) — so o ADMIN paga. Some quando ja
            ligou ao extrato ou o banco avisou que o PIX saiu. #}
         {% set ja_saiu = t.get('pix_enviado_em') and not (t.get('pix_estornado_em')
              and t.pix_estornado_em >= t.pix_enviado_em) %}
         {% if tem_troco and not conc and not ja_saiu and st != 'CANCELADO'
+              and t.get('dup_status') != 'PENDENTE'
               and (current_user.nivel or '')|upper == 'ADMIN' %}
         <a class="bt bt--pagar" href="{{ url_for('troco_pix.pagar', troco_pix_id=t.id) }}"
            onclick="event.stopPropagation()" title="QR e Pix copia e cola para pagar no app do Cora">

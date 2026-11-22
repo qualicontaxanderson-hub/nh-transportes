@@ -506,8 +506,24 @@ body > .container-fluid:has(#tpn){
 {% endblock %}
 
 {% block scripts %}
+<style>
+#tpn-rep{ position:fixed; inset:0; background:rgba(15,23,32,.55); z-index:2000;
+  display:flex; align-items:center; justify-content:center; padding:16px; }
+#tpn-rep .rep__cx{ background:#fff; border-radius:16px; padding:1rem 1.1rem; max-width:420px; width:100%;
+  box-shadow:0 12px 40px rgba(0,0,0,.25); font-size:.92rem; color:#151d27; }
+#tpn-rep .rep__t{ font-weight:800; color:#8a5a00; font-size:1.02rem; margin-bottom:.5rem; }
+#tpn-rep p{ margin:.35rem 0; }
+#tpn-rep .rep__d{ background:#fff4dc; border-radius:10px; padding:.5rem .65rem; }
+#tpn-rep .rep__bts{ display:flex; gap:.5rem; margin-top:.8rem; }
+#tpn-rep .rep__bts button{ flex:1; border:0; border-radius:10px; padding:.7rem; font-weight:700; font-size:.95rem; cursor:pointer; }
+#tpn-rep .rep__nao{ background:#e7ebf0; color:#3d4854; }
+#tpn-rep .rep__sim{ background:#c08a2c; color:#fff; }
+</style>
+
 <script>
 var TPN_CLIENTES = {{ clientes_pix_json | safe }};
+var TPN_EDIT = {{ 'true' if edit_mode else 'false' }};
+var TPN_URL_REP = '{{ url_for("troco_pix.repetido") }}';
 
 // ─── dinheiro ────────────────────────────────────────────────────────────
 // O valor digitado aparece em real (1.234,56) e viaja como numero (1234.56).
@@ -850,6 +866,53 @@ document.addEventListener('DOMContentLoaded', function(){
   });
 
   // ─── envio ─────────────────────────────────────────────────────────────
+  // O Enter / "Ir" do teclado do celular NÃO salva (22/11/2026): salvou um
+  // troco antes das fotos e o frentista lançou de novo (N1/N2). Só o botão.
+  document.getElementById('tpn-form').addEventListener('keydown', function(ev){
+    if (ev.key !== 'Enter' && ev.keyCode !== 13) return;
+    var t = ev.target;
+    if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'BUTTON' || t.type === 'submit')) return;
+    ev.preventDefault();
+    if (t && t.blur) t.blur();
+  });
+
+  // Troco igual em 30 min: pergunta na tela antes de gravar
+  function tpnHidden(f){
+    var campos = document.querySelectorAll('#tpn .money');
+    for (var i = 0; i < campos.length; i++){
+      var c = campos[i];
+      if (!c.name) continue;
+      var h = document.createElement('input');
+      h.type = 'hidden';
+      h.name = c.name;
+      h.value = c.getAttribute('data-raw-value') || '0';
+      c.removeAttribute('name');
+      f.appendChild(h);
+    }
+  }
+  function tpnEnvia(f){ tpnHidden(f); f.submit(); }
+  function tpnPerguntaRep(d, f){
+    var r = d.dup, ant = document.getElementById('tpn-rep');
+    if (ant) ant.remove();
+    var m = document.createElement('div');
+    m.id = 'tpn-rep';
+    m.innerHTML =
+      '<div class="rep__cx" role="dialog" aria-modal="true">' +
+      '<div class="rep__t"><i class="bi bi-exclamation-triangle-fill"></i> Este troco já foi lançado?</div>' +
+      '<p>Há ' + (r.minutos < 1 ? 'menos de 1 minuto' : r.minutos + ' min') + ' (às ' + r.hora + ') foi lançado o <b>' + r.numero +
+      '</b> igual a este:</p>' +
+      '<p class="rep__d">' + (r.cliente || '') + '<br>Cheque <b>R$ ' + tpnFmt(r.cheque) + '</b> · PIX <b>R$ ' + tpnFmt(r.pix) + '</b></p>' +
+      '<p><b>Tem certeza que é outro troco?</b>' +
+      (d.precisa_admin ? ' Se sim, ele fica <b>aguardando a aprovação do admin</b> — depois mande o link para ele.' : '') + '</p>' +
+      '<div class="rep__bts"><button type="button" class="rep__nao">Não, cancelar</button>' +
+      '<button type="button" class="rep__sim">Sim, é outro troco</button></div></div>';
+    document.body.appendChild(m);
+    m.querySelector('.rep__nao').onclick = function(){ m.remove(); };
+    m.querySelector('.rep__sim').onclick = function(){
+      this.disabled = true; this.textContent = 'Gravando…'; tpnEnvia(f);
+    };
+  }
+
   document.getElementById('tpn-form').addEventListener('submit', function(ev){
     var erro = document.getElementById('tpn-erro');
     var pix = tpnConta();
@@ -890,6 +953,21 @@ document.addEventListener('DOMContentLoaded', function(){
       return;
     }
     erro.hidden = true;
+    if (!TPN_EDIT){
+      // pergunta ao servidor se há troco igual; se a consulta falhar, grava
+      // (o servidor confere de novo e segura para o admin)
+      ev.preventDefault();
+      var f = this, pc = f.querySelector('[name="cliente_id"]');
+      var q = 'cliente_id=' + encodeURIComponent(pc ? pc.value : '') +
+              '&pix=' + encodeURIComponent(cid) +
+              '&cheque=' + tpnValor('cheque_valor').toFixed(2) +
+              '&troco=' + Math.max(pix, 0).toFixed(2);
+      fetch(TPN_URL_REP + '?' + q, {credentials: 'same-origin'})
+        .then(function(r){ return r.json(); })
+        .then(function(d){ if (d && d.dup) tpnPerguntaRep(d, f); else tpnEnvia(f); })
+        .catch(function(){ tpnEnvia(f); });
+      return;
+    }
     // Cada valor viaja como número cru, em hidden — é o que as rotas /novo e
     // /editar sempre receberam.
     var campos = document.querySelectorAll('#tpn .money');

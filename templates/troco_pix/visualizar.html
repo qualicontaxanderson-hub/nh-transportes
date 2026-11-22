@@ -37,6 +37,17 @@ body > .container-fluid:has(#tpv){
     letter-spacing:.02em; }
   #tpv .topo__s{ font-size:.76rem; opacity:.96; margin-top:.15rem; }
 
+  #tpv .rep{ border-radius:12px; padding:.65rem .75rem; margin-bottom:.7rem; font-size:.84rem; }
+  #tpv .rep--pend{ background:#fff4dc; border:1px solid #f0c66b; color:#6b4500; }
+  #tpv .rep--ok{ background:#e4f4e8; color:#1c6b34; }
+  #tpv .rep__t{ font-weight:800; }
+  #tpv .rep__s{ margin:.2rem 0 .5rem; }
+  #tpv .rep__link{ width:100%; font-size:.75rem; border:1px solid #e3c27f; border-radius:8px;
+    padding:.35rem .5rem; background:#fff; color:#4b5563; margin-bottom:.45rem; }
+  #tpv .rep__bts{ display:flex; gap:.45rem; flex-wrap:wrap; }
+  #tpv .rep__bt{ display:inline-flex; align-items:center; gap:.3rem; border:0; border-radius:9px;
+    padding:.45rem .8rem; font-weight:700; background:#c08a2c; color:#fff; text-decoration:none; cursor:pointer; }
+  #tpv .rep__bt--zap{ background:#17963C; }
   #tpv .flash{ border-radius:11px; padding:.55rem .7rem; font-size:.82rem;
     font-weight:700; margin-bottom:.7rem; background:#e4f4e8; color:#146c43; }
   #tpv .flash--danger{ background:#fbe9e9; color:var(--danger); }
@@ -129,6 +140,36 @@ body > .container-fluid:has(#tpv){
       {{ message }}</div>
     {% endfor %}
   {% endwith %}
+
+  {# Troco repetido (22/11/2026): aguardando o ADMIN, com o link para mandar #}
+  {% if repetido %}
+  {% set eh_adm = (current_user.nivel or '')|upper == 'ADMIN' %}
+  {% if repetido.status == 'PENDENTE' %}
+  <div class="rep rep--pend">
+    <div class="rep__t"><i class="bi bi-exclamation-triangle-fill"></i>
+      Troco repetido — aguardando aprovação do admin</div>
+    <div class="rep__s">Igual ao {{ repetido.duplicado_num or ('#' ~ repetido.duplicado_de) }}
+      (mesmo cliente, cheque e PIX em menos de 30 min).
+      Enquanto o admin não aprovar, o PIX não é pago.</div>
+    {% if eh_adm %}
+    <a class="rep__bt" href="{{ url_for('troco_pix.aprovar_repetido', troco_pix_id=transacao.id) }}">
+      <i class="bi bi-shield-check"></i> Aprovar ou recusar</a>
+    {% else %}
+    <input class="rep__link" id="repLink" readonly value="{{ link_aprovar }}" onclick="this.select()">
+    <div class="rep__bts">
+      <button type="button" class="rep__bt" id="repCopiar"><i class="bi bi-clipboard"></i> Copiar link</button>
+      <a class="rep__bt rep__bt--zap" target="_blank" rel="noopener"
+         href="https://wa.me/?text={{ ('Aprovar troco repetido ' ~ (transacao.numero_sequencial or transacao.id) ~ ' (igual ao ' ~ (repetido.duplicado_num or repetido.duplicado_de) ~ '): ' ~ link_aprovar)|urlencode }}">
+        <i class="bi bi-whatsapp"></i> Pedir aprovação</a>
+    </div>
+    {% endif %}
+  </div>
+  {% elif repetido.status == 'APROVADO' %}
+  <div class="rep rep--ok"><i class="bi bi-check-circle-fill"></i>
+    Troco repetido aprovado por {{ repetido.decidido_por_nome or 'admin' }}
+    (igual ao {{ repetido.duplicado_num or ('#' ~ repetido.duplicado_de) }}): ficam os dois.</div>
+  {% endif %}
+  {% endif %}
 
   {# O botao que resolve a tela: manda a solicitacao para quem faz o PIX. #}
   <button type="button" class="zap" id="btnCopyWhatsApp">
@@ -327,6 +368,10 @@ document.addEventListener('DOMContentLoaded', function() {
         btnCopyWhatsApp.addEventListener('click', function() {
             // Salvo parcial: so copia completo, com o cheque (20/11/2026)
             const ZAP_FALTA = {{ (zap_falta or [])|tojson }};
+            {% if repetido and repetido.status == 'PENDENTE' %}
+            alert('Este troco está aguardando a aprovação do admin (troco repetido).\n\nPeça a aprovação pelo botão amarelo antes de mandar o PIX.');
+            return;
+            {% endif %}
             if (ZAP_FALTA.length) {
                 alert('Ainda não dá para mandar no WhatsApp.\n\nFalta:\n• ' +
                       ZAP_FALTA.join('\n• ') + '\n\nToque em Corrigir e complete.');
@@ -472,5 +517,17 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+</script>
+<script>
+(function(){
+  var b = document.getElementById('repCopiar'), i = document.getElementById('repLink');
+  if (!b || !i) return;
+  b.addEventListener('click', function(){
+    i.select();
+    var ok = function(){ b.innerHTML = '<i class="bi bi-check-lg"></i> Copiado'; };
+    if (navigator.clipboard) navigator.clipboard.writeText(i.value).then(ok, function(){ document.execCommand('copy'); ok(); });
+    else { document.execCommand('copy'); ok(); }
+  });
+})();
 </script>
 {% endblock %}

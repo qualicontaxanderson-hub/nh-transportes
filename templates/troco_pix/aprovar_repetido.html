@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Troco repetido – Troco PIX{% endblock %}
+
+{#- Troco repetido (22/11/2026): o link que o frentista manda. O ADMIN vê os
+    dois lançamentos lado a lado e decide: aprovar (ficam os dois) ou recusar
+    (o novo é apagado, com o lançamento de caixa dele). -#}
+
+{% block content %}
+<style>
+  #tpa{ max-width:720px; margin:0 auto; padding:1rem 16px 2rem; color:#151d27; }
+  #tpa h1{ font-size:1.15rem; font-weight:800; margin:0 0 .3rem; }
+  #tpa .sub{ color:#4b5563; font-size:.88rem; margin-bottom:.9rem; }
+  #tpa .flash{ border-radius:11px; padding:.55rem .7rem; font-size:.85rem; margin-bottom:.6rem;
+    background:#e4f4e8; color:#1c6b34; }
+  #tpa .flash--danger{ background:#fbe4e4; color:#a32d2d; }
+  #tpa .flash--warning{ background:#fff4dc; color:#6b4500; }
+  #tpa .dois{ display:grid; grid-template-columns:1fr 1fr; gap:.7rem; }
+  @media (max-width:560px){ #tpa .dois{ grid-template-columns:1fr; } }
+  #tpa .cx{ background:#fff; border:1px solid #d9e0e8; border-radius:14px; padding:.75rem .85rem; }
+  #tpa .cx--novo{ border-color:#f0c66b; background:#fffaf0; }
+  #tpa .cx__r{ font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:#6b7785; }
+  #tpa .cx__n{ font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:800; margin:.15rem 0 .45rem; }
+  #tpa .cx__n a{ color:#1D63A5; text-decoration:none; }
+  #tpa .li{ display:flex; justify-content:space-between; gap:.5rem; font-size:.86rem; padding:.18rem 0;
+    border-top:1px solid #eef1f5; }
+  #tpa .li span:first-child{ color:#4b5563; }
+  #tpa .li b{ text-align:right; }
+  #tpa .est{ border-radius:12px; padding:.75rem .85rem; margin-top:.9rem; font-weight:600; }
+  #tpa .est--pend{ background:#fff4dc; color:#6b4500; }
+  #tpa .est--ok{ background:#e4f4e8; color:#1c6b34; }
+  #tpa .est--rec{ background:#e7ebf0; color:#3d4854; }
+  #tpa .bts{ display:flex; gap:.6rem; margin-top:.9rem; }
+  #tpa .bts form{ flex:1; }
+  #tpa .bts button{ width:100%; border:0; border-radius:11px; padding:.8rem; font-weight:800; font-size:1rem; cursor:pointer; }
+  #tpa .bt-ok{ background:#17963C; color:#fff; }
+  #tpa .bt-rec{ background:#a32d2d; color:#fff; }
+  #tpa .voltar{ display:inline-block; margin-top:1rem; color:#4b5563; }
+</style>
+<div id="tpa">
+  <h1><i class="bi bi-exclamation-triangle-fill" style="color:#c08a2c"></i> Troco repetido</h1>
+  <div class="sub">Mesmo cliente PIX, mesmo cheque e mesmo PIX lançados em menos de 30 minutos.</div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+    <div class="flash {{ 'flash--danger' if category == 'danger' else 'flash--warning' if category == 'warning' else '' }}">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  {% macro cartao(t, rotulo, classe) %}
+  <div class="cx {{ classe }}">
+    <div class="cx__r">{{ rotulo }}</div>
+    {% if t %}
+    <div class="cx__n"><a href="{{ url_for('troco_pix.visualizar', troco_pix_id=t.id) }}">{{ t.numero_sequencial or ('#' ~ t.id) }}</a></div>
+    <div class="li"><span>Lançado às</span><b>{{ hora_br(t.criado_em) }} por {{ t.criado_por_nome or '—' }}</b></div>
+    <div class="li"><span>Frentista</span><b>{{ t.frentista_nome or '—' }}</b></div>
+    <div class="li"><span>Cliente PIX</span><b>{{ t.cliente_pix_nome or '—' }}</b></div>
+    <div class="li"><span>Venda</span><b>{{ (t.venda_total or 0)|formatar_moeda }}</b></div>
+    <div class="li"><span>Cheque</span><b>{{ (t.cheque_valor or 0)|formatar_moeda }}</b></div>
+    <div class="li"><span>Troco PIX</span><b>{{ (t.troco_pix or 0)|formatar_moeda }}</b></div>
+    <div class="li"><span>PIX</span><b>{{ 'já saiu' if (t.pix_enviado_em or t.bank_transaction_id) else 'não pago' }}</b></div>
+    {% else %}
+    <div class="cx__n">apagado</div>
+    {% endif %}
+  </div>
+  {% endmacro %}
+
+  <div class="dois">
+    {{ cartao(antigo, 'Lançado primeiro', '') }}
+    {{ cartao(novo, 'Lançado de novo (este pedido)', 'cx--novo') }}
+  </div>
+
+  {% if dup.status == 'PENDENTE' %}
+    {% if eh_admin %}
+    <div class="est est--pend">É outro troco de verdade? Aprovando, ficam os dois. Recusando, o lançado de novo é apagado.</div>
+    <div class="bts">
+      <form method="post" onsubmit="return confirm('Recusar e APAGAR o lançamento repetido?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="bt-rec" name="acao" value="recusar"><i class="bi bi-x-lg"></i> Recusar (apagar)</button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="bt-ok" name="acao" value="aprovar"><i class="bi bi-check-lg"></i> Aprovar (ficam os dois)</button>
+      </form>
+    </div>
+    {% else %}
+    <div class="est est--pend">Aguardando o admin aprovar. Mande este link para ele.</div>
+    {% endif %}
+  {% elif dup.status == 'APROVADO' %}
+    <div class="est est--ok"><i class="bi bi-check-circle-fill"></i> Aprovado por {{ dup.decidido_por_nome or 'admin' }}: ficam os dois.</div>
+  {% else %}
+    <div class="est est--rec">Recusado por {{ dup.decidido_por_nome or 'admin' }}: o lançamento repetido foi apagado.</div>
+  {% endif %}
+
+  <a class="voltar" href="{{ url_for('troco_pix.listar') }}"><i class="bi bi-arrow-left"></i> Voltar aos trocos</a>
+</div>
+{% endblock %}
