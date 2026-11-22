@@ -13,7 +13,7 @@ Rota:
 from calendar import monthrange
 from datetime import date
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required
 
 from routes.auth import admin_required
@@ -385,6 +385,58 @@ def conf_transportes_frete_simulado():
     finally:
         conn.close()
     return jsonify({'ok': True})
+
+
+def _valor_litro(txt):
+    """'0,13' / '0.13' / 'R$ 0,13' -> 0.13; vazio -> None; inválido -> ValueError."""
+    txt = str(txt or '').strip().replace('R$', '').replace(' ', '')
+    if ',' in txt:
+        txt = txt.replace('.', '').replace(',', '.')
+    if not txt:
+        return None
+    v = float(txt)
+    if not 0 <= v < 100:
+        raise ValueError(txt)
+    return v
+
+
+@bp.route('/conf_transportes/frete_simulado_form', methods=['POST'])
+@login_required
+@admin_required
+def conf_transportes_frete_simulado_form():
+    """Mesmo que o de cima, por formulário comum: um campo v_YYYYMM por mês
+    (vazio apaga). Volta para a tela no mesmo período."""
+    from flask_login import current_user
+    f = request.form
+    ini, fim = f.get('data_inicio', ''), f.get('data_fim', '')
+    volta = url_for('conf_transportes.conf_transportes', data_inicio=ini, data_fim=fim)
+    try:
+        cid = int(f.get('cliente_id'))
+        valores = {}
+        for k in f:
+            if k.startswith('v_') and len(k) == 8 and k[2:].isdigit() and 1 <= int(k[6:]) <= 12:
+                valores[k[2:]] = _valor_litro(f.get(k))
+    except (TypeError, ValueError):
+        flash('Frete simulado não gravado: valor inválido (use, por exemplo, 0,13).', 'danger')
+        return redirect(volta + '#sim-%s' % f.get('cliente_id', ''))
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(_DDL_SIM)
+        for m, v in valores.items():
+            if v is None:
+                cur.execute("DELETE FROM conf_transp_frete_sim WHERE cliente_id=%s AND mes=%s", (cid, m))
+            else:
+                cur.execute("""INSERT INTO conf_transp_frete_sim (cliente_id, mes, valor_litro, atualizado_por)
+                               VALUES (%s, %s, %s, %s)
+                               ON DUPLICATE KEY UPDATE valor_litro=VALUES(valor_litro),
+                                                       atualizado_por=VALUES(atualizado_por)""",
+                            (cid, m, round(v, 4), getattr(current_user, 'username', None)))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+    return redirect(volta + '#sim-%d' % cid)
 
 
 def _meses(ini, fim, mes):

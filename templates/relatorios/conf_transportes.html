@@ -220,6 +220,13 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
   padding:1px 4px; font:inherit; color:var(--ink); }
 #ctr .sim-ok{ margin-left:3px; border:0; background:#c08a2c; color:#fff; border-radius:6px;
   padding:1px 6px; font-size:.75rem; cursor:pointer; vertical-align:middle; }
+#ctr td.sim-c input{ width:4.4rem; text-align:right; border:1px solid #e3c27f; border-radius:6px;
+  padding:1px 5px; font:inherit; color:#7a4b00; background:#fff; }
+#ctr td.sim-c input:focus{ outline:2px solid #c08a2c; border-color:#c08a2c; }
+#ctr .sim-grava{ margin-left:.4rem; border:0; background:#c08a2c; color:#fff; border-radius:6px;
+  font-size:.68rem; padding:1px .5rem; font-weight:700; cursor:pointer; }
+#ctr .sim-rep{ margin-left:.25rem; border:1px solid #e3c27f; background:#fff; color:#7a4b00;
+  border-radius:6px; font-size:.64rem; padding:0 .35rem; font-weight:700; cursor:pointer; }
 #ctr .sim-tudo{ margin-left:.4rem; border:1px solid #e3c27f; background:#fff; color:#7a4b00;
   border-radius:6px; font-size:.64rem; padding:0 .35rem; font-weight:700; cursor:pointer; }
 #ctr tr.l-sim2 td{ font-size:.76rem; color:#7a4b00; background:#fffdf7; }
@@ -361,12 +368,13 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
           {% for m in months %}<td>{{ brl0(sc.custo[m.key]) }}</td>{% endfor %}
           <td class="acum">{{ brl0(sc.custo_tot) }}</td></tr>
         {% if sc.cid %}
-        <tr class="l-sim"><td>Frete terceiro simulado (R$/litro) - {{ sc.nome }}
-            <button type="button" class="sim-tudo" data-cid="{{ sc.cid }}" data-nome="{{ sc.nome }}"
-                    data-meses="{{ months|map(attribute='key')|join(',') }}">repetir em todos</button></td>
+        <tr class="l-sim" id="sim-{{ sc.cid }}"><td>Frete terceiro simulado (R$/litro) - {{ sc.nome }}
+            <button type="submit" form="fsim{{ sc.cid }}" class="sim-grava"><i class="bi bi-check-lg"></i> Gravar</button>
+            <button type="button" class="sim-rep" data-cid="{{ sc.cid }}" title="Copia o 1º valor preenchido para os meses vazios (depois clique em Gravar)">repetir</button></td>
           {% for m in months %}{% set t_ = sc.tarifa[m.key] %}
-            <td class="sim" data-cid="{{ sc.cid }}" data-mes="{{ m.key }}" data-v="{{ '' if t_ is none else ('%.4f' % t_).rstrip('0').rstrip('.').replace('.', ',') }}"
-                title="Clique para digitar o frete por litro de {{ m.label }}">{% if t_ is none %}<span class="sim-vz">definir</span>{% else %}R$ {{ ('%.4f' % t_).replace('.', ',') }}{% endif %}</td>
+            <td class="sim-c"><input type="text" inputmode="decimal" class="sim-in" form="fsim{{ sc.cid }}"
+                name="v_{{ m.key }}" placeholder="—" autocomplete="off"
+                value="{{ '' if t_ is none else ('%.4f' % t_).rstrip('0').rstrip('.').replace('.', ',') }}"></td>
           {% endfor %}
           <td class="acum">{% if sc.tarifa_media is none %}—{% else %}R$ {{ ('%.4f' % sc.tarifa_media).replace('.', ',') }}{% endif %}</td></tr>
         {% if sc.tem_sim %}
@@ -381,6 +389,14 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
         {% endif %}
         {% endfor %}
       </tbody></table></div>
+    {% for sc in sem_cobranca %}{% if sc.cid %}
+    <form id="fsim{{ sc.cid }}" method="post" action="{{ url_for('conf_transportes.conf_transportes_frete_simulado_form') }}" style="display:none">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="cliente_id" value="{{ sc.cid }}">
+      <input type="hidden" name="data_inicio" value="{{ data_inicio }}">
+      <input type="hidden" name="data_fim" value="{{ data_fim }}">
+    </form>
+    {% endif %}{% endfor %}
   </section>
 
 
@@ -666,6 +682,14 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
         if (e.key === 'Escape') fim(false);
       });
       inp.addEventListener('blur', function () { fim(true); });
+    });
+  });
+  raiz.querySelectorAll('.sim-rep').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var ins = raiz.querySelectorAll('input.sim-in[form="fsim' + b.dataset.cid + '"]'), v = '';
+      ins.forEach(function (i) { if (!v && i.value.trim()) v = i.value.trim(); });
+      if (!v) { alert('Digite o valor em um mês primeiro (ex.: 0,13).'); return; }
+      ins.forEach(function (i) { if (!i.value.trim()) i.value = v; });
     });
   });
   raiz.querySelectorAll('.sim-tudo').forEach(function (b) {
