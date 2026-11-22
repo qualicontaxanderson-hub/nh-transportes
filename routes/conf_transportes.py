@@ -130,7 +130,9 @@ def _caminhoes(blocks, months, veiculos, placas):
                      for k in soma_custos}
             if any(abs(v) >= 0.005 for v in resto.values()):
                 custos.append({'nome': 'OUTRAS DESPESAS', 'by_month': resto,
-                               'total': sum(resto.values())})
+                               'total': sum(resto.values()),
+                               'drill': ({'tit': block.get('titulo_id'), 'cat': row.get('categoria_id'),
+                                          'sub': 'nenhuma'} if row.get('drill') else None)})
                 for k, v in resto.items():
                     soma_custos[k] += v
             custos.sort(key=lambda c: -c['total'])

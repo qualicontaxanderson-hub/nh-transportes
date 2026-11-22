@@ -1884,7 +1884,9 @@ def conf_despesas_lancamentos():
 
     where = ['ld.data BETWEEN %s AND %s', 'ld.titulo_id = %s', 'ld.categoria_id = %s']
     params = [ini, fim, titulo_id, categoria_id]
-    if sub:
+    if sub == 'nenhuma':                      # lançado sem subcategoria
+        where.append('ld.subcategoria_id IS NULL')
+    elif sub:
         where.append('ld.subcategoria_id = %s')
         params.append(int(sub))
     if empresa_ids:
@@ -1929,7 +1931,9 @@ def conf_despesas_lancamentos():
             from utils import frota_despesa as fd
             vincs = [v for v in fd.vinculos(conn)
                      if v['titulo_id'] == titulo_id and v['categoria_id'] == categoria_id
-                     and (not sub or v['subcategoria_id'] == int(sub))]
+                     and (not sub or (sub != 'nenhuma' and v['subcategoria_id'] == int(sub)))]
+            if sub == 'nenhuma':
+                vincs = []
             if vincs:
                 subs = {v['subcategoria_id'] for v in vincs}
                 linhas = [l for l in linhas
