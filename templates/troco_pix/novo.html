@@ -891,6 +891,10 @@ document.addEventListener('DOMContentLoaded', function(){
     }
   }
   function tpnEnvia(f){ tpnHidden(f); f.submit(); }
+  // a trava geral (app.js) poe "Salvando..." e desliga os botoes; no "Nao" eles voltam
+  var tpnBts = [].map.call(document.querySelectorAll('#tpn-form button[type="submit"]'),
+                           function(b){ return [b, b.innerHTML]; });
+  function tpnSolta(){ tpnBts.forEach(function(x){ x[0].disabled = false; x[0].innerHTML = x[1]; }); }
   function tpnPerguntaRep(d, f){
     var r = d.dup, ant = document.getElementById('tpn-rep');
     if (ant) ant.remove();
@@ -907,7 +911,7 @@ document.addEventListener('DOMContentLoaded', function(){
       '<div class="rep__bts"><button type="button" class="rep__nao">Não, cancelar</button>' +
       '<button type="button" class="rep__sim">Sim, é outro troco</button></div></div>';
     document.body.appendChild(m);
-    m.querySelector('.rep__nao').onclick = function(){ m.remove(); };
+    m.querySelector('.rep__nao').onclick = function(){ m.remove(); tpnSolta(); };
     m.querySelector('.rep__sim').onclick = function(){
       this.disabled = true; this.textContent = 'Gravando…'; tpnEnvia(f);
     };
