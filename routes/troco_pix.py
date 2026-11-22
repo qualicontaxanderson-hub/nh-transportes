@@ -448,6 +448,19 @@ def listar():
             cursor.execute(query, [data_inicio, data_fim] + combined_filter_params)
         transacoes = cursor.fetchall()
         
+        # troco repetido aguardando o ADMIN (22/11/2026)
+        try:
+            ids = [t['id'] for t in transacoes]
+            if ids:
+                _dup_tabela(conn)
+                cursor.execute("SELECT troco_pix_id, status FROM troco_pix_dup_aprov WHERE troco_pix_id IN (%s)"
+                               % ','.join(['%s'] * len(ids)), ids)
+                dst = {r['troco_pix_id']: r['status'] for r in cursor.fetchall()}
+                for t in transacoes:
+                    t['dup_status'] = dst.get(t['id'])
+        except Exception as e:
+            print('[troco_pix] repetidos da lista: %s' % e)
+
         # Buscar lista de clientes para filtro (apenas com produtos cadastrados)
         cursor.execute("""
             SELECT DISTINCT c.id, c.razao_social 
@@ -601,6 +614,12 @@ def visualizar(troco_pix_id):
         except Exception as e:
             print('[troco_pix] cupom do troco %s: %s' % (troco_pix_id, e))
 
+        try:
+            repetido = _dup_do_troco(conn, troco_pix_id)
+        except Exception as e:
+            print('[troco_pix] repetido %s: %s' % (troco_pix_id, e))
+            repetido = None
+
         cursor.close()
         conn.close()
 
@@ -616,6 +635,8 @@ def visualizar(troco_pix_id):
                     zap_falta.append('foto %s do cheque %d' % (' e '.join(lados), n))
 
         return render_template('troco_pix/visualizar.html',
+                             repetido=repetido,
+                             link_aprovar=_url_publica('troco_pix.aprovar_repetido', troco_pix_id=troco_pix_id) if repetido else '',
                              zap_falta=zap_falta,
                              cheques=cheques,
                              cupom=cupom,
@@ -958,6 +979,180 @@ def foto_celular(token):
         conn.close()
 
 
+# ==================== TROCO REPETIDO (22/11/2026) ====================
+# O mesmo troco lançado duas vezes (o Enter do celular salvou antes das fotos e
+# o frentista lançou de novo: PIX-22-11-2026-N1/N2). Mesmo posto, mesmo cliente
+# PIX, mesmo cheque e mesmo PIX em 30 minutos: a tela pergunta "tem certeza?" e,
+# se sim, o novo fica aguardando o ADMIN. Aprovado, ficam os dois; recusado, o
+# novo é apagado. Se o próprio ADMIN lança, já fica aprovado.
+
+DUP_MINUTOS = 30
+_DDL_DUP = """CREATE TABLE IF NOT EXISTS troco_pix_dup_aprov (
+    troco_pix_id INT NOT NULL PRIMARY KEY,
+    duplicado_de INT NOT NULL,
+    duplicado_num VARCHAR(50) NULL,
+    pedido_por INT NULL,
+    pedido_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(10) NOT NULL DEFAULT 'PENDENTE',
+    decidido_por INT NULL,
+    decidido_em TIMESTAMP NULL)"""
+_dup_tabela_ok = False
+
+
+def _dup_tabela(conn):
+    """CREATE TABLE faz commit implícito: chamar fora de transação."""
+    global _dup_tabela_ok
+    if not _dup_tabela_ok:
+        c = conn.cursor()
+        c.execute(_DDL_DUP)
+        c.close()
+        _dup_tabela_ok = True
+
+
+def _dup_procura(conn, posto_id, pix_cli_id, cheque_valor, troco_pix, ignora_id=0):
+    """O troco igual mais recente dos últimos 30 minutos, ou None."""
+    try:
+        chq, pix = float(cheque_valor or 0), float(troco_pix or 0)
+        posto_id, pix_cli_id = int(posto_id), int(pix_cli_id)
+    except (TypeError, ValueError):
+        return None
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT tp.id, tp.numero_sequencial, tp.criado_em, tp.cheque_valor, tp.troco_pix,
+               tpc.nome_completo AS cliente_pix_nome,
+               TIMESTAMPDIFF(MINUTE, tp.criado_em, NOW()) AS minutos
+          FROM troco_pix tp
+          LEFT JOIN troco_pix_clientes tpc ON tpc.id = tp.troco_pix_cliente_id
+         WHERE tp.cliente_id = %s AND tp.troco_pix_cliente_id = %s
+           AND ABS(tp.cheque_valor - %s) < 0.005
+           AND ABS(COALESCE(tp.troco_pix, 0) - %s) < 0.005
+           AND COALESCE(tp.status, '') <> 'CANCELADO'
+           AND tp.criado_em >= NOW() - INTERVAL %s MINUTE
+           AND tp.id <> %s
+         ORDER BY tp.id DESC LIMIT 1""",
+        (posto_id, pix_cli_id, chq, pix, DUP_MINUTOS, int(ignora_id or 0)))
+    r = cur.fetchone()
+    cur.close()
+    return r
+
+
+def _hora_br(dt):
+    """criado_em vem do MySQL em UTC; a tela fala em horário de Brasília."""
+    return (dt - timedelta(hours=3)).strftime('%H:%M') if dt else ''
+
+
+def _dup_do_troco(conn, troco_pix_id):
+    _dup_tabela(conn)
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""SELECT d.*, u.username AS pedido_por_nome, u2.username AS decidido_por_nome
+                     FROM troco_pix_dup_aprov d
+                     LEFT JOIN usuarios u ON u.id = d.pedido_por
+                     LEFT JOIN usuarios u2 ON u2.id = d.decidido_por
+                    WHERE d.troco_pix_id = %s""", (troco_pix_id,))
+    r = cur.fetchone()
+    cur.close()
+    return r
+
+
+@troco_pix_bp.route('/repetido')
+@login_required
+def repetido():
+    """A tela de lançar pergunta antes de gravar (GET: sem CSRF, sem surpresa)."""
+    from flask import jsonify
+    a = request.args
+    posto = a.get('cliente_id')
+    if (getattr(current_user, 'nivel', '') or '').upper() == 'PISTA':
+        posto = getattr(current_user, 'cliente_id', None)
+    conn = get_db_connection()
+    try:
+        d = _dup_procura(conn, posto, a.get('pix'), a.get('cheque'), a.get('troco'))
+    finally:
+        conn.close()
+    if not d:
+        return jsonify({'dup': None})
+    return jsonify({'dup': {
+        'numero': d['numero_sequencial'] or ('#%d' % d['id']),
+        'hora': _hora_br(d['criado_em']),
+        'minutos': int(d['minutos'] or 0),
+        'cliente': d['cliente_pix_nome'] or '',
+        'cheque': float(d['cheque_valor'] or 0),
+        'pix': float(d['troco_pix'] or 0)},
+        'precisa_admin': not _so_admin()})
+
+
+@troco_pix_bp.route('/aprovar/<int:troco_pix_id>', methods=['GET', 'POST'])
+@login_required
+def aprovar_repetido(troco_pix_id):
+    """O link que o frentista manda: o ADMIN vê os dois e aprova ou recusa."""
+    conn = get_db_connection()
+    try:
+        dup = _dup_do_troco(conn, troco_pix_id)
+        if not dup:
+            flash('Este troco não está aguardando aprovação.', 'warning')
+            return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
+        cur = conn.cursor(dictionary=True)
+        cur.execute("""SELECT tp.*, tpc.nome_completo AS cliente_pix_nome, f.nome AS frentista_nome,
+                              u.username AS criado_por_nome, cp.enviado_em AS pix_enviado_em
+                         FROM troco_pix tp
+                         LEFT JOIN troco_pix_clientes tpc ON tpc.id = tp.troco_pix_cliente_id
+                         LEFT JOIN funcionarios f ON f.id = tp.funcionario_id
+                         LEFT JOIN usuarios u ON u.id = tp.criado_por
+                         LEFT JOIN troco_pix_comprovantes cp ON cp.troco_pix_id = tp.id
+                        WHERE tp.id IN (%s, %s)""", (troco_pix_id, dup['duplicado_de']))
+        por_id = {r['id']: r for r in cur.fetchall()}
+        cur.close()
+        novo_t, antigo = por_id.get(troco_pix_id), por_id.get(dup['duplicado_de'])
+
+        if request.method == 'POST':
+            if not _so_admin():
+                flash('Só o ADMIN aprova troco repetido.', 'danger')
+                return redirect(url_for('troco_pix.aprovar_repetido', troco_pix_id=troco_pix_id))
+            if dup['status'] != 'PENDENTE':
+                flash('Este pedido já foi decidido.', 'warning')
+                return redirect(url_for('troco_pix.aprovar_repetido', troco_pix_id=troco_pix_id))
+            acao = request.form.get('acao')
+            cur = conn.cursor()
+            if acao == 'aprovar':
+                cur.execute("""UPDATE troco_pix_dup_aprov SET status='APROVADO', decidido_por=%s,
+                               decidido_em=NOW() WHERE troco_pix_id=%s""", (current_user.id, troco_pix_id))
+                conn.commit()
+                cur.close()
+                flash('Aprovado: ficam os dois lançamentos.', 'success')
+                return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
+            if acao == 'recusar':
+                if not novo_t:
+                    cur.close()
+                    flash('O troco já não existe.', 'warning')
+                    return redirect(url_for('troco_pix.listar'))
+                if novo_t.get('bank_transaction_id') or novo_t.get('pix_enviado_em'):
+                    cur.close()
+                    flash('O PIX deste troco já saiu: não dá para recusar. Confira no extrato.', 'danger')
+                    return redirect(url_for('troco_pix.aprovar_repetido', troco_pix_id=troco_pix_id))
+                lc = novo_t.get('lancamento_caixa_id')
+                for t in ('troco_pix_cheques', 'troco_pix_cupom', 'troco_pix_cupom_recusa'):
+                    cur.execute("DELETE FROM %s WHERE troco_pix_id = %%s" % t, (troco_pix_id,))
+                cur.execute("DELETE FROM troco_pix WHERE id = %s", (troco_pix_id,))
+                cur.execute("""UPDATE troco_pix_dup_aprov SET status='RECUSADO', decidido_por=%s,
+                               decidido_em=NOW() WHERE troco_pix_id=%s""", (current_user.id, troco_pix_id))
+                conn.commit()
+                cur.close()
+                if lc:
+                    excluir_lancamento_caixa_automatico(lc)
+                flash('Recusado: o lançamento repetido %s foi apagado; fica só o %s.'
+                      % (novo_t.get('numero_sequencial') or troco_pix_id,
+                         dup.get('duplicado_num') or dup['duplicado_de']), 'success')
+                if antigo:
+                    return redirect(url_for('troco_pix.visualizar', troco_pix_id=antigo['id']))
+                return redirect(url_for('troco_pix.listar'))
+            cur.close()
+
+        return render_template('troco_pix/aprovar_repetido.html', dup=dup, novo=novo_t,
+                               antigo=antigo, hora_br=_hora_br, eh_admin=_so_admin(),
+                               titulo='Troco repetido')
+    finally:
+        conn.close()
+
+
 @troco_pix_bp.route('/pagar/<int:troco_pix_id>')
 @login_required
 def pagar(troco_pix_id):
@@ -969,6 +1164,11 @@ def pagar(troco_pix_id):
         return redirect(url_for('troco_pix.listar'))
     from utils import pix_brcode
     conn = get_db_connection()
+    _dp = _dup_do_troco(conn, troco_pix_id)
+    if _dp and _dp['status'] == 'PENDENTE':
+        conn.close()
+        flash('Troco repetido aguardando aprovação: aprove antes de pagar.', 'warning')
+        return redirect(url_for('troco_pix.aprovar_repetido', troco_pix_id=troco_pix_id))
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("""
@@ -1211,6 +1411,10 @@ def novo():
             flash(erro_sp, 'warning')
             return redirect(url_for('troco_pix.novo'))
 
+        # Troco repetido em 30 min (22/11/2026): grava, mas fica aguardando o ADMIN
+        _dup_tabela(conn)
+        dup = _dup_procura(conn, cliente_id, troco_pix_cliente_id, cheque_valor, troco_pix)
+
         # Gerar número sequencial
         numero_sequencial = gerar_numero_troco_pix(data_transacao)
         
@@ -1238,6 +1442,19 @@ def novo():
         
         conn.commit()
         troco_pix_id = cursor.lastrowid
+
+        if dup:
+            adm = _so_admin()
+            cursor.execute("""INSERT INTO troco_pix_dup_aprov (troco_pix_id, duplicado_de, duplicado_num,
+                                  pedido_por, status, decidido_por, decidido_em)
+                              VALUES (%s, %s, %s, %s, %s, %s, IF(%s, NOW(), NULL))""",
+                           (troco_pix_id, dup['id'], dup['numero_sequencial'], user_id,
+                            'APROVADO' if adm else 'PENDENTE', user_id if adm else None, 1 if adm else 0))
+            conn.commit()
+            if not adm:
+                flash('Troco igual ao %s (de %s): ficou AGUARDANDO APROVAÇÃO do admin. '
+                      'Mande o link abaixo para ele aprovar.'
+                      % (dup['numero_sequencial'] or dup['id'], _hora_br(dup['criado_em'])), 'warning')
 
         if cheques:
             try:
