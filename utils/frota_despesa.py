@@ -142,6 +142,7 @@ def abastecimentos(conn, ini, fim, vincs=None):
                      WHERE i.venda_id = v.id AND i.eh_combustivel = 1) AS litros
               FROM vendas_xml v
              WHERE {_ONDE_PRAZO}
+               AND COALESCE(v.situacao, '') <> 'cancelada'
                AND DATE(v.dh_emissao) BETWEEN %s AND %s
                AND ({_PLACA_SQL} IN ({ph}) OR v.id IN ({','.join(['%s'] * len(por_cupom)) or 'NULL'}))
              ORDER BY v.dh_emissao, v.id""", [ini, fim] + placas + list(por_cupom))
