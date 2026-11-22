@@ -201,6 +201,16 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
 #ctr .sub-l{ font-size:.66rem; color:var(--muted); font-weight:400; }
 #ctr .vazio{ background:#fff; border:1px dashed var(--borda); border-radius:14px; padding:2rem;
   text-align:center; color:var(--muted); }
+/* leitura: zebrado (só linhas visíveis, refeito ao abrir/fechar), linha e coluna sob o mouse */
+#ctr td + td, #ctr th + th{ border-left:1px solid #edf0f4; }
+#ctr tbody tr.zb > td{ background-color:#f3f6fa; }
+#ctr tbody tr.zb > td.acum{ background-color:#efe7cf; }
+#ctr tbody tr:not(.l-res):hover > td{ background-color:#e2edf9; }
+#ctr tbody tr:not(.l-res):hover > td.acum{ background-color:#ebdfb8; }
+#ctr td.colh, #ctr th.colh{ box-shadow:inset 0 0 0 9999px rgba(29,99,165,.07); }
+#ctr th.colh{ color:var(--blue); }
+#ctr tbody tr:not(.l-res):hover > td:first-child{ color:var(--blue-deep); font-weight:700; }
+#ctr tr.l-grp:not(.l-it) > td{ border-top:1px solid var(--borda); }
 #ctr .nota{ font-size:.72rem; color:var(--muted); margin:.2rem .2rem 1rem; }
 </style>
 {% endblock %}
@@ -286,6 +296,84 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
       <div class="graf__m">{% for m in months %}<span>{{ m.label }}</span>{% endfor %}</div>
     </div>
   </div>
+
+  {# ── Resultado geral da frota, num quadro só ─────────────────────── #}
+  <section class="cam">
+    <div class="cam__h{{ ' neg' if frota_tot.lucro < 0 }}">
+      <div class="cam__i"><i class="bi bi-clipboard-data"></i></div>
+      <div><div class="cam__n">Resultado geral — todos os caminhões</div>
+        <div class="cam__d">Tudo junto: o que entrou de frete, o que saiu e se sobrou ou faltou.</div></div>
+      <div class="cam__r"><div class="rot">{{ 'Prejuízo' if frota_tot.lucro < 0 else 'Lucro' }} no período</div>
+        <div class="cam__v num">{{ brl(frota_tot.lucro) }}</div></div>
+    </div>
+    <div class="tab"><table>
+      <thead><tr><th>Frota</th>{% for m in months %}<th>{{ m.label }}</th>{% endfor %}<th class="acum">Total</th></tr></thead>
+      <tbody>
+        <tr class="l-rec"><td>Receita de frete</td>
+          {% for m in months %}<td>{{ brl0(frota.receita[m.key]) }}</td>{% endfor %}
+          <td class="acum">{{ brl0(frota_tot.receita) }}</td></tr>
+        <tr class="l-it"><td>(−) Custos dos caminhões</td>
+          {% for m in months %}<td>{{ brl0(-frota.custos[m.key]) }}</td>{% endfor %}
+          <td class="acum">{{ brl0(-frota_tot.custos) }}</td></tr>
+        <tr class="l-it"><td>(−) Motoristas</td>
+          {% for m in months %}<td>{{ brl0(-frota.mot[m.key]) }}</td>{% endfor %}
+          <td class="acum">{{ brl0(-frota_tot.mot) }}</td></tr>
+        <tr class="l-res"><td>= {{ 'Prejuízo' if frota_tot.lucro < 0 else 'Lucro' }}</td>
+          {% for m in months %}{% set v = frota.lucro[m.key] %}
+            <td class="{{ 'neg' if v < -0.004 else ('pos' if v > 0.004 else '') }}">{{ brl0(v) }}</td>{% endfor %}
+          <td class="acum {{ 'neg' if frota_tot.lucro < 0 else 'pos' }}">{{ brl(frota_tot.lucro) }}</td></tr>
+        <tr class="l-marg"><td>Margem</td>
+          {% for m in months %}<td>{{ pct(frota.lucro[m.key], frota.receita[m.key]) }}</td>{% endfor %}
+          <td class="acum">{{ pct(frota_tot.lucro, frota_tot.receita) }}</td></tr>
+        <tr class="l-info"><td>Litros transportados</td>
+          {% for m in months %}<td>{{ lt(frota.litros[m.key]) }}</td>{% endfor %}
+          <td class="acum">{{ lt(frota_tot.litros) }}</td></tr>
+        <tr class="l-cpl"><td>Custo por litro sem cobrança <small>(resultado ÷ litros sem cobrança)</small></td>
+          {% for m in months %}<td>{{ cpl(frota_cpl[m.key]) }}</td>{% endfor %}
+          <td class="acum">{{ cpl(frota_cpl_tot) }}</td></tr>
+        {% for sc in sem_cobranca %}
+        <tr class="l-cpl l-cpl2"><td>Custo dos sem cobrança - {{ sc.nome }}</td>
+          {% for m in months %}<td>{{ brl0(sc.custo[m.key]) }}</td>{% endfor %}
+          <td class="acum">{{ brl0(sc.custo_tot) }}</td></tr>
+        {% endfor %}
+      </tbody></table></div>
+  </section>
+
+
+  {# ── Transportes sem cobrança: quanto nos custaram ────────────────── #}
+  {% for sc in sem_cobranca %}
+  <section class="cam">
+    <div class="cam__h" style="border-left-color:var(--blue)">
+      <div class="cam__i"><i class="bi bi-fuel-pump-fill"></i></div>
+      <div><div class="cam__n">Transportes sem cobrança — {{ sc.nome }}</div>
+        <div class="cam__d">O resultado de cada caminhão no mês é o custo de levar os litros dele. Valor negativo = o frete cobrado pagou tudo e ainda sobrou.</div></div>
+      <div class="cam__r"><div class="rot">Custo no período</div>
+        <div class="cam__v num" style="color:var(--blue)">{{ brl(sc.custo_tot) }}</div>
+        <div class="rot">{{ lt(sc.litros_tot) }} · {{ cpl((sc.custo_tot / sc.litros_tot) if sc.litros_tot else none) }}/L</div></div>
+    </div>
+    <div class="tab"><table>
+      <thead><tr><th>Caminhão</th>{% for m in months %}<th>{{ m.label }}</th>{% endfor %}<th class="acum">Total</th></tr></thead>
+      <tbody>
+        {% for l in sc.linhas %}
+        <tr class="l-it"><td>{{ l.caminhao }}{% if l.placa %} <span class="placa">{{ l.placa }}</span>{% endif %}</td>
+          {% for m in months %}<td>{{ brl0(l.custo[m.key]) }}<div class="sub-l">{{ lt(l.litros[m.key]) }}</div></td>{% endfor %}
+          <td class="acum">{{ brl0(l.custo_tot) }}<div class="sub-l">{{ lt(l.litros_tot) }}</div></td></tr>
+        {% endfor %}
+        {% if sc.tem_ajuste %}
+        <tr class="l-it"><td>Caminhão sem litro dele no mês / frete terceiros</td>
+          {% for m in months %}<td>{{ brl0(sc.ajuste[m.key]) }}</td>{% endfor %}
+          <td class="acum">{{ brl0(sc.ajuste_tot) }}</td></tr>
+        {% endif %}
+        <tr class="l-res"><td>Total</td>
+          {% for m in months %}<td>{{ brl0(sc.custo[m.key]) }}<div class="sub-l">{{ lt(sc.litros[m.key]) }}</div></td>{% endfor %}
+          <td class="acum">{{ brl0(sc.custo_tot) }}<div class="sub-l">{{ lt(sc.litros_tot) }}</div></td></tr>
+        <tr class="l-cpl"><td>Custo por litro</td>
+          {% for m in months %}{% set q = sc.litros[m.key] %}<td>{{ cpl((sc.custo[m.key] / q) if q >= 0.5 else none) }}</td>{% endfor %}
+          <td class="acum">{{ cpl((sc.custo_tot / sc.litros_tot) if sc.litros_tot >= 0.5 else none) }}</td></tr>
+      </tbody></table></div>
+  </section>
+  {% endfor %}
+
 
   {# ── Um quadro por caminhão ───────────────────────────────────────── #}
   {% for t in trucks %}
@@ -410,82 +498,6 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
   </section>
   {% endif %}
 
-  {# ── Transportes sem cobrança: quanto nos custaram ────────────────── #}
-  {% for sc in sem_cobranca %}
-  <section class="cam">
-    <div class="cam__h" style="border-left-color:var(--blue)">
-      <div class="cam__i"><i class="bi bi-fuel-pump-fill"></i></div>
-      <div><div class="cam__n">Transportes sem cobrança — {{ sc.nome }}</div>
-        <div class="cam__d">O resultado de cada caminhão no mês é o custo de levar os litros dele. Valor negativo = o frete cobrado pagou tudo e ainda sobrou.</div></div>
-      <div class="cam__r"><div class="rot">Custo no período</div>
-        <div class="cam__v num" style="color:var(--blue)">{{ brl(sc.custo_tot) }}</div>
-        <div class="rot">{{ lt(sc.litros_tot) }} · {{ cpl((sc.custo_tot / sc.litros_tot) if sc.litros_tot else none) }}/L</div></div>
-    </div>
-    <div class="tab"><table>
-      <thead><tr><th>Caminhão</th>{% for m in months %}<th>{{ m.label }}</th>{% endfor %}<th class="acum">Total</th></tr></thead>
-      <tbody>
-        {% for l in sc.linhas %}
-        <tr class="l-it"><td>{{ l.caminhao }}{% if l.placa %} <span class="placa">{{ l.placa }}</span>{% endif %}</td>
-          {% for m in months %}<td>{{ brl0(l.custo[m.key]) }}<div class="sub-l">{{ lt(l.litros[m.key]) }}</div></td>{% endfor %}
-          <td class="acum">{{ brl0(l.custo_tot) }}<div class="sub-l">{{ lt(l.litros_tot) }}</div></td></tr>
-        {% endfor %}
-        {% if sc.tem_ajuste %}
-        <tr class="l-it"><td>Caminhão sem litro dele no mês / frete terceiros</td>
-          {% for m in months %}<td>{{ brl0(sc.ajuste[m.key]) }}</td>{% endfor %}
-          <td class="acum">{{ brl0(sc.ajuste_tot) }}</td></tr>
-        {% endif %}
-        <tr class="l-res"><td>Total</td>
-          {% for m in months %}<td>{{ brl0(sc.custo[m.key]) }}<div class="sub-l">{{ lt(sc.litros[m.key]) }}</div></td>{% endfor %}
-          <td class="acum">{{ brl0(sc.custo_tot) }}<div class="sub-l">{{ lt(sc.litros_tot) }}</div></td></tr>
-        <tr class="l-cpl"><td>Custo por litro</td>
-          {% for m in months %}{% set q = sc.litros[m.key] %}<td>{{ cpl((sc.custo[m.key] / q) if q >= 0.5 else none) }}</td>{% endfor %}
-          <td class="acum">{{ cpl((sc.custo_tot / sc.litros_tot) if sc.litros_tot >= 0.5 else none) }}</td></tr>
-      </tbody></table></div>
-  </section>
-  {% endfor %}
-
-  {# ── Resultado geral da frota, num quadro só ─────────────────────── #}
-  <section class="cam">
-    <div class="cam__h{{ ' neg' if frota_tot.lucro < 0 }}">
-      <div class="cam__i"><i class="bi bi-clipboard-data"></i></div>
-      <div><div class="cam__n">Resultado geral — todos os caminhões</div>
-        <div class="cam__d">Tudo junto: o que entrou de frete, o que saiu e se sobrou ou faltou.</div></div>
-      <div class="cam__r"><div class="rot">{{ 'Prejuízo' if frota_tot.lucro < 0 else 'Lucro' }} no período</div>
-        <div class="cam__v num">{{ brl(frota_tot.lucro) }}</div></div>
-    </div>
-    <div class="tab"><table>
-      <thead><tr><th>Frota</th>{% for m in months %}<th>{{ m.label }}</th>{% endfor %}<th class="acum">Total</th></tr></thead>
-      <tbody>
-        <tr class="l-rec"><td>Receita de frete</td>
-          {% for m in months %}<td>{{ brl0(frota.receita[m.key]) }}</td>{% endfor %}
-          <td class="acum">{{ brl0(frota_tot.receita) }}</td></tr>
-        <tr class="l-it"><td>(−) Custos dos caminhões</td>
-          {% for m in months %}<td>{{ brl0(-frota.custos[m.key]) }}</td>{% endfor %}
-          <td class="acum">{{ brl0(-frota_tot.custos) }}</td></tr>
-        <tr class="l-it"><td>(−) Motoristas</td>
-          {% for m in months %}<td>{{ brl0(-frota.mot[m.key]) }}</td>{% endfor %}
-          <td class="acum">{{ brl0(-frota_tot.mot) }}</td></tr>
-        <tr class="l-res"><td>= {{ 'Prejuízo' if frota_tot.lucro < 0 else 'Lucro' }}</td>
-          {% for m in months %}{% set v = frota.lucro[m.key] %}
-            <td class="{{ 'neg' if v < -0.004 else ('pos' if v > 0.004 else '') }}">{{ brl0(v) }}</td>{% endfor %}
-          <td class="acum {{ 'neg' if frota_tot.lucro < 0 else 'pos' }}">{{ brl(frota_tot.lucro) }}</td></tr>
-        <tr class="l-marg"><td>Margem</td>
-          {% for m in months %}<td>{{ pct(frota.lucro[m.key], frota.receita[m.key]) }}</td>{% endfor %}
-          <td class="acum">{{ pct(frota_tot.lucro, frota_tot.receita) }}</td></tr>
-        <tr class="l-info"><td>Litros transportados</td>
-          {% for m in months %}<td>{{ lt(frota.litros[m.key]) }}</td>{% endfor %}
-          <td class="acum">{{ lt(frota_tot.litros) }}</td></tr>
-        <tr class="l-cpl"><td>Custo por litro sem cobrança <small>(resultado ÷ litros sem cobrança)</small></td>
-          {% for m in months %}<td>{{ cpl(frota_cpl[m.key]) }}</td>{% endfor %}
-          <td class="acum">{{ cpl(frota_cpl_tot) }}</td></tr>
-        {% for sc in sem_cobranca %}
-        <tr class="l-cpl l-cpl2"><td>Custo dos sem cobrança - {{ sc.nome }}</td>
-          {% for m in months %}<td>{{ brl0(sc.custo[m.key]) }}</td>{% endfor %}
-          <td class="acum">{{ brl0(sc.custo_tot) }}</td></tr>
-        {% endfor %}
-      </tbody></table></div>
-  </section>
-
   <div class="nota">Custo por litro sem cobrança = resultado do mês (receita − custos − motoristas) ÷ litros levados sem cobrar frete.
     Prejuízo vira custo; lucro aparece negativo (sobrou). Na frota, soma o resultado de todos os caminhões.</div>
   <div class="nota">Mesmos números do bloco Caminhões da Conf. Despesas: receita = fretes do caminhão;
@@ -526,6 +538,40 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
       if (abrir) raiz.querySelectorAll('tr[data-pai="' + id + '"]').forEach(function (f) { f.hidden = false; });
       else fechar(id);
     });
+  });
+
+  /* zebrado: alterna só entre as linhas visíveis; refaz quando um grupo abre/fecha */
+  var SEM_ZB = ['l-res', 'l-rec', 'l-marg'];
+  function zebra() {
+    raiz.querySelectorAll('table tbody').forEach(function (tb) {
+      var n = 0;
+      Array.prototype.forEach.call(tb.rows, function (tr) {
+        var fora = tr.hidden || SEM_ZB.some(function (c) { return tr.classList.contains(c); })
+                   || (tr.classList.contains('l-cpl') && !tr.classList.contains('l-cpl2'));
+        tr.classList.toggle('zb', !fora && (n++ % 2 === 1));
+      });
+    });
+  }
+  var zbPend = false;
+  new MutationObserver(function () {
+    if (zbPend) return; zbPend = true;
+    requestAnimationFrame(function () { zbPend = false; zebra(); });
+  }).observe(raiz, {subtree: true, attributes: true, attributeFilter: ['hidden']});
+  zebra();
+
+  /* coluna do mês sob o mouse */
+  var colAtiva = [];
+  raiz.addEventListener('mouseover', function (e) {
+    var td = e.target.closest('td, th');
+    colAtiva.forEach(function (c) { c.classList.remove('colh'); }); colAtiva = [];
+    if (!td || td.cellIndex < 1) return;
+    var tb = td.closest('table'), k = td.cellIndex;
+    Array.prototype.forEach.call(tb.rows, function (tr) {
+      var c = tr.cells[k]; if (c) { c.classList.add('colh'); colAtiva.push(c); }
+    });
+  });
+  raiz.addEventListener('mouseleave', function () {
+    colAtiva.forEach(function (c) { c.classList.remove('colh'); }); colAtiva = [];
   });
 
   /* #tudo no endereço abre todos os detalhes */
