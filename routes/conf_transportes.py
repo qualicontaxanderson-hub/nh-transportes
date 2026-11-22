@@ -7,7 +7,8 @@ leitura: receita do frete primeiro, depois os custos do caminhão, depois os
 motoristas, e no fim o resultado (lucro ou prejuízo).
 
 Rota:
-  GET /relatorios/conf_transportes
+  GET  /relatorios/conf_transportes
+  POST /relatorios/conf_transportes/frete_simulado  (R$/L simulado por cliente e mês)
 """
 from calendar import monthrange
 from datetime import date
@@ -47,27 +48,55 @@ def _litros_por_destino(conn, data_inicio, data_fim):
     linha, e todo o resto (frete cobrado) em "Geral". Mesma conta de litros
     da Conf. Despesas (COALESCE(quantidade_manual, q.valor, 0)), então a soma
     das linhas bate com o total.
-    Retorna {vid: {nome: {mk: litros}}}."""
+    Retorna ({vid: {nome: {mk: litros}}}, {nome: cliente_id})."""
     cur = conn.cursor(dictionary=True)
     cur.execute("""
         SELECT f.veiculos_id AS vid, DATE_FORMAT(f.data_frete, '%Y%m') AS mk,
                CASE WHEN COALESCE(f.valor_total_frete, 0) = 0
                     THEN COALESCE(NULLIF(c.nome_fantasia, ''), c.razao_social, 'Sem cliente')
                     ELSE NULL END AS destino,
+               CASE WHEN COALESCE(f.valor_total_frete, 0) = 0 THEN c.id ELSE NULL END AS cid,
                COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)), 0) AS litros
           FROM fretes f
           LEFT JOIN quantidades q ON q.id = f.quantidade_id
           LEFT JOIN clientes c ON c.id = f.clientes_id
          WHERE f.data_frete BETWEEN %s AND %s AND f.veiculos_id IS NOT NULL
-         GROUP BY 1, 2, 3
+         GROUP BY 1, 2, 3, 4
     """, (data_inicio, data_fim))
-    out = {}
+    out, ids = {}, {}
     for r in cur.fetchall():
         nome = r['destino'] or 'Geral'
+        if r['cid']:
+            ids[nome] = r['cid']
         d = out.setdefault(r['vid'], {}).setdefault(nome, {})
         d[r['mk']] = d.get(r['mk'], 0.0) + float(r['litros'])
     cur.close()
-    return out
+    return out, ids
+
+
+# Frete de terceiro SIMULADO (pedido do Anderson, 22/11/2026): para cada
+# cliente que não paga frete, quanto custaria pagar um terceiro (R$ por litro,
+# um valor por mês, digitado na tela) e quanto a frota economizou com isso.
+_DDL_SIM = """
+CREATE TABLE IF NOT EXISTS conf_transp_frete_sim (
+    cliente_id     INT          NOT NULL,
+    mes            CHAR(6)      NOT NULL COMMENT 'YYYYMM',
+    valor_litro    DECIMAL(10,4) NOT NULL,
+    atualizado_por VARCHAR(80)  NULL,
+    atualizado_em  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (cliente_id, mes)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"""
+
+
+def _frete_sim(conn):
+    """{(cliente_id, 'YYYYMM'): R$/L}. CREATE TABLE faz commit: fora de transação."""
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(_DDL_SIM)
+        cur.execute("SELECT cliente_id, mes, valor_litro FROM conf_transp_frete_sim")
+        return {(r['cliente_id'], r['mes']): float(r['valor_litro']) for r in cur.fetchall()}
+    finally:
+        cur.close()
 
 
 def _z(months):
@@ -179,7 +208,8 @@ def conf_transportes():
         titulo_ids = _titulos_caminhoes(conn)
         veiculos, _ = _fetch_veiculos_motoristas(conn)
         placas = _placas(conn)
-        litros_dest = _litros_por_destino(conn, data_inicio, data_fim)
+        litros_dest, cli_ids = _litros_por_destino(conn, data_inicio, data_fim)
+        tarifas = _frete_sim(conn)
     finally:
         conn.close()
 
@@ -274,6 +304,27 @@ def conf_transportes():
         sc['custo_tot'] = sum(sc['custo'].values())
         sc['ajuste_tot'] = sum(sc['ajuste'].values())
         sc['tem_ajuste'] = any(abs(v) >= 0.005 for v in sc['ajuste'].values())
+        # frete de terceiro simulado: litros × R$/L do mês; economia = esse frete − nosso custo
+        sc['cid'] = cli_ids.get(sc['nome'])
+        sc['tarifa'], sc['frete_sim'], sc['economia'] = {}, {}, {}
+        f_tot = e_tot = l_tar = 0.0
+        for m in months:
+            k = m['key']
+            t_ = tarifas.get((sc['cid'], k))
+            sc['tarifa'][k] = t_
+            if t_ is None:
+                sc['frete_sim'][k] = sc['economia'][k] = None
+                continue
+            fs = sc['litros'][k] * t_
+            sc['frete_sim'][k] = fs
+            sc['economia'][k] = fs - sc['custo'][k]
+            f_tot += fs
+            e_tot += fs - sc['custo'][k]
+            l_tar += sc['litros'][k]
+        sc['tem_sim'] = any(v is not None for v in sc['tarifa'].values())
+        sc['frete_sim_tot'] = f_tot
+        sc['economia_tot'] = e_tot
+        sc['tarifa_media'] = (f_tot / l_tar) if l_tar >= 0.5 else None
     frota_cpl = {m['key']: (-frota['lucro'][m['key']] / livre_f[m['key']])
                  if livre_f[m['key']] >= 0.5 else None for m in months}
     _c = sum(-frota['lucro'][m['key']] for m in months if livre_f[m['key']] >= 0.5)
@@ -292,6 +343,45 @@ def conf_transportes():
         frota_cpl=frota_cpl, frota_cpl_tot=frota_cpl_tot,
         sem_cobranca=sem_cobranca,
     )
+
+@bp.route('/conf_transportes/frete_simulado', methods=['POST'])
+@login_required
+@admin_required
+def conf_transportes_frete_simulado():
+    """Grava (ou apaga, com valor vazio) o R$/L simulado de um cliente sem
+    cobrança para um ou mais meses. JSON: {cliente_id, meses: ['YYYYMM'], valor}."""
+    from flask_login import current_user
+    d = request.get_json(silent=True) or {}
+    try:
+        cid = int(d.get('cliente_id'))
+        meses = [str(m) for m in (d.get('meses') or [])]
+        assert meses and all(len(m) == 6 and m.isdigit() and 1 <= int(m[4:]) <= 12 for m in meses)
+        txt = str(d.get('valor') or '').strip().replace('R$', '').replace(' ', '')
+        if ',' in txt:
+            txt = txt.replace('.', '').replace(',', '.')
+        valor = float(txt) if txt else None
+        assert valor is None or 0 <= valor < 100
+    except (TypeError, ValueError, AssertionError):
+        return jsonify({'ok': False, 'erro': 'valor inválido (ex.: 0,13)'}), 400
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(_DDL_SIM)
+        for m in meses:
+            if valor is None:
+                cur.execute("DELETE FROM conf_transp_frete_sim WHERE cliente_id=%s AND mes=%s", (cid, m))
+            else:
+                cur.execute("""INSERT INTO conf_transp_frete_sim (cliente_id, mes, valor_litro, atualizado_por)
+                               VALUES (%s, %s, %s, %s)
+                               ON DUPLICATE KEY UPDATE valor_litro=VALUES(valor_litro),
+                                                       atualizado_por=VALUES(atualizado_por)""",
+                            (cid, m, round(valor, 4), getattr(current_user, 'username', None)))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
 
 def _meses(ini, fim, mes):
     """Lista de (ano, mes) do periodo, ou so o mes pedido (YYYYMM)."""

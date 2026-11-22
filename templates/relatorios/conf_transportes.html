@@ -211,6 +211,19 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
 #ctr th.colh{ color:var(--blue); }
 #ctr tbody tr:not(.l-res):hover > td:first-child{ color:var(--blue-deep); font-weight:700; }
 #ctr tr.l-grp:not(.l-it) > td{ border-top:1px solid var(--borda); }
+/* frete de terceiro simulado */
+#ctr tr.l-sim td{ background:#fffaf0; color:#7a4b00; font-weight:700; font-size:.76rem; }
+#ctr tr.l-sim td.sim{ cursor:pointer; }
+#ctr tr.l-sim td.sim:hover{ background:#fdecc8 !important; text-decoration:underline; }
+#ctr .sim-vz{ color:#c08a2c; font-weight:600; font-style:italic; }
+#ctr td.sim input{ width:5.2rem; text-align:right; border:2px solid #c08a2c; border-radius:6px;
+  padding:1px 4px; font:inherit; color:var(--ink); }
+#ctr .sim-tudo{ margin-left:.4rem; border:1px solid #e3c27f; background:#fff; color:#7a4b00;
+  border-radius:6px; font-size:.64rem; padding:0 .35rem; font-weight:700; cursor:pointer; }
+#ctr tr.l-sim2 td{ font-size:.76rem; color:#7a4b00; background:#fffdf7; }
+#ctr tr.l-eco td{ font-weight:800; font-size:.8rem; background:#fffdf7; }
+#ctr tr.l-eco td.pos{ color:var(--ok); background:var(--ok-bg); }
+#ctr tr.l-eco td.neg{ color:var(--danger); background:var(--danger-bg); }
 #ctr .nota{ font-size:.72rem; color:var(--muted); margin:.2rem .2rem 1rem; }
 </style>
 {% endblock %}
@@ -335,6 +348,25 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
         <tr class="l-cpl l-cpl2"><td>Custo dos sem cobrança - {{ sc.nome }}</td>
           {% for m in months %}<td>{{ brl0(sc.custo[m.key]) }}</td>{% endfor %}
           <td class="acum">{{ brl0(sc.custo_tot) }}</td></tr>
+        {% if sc.cid %}
+        <tr class="l-sim"><td>Frete terceiro simulado (R$/litro) - {{ sc.nome }}
+            <button type="button" class="sim-tudo" data-cid="{{ sc.cid }}" data-nome="{{ sc.nome }}"
+                    data-meses="{{ months|map(attribute='key')|join(',') }}">repetir em todos</button></td>
+          {% for m in months %}{% set t_ = sc.tarifa[m.key] %}
+            <td class="sim" data-cid="{{ sc.cid }}" data-mes="{{ m.key }}" data-v="{{ '' if t_ is none else ('%.4f' % t_).rstrip('0').rstrip('.').replace('.', ',') }}"
+                title="Clique para digitar o frete por litro de {{ m.label }}">{% if t_ is none %}<span class="sim-vz">definir</span>{% else %}R$ {{ ('%.4f' % t_).replace('.', ',') }}{% endif %}</td>
+          {% endfor %}
+          <td class="acum">{% if sc.tarifa_media is none %}—{% else %}R$ {{ ('%.4f' % sc.tarifa_media).replace('.', ',') }}{% endif %}</td></tr>
+        {% if sc.tem_sim %}
+        <tr class="l-sim2"><td>Frete terceiro (litros × R$/litro) - {{ sc.nome }}</td>
+          {% for m in months %}{% set v = sc.frete_sim[m.key] %}<td>{% if v is none %}<span class="nd">—</span>{% else %}{{ brl0(v) }}{% endif %}</td>{% endfor %}
+          <td class="acum">{{ brl0(sc.frete_sim_tot) }}</td></tr>
+        <tr class="l-eco"><td>Economia (frete terceiro − nosso custo) - {{ sc.nome }}</td>
+          {% for m in months %}{% set v = sc.economia[m.key] %}
+            <td class="{{ '' if v is none else ('pos' if v > 0.004 else ('neg' if v < -0.004 else '')) }}">{% if v is none %}<span class="nd">—</span>{% else %}{{ brl0(v) }}{% endif %}</td>{% endfor %}
+          <td class="acum {{ 'pos' if sc.economia_tot > 0.004 else ('neg' if sc.economia_tot < -0.004 else '') }}">{{ brl0(sc.economia_tot) }}</td></tr>
+        {% endif %}
+        {% endif %}
         {% endfor %}
       </tbody></table></div>
   </section>
@@ -541,7 +573,7 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
   });
 
   /* zebrado: alterna só entre as linhas visíveis; refaz quando um grupo abre/fecha */
-  var SEM_ZB = ['l-res', 'l-rec', 'l-marg'];
+  var SEM_ZB = ['l-res', 'l-rec', 'l-marg', 'l-sim', 'l-sim2', 'l-eco'];
   function zebra() {
     raiz.querySelectorAll('table tbody').forEach(function (tb) {
       var n = 0;
@@ -573,6 +605,52 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
   raiz.addEventListener('mouseleave', function () {
     colAtiva.forEach(function (c) { c.classList.remove('colh'); }); colAtiva = [];
   });
+
+  /* frete de terceiro simulado: digita o R$/litro do mês na própria célula */
+  var URL_SIM = '{{ url_for("conf_transportes.conf_transportes_frete_simulado") }}';
+  function simGrava(cid, meses, valor) {
+    return fetch(URL_SIM, {method: 'POST', credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({cliente_id: cid, meses: meses, valor: valor})})
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { alert(d.erro || 'Não foi possível gravar.'); return; }
+        try { sessionStorage.setItem('ct-y', String(window.scrollY)); } catch (e) {}
+        location.reload();
+      })
+      .catch(function () { alert('Falha de conexão — nada foi gravado.'); });
+  }
+  raiz.querySelectorAll('td.sim').forEach(function (td) {
+    td.addEventListener('click', function () {
+      if (td.querySelector('input')) return;
+      var ant = td.innerHTML, inp = document.createElement('input');
+      inp.type = 'text'; inp.inputMode = 'decimal'; inp.value = td.dataset.v; inp.placeholder = '0,13';
+      td.innerHTML = ''; td.appendChild(inp); inp.focus(); inp.select();
+      var feito = false;
+      function fim(gravar) {
+        if (feito) return; feito = true;
+        if (gravar && inp.value.trim() !== td.dataset.v) simGrava(+td.dataset.cid, [td.dataset.mes], inp.value.trim());
+        else td.innerHTML = ant;
+      }
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') fim(true);
+        if (e.key === 'Escape') fim(false);
+      });
+      inp.addEventListener('blur', function () { fim(true); });
+    });
+  });
+  raiz.querySelectorAll('.sim-tudo').forEach(function (b) {
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var v = prompt('Frete por litro para TODOS os meses deste período (' + b.dataset.nome + ').\nEx.: 0,13 — deixe vazio para apagar.', '0,13');
+      if (v === null) return;
+      simGrava(+b.dataset.cid, b.dataset.meses.split(','), v.trim());
+    });
+  });
+  try {
+    var yy = sessionStorage.getItem('ct-y');
+    if (yy) { sessionStorage.removeItem('ct-y'); window.scrollTo(0, +yy); }
+  } catch (e) {}
 
   /* #tudo no endereço abre todos os detalhes */
   if (location.hash === '#tudo') {
