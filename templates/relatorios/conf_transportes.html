@@ -216,8 +216,10 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
 #ctr tr.l-sim td.sim{ cursor:pointer; }
 #ctr tr.l-sim td.sim:hover{ background:#fdecc8 !important; text-decoration:underline; }
 #ctr .sim-vz{ color:#c08a2c; font-weight:600; font-style:italic; }
-#ctr td.sim input{ width:5.2rem; text-align:right; border:2px solid #c08a2c; border-radius:6px;
+#ctr td.sim input{ width:4.6rem; text-align:right; border:2px solid #c08a2c; border-radius:6px;
   padding:1px 4px; font:inherit; color:var(--ink); }
+#ctr .sim-ok{ margin-left:3px; border:0; background:#c08a2c; color:#fff; border-radius:6px;
+  padding:1px 6px; font-size:.75rem; cursor:pointer; vertical-align:middle; }
 #ctr .sim-tudo{ margin-left:.4rem; border:1px solid #e3c27f; background:#fff; color:#7a4b00;
   border-radius:6px; font-size:.64rem; padding:0 .35rem; font-weight:700; cursor:pointer; }
 #ctr tr.l-sim2 td{ font-size:.76rem; color:#7a4b00; background:#fffdf7; }
@@ -612,9 +614,11 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
     return fetch(URL_SIM, {method: 'POST', credentials: 'same-origin',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({cliente_id: cid, meses: meses, valor: valor})})
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        return r.json().catch(function () { return {ok: false, erro: 'O servidor recusou (HTTP ' + r.status + '). Recarregue a página e tente de novo.'}; });
+      })
       .then(function (d) {
-        if (!d.ok) { alert(d.erro || 'Não foi possível gravar.'); return; }
+        if (!d.ok) { alert(d.erro || 'Não foi possível gravar.'); location.reload(); return; }
         try { sessionStorage.setItem('ct-y', String(window.scrollY)); } catch (e) {}
         location.reload();
       })
@@ -623,17 +627,21 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
   raiz.querySelectorAll('td.sim').forEach(function (td) {
     td.addEventListener('click', function () {
       if (td.querySelector('input')) return;
-      var ant = td.innerHTML, inp = document.createElement('input');
+      var ant = td.innerHTML, inp = document.createElement('input'), ok = document.createElement('button');
       inp.type = 'text'; inp.inputMode = 'decimal'; inp.value = td.dataset.v; inp.placeholder = '0,13';
-      td.innerHTML = ''; td.appendChild(inp); inp.focus(); inp.select();
+      ok.type = 'button'; ok.className = 'sim-ok'; ok.title = 'Gravar'; ok.innerHTML = '<i class="bi bi-check-lg"></i>';
+      td.innerHTML = ''; td.appendChild(inp); td.appendChild(ok); inp.focus(); inp.select();
       var feito = false;
       function fim(gravar) {
         if (feito) return; feito = true;
-        if (gravar && inp.value.trim() !== td.dataset.v) simGrava(+td.dataset.cid, [td.dataset.mes], inp.value.trim());
-        else td.innerHTML = ant;
+        if (gravar && inp.value.trim() !== td.dataset.v) {
+          inp.disabled = ok.disabled = true; ok.innerHTML = '…';
+          simGrava(+td.dataset.cid, [td.dataset.mes], inp.value.trim());
+        } else td.innerHTML = ant;
       }
+      ok.addEventListener('mousedown', function (e) { e.preventDefault(); fim(true); });
       inp.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') fim(true);
+        if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); fim(true); }
         if (e.key === 'Escape') fim(false);
       });
       inp.addEventListener('blur', function () { fim(true); });
