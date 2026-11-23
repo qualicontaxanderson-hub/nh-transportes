@@ -778,17 +778,22 @@ def _lookup_caminhoes_titulo(conn):
         cur.execute(
             "SELECT id, nome, COALESCE(ordem, 9999) AS ordem"
             " FROM titulos_despesas"
-            " ORDER BY ordem, nome"
+            " ORDER BY ativo DESC, ordem, id"
         )
         rows = cur.fetchall()
     except Exception:
         rows = []
     cur.close()
-    return next(
-        (r for r in rows
-         if 'CAMINHAO' in _ascii_upper(r['nome'])
-         or 'CAMINHOES' in _ascii_upper(r['nome'])), None
-    )
+    # há três "CAMINHÕES" (7 ativo; 18 e 27 inativos, vazios): fica o ativo,
+    # e 'ids' guarda todos para tirar os lançamentos de qualquer um deles
+    cams = [r for r in rows
+            if 'CAMINHAO' in _ascii_upper(r['nome'])
+            or 'CAMINHOES' in _ascii_upper(r['nome'])]
+    if not cams:
+        return None
+    r = dict(cams[0])
+    r['ids'] = {str(c['id']) for c in cams}
+    return r
 
 
 def _fetch_frete_receita_empresa_dre(conn, data_inicio, data_fim, empresa_ids):
@@ -1442,7 +1447,7 @@ def dre_postos():
                 # cobrança custou a ela (Conf. Transportes), logo abaixo.
                 if _caminhoes_tit is not None:
                     lancamentos = [r for r in lancamentos
-                                   if str(r.get('titulo_id')) != str(_caminhoes_tit['id'])]
+                                   if str(r.get('titulo_id')) not in _caminhoes_tit['ids']]
                 all_lancamentos.extend(lancamentos)
 
                 # Despesas de caixa: RETIRADA ALUGUEL
@@ -1482,7 +1487,7 @@ def dre_postos():
                 caminhoes_ok = (
                     _caminhoes_tit is not None
                     and (not titulo_ids_set
-                         or str(_caminhoes_tit['id']) in titulo_ids_set)
+                         or bool(_caminhoes_tit['ids'] & titulo_ids_set))
                 )
                 if caminhoes_ok:
                     if sem_cob_cache is None:

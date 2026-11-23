@@ -1,1015 +1,975 @@
 {% extends 'base.html' %}
 {% block title %}DRE Postos{% endblock %}
 
+{#- DRE refeito em 23/11/2026 (pedido do Anderson: "repagine tudo, capricha").
+    Mesmas contas de antes, com três regras novas vindas da rota:
+      · CAMINHÕES = custo dos transportes sem cobrança da empresa (Conf. Transportes);
+      · CARTÕES só aparecem para a empresa dona da maquininha;
+      · filtros salvos no sistema (por usuário), com um padrão que abre sozinho. -#}
+
+{% macro brl(v) -%}
+  {%- set a = (v or 0)|abs -%}
+  {%- set s = '{:,.2f}'.format(a).replace(',', 'X').replace('.', ',').replace('X', '.') -%}
+  {%- if (v or 0) < -0.004 %}−R$ {{ s }}{% else %}R$ {{ s }}{% endif -%}
+{%- endmacro %}
+{% macro brl0(v) -%}
+  {%- if (v or 0)|abs < 0.005 %}<span class="nd">—</span>{% else %}{{ brl(v) }}{% endif -%}
+{%- endmacro %}
+{% macro mil(v) -%}
+  {%- set a = (v or 0)|abs -%}
+  {%- if a >= 1000000 %}{{ '{:,.2f}'.format(a/1000000).replace(',', 'X').replace('.', ',').replace('X', '.') }} mi
+  {%- elif a >= 1000 %}{{ '{:,.1f}'.format(a/1000).replace(',', 'X').replace('.', ',').replace('X', '.') }} mil
+  {%- else %}{{ '{:,.0f}'.format(a) }}{% endif -%}
+{%- endmacro %}
+{% macro lt(v) -%}
+  {%- if (v or 0)|abs < 0.0005 %}<span class="nd">—</span>{% else %}{{ '{:,.0f}'.format(v).replace(',', '.') }} L{% endif -%}
+{%- endmacro %}
+{% macro pct(a, b) -%}
+  {%- if (b or 0)|abs < 0.005 or (a or 0)|abs < 0.005 %}<span class="nd">—</span>{% else %}{{ '{:.1f}'.format(a / b * 100).replace('.', ',') }}%{% endif -%}
+{%- endmacro %}
+{#- uma linha de valores: meses + total + % da receita -#}
+{% macro vals(bym, tot, drill=None) -%}
+  {%- for m in months %}{% set v = bym.get(m.key, 0) %}
+    <td{% if drill and v|abs >= 0.005 %} class="dr" data-tit="{{ drill[0] }}" data-cat="{{ drill[1] }}" data-mes="{{ m.key }}" data-v="{{ v }}" data-nome="{{ drill[2] }} · {{ m.label }}/{{ m.year }}"{% endif %}>{{ brl0(v) }}</td>
+  {%- endfor %}
+  <td class="acum{{ ' dr' if drill and tot|abs >= 0.005 }}"{% if drill and tot|abs >= 0.005 %} data-tit="{{ drill[0] }}" data-cat="{{ drill[1] }}" data-mes="" data-v="{{ tot }}" data-nome="{{ drill[2] }} · período"{% endif %}>{{ brl0(tot) }}</td>
+  <td class="av">{{ pct(tot, grand_receitas) }}</td>
+{%- endmacro %}
+{% macro valsL(bym, tot) -%}
+  {%- for m in months %}<td>{{ lt(bym.get(m.key, 0)) }}</td>{% endfor %}
+  <td class="acum">{{ lt(tot) }}</td><td class="av"></td>
+{%- endmacro %}
+
 {% block styles %}
 <style>
-/* ── Hero ────────────────────────────────────────────────────────────────── */
-.page-hero {
-  background: linear-gradient(135deg, #1D63A5 0%, #154070 100%);
-  border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
-}
-.page-hero .hero-icon {
-  width: 3rem; height: 3rem; background: rgba(255,255,255,.15);
-  border-radius: .6rem; display: flex; align-items: center; justify-content: center;
-  font-size: 1.5rem; flex-shrink: 0;
-}
+body > .container-fluid:has(#dre){ background:transparent; box-shadow:none; border-radius:0;
+  padding:.3rem .3rem 0; margin:0; max-width:none; }
+@media (min-width:992px){ body > .container-fluid:has(#dre){ padding:.7rem 1rem 0; } }
 
-/* ── Cabeçalho de filtros ─────────────────────────────────────────────────── */
-.flt-header {
-  background: #1D63A5; color: #fff; font-size: .78rem; font-weight: 600;
-  padding: .45rem .75rem; border-radius: .35rem .35rem 0 0;
-}
+#dre{ --blue:#1D63A5; --blue-deep:#0C4C86; --blue-soft:#eef5fd; --ok:#146c43; --ok-bg:#e9f5ee;
+      --danger:#b42318; --danger-bg:#fdeeec; --amber:#8a5a00; --amber-bg:#fff6e0;
+      --muted:#5b6573; --ink:#151d27; --borda:#dde3ea; --linha:#eef1f5; --surface:#fff; --soft:#f6f8fb;
+      color:var(--ink); }
+#dre .num, #dre table{ font-variant-numeric:tabular-nums; }
+#dre .nd{ color:#b7bfc9; }
 
-/* ── Tabela matriz ────────────────────────────────────────────────────────── */
-.tbl-dre {
-  font-size: .72rem; border-collapse: collapse; width: 100%;
-}
-.tbl-dre th, .tbl-dre td {
-  padding: .22rem .38rem; border: 1px solid #dee2e6; white-space: nowrap; vertical-align: middle;
-}
-.tbl-dre td.col-desc, .tbl-dre th.col-desc {
-  position: sticky; left: 0; z-index: 2; min-width: 200px; max-width: 260px;
-  white-space: normal; word-break: break-word;
-}
-.tbl-dre thead tr th {
-  text-align: center; background: #343a40; color: #fff; font-size: .66rem;
-  text-transform: uppercase; letter-spacing: .04em;
-}
-.tbl-dre thead tr th.col-desc { text-align: left; background: #343a40; }
+/* topo */
+#dre .topo{ background:linear-gradient(120deg,#2E6FB0,#1D63A5 55%,#0C4C86); color:#fff;
+  border-radius:14px; padding:.85rem 1rem; margin-bottom:.7rem; display:flex; gap:.8rem;
+  align-items:center; flex-wrap:wrap; }
+#dre .topo__i{ width:2.5rem; height:2.5rem; border-radius:.65rem; background:rgba(255,255,255,.16);
+  display:grid; place-items:center; font-size:1.3rem; flex:0 0 auto; }
+#dre .topo__t{ font-weight:800; font-size:1.08rem; }
+#dre .topo__s{ font-size:.77rem; opacity:.95; }
+#dre .topo__a{ margin-left:auto; display:flex; gap:.4rem; flex-wrap:wrap; }
+#dre .topo__a a{ color:#fff; text-decoration:none; font-size:.76rem; font-weight:700;
+  border:1px solid rgba(255,255,255,.35); background:rgba(255,255,255,.12); border-radius:9px;
+  padding:.35rem .65rem; display:inline-flex; gap:.35rem; align-items:center; }
+#dre .topo__a a:hover{ background:rgba(255,255,255,.22); }
 
-/* ── Tipos de linha ───────────────────────────────────────────────────────── */
-.row-section td {
-  background: #1D63A5; color: #fff; font-weight: 700; font-size: .76rem;
-  text-transform: uppercase; letter-spacing: .05em;
-}
-.row-titulo td {
-  background: #1D63A5; color: #fff; font-weight: 700; font-size: .74rem;
-  text-transform: uppercase; letter-spacing: .04em; cursor: pointer;
-}
-.row-titulo:hover td { background: #154f91; }
-.row-item td   { background: #fff; font-weight: 400; }
-.row-item:hover td { background: #f0f4ff; }
-.row-child td  { background: #f9fbff; font-size: .70rem; }
-.row-child .col-desc { padding-left: 1.6rem !important; }
-.row-block-total td { background: #4a86c8; color: #fff; font-weight: 700; }
-.row-desp-total td  { background: #dc3545; color: #fff; font-weight: 700; }
-.row-lucro td {
-  background: #154070; color: #fff; font-weight: 700; font-size: .82rem;
-  text-transform: uppercase;
-}
-.row-lucro-neg td { background: #a31a1a !important; }
+#dre .flash{ border-radius:11px; padding:.55rem .8rem; font-size:.82rem; margin-bottom:.6rem;
+  background:var(--ok-bg); color:var(--ok); font-weight:600; }
+#dre .flash--warning{ background:var(--amber-bg); color:var(--amber); }
+#dre .flash--danger{ background:var(--danger-bg); color:var(--danger); }
 
-/* ── Litros (linha informativa) ───────────────────────────────────────────── */
-.row-litros td   { background: #f8f5e4; color: #5a4500; font-style: italic; }
-.row-litros:hover td { background: #f0e9c5; }
-.row-litros-child td { background: #fffde7; font-size: .70rem; font-style: italic; }
-.row-litros-child .col-desc { padding-left: 1.6rem !important; }
+/* ── filtros ─────────────────────────────────────────────────── */
+#dre .flt{ background:var(--surface); border:1px solid var(--borda); border-radius:16px;
+  box-shadow:0 3px 14px rgba(20,35,60,.06); margin-bottom:1rem; overflow:hidden; }
+#dre .flt__salvos{ display:flex; gap:.45rem; align-items:center; flex-wrap:wrap; padding:.6rem .9rem;
+  background:linear-gradient(90deg,#f5f9fe,#fbfcfe); border-bottom:1px solid var(--linha); }
+#dre .flt__corpo{ padding:.75rem .9rem .3rem; display:grid; gap:.75rem; }
+#dre .lin{ display:grid; grid-template-columns:7.2rem 1fr; gap:.6rem; align-items:start; }
+@media (max-width:640px){ #dre .lin{ grid-template-columns:1fr; gap:.3rem; } }
+#dre .rot{ font-size:.66rem; font-weight:800; color:var(--muted); text-transform:uppercase;
+  letter-spacing:.07em; padding-top:.42rem; }
+#dre .chips{ display:flex; gap:.4rem; flex-wrap:wrap; align-items:center; }
+#dre .chip{ position:relative; display:inline-flex; align-items:center; gap:.35rem; cursor:pointer;
+  border:1px solid var(--borda); background:#fff; color:#2b3644; border-radius:99px;
+  padding:.34rem .75rem; font-size:.79rem; font-weight:700; user-select:none;
+  transition:background .12s, border-color .12s, color .12s, box-shadow .12s; }
+#dre .chip:hover{ border-color:#9fc0e3; background:var(--blue-soft); }
+#dre .chip input{ position:absolute; opacity:0; pointer-events:none; }
+#dre .chip .bi-check-lg{ display:none; }
+#dre .chip.on{ background:var(--blue); border-color:var(--blue); color:#fff;
+  box-shadow:0 2px 8px rgba(29,99,165,.25); }
+#dre .chip.on .bi-check-lg{ display:inline; }
+#dre .chip.sm{ padding:.22rem .6rem; font-size:.72rem; }
+#dre .chip.on.sm{ box-shadow:none; }
+#dre .lk{ border:0; background:none; color:var(--blue); font-size:.72rem; font-weight:700; cursor:pointer;
+  padding:.2rem .3rem; text-decoration:underline; text-underline-offset:2px; }
+#dre .datas{ display:flex; gap:.4rem; align-items:center; flex-wrap:wrap; }
+#dre .datas input{ border:1px solid var(--borda); border-radius:9px; padding:.33rem .5rem;
+  font-size:.8rem; font-family:inherit; color:var(--ink); }
+#dre .datas span{ font-size:.75rem; color:var(--muted); }
+#dre .sep{ width:1px; height:1.4rem; background:var(--borda); margin:0 .2rem; }
 
-/* ── Compras ──────────────────────────────────────────────────────────────── */
-.row-compras-section td {
-  background: #e65100; color: #fff; font-weight: 700; font-size: .76rem;
-  text-transform: uppercase; letter-spacing: .05em;
-}
-.row-compras-item td { background: #fff7f0; font-weight: 500; }
-.row-compras-item:hover td { background: #fff0e0; }
-.row-compras-child td { background: #fffaf5; font-size: .70rem; }
-.row-compras-child .col-desc { padding-left: 1.6rem !important; }
-.row-compras-litros td { background: #fff8ee; color: #7a3900; font-style: italic; font-size: .69rem; }
-.row-compras-litros .col-desc { padding-left: 3rem !important; }
-.row-compras-total td { background: #bf360c; color: #fff; font-weight: 700; }
+#dre .bt{ border:1px solid #bcd3ea; background:var(--blue-soft); color:var(--blue-deep); border-radius:10px;
+  padding:.42rem .8rem; font-size:.8rem; font-weight:800; cursor:pointer; text-decoration:none;
+  display:inline-flex; gap:.35rem; align-items:center; }
+#dre .bt:hover{ background:#e1edfa; }
+#dre .bt--pri{ background:var(--blue); border-color:var(--blue); color:#fff; padding:.48rem 1.1rem; }
+#dre .bt--pri:hover{ background:var(--blue-deep); }
+#dre .bt--ghost{ background:#fff; border-color:var(--borda); color:#3d4854; }
+#dre .flt__acoes{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; padding:.6rem .9rem .8rem; }
+#dre .flt__acoes .dir{ margin-left:auto; display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
 
-/* ── Estoque (EI / EF dentro do bloco CMV) ────────────────────────────────── */
-.row-estoque-item td { background: #e8f5e9; font-weight: 500; color: #1b5e20; }
-.row-estoque-item:hover td { background: #c8e6c9; }
-.row-estoque-child td { background: #f1f8e9; font-size: .70rem; }
-.row-estoque-child .col-desc { padding-left: 1.6rem !important; }
-.row-estoque-litros td { background: #f9fbe7; color: #33691e; font-style: italic; font-size: .69rem; }
-.row-estoque-litros .col-desc { padding-left: 3rem !important; }
-.row-cmv-total td { background: #4a148c; color: #fff; font-weight: 700; }
+/* filtros salvos */
+#dre .sv{ display:inline-flex; align-items:stretch; border:1px solid #c9dbee; border-radius:99px;
+  background:#fff; overflow:hidden; font-size:.76rem; }
+#dre .sv a{ color:var(--blue-deep); text-decoration:none; font-weight:800; padding:.28rem .45rem .28rem .7rem;
+  display:inline-flex; gap:.3rem; align-items:center; }
+#dre .sv a:hover{ background:var(--blue-soft); }
+#dre .sv.atual{ border-color:var(--blue); box-shadow:0 0 0 2px rgba(29,99,165,.15); }
+#dre .sv.atual a{ background:var(--blue-soft); }
+#dre .sv form{ display:inline-flex; margin:0; }
+#dre .sv button{ border:0; background:none; padding:0 .4rem; color:#9aa6b4; cursor:pointer; font-size:.8rem; }
+#dre .sv button:hover{ color:var(--blue); background:var(--soft); }
+#dre .sv button.x:hover{ color:var(--danger); }
+#dre .sv button.estrela.on{ color:#e0a100; }
+#dre .salvar-cx{ display:none; gap:.4rem; align-items:center; flex-wrap:wrap; background:#fff;
+  border:1px solid #bcd3ea; border-radius:12px; padding:.4rem .5rem; }
+#dre .salvar-cx.on{ display:inline-flex; }
+#dre .salvar-cx input[type=text]{ border:1px solid var(--borda); border-radius:8px; padding:.3rem .5rem;
+  font-size:.8rem; width:13rem; }
+#dre .salvar-cx label{ font-size:.74rem; color:var(--muted); display:inline-flex; gap:.25rem; align-items:center; }
+#dre .importa{ font-size:.75rem; color:var(--amber); background:var(--amber-bg); border-radius:99px;
+  padding:.25rem .7rem; display:inline-flex; gap:.4rem; align-items:center; }
 
-/* ── Valores ──────────────────────────────────────────────────────────────── */
-.val-zero { color: #bbb; }
-.col-acum { background: #f8f5e4 !important; font-weight: 600; }
-.row-section .col-acum,
-.row-compras-section .col-acum,
-.row-block-total .col-acum,
-.row-compras-total .col-acum,
-.row-cmv-total .col-acum,
-.row-desp-total .col-acum,
-.row-lucro .col-acum { background: rgba(255,255,255,.15) !important; }
-.dif-pos  { color: #5fffaa; font-weight: 700; }
-.dif-neg  { color: #ff8080; font-weight: 700; }
+/* ajustes por empresa */
+#dre .ajustes{ display:none; border-top:1px dashed var(--borda); padding:.75rem .9rem; background:#fbfcfe; }
+#dre .ajustes.on{ display:grid; gap:.7rem; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); }
+#dre .emp{ background:#fff; border:1px solid var(--borda); border-radius:14px; overflow:hidden; }
+#dre .emp[hidden]{ display:none; }
+#dre .emp__h{ display:flex; align-items:center; gap:.5rem; padding:.55rem .75rem; font-weight:800; font-size:.86rem;
+  border-bottom:1px solid var(--linha); background:linear-gradient(90deg,#f3f8fd,#fff); }
+#dre .emp__h i{ color:var(--blue); }
+#dre .emp__b{ padding:.6rem .75rem .75rem; display:grid; gap:.6rem; }
+#dre .emp__r{ font-size:.64rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.06em;
+  margin-bottom:.3rem; display:flex; justify-content:space-between; align-items:center; }
+#dre .emp__r em{ font-style:normal; text-transform:none; letter-spacing:0; font-weight:600; color:#8a96a3; }
+#dre .busca{ border:1px solid var(--borda); border-radius:8px; padding:.25rem .5rem; font-size:.74rem; width:100%;
+  margin-bottom:.35rem; }
+#dre .rolo{ max-height:8.5rem; overflow:auto; padding:.1rem; }
+#dre .tg{ display:inline-flex; align-items:center; gap:.3rem; border:1px solid var(--borda); border-radius:9px;
+  padding:.25rem .55rem; font-size:.74rem; font-weight:700; cursor:pointer; background:#fff; color:#8a96a3; user-select:none; }
+#dre .tg input{ display:none; }
+#dre .tg.on{ border-color:#9fd3b5; background:var(--ok-bg); color:var(--ok); }
+#dre .tg .bi-check-circle-fill{ display:none; } #dre .tg.on .bi-check-circle-fill{ display:inline; }
+#dre .tg .bi-circle{ display:inline; } #dre .tg.on .bi-circle{ display:none; }
 
-/* ── Toggle icon ────────────────────────────────────────────────────────────*/
-.toggle-icon {
-  display: inline-block; width: 1em; font-size: .75em;
-  color: rgba(255,255,255,.8); margin-right: .2em;
-}
+/* ── painel: números do período ─────────────────────────────── */
+#dre .kpis{ display:grid; gap:.6rem; margin-bottom:1rem; grid-template-columns:repeat(2,1fr); }
+@media (min-width:900px){ #dre .kpis{ grid-template-columns:repeat(5,1fr); } }
+#dre .kpi{ background:var(--surface); border:1px solid var(--borda); border-radius:14px; padding:.7rem .85rem;
+  box-shadow:0 2px 10px rgba(20,35,60,.05); position:relative; overflow:hidden; }
+#dre .kpi::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--c, var(--blue)); }
+#dre .kpi .r{ font-size:.64rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.07em; }
+#dre .kpi .v{ font-size:1.32rem; font-weight:800; margin-top:.15rem; line-height:1.15; }
+#dre .kpi .s{ font-size:.72rem; color:var(--muted); margin-top:.15rem; }
+#dre .kpi.res{ background:linear-gradient(160deg,#f3f9f5,#e9f4ed); }
+#dre .kpi.res.neg{ background:linear-gradient(160deg,#fdf5f4,#fbecea); }
+#dre .kpi.res .v{ color:var(--ok); } #dre .kpi.res.neg .v{ color:var(--danger); }
+
+#dre .painel{ display:grid; gap:1rem; margin-bottom:1rem; }
+@media (min-width:1100px){ #dre .painel{ grid-template-columns:1.25fr 1fr; align-items:start; } }
+#dre .rk__i.mais{ display:none; } #dre .rk.todas .rk__i.mais{ display:grid; }
+#dre .card2{ background:var(--surface); border:1px solid var(--borda); border-radius:16px;
+  box-shadow:0 3px 14px rgba(20,35,60,.06); padding:.9rem 1rem; }
+#dre .card2 h3{ font-size:.7rem; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.07em; margin:0; }
+/* gráfico */
+#dre .graf__c{ position:relative; display:flex; align-items:stretch; gap:4px; height:200px; margin-top:.6rem; }
+#dre .graf__zero{ position:absolute; left:0; right:0; height:1px; background:#c7cfd9; }
+#dre .gm{ flex:1 1 0; position:relative; }
+#dre .gm:hover{ background:rgba(29,99,165,.06); border-radius:6px; }
+#dre .gm i{ position:absolute; left:20%; right:20%; display:block; }
+#dre .gm i.pos{ background:#2f9e5d; border-radius:4px 4px 0 0; }
+#dre .gm i.neg{ background:#d9534f; border-radius:0 0 4px 4px; }
+#dre .gm .v{ position:absolute; left:-12px; right:-12px; text-align:center; font-size:.6rem; font-weight:800; white-space:nowrap; }
+#dre .graf__m{ display:flex; gap:4px; margin-top:.3rem; }
+#dre .graf__m span{ flex:1 1 0; text-align:center; font-size:.62rem; font-weight:800; color:var(--muted); }
+#dre .dica{ position:fixed; pointer-events:none; z-index:60; background:#151d27; color:#fff; border-radius:9px;
+  padding:.5rem .65rem; font-size:.74rem; line-height:1.5; display:none; box-shadow:0 6px 18px rgba(0,0,0,.2); }
+#dre .dica b{ font-weight:800; }
+/* para onde vai o dinheiro */
+#dre .rk{ display:grid; gap:.42rem; margin-top:.7rem; }
+#dre .rk__i{ display:grid; grid-template-columns:1fr auto; gap:.1rem .6rem; cursor:pointer; padding:.3rem .45rem;
+  border-radius:9px; }
+#dre .rk__i:hover{ background:var(--blue-soft); }
+#dre .rk__n{ font-size:.8rem; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#dre .rk__v{ font-size:.8rem; font-weight:800; text-align:right; }
+#dre .rk__b{ grid-column:1 / -1; height:7px; background:var(--linha); border-radius:99px; overflow:hidden; }
+#dre .rk__b i{ display:block; height:100%; background:linear-gradient(90deg,#4f8fd0,#1D63A5); border-radius:99px; }
+#dre .rk__p{ font-size:.68rem; color:var(--muted); font-weight:600; margin-left:.3rem; }
+#dre .rk__i.neg .rk__b i{ background:#2f9e5d; }
+
+/* ── tabela DRE ─────────────────────────────────────────────── */
+#dre .tbx{ background:var(--surface); border:1px solid var(--borda); border-radius:16px; overflow:hidden;
+  box-shadow:0 3px 14px rgba(20,35,60,.07); margin-bottom:.6rem; }
+#dre .tbx__h{ display:flex; align-items:center; gap:.6rem; padding:.7rem 1rem; flex-wrap:wrap;
+  border-bottom:1px solid var(--linha); }
+#dre .tbx__h b{ font-size:.95rem; }
+#dre .tbx__h small{ color:var(--muted); font-size:.74rem; }
+#dre .tbx__h .dir{ margin-left:auto; display:flex; gap:.4rem; flex-wrap:wrap; }
+#dre .tab{ overflow-x:auto; }
+#dre table{ width:100%; border-collapse:collapse; font-size:.77rem; }
+#dre th{ background:#f0f4f8; color:#3d4854; font-size:.63rem; text-transform:uppercase; letter-spacing:.05em;
+  font-weight:800; padding:.5rem .45rem; text-align:right; white-space:nowrap; border-bottom:1px solid var(--borda);
+  position:sticky; top:0; z-index:2; }
+#dre th:first-child, #dre td:first-child{ text-align:left; position:sticky; left:0; background:inherit; z-index:1; }
+#dre th:first-child{ z-index:3; background:#f0f4f8; }
+#dre td{ padding:.37rem .45rem; text-align:right; white-space:nowrap; border-bottom:1px solid var(--linha); }
+#dre td + td, #dre th + th{ border-left:1px solid #edf0f4; }
+#dre td:first-child{ min-width:250px; max-width:330px; white-space:normal; }
+#dre tr{ background:#fff; }
+#dre th.acum, #dre td.acum{ background:#f7f3e6; font-weight:800; }
+#dre th.av, #dre td.av{ color:var(--muted); font-size:.7rem; font-weight:700; min-width:3.6rem; }
+#dre.sem-av .av{ display:none; }
+#dre tr[hidden]{ display:none; }
+
+#dre tr.l-sec td{ background:#f3f7fc !important; color:var(--blue-deep); font-weight:800; font-size:.7rem;
+  text-transform:uppercase; letter-spacing:.08em; border-top:2px solid #d4e2f1; padding:.5rem .55rem; }
+#dre tr.l-sec.cmv td{ color:#6b3a00; background:#fdf6ee !important; border-top-color:#f1d9bd; }
+#dre tr.l-sec.desp td{ color:#8e1f15; background:#fdf3f2 !important; border-top-color:#f3cfcb; }
+#dre tr.l-grp td{ font-weight:800; }
+#dre tr.l-grp td:first-child{ cursor:pointer; }
+#dre tr.l-grp .seta{ display:inline-block; width:1rem; color:var(--blue); transition:transform .15s; }
+#dre tr.l-grp.aberto .seta{ transform:rotate(90deg); }
+#dre tr.l-grp .ic{ width:1.15rem; text-align:center; margin-right:.15rem; }
+#dre tr.l-it td:first-child{ padding-left:2.1rem; color:#3a4655; }
+#dre tr.l-it2 td{ color:var(--muted); font-size:.72rem; font-style:italic; }
+#dre tr.l-it2 td:first-child{ padding-left:3.2rem; }
+#dre tr.l-tot td{ font-weight:800; border-top:1px solid #c9d3de; background:#f8fafc; }
+#dre tr.l-tot.rec td{ color:var(--ok); }
+#dre tr.l-tot.cmv td{ color:#7a3d00; }
+#dre tr.l-tot.desp td{ color:var(--danger); }
+#dre tr.l-res td{ font-weight:800; font-size:.84rem; border-top:2px solid var(--ink); border-bottom:0; }
+#dre tr.l-res td.pos{ color:var(--ok); background:var(--ok-bg); }
+#dre tr.l-res td.neg{ color:var(--danger); background:var(--danger-bg); }
+#dre tr.l-res.bruto td{ font-size:.8rem; border-top:1px solid #9aa6b4; }
+#dre tr.l-marg td{ font-size:.72rem; color:var(--muted); font-weight:700; }
+#dre tr.l-acu td{ font-size:.74rem; font-style:italic; font-weight:700; }
+#dre tr.l-acu td.pos{ color:var(--ok); } #dre tr.l-acu td.neg{ color:var(--danger); }
+#dre .tag-cam{ display:inline-flex; gap:.25rem; align-items:center; font-size:.64rem; font-weight:800; color:var(--blue);
+  background:var(--blue-soft); border-radius:99px; padding:.05rem .45rem; margin-left:.35rem; text-decoration:none; }
+#dre .tag-cam:hover{ background:#dbeafe; }
+#dre .sub-l{ font-size:.66rem; color:var(--muted); font-weight:400; }
+/* leitura: zebrado, linha e coluna sob o mouse */
+#dre tbody tr.zb > td{ background-color:#f6f8fb; }
+#dre tbody tr.zb > td.acum{ background-color:#efe7cf; }
+#dre tbody tr:not(.l-res):not(.l-sec):hover > td{ background-color:#e2edf9; }
+#dre tbody tr:not(.l-res):not(.l-sec):hover > td.acum{ background-color:#ebdfb8; }
+#dre td.colh, #dre th.colh{ box-shadow:inset 0 0 0 9999px rgba(29,99,165,.07); }
+#dre th.colh{ color:var(--blue); }
+#dre td.dr{ cursor:pointer; }
+#dre td.dr:hover{ color:var(--blue); text-decoration:underline; }
+#dre td.dr.sel{ outline:2px solid var(--blue); outline-offset:-2px; }
+#dre tr.foco > td{ animation:dreFoco 1.6s ease-out; }
+@keyframes dreFoco{ 0%{ background-color:#ffe9a8; } 100%{} }
+#dre .nota{ font-size:.73rem; color:var(--muted); margin:.3rem .3rem 1.2rem; line-height:1.55; }
+#dre .nota b{ color:#3a4655; }
+#dre .vazio{ background:#fff; border:1px dashed #c9d3de; border-radius:16px; padding:2.4rem 1rem; text-align:center; color:var(--muted); }
+#dre .vazio i{ font-size:2rem; color:#9fc0e3; }
+#dre .vazio b{ display:block; color:var(--ink); font-size:1rem; margin:.4rem 0 .2rem; }
+
+/* janela de lançamentos */
+.dre-veu{ position:fixed; inset:0; background:rgba(15,23,42,.55); z-index:1050; display:none; }
+.dre-jan{ position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:min(760px,calc(100% - 32px));
+  max-height:calc(100vh - 48px); background:#fff; z-index:1051; border-radius:14px; box-shadow:0 20px 60px rgba(0,0,0,.3);
+  display:none; flex-direction:column; font-size:13px; color:#1f2937; overflow:hidden; }
+body.dre-aberta .dre-veu{ display:block; } body.dre-aberta .dre-jan{ display:flex; }
+.dre-jan__cab{ padding:14px 18px; border-bottom:1px solid #e5e7eb; display:flex; gap:10px; align-items:flex-start; }
+.dre-jan__cab h2{ margin:0; font-size:15px; font-weight:700; }
+.dre-jan__sub{ color:#6b7280; font-size:12px; margin-top:2px; }
+.dre-jan__x{ margin-left:auto; border:0; background:none; font-size:22px; color:#6b7280; line-height:1; cursor:pointer; }
+.dre-jan__corpo{ overflow:auto; padding:12px 18px; flex:1; }
+.dre-jan__rod{ border-top:1px solid #e5e7eb; padding:10px 18px; display:flex; justify-content:space-between; font-weight:700; }
+.dre-it{ border:1px solid #e5e7eb; border-radius:10px; padding:9px 12px; margin-bottom:7px; }
+.dre-it__l1{ display:flex; justify-content:space-between; gap:10px; }
+.dre-it__v{ font-weight:800; white-space:nowrap; }
+.dre-it__m{ color:#6b7280; font-size:11px; margin-top:2px; }
+.dre-aviso{ background:#fffbeb; color:#92400e; border-radius:8px; padding:7px 10px; font-size:12px; margin-top:8px; }
 </style>
 {% endblock %}
 
-{% macro fmt(v) %}
-  {%- if v is not none and v != 0 -%}
-    R$ {{ '{:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }}
-  {%- else -%}<span class="val-zero">—</span>
-  {%- endif -%}
-{% endmacro %}
-
-{% macro fmtL(v) %}
-  {%- if v is not none and v != 0 -%}
-    {{ '{:,.3f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }} L
-  {%- else -%}<span class="val-zero">—</span>
-  {%- endif -%}
-{% endmacro %}
-
-{% macro fmtResult(v) %}
-  {%- if v is not none and v != 0 -%}
-    <span class="{{ 'dif-pos' if v > 0 else 'dif-neg' }}">
-      R$ {{ '{:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }}
-    </span>
-  {%- else -%}<span class="val-zero">—</span>
-  {%- endif -%}
-{% endmacro %}
-
 {% block content %}
-<div class="container-fluid">
+{% set tem_dados = months and empresa_ids %}
+{% set nomes_sel = [] %}{% for e in empresas %}{% if e.id|string in empresa_ids %}{% set _ = nomes_sel.append(e.nome) %}{% endif %}{% endfor %}
+<div id="dre">
 
-  <!-- Breadcrumb -->
-  <nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb small">
-      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
-      <li class="breadcrumb-item">Relatórios</li>
-      <li class="breadcrumb-item active">DRE Postos</li>
-    </ol>
-  </nav>
-
-  <!-- Hero -->
-  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mb-3">
-    <div class="hero-icon"><i class="bi bi-graph-up-arrow"></i></div>
-    <div class="flex-grow-1">
-      <h4 class="mb-0 fw-bold">DRE — Demonstração do Resultado</h4>
-      <p class="mb-0 opacity-75" style="font-size:.8rem;">
-        Vendas · Recebimentos · Despesas · Lucro Operacional por mês
-      </p>
+  <div class="topo">
+    <div class="topo__i"><i class="bi bi-graph-up-arrow"></i></div>
+    <div>
+      <div class="topo__t">DRE — Demonstração do Resultado</div>
+      <div class="topo__s">
+        {% if nomes_sel %}{{ nomes_sel|join(' + ') }}{% else %}Escolha a empresa{% endif %}
+        · {{ data_inicio[8:10] }}/{{ data_inicio[5:7] }}/{{ data_inicio[0:4] }} a {{ data_fim[8:10] }}/{{ data_fim[5:7] }}/{{ data_fim[0:4] }}
+      </div>
     </div>
-    <a href="{{ url_for('relatorios.lucro_postos') }}"
-       class="btn btn-sm px-3"
-       style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
-      <i class="bi bi-fuel-pump-fill me-1"></i> Lucro Postos
-    </a>
+    <div class="topo__a">
+      <a href="{{ url_for('conf_transportes.conf_transportes') }}"><i class="bi bi-truck"></i> Conf. Transportes</a>
+      <a href="{{ url_for('conf_despesas.conf_despesas') }}"><i class="bi bi-receipt"></i> Conf. Despesas</a>
+      <a href="{{ url_for('relatorios.lucro_postos') }}"><i class="bi bi-fuel-pump-fill"></i> Lucro Postos</a>
+    </div>
   </div>
 
-  <!-- ── FILTROS ──────────────────────────────────────────────────────────── -->
-  <form method="GET" id="formFiltro" class="card shadow-sm mb-3">
-    <div class="flt-header"><i class="bi bi-funnel me-1"></i> Filtros</div>
-    <div class="card-body py-2">
-      <div class="row g-2 align-items-end">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+    <div class="flash {{ 'flash--danger' if category == 'danger' else 'flash--warning' if category == 'warning' else '' }}">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
 
-        <!-- Empresa -->
-        <div class="col-md-3">
-          <label class="form-label form-label-sm mb-0 fw-semibold">
-            Empresa <small class="text-muted fw-normal">(Ctrl+clique p/ múltiplas)</small>
-          </label>
-          <select name="empresa_ids[]" id="sel_empresas"
-                  class="form-select form-select-sm" multiple size="5">
+  {# ═══════════════════════ FILTROS ═══════════════════════ #}
+  <div class="flt">
+    <div class="flt__salvos">
+      <span class="rot" style="padding:0"><i class="bi bi-bookmark-star"></i> Filtros salvos</span>
+      {% for f in filtros_salvos %}
+      <span class="sv" data-params="{{ f.params }}">
+        <a href="{{ url_for('dre_postos.dre_postos') }}?{{ f.params }}" title="Abrir este filtro">
+          {% if f.padrao %}<i class="bi bi-star-fill" style="color:#e0a100"></i>{% endif %}{{ f.nome }}</a>
+        <form method="post" action="{{ url_for('dre_postos.dre_filtro_acao', fid=f.id, acao='padrao') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="volta" class="volta" value="">
+          <button class="estrela{{ ' on' if f.padrao }}" title="{{ 'Deixar de abrir sozinho' if f.padrao else 'Abrir sempre com este filtro' }}">
+            <i class="bi {{ 'bi-star-fill' if f.padrao else 'bi-star' }}"></i></button>
+        </form>
+        <form method="post" action="{{ url_for('dre_postos.dre_filtro_acao', fid=f.id, acao='excluir') }}"
+              onsubmit="return confirm('Excluir o filtro “{{ f.nome|e }}”?')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="volta" class="volta" value="">
+          <button class="x" title="Excluir"><i class="bi bi-x-lg"></i></button>
+        </form>
+      </span>
+      {% else %}
+      <span class="sub-l">nenhum ainda — monte o filtro abaixo e clique em <b>Salvar filtro</b></span>
+      {% endfor %}
+      <span class="importa" id="importaLS" hidden>
+        <i class="bi bi-browser-chrome"></i> <span id="importaTxt"></span>
+        <form method="post" action="{{ url_for('dre_postos.dre_filtro_importar') }}" style="display:inline;margin:0">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="dados" id="importaDados">
+          <input type="hidden" name="volta" class="volta" value="">
+          <button class="lk" style="color:var(--amber)">trazer para o sistema</button>
+        </form>
+      </span>
+    </div>
+
+    <form method="get" id="formFiltro">
+      <input type="hidden" name="per" id="per" value="{{ per }}">
+      <div class="flt__corpo">
+        <div class="lin">
+          <div class="rot">Empresas</div>
+          <div class="chips" id="chipsEmp">
             {% for e in empresas %}
-            <option value="{{ e.id }}" {% if e.id|string in empresa_ids %}selected{% endif %}>
-              {{ e.nome }}
-            </option>
+            <label class="chip{{ ' on' if e.id|string in empresa_ids }}">
+              <input type="checkbox" name="empresa_ids[]" value="{{ e.id }}" {{ 'checked' if e.id|string in empresa_ids }}>
+              <i class="bi bi-check-lg"></i>{{ e.nome }}</label>
             {% endfor %}
-          </select>
-        </div>
-
-        <!-- Datas -->
-        <div class="col-md-2">
-          <label class="form-label form-label-sm mb-0 fw-semibold">Data início</label>
-          <input type="date" name="data_inicio" id="data_inicio"
-                 value="{{ data_inicio }}" class="form-control form-control-sm">
-          <div class="mt-1 d-flex gap-1 flex-wrap">
-            <button type="button" class="btn btn-outline-secondary btn-sm"
-                    style="font-size:.7rem;padding:.15rem .4rem;"
-                    onclick="setPeriodo('mes')">Este mês</button>
-            <button type="button" class="btn btn-outline-secondary btn-sm"
-                    style="font-size:.7rem;padding:.15rem .4rem;"
-                    onclick="setPeriodo('mes_ant')">Mês ant.</button>
-            <button type="button" class="btn btn-outline-secondary btn-sm"
-                    style="font-size:.7rem;padding:.15rem .4rem;"
-                    onclick="setPeriodo('ano')">Este ano</button>
+            <span class="sep"></span>
+            <button type="button" class="lk" data-emp="todas">todas</button>
+            <button type="button" class="lk" data-emp="nenhuma">nenhuma</button>
           </div>
         </div>
-        <div class="col-md-2">
-          <label class="form-label form-label-sm mb-0 fw-semibold">Data fim</label>
-          <input type="date" name="data_fim" id="data_fim"
-                 value="{{ data_fim }}" class="form-control form-control-sm">
-        </div>
-
-        <!-- Ações -->
-        <div class="col-md-5 d-flex gap-2 flex-wrap align-items-end">
-          <button type="submit" class="btn btn-primary btn-sm px-4">
-            <i class="bi bi-search me-1"></i> Filtrar
-          </button>
-          <a href="{{ url_for('dre_postos.dre_postos') }}"
-             class="btn btn-outline-secondary btn-sm px-3">
-            <i class="bi bi-x-circle me-1"></i> Limpar
-          </a>
-          <button type="button" class="btn btn-outline-primary btn-sm px-3"
-                  data-bs-toggle="modal" data-bs-target="#modalSalvarFiltro">
-            <i class="bi bi-bookmark-fill me-1"></i> Salvar Filtro
-          </button>
-          <button type="button" class="btn btn-outline-warning btn-sm px-3"
-                  data-bs-toggle="modal" data-bs-target="#modalCarregarFiltro"
-                  onclick="abrirModalCarregar()">
-            <i class="bi bi-bookmark me-1"></i> Carregar Filtro
-          </button>
-          <span id="msg_filtro" class="text-muted small"></span>
-        </div>
-
-        <!-- Modal: Salvar Filtro -->
-        <div class="modal fade" id="modalSalvarFiltro" tabindex="-1">
-          <div class="modal-dialog modal-sm">
-            <div class="modal-content">
-              <div class="modal-header py-2" style="background:#1D63A5;color:#fff;">
-                <h6 class="modal-title mb-0"><i class="bi bi-bookmark-fill me-1"></i> Salvar Filtro</h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-              </div>
-              <div class="modal-body">
-                <label class="form-label form-label-sm mb-1">Nome do preset</label>
-                <input type="text" id="inputNomeFiltro" class="form-control form-control-sm"
-                       placeholder="Ex: DRE Anual Completo" maxlength="60">
-              </div>
-              <div class="modal-footer py-1">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary btn-sm"
-                        onclick="confirmarSalvarFiltro()">
-                  <i class="bi bi-floppy me-1"></i> Salvar
-                </button>
-              </div>
+        <div class="lin">
+          <div class="rot">Período</div>
+          <div class="chips">
+            {% for k, t in [('mes','Este mês'),('mesant','Mês anterior'),('tri','Trimestre'),('ano','Este ano'),('anoant','Ano anterior'),('12m','Últimos 12 meses')] %}
+            <button type="button" class="chip sm{{ ' on' if per == k }}" data-per="{{ k }}">{{ t }}</button>
+            {% endfor %}
+            <span class="sep"></span>
+            <div class="datas">
+              <input type="date" name="data_inicio" id="data_inicio" value="{{ data_inicio }}">
+              <span>até</span>
+              <input type="date" name="data_fim" id="data_fim" value="{{ data_fim }}">
             </div>
           </div>
         </div>
+      </div>
 
-        <!-- Modal: Carregar Filtro -->
-        <div class="modal fade" id="modalCarregarFiltro" tabindex="-1">
-          <div class="modal-dialog">
-            <div class="modal-content">
-              <div class="modal-header py-2" style="background:#1D63A5;color:#fff;">
-                <h6 class="modal-title mb-0"><i class="bi bi-bookmark me-1"></i> Filtros Salvos</h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-              </div>
-              <div class="modal-body p-2" id="listaPresets">
-                <p class="text-muted small mb-0">Nenhum filtro salvo.</p>
-              </div>
-              <div class="modal-footer py-1">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+      {# ajustes finos por empresa (um cartão por empresa marcada) #}
+      <div class="ajustes" id="ajustes">
+        {% for e in empresas %}{% set eid = e.id|string %}
+        {% set cfg = empresa_configs_for_js.get(eid, {}) %}
+        <div class="emp" data-eid="{{ eid }}" {{ 'hidden' if eid not in empresa_ids }}>
+          <div class="emp__h"><i class="bi bi-building"></i> {{ e.nome }}</div>
+          <div class="emp__b">
+            <input type="hidden" name="cf_{{ eid }}_submitted" value="1">
+            <div>
+              <div class="emp__r">O que entra</div>
+              <div class="chips">
+                {% for k, t, ic in [('vendas','Vendas','bi-fuel-pump-fill'),('compras','CMV (estoque e compras)','bi-box-seam'),('aluguel','Aluguel','bi-house-door'),('prazo','Clientes à prazo','bi-person-lines-fill'),('cartoes','Cartões','bi-credit-card')] %}
+                {% set on = cfg.get('include_' ~ k, True) %}
+                <input type="hidden" name="cf_{{ eid }}_{{ k }}" value="0">
+                <label class="tg{{ ' on' if on }}"><input type="checkbox" name="cf_{{ eid }}_{{ k }}" value="1" {{ 'checked' if on }}>
+                  <i class="bi bi-check-circle-fill"></i><i class="bi bi-circle"></i> <i class="bi {{ ic }}"></i> {{ t }}</label>
+                {% endfor %}
               </div>
             </div>
+            <div>
+              {% set tsel = cfg.get('titulo_ids', [])|map('string')|list %}
+              <div class="emp__r">Despesas <em class="qt" data-vazio="todas"></em></div>
+              <div class="chips">
+                {% for t in titulos %}
+                <label class="chip sm{{ ' on' if t.id|string in tsel }}"><input type="checkbox" name="cf_{{ eid }}_titulos[]" value="{{ t.id }}" {{ 'checked' if t.id|string in tsel }}>
+                  <i class="bi bi-check-lg"></i>{{ t.nome }}</label>
+                {% endfor %}
+              </div>
+            </div>
+            {% if formas %}
+            <div>
+              {% set fsel = cfg.get('forma_ids', [])|map('string')|list %}
+              <div class="emp__r">Formas de recebimento (aluguel e prazo) <em class="qt" data-vazio="todas"></em></div>
+              <input type="search" class="busca" placeholder="procurar forma…">
+              <div class="chips rolo">
+                {% for f in formas %}
+                <label class="chip sm{{ ' on' if f.id|string in fsel }}"><input type="checkbox" name="cf_{{ eid }}_formas[]" value="{{ f.id }}" {{ 'checked' if f.id|string in fsel }}>
+                  <i class="bi bi-check-lg"></i>{{ f.nome }}</label>
+                {% endfor %}
+              </div>
+            </div>
+            {% endif %}
           </div>
         </div>
-
+        {% endfor %}
       </div>
 
-      <!-- ── Configuração por empresa ──────────────────────────────────────── -->
-      <div class="mt-3" id="empresa-configs-wrap" style="display:none;">
-        <div class="mb-1 fw-semibold small" style="color:#1D63A5;">
-          <i class="bi bi-sliders me-1"></i>
-          Configuração individual por empresa
-          <small class="text-muted fw-normal ms-1">(vazio = sem restrição)</small>
+      <div class="flt__acoes">
+        <button type="submit" class="bt bt--pri"><i class="bi bi-search"></i> Aplicar</button>
+        <button type="button" class="bt bt--ghost" id="btAjustes"><i class="bi bi-sliders"></i> Ajustes por empresa <span id="qtAjustes" class="sub-l"></span></button>
+        <a class="bt bt--ghost" href="{{ url_for('dre_postos.dre_postos') }}?per=ano"><i class="bi bi-arrow-counterclockwise"></i> Limpar</a>
+        <div class="dir">
+          <div class="salvar-cx" id="salvarCx">
+            <input type="text" id="svNome" maxlength="80" placeholder="Nome do filtro (ex.: NH GTBA no ano)">
+            <label><input type="checkbox" id="svPadrao"> abrir sempre com este</label>
+            <button type="button" class="bt bt--pri" id="svOk" style="padding:.38rem .8rem"><i class="bi bi-floppy"></i> Salvar</button>
+            <button type="button" class="lk" id="svCancela">cancelar</button>
+          </div>
+          <button type="button" class="bt" id="btSalvar"><i class="bi bi-bookmark-plus"></i> Salvar filtro</button>
         </div>
-        <div id="empresa-configs" class="d-flex flex-wrap gap-2"></div>
       </div>
+    </form>
+    <form method="post" id="formSalvar" action="{{ url_for('dre_postos.dre_filtro_salvar') }}" hidden>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="nome"><input type="hidden" name="params"><input type="hidden" name="padrao">
+    </form>
+  </div>
 
-    </div>
-  </form>
+  {% if not empresa_ids %}
+  <div class="vazio">
+    <i class="bi bi-building-check"></i>
+    <b>Escolha a empresa</b>
+    Marque uma ou mais empresas acima e clique em <b>Aplicar</b>. Os cartões só aparecem para a empresa dona da maquininha.
+  </div>
+  {% elif not months %}
+  <div class="vazio"><i class="bi bi-calendar-x"></i><b>Período inválido</b>Confira as datas.</div>
+  {% else %}
 
-  <!-- ── TABELA DRE ───────────────────────────────────────────────────────── -->
-  {% if months %}
-  <div class="card shadow-sm">
-    <div class="card-header py-2" style="background:#1D63A5;color:#fff;font-size:.78rem;font-weight:600;">
-      <i class="bi bi-table me-1"></i>
-      DRE — {{ data_inicio|replace('-','/') }} a {{ data_fim|replace('-','/') }}
-      {% if empresa_ids %}<span class="ms-2 opacity-75 small">({{ empresa_ids|length }} empresa{{ 's' if empresa_ids|length > 1 else '' }})</span>{% endif %}
+  {# ═══════════════════════ NÚMEROS DO PERÍODO ═══════════════════════ #}
+  {% set lucro_bruto = grand_receitas - grand_cmv %}
+  <div class="kpis">
+    <div class="kpi" style="--c:#2f9e5d">
+      <div class="r">Receitas</div><div class="v num">{{ brl(grand_receitas) }}</div>
+      <div class="s">vendas, aluguel e prazo</div></div>
+    <div class="kpi" style="--c:#e07b00">
+      <div class="r">CMV</div><div class="v num">{{ brl(grand_cmv) }}</div>
+      <div class="s">{{ pct(grand_cmv, grand_receitas) }} da receita</div></div>
+    <div class="kpi" style="--c:#b42318">
+      <div class="r">Despesas</div><div class="v num">{{ brl(grand_despesas) }}</div>
+      <div class="s">{{ pct(grand_despesas, grand_receitas) }} da receita</div></div>
+    <div class="kpi res{{ ' neg' if grand_lucro < 0 }}" style="--c:{{ '#b42318' if grand_lucro < 0 else '#146c43' }}">
+      <div class="r">{{ 'Prejuízo' if grand_lucro < 0 else 'Lucro' }} operacional</div><div class="v num">{{ brl(grand_lucro) }}</div>
+      <div class="s">lucro bruto {{ brl(lucro_bruto) }}</div></div>
+    <div class="kpi" style="--c:#1D63A5">
+      <div class="r">Margem</div><div class="v num">{{ pct(grand_lucro, grand_receitas) }}</div>
+      <div class="s">lucro ÷ receitas</div></div>
+  </div>
+
+  <div class="painel">
+    <div class="card2">
+      <h3>Resultado mês a mês</h3>
+      {% set ns = namespace(pos=0, neg=0) %}
+      {% for m in months %}{% set v = lucro_by_month.get(m.key, 0) %}
+        {% if v > ns.pos %}{% set ns.pos = v %}{% endif %}{% if v < ns.neg %}{% set ns.neg = v %}{% endif %}
+      {% endfor %}
+      {% set faixa = (ns.pos - ns.neg) if (ns.pos - ns.neg) > 0 else 1 %}
+      {% set zero = 12 + 76 * ns.pos / faixa %}
+      <div class="graf__c">
+        <div class="graf__zero" style="top:{{ zero }}%"></div>
+        {% for m in months %}{% set v = lucro_by_month.get(m.key, 0) %}{% set h = 76 * (v|abs) / faixa %}
+        <div class="gm" data-mes="{{ m.label }}/{{ m.year }}" data-rec="{{ brl(receitas_by_month.get(m.key, 0)) }}"
+             data-cmv="{{ brl(cmv_by_month.get(m.key, 0)) }}" data-des="{{ brl(grand_despesas_by_month.get(m.key, 0)) }}"
+             data-res="{{ brl(v) }}">
+          {% if v >= 0 %}
+            <i class="pos" style="top:{{ zero - h }}%;height:{{ h }}%"></i>
+            {% if v|abs >= 0.5 %}<span class="v num" style="top:calc({{ zero - h }}% - 15px);color:var(--ok)">{{ mil(v) }}</span>{% endif %}
+          {% else %}
+            <i class="neg" style="top:{{ zero }}%;height:{{ h }}%"></i>
+            <span class="v num" style="top:calc({{ zero + h }}% + 2px);color:var(--danger)">−{{ mil(v) }}</span>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="graf__m">{% for m in months %}<span>{{ m.label }}</span>{% endfor %}</div>
     </div>
-    <div class="card-body p-0" style="overflow-x:auto;">
-      <table class="tbl-dre">
-        <thead>
-          <tr>
-            <th class="col-desc">Descrição</th>
-            {% for m in months %}<th>{{ m.label }}{{ '/'+m.year|string if months|length > 12 else '' }}</th>{% endfor %}
-            <th class="col-acum">TOTAL</th>
-          </tr>
-        </thead>
+
+    <div class="card2">
+      <h3>Para onde vai o dinheiro</h3>
+      {% set rk = [] %}
+      {% for b in despesas_blocks %}{% set _ = rk.append({'nome': b.titulo_nome, 'tot': b.total, 'g': 'tit_' ~ b.titulo_id}) %}{% endfor %}
+      {% if grand_cartoes %}{% set _ = rk.append({'nome': 'CARTÕES (taxas)', 'tot': grand_cartoes, 'g': 'cartoes'}) %}{% endif %}
+      {% set rk = rk|sort(attribute='tot', reverse=True) %}
+      {% set mx = namespace(v=0.01) %}{% for r in rk %}{% if r.tot|abs > mx.v %}{% set mx.v = r.tot|abs %}{% endif %}{% endfor %}
+      <div class="rk">
+        {% for r in rk %}
+        <div class="rk__i{{ ' neg' if r.tot < 0 }}{{ ' mais' if loop.index > 8 }}" data-vai="{{ r.g }}" title="Abrir na tabela">
+          <div class="rk__n">{{ r.nome }}</div>
+          <div class="rk__v num">{{ brl(r.tot) }}<span class="rk__p">{{ pct(r.tot, grand_despesas) }}</span></div>
+          <div class="rk__b"><i style="width:{{ (100 * (r.tot|abs) / mx.v)|round(1) }}%"></i></div>
+        </div>
+        {% else %}
+        <div class="sub-l" style="margin-top:.6rem">Nenhuma despesa no período.</div>
+        {% endfor %}
+      </div>
+      {% if rk|length > 8 %}<button type="button" class="lk" style="margin-top:.4rem" onclick="var k=this.previousElementSibling;k.classList.toggle('todas');this.textContent=k.classList.contains('todas')?'ver só as 8 maiores':'ver todas ({{ rk|length }})'">ver todas ({{ rk|length }})</button>{% endif %}
+    </div>
+  </div>
+
+  {# ═══════════════════════ A DRE ═══════════════════════ #}
+  <section class="tbx">
+    <div class="tbx__h">
+      <b><i class="bi bi-table" style="color:var(--blue)"></i> Demonstrativo</b>
+      <small>clique numa linha com <i class="bi bi-chevron-right"></i> para abrir · clique num valor de despesa para ver os lançamentos</small>
+      <div class="dir">
+        <button type="button" class="bt bt--ghost" id="btAbreTudo"><i class="bi bi-arrows-expand"></i> Abrir tudo</button>
+        <button type="button" class="bt bt--ghost" id="btFechaTudo"><i class="bi bi-arrows-collapse"></i> Fechar tudo</button>
+        <button type="button" class="bt bt--ghost" id="btAV"><i class="bi bi-percent"></i> % da receita</button>
+      </div>
+    </div>
+    <div class="tab">
+      <table>
+        <thead><tr>
+          <th>Descrição</th>
+          {% for m in months %}<th>{{ m.label }}{{ '/' ~ m.year if months|length > 12 }}</th>{% endfor %}
+          <th class="acum">Total</th><th class="av">% rec.</th>
+        </tr></thead>
         <tbody>
 
-          {# ══════════════════════════════════════════════════════
-             BLOCO: RECEITAS
-          ══════════════════════════════════════════════════════ #}
-          <tr class="row-section">
-            <td class="col-desc" colspan="{{ months|length + 2 }}">
-              <i class="bi bi-arrow-up-circle me-1"></i> RECEITAS
-            </td>
-          </tr>
-
-          {# ── Vendas de Combustíveis (R$) ─────────────────── #}
-          {% if any_include_vendas %}
-          {# Main row — toggle expands per-product sub-rows #}
-          <tr class="row-item" onclick="toggleGroup('vendas')" style="cursor:pointer;">
-            <td class="col-desc fw-semibold">
-              <span class="toggle-icon" id="icon-vendas">▶</span>
-              <i class="bi bi-fuel-pump-fill me-1 text-success"></i> Vendas de Combustíveis
-            </td>
-            {% for m in months %}
-              {% set v = vendas_reais_by_month.get(m.key, 0) %}
-              <td class="text-end">{{ fmt(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(grand_vendas_reais) }}</td>
-          </tr>
-
-          {# Per-product sub-rows (collapsed by default — click header to expand) #}
-          {% set all_vendas_prods = [] %}
-          {% for mk, pm in vendas_por_produto.items() %}
-            {% for prod in pm.keys() %}
-              {% if prod not in all_vendas_prods %}{% set _ = all_vendas_prods.append(prod) %}{% endif %}
-            {% endfor %}
-          {% endfor %}
-          {% for prod in all_vendas_prods | sort %}
-          {# R$ row per product #}
-          <tr class="row-child" data-group="vendas" style="display:none;">
-            <td class="col-desc">└ {{ prod }}</td>
-            {% for m in months %}
-              {% set v = vendas_por_produto.get(m.key, {}).get(prod, {}).get('reais', 0) %}
-              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(grand_vendas_por_produto.get(prod, {}).get('reais', 0)) }}</td>
-          </tr>
-          {# Litros row per product (indented italic) — only when product has litros #}
-          {% if grand_vendas_por_produto.get(prod, {}).get('litros', 0) > 0 %}
-          <tr class="row-litros-child" data-group="vendas" style="display:none;">
-            <td class="col-desc" style="padding-left:3rem !important;">└─ Litros</td>
-            {% for m in months %}
-              {% set v = vendas_por_produto.get(m.key, {}).get(prod, {}).get('litros', 0) %}
-              <td class="text-end">{{ fmtL(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmtL(grand_vendas_por_produto.get(prod, {}).get('litros', 0)) }}</td>
-          </tr>
+        {# ── RECEITAS ── #}
+        <tr class="l-sec"><td colspan="{{ months|length + 3 }}"><i class="bi bi-arrow-up-circle"></i> Receitas</td></tr>
+        {% if any_include_vendas %}
+          {% set prods = [] %}
+          {% for mk, pm in vendas_por_produto.items() %}{% for p in pm.keys() %}{% if p not in prods %}{% set _ = prods.append(p) %}{% endif %}{% endfor %}{% endfor %}
+          <tr class="l-grp" data-abre="vendas"><td><span class="seta">›</span><i class="bi bi-fuel-pump-fill ic" style="color:#2f9e5d"></i>Vendas de combustíveis</td>
+            {{ vals(vendas_reais_by_month, grand_vendas_reais) }}</tr>
+          {% for p in prods|sort %}
+          <tr class="l-it" data-pai="vendas" hidden><td>{{ p }}</td>
+            {% set bym = {} %}{% for m in months %}{% set _ = bym.update({m.key: vendas_por_produto.get(m.key, {}).get(p, {}).get('reais', 0)}) %}{% endfor %}
+            {{ vals(bym, grand_vendas_por_produto.get(p, {}).get('reais', 0)) }}</tr>
+          {% if grand_vendas_por_produto.get(p, {}).get('litros', 0) > 0 %}
+          <tr class="l-it2" data-pai="vendas" hidden><td>litros</td>
+            {% set bym = {} %}{% for m in months %}{% set _ = bym.update({m.key: vendas_por_produto.get(m.key, {}).get(p, {}).get('litros', 0)}) %}{% endfor %}
+            {{ valsL(bym, grand_vendas_por_produto.get(p, {}).get('litros', 0)) }}</tr>
           {% endif %}
           {% endfor %}
-
-          {# ── ARLA ──────────────────────────────────────────── #}
-          {% if grand_arla > 0 %}
-          <tr class="row-item">
-            <td class="col-desc fw-semibold">
-              <i class="bi bi-droplet-fill me-1 text-info"></i> ARLA
-            </td>
-            {% for m in months %}
-              {% set v = arla_by_month.get(m.key, 0) %}
-              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(grand_arla) }}</td>
-          </tr>
+          {% if grand_arla|abs >= 0.005 %}
+          <tr class="l-grp"><td><span class="seta"></span><i class="bi bi-droplet-fill ic" style="color:#0aa2c0"></i>ARLA</td>{{ vals(arla_by_month, grand_arla) }}</tr>
           {% endif %}
-
-          {# ── LUBRIFICANTES ─────────────────────────────────── #}
-          {% if grand_lubrif > 0 %}
-          <tr class="row-item">
-            <td class="col-desc fw-semibold">
-              <i class="bi bi-gear-fill me-1 text-secondary"></i> LUBRIFICANTES
-            </td>
-            {% for m in months %}
-              {% set v = lubrif_by_month.get(m.key, 0) %}
-              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(grand_lubrif) }}</td>
-          </tr>
+          {% if grand_lubrif|abs >= 0.005 %}
+          <tr class="l-grp"><td><span class="seta"></span><i class="bi bi-gear-fill ic" style="color:#6c757d"></i>Lubrificantes</td>{{ vals(lubrif_by_month, grand_lubrif) }}</tr>
           {% endif %}
-
-          {% endif %}{# if any_include_vendas #}
-
-          {# ── Recebimento de Aluguel ──────────────────────── #}
-          {% if any_include_aluguel %}
-          <tr class="row-item" onclick="toggleGroup('aluguel')" style="cursor:pointer;">
-            <td class="col-desc fw-semibold">
-              <span class="toggle-icon" id="icon-aluguel">▶</span>
-              <i class="bi bi-house-door me-1 text-primary"></i> Recebimento de Aluguel
-            </td>
-            {% for m in months %}
-              {% set v = recebimentos.aluguel.get(m.key, 0) %}
-              <td class="text-end">{{ fmt(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(grand_aluguel) }}</td>
-          </tr>
+        {% endif %}
+        {% if any_include_aluguel %}
+          <tr class="l-grp" data-abre="aluguel"><td><span class="seta">›</span><i class="bi bi-house-door ic" style="color:#1D63A5"></i>Recebimento de aluguel</td>
+            {{ vals(recebimentos.aluguel, grand_aluguel) }}</tr>
           {% for f in recebimentos.aluguel_formas %}
-          <tr class="row-child" data-group="aluguel" style="display:none;">
-            <td class="col-desc">└ {{ f.nome }}</td>
-            {% for m in months %}
-              {% set v = f.by_month.get(m.key, 0) %}
-              <td class="text-end">{{ fmt(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(f.total) }}</td>
-          </tr>
+          <tr class="l-it" data-pai="aluguel" hidden><td>{{ f.nome }}</td>{{ vals(f.by_month, f.total) }}</tr>
           {% endfor %}
-          {% endif %}{# if any_include_aluguel #}
-
-          {# ── Clientes à Prazo ────────────────────────────── #}
-          {% if any_include_prazo %}
-          <tr class="row-item" onclick="toggleGroup('prazo')" style="cursor:pointer;">
-            <td class="col-desc fw-semibold">
-              <span class="toggle-icon" id="icon-prazo">▶</span>
-              <i class="bi bi-person-lines-fill me-1 text-info"></i> Clientes à Prazo
-            </td>
-            {% for m in months %}
-              {% set v = recebimentos.cliente_a_prazo.get(m.key, 0) %}
-              <td class="text-end">{{ fmt(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(grand_prazo) }}</td>
-          </tr>
+        {% endif %}
+        {% if any_include_prazo %}
+          <tr class="l-grp" data-abre="prazo"><td><span class="seta">›</span><i class="bi bi-person-lines-fill ic" style="color:#0aa2c0"></i>Clientes à prazo</td>
+            {{ vals(recebimentos.cliente_a_prazo, grand_prazo) }}</tr>
           {% for f in recebimentos.cliente_a_prazo_formas %}
-          <tr class="row-child" data-group="prazo" style="display:none;">
-            <td class="col-desc">└ {{ f.nome }}</td>
-            {% for m in months %}
-              {% set v = f.by_month.get(m.key, 0) %}
-              <td class="text-end">{{ fmt(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(f.total) }}</td>
-          </tr>
+          <tr class="l-it" data-pai="prazo" hidden><td>{{ f.nome }}</td>{{ vals(f.by_month, f.total) }}</tr>
           {% endfor %}
-          {% endif %}{# if any_include_prazo #}
+        {% endif %}
+        <tr class="l-tot rec"><td><i class="bi bi-plus-circle-fill"></i> Total receitas</td>{{ vals(receitas_by_month, grand_receitas) }}</tr>
 
-          {# TOTAL RECEITAS #}
-          <tr class="row-block-total">
-            <td class="col-desc"><i class="bi bi-plus-circle-fill me-1"></i> TOTAL RECEITAS</td>
-            {% for m in months %}
-              <td class="text-end">{{ fmt(receitas_by_month.get(m.key, 0)) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(grand_receitas) }}</td>
-          </tr>
-
-          {# ══════════════════════════════════════════════════════
-             BLOCO: CMV — Custo da Mercadoria Vendida
-          ══════════════════════════════════════════════════════ #}
-          {% if any_include_compras %}
-          <tr class="row-compras-section">
-            <td class="col-desc" colspan="{{ months|length + 2 }}">
-              <i class="bi bi-calculator-fill me-1"></i> CMV — CUSTO DA MERCADORIA VENDIDA
-            </td>
-          </tr>
-
-          {# ── Coleta todos os produtos para EI, Compras e EF ── #}
-          {% set all_cmv_prods = [] %}
-          {% for mk, pm in estoque_ei.items() %}
-            {% for prod in pm.keys() %}
-              {% if prod not in all_cmv_prods %}{% set _ = all_cmv_prods.append(prod) %}{% endif %}
-            {% endfor %}
+        {# ── CMV ── #}
+        {% if any_include_compras %}
+          {% set cp = [] %}
+          {% for src in [estoque_ei, compras_por_produto, estoque_ef] %}{% for mk, pm in src.items() %}{% for p in pm.keys() %}{% if p not in cp %}{% set _ = cp.append(p) %}{% endif %}{% endfor %}{% endfor %}{% endfor %}
+          <tr class="l-sec cmv"><td colspan="{{ months|length + 3 }}"><i class="bi bi-calculator"></i> CMV — custo da mercadoria vendida</td></tr>
+          {% for g, titulo, src, tot_bym, tot, gp in [
+               ('ei', '(+) Estoque inicial', estoque_ei, estoque_ei_by_month, grand_estoque_ei_total, grand_estoque_ei),
+               ('cp', '(+) Compras de combustíveis', compras_por_produto, compras_by_month, grand_compras, grand_compras_por_produto),
+               ('ef', '(−) Estoque final', estoque_ef, estoque_ef_by_month, grand_estoque_ef_total, grand_estoque_ef)] %}
+          <tr class="l-grp" data-abre="cmv_{{ g }}"><td><span class="seta">›</span><i class="bi {{ 'bi-cart-fill' if g == 'cp' else 'bi-box-seam' }} ic" style="color:#e07b00"></i>{{ titulo }}</td>
+            {{ vals(tot_bym, tot) }}</tr>
+          {% for p in cp|sort %}
+          <tr class="l-it" data-pai="cmv_{{ g }}" hidden><td>{{ p }}</td>
+            {% set bym = {} %}{% for m in months %}{% set _ = bym.update({m.key: src.get(m.key, {}).get(p, {}).get('reais', 0)}) %}{% endfor %}
+            {{ vals(bym, gp.get(p, {}).get('reais', 0)) }}</tr>
+          <tr class="l-it2" data-pai="cmv_{{ g }}" hidden><td>litros</td>
+            {% set bym = {} %}{% for m in months %}{% set _ = bym.update({m.key: src.get(m.key, {}).get(p, {}).get('litros', 0)}) %}{% endfor %}
+            {{ valsL(bym, gp.get(p, {}).get('litros', 0)) }}</tr>
           {% endfor %}
-          {% for mk, pm in compras_por_produto.items() %}
-            {% for prod in pm.keys() %}
-              {% if prod not in all_cmv_prods %}{% set _ = all_cmv_prods.append(prod) %}{% endif %}
-            {% endfor %}
           {% endfor %}
-          {% for mk, pm in estoque_ef.items() %}
-            {% for prod in pm.keys() %}
-              {% if prod not in all_cmv_prods %}{% set _ = all_cmv_prods.append(prod) %}{% endif %}
-            {% endfor %}
+          <tr class="l-tot cmv"><td><i class="bi bi-calculator-fill"></i> CMV = EI + compras − EF</td>{{ vals(cmv_by_month, grand_cmv) }}</tr>
+          {% set lb = {} %}{% for m in months %}{% set _ = lb.update({m.key: receitas_by_month.get(m.key, 0) - cmv_by_month.get(m.key, 0)}) %}{% endfor %}
+          <tr class="l-res bruto"><td>= Lucro bruto <span class="sub-l">(receitas − CMV)</span></td>
+            {% for m in months %}{% set v = lb[m.key] %}<td class="{{ 'pos' if v >= 0 else 'neg' }}">{{ brl0(v) }}</td>{% endfor %}
+            <td class="{{ 'pos' if lucro_bruto >= 0 else 'neg' }}">{{ brl0(lucro_bruto) }}</td><td class="av">{{ pct(lucro_bruto, grand_receitas) }}</td></tr>
+        {% endif %}
+
+        {# ── DESPESAS ── #}
+        <tr class="l-sec desp"><td colspan="{{ months|length + 3 }}"><i class="bi bi-arrow-down-circle"></i> Despesas</td></tr>
+        {% if not despesas_blocks and not grand_cartoes %}
+        <tr><td colspan="{{ months|length + 3 }}" style="color:var(--muted);font-style:italic">Nenhuma despesa no período / filtros escolhidos.</td></tr>
+        {% endif %}
+        {% for b in despesas_blocks %}
+          {% set eh_cam = caminhoes_titulo_id and b.titulo_id|string == caminhoes_titulo_id %}
+          <tr class="l-grp" data-abre="tit_{{ b.titulo_id }}"><td><span class="seta">›</span>{% if eh_cam %}<i class="bi bi-truck ic" style="color:#1D63A5"></i>{% endif %}{{ b.titulo_nome }}
+            {% if eh_cam %}<a class="tag-cam" href="{{ url_for('conf_transportes.conf_transportes', data_inicio=data_inicio, data_fim=data_fim) }}" onclick="event.stopPropagation()" title="O que os caminhões dão: Conf. Transportes"><i class="bi bi-box-arrow-up-right"></i> Conf. Transportes</a>{% endif %}</td>
+            {{ vals(b.total_by_month, b.total) }}</tr>
+          {% for r in b.rows %}
+          {% set drill = (b.titulo_id, r.categoria_id, b.titulo_nome ~ ' › ' ~ r.categoria_nome) if (b.titulo_id is number and r.categoria_id is number) else None %}
+          <tr class="l-it" data-pai="tit_{{ b.titulo_id }}" hidden><td>{{ r.categoria_nome }}
+            {% if eh_cam %}{% for c in caminhoes_sc %}{% if r.categoria_id == 'cam_sc_' ~ c.eid %}<div class="sub-l">custo de levar {{ lt(c.litros_tot) }} sem cobrança de frete — resultado da frota ÷ litros (Conf. Transportes)</div>{% endif %}{% endfor %}{% endif %}</td>
+            {{ vals(r.by_month, r.total, drill) }}</tr>
           {% endfor %}
-
-          {# ══ ESTOQUE INICIAL ══ #}
-          <tr class="row-estoque-item" onclick="toggleGroup('estoque_ei')" style="cursor:pointer;">
-            <td class="col-desc fw-semibold">
-              <span class="toggle-icon" id="icon-estoque_ei">▶</span>
-              <i class="bi bi-box-seam me-1"></i> (+) Estoque Inicial
-            </td>
-            {% for m in months %}
-              {% set v = estoque_ei_by_month.get(m.key, 0) %}
-              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(grand_estoque_ei_total) }}</td>
-          </tr>
-          {% for prod in all_cmv_prods | sort %}
-          <tr class="row-estoque-child" data-group="estoque_ei" style="display:none;">
-            <td class="col-desc">└ {{ prod }}</td>
-            {% for m in months %}
-              {% set v = estoque_ei.get(m.key, {}).get(prod, {}).get('reais', 0) %}
-              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(grand_estoque_ei.get(prod, {}).get('reais', 0)) }}</td>
-          </tr>
-          <tr class="row-estoque-litros" data-group="estoque_ei" style="display:none;">
-            <td class="col-desc">└─ Litros</td>
-            {% for m in months %}
-              {% set v = estoque_ei.get(m.key, {}).get(prod, {}).get('litros', 0) %}
-              <td class="text-end">{{ fmtL(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmtL(grand_estoque_ei.get(prod, {}).get('litros', 0)) }}</td>
-          </tr>
-          {% endfor %}
-
-          {# ══ COMPRAS ══ #}
-          <tr class="row-compras-item" onclick="toggleGroup('compras')" style="cursor:pointer;">
-            <td class="col-desc fw-semibold">
-              <span class="toggle-icon" id="icon-compras" style="color:#e65100;">▶</span>
-              <i class="bi bi-fuel-pump me-1" style="color:#e65100;"></i> (+) Compras de Combustíveis
-            </td>
-            {% for m in months %}
-              {% set v = compras_by_month.get(m.key, 0) %}
-              <td class="text-end">{{ fmt(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(grand_compras) }}</td>
-          </tr>
-          {% for prod in all_cmv_prods | sort %}
-          <tr class="row-compras-child" data-group="compras" style="display:none;">
-            <td class="col-desc">└ {{ prod }}</td>
-            {% for m in months %}
-              {% set v = compras_por_produto.get(m.key, {}).get(prod, {}).get('reais', 0) %}
-              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(grand_compras_por_produto.get(prod, {}).get('reais', 0)) }}</td>
-          </tr>
-          <tr class="row-compras-litros" data-group="compras" style="display:none;">
-            <td class="col-desc">└─ Litros</td>
-            {% for m in months %}
-              {% set v = compras_por_produto.get(m.key, {}).get(prod, {}).get('litros', 0) %}
-              <td class="text-end">{{ fmtL(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmtL(grand_compras_por_produto.get(prod, {}).get('litros', 0)) }}</td>
-          </tr>
-          {% endfor %}
-
-          {# ══ ESTOQUE FINAL ══ #}
-          <tr class="row-estoque-item" onclick="toggleGroup('estoque_ef')" style="cursor:pointer;">
-            <td class="col-desc fw-semibold">
-              <span class="toggle-icon" id="icon-estoque_ef">▶</span>
-              <i class="bi bi-box-seam me-1"></i> (−) Estoque Final
-            </td>
-            {% for m in months %}
-              {% set v = estoque_ef_by_month.get(m.key, 0) %}
-              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(grand_estoque_ef_total) }}</td>
-          </tr>
-          {% for prod in all_cmv_prods | sort %}
-          <tr class="row-estoque-child" data-group="estoque_ef" style="display:none;">
-            <td class="col-desc">└ {{ prod }}</td>
-            {% for m in months %}
-              {% set v = estoque_ef.get(m.key, {}).get(prod, {}).get('reais', 0) %}
-              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(grand_estoque_ef.get(prod, {}).get('reais', 0)) }}</td>
-          </tr>
-          <tr class="row-estoque-litros" data-group="estoque_ef" style="display:none;">
-            <td class="col-desc">└─ Litros</td>
-            {% for m in months %}
-              {% set v = estoque_ef.get(m.key, {}).get(prod, {}).get('litros', 0) %}
-              <td class="text-end">{{ fmtL(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmtL(grand_estoque_ef.get(prod, {}).get('litros', 0)) }}</td>
-          </tr>
-          {% endfor %}
-
-          {# ══ CMV TOTAL ══ #}
-          <tr class="row-cmv-total">
-            <td class="col-desc">
-              <i class="bi bi-calculator-fill me-1"></i> CMV = EI + Compras − EF
-            </td>
-            {% for m in months %}
-              <td class="text-end">{{ fmt(cmv_by_month.get(m.key, 0)) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(grand_cmv) }}</td>
-          </tr>
-          {% endif %}{# if any_include_compras #}
-
-          {# ══════════════════════════════════════════════════════
-             BLOCO: DESPESAS
-          ══════════════════════════════════════════════════════ #}
-          <tr class="row-section">
-            <td class="col-desc" colspan="{{ months|length + 2 }}">
-              <i class="bi bi-dash-circle me-1"></i> DESPESAS
-            </td>
-          </tr>
-
-          {% if not despesas_blocks %}
-          <tr>
-            <td class="col-desc text-muted" colspan="{{ months|length + 2 }}">
-              <em>Nenhuma despesa encontrada no período / filtros selecionados.</em>
-            </td>
-          </tr>
-          {% endif %}
-
-          {% for block in despesas_blocks %}
-          {# Título do bloco (expansível) #}
-          <tr class="row-titulo" onclick="toggleGroup('tit_{{ block.titulo_id }}')">
-            <td class="col-desc">
-              <span class="toggle-icon" id="icon-tit_{{ block.titulo_id }}">▶</span>
-              {{ block.titulo_nome }}
-            </td>
-            {% for m in months %}
-              <td class="text-end">{{ fmt(block.total_by_month.get(m.key, 0)) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(block.total) }}</td>
-          </tr>
-          {# Linhas de categoria (ocultas por padrão) #}
-          {% for row in block.rows %}
-          <tr class="row-item row-child" data-group="tit_{{ block.titulo_id }}" style="display:none;">
-            <td class="col-desc">└ {{ row.categoria_nome }}</td>
-            {% for m in months %}
-              {% set v = row.by_month.get(m.key, 0) %}
-              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(row.total) }}</td>
-          </tr>
-          {% endfor %}
-          {% endfor %}{# for block in despesas_blocks #}
-
-          {# CARTÕES — taxas globais de cartão (igual a conf_cartoes) #}
-          {% if grand_cartoes %}
-          <tr class="row-titulo" onclick="toggleGroup('cartoes_block')">
-            <td class="col-desc">
-              <span class="toggle-icon" id="icon-cartoes_block">▶</span>
-              <i class="bi bi-credit-card me-1"></i> CARTÕES
-            </td>
-            {% for m in months %}
-              <td class="text-end">{{ fmt(cartoes_by_month.get(m.key, 0)) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(grand_cartoes) }}</td>
-          </tr>
+        {% endfor %}
+        {% if grand_cartoes %}
+          <tr class="l-grp" data-abre="cartoes"><td><span class="seta">›</span><i class="bi bi-credit-card ic" style="color:#6f42c1"></i>CARTÕES <span class="sub-l">taxas das operadoras</span></td>
+            {{ vals(cartoes_by_month, grand_cartoes) }}</tr>
           {% for band in cartoes_taxas_list %}
-          <tr class="row-item row-child" data-group="cartoes_block" style="display:none;">
-            <td class="col-desc">└ {{ band.nome }}{% if band.tipo == 'DEBITO' and 'BARAT' not in (band.nome|upper) and 'X7' not in (band.nome|upper) %} · débito{% elif band.tipo == 'CREDITO' and 'BARAT' not in (band.nome|upper) and 'X7' not in (band.nome|upper) %} · crédito{% endif %}</td>
-            {% for m in months %}
-              {% set v = band.fee_by_month.get(m.key, 0) %}
-              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(band.fee_total) }}</td>
-          </tr>
+          {% set solo = 'BARAT' in (band.nome|upper) or 'X7' in (band.nome|upper) %}
+          <tr class="l-it" data-pai="cartoes" hidden><td>{{ band.nome }}{% if not solo %}<span class="sub-l"> · {{ 'débito' if band.tipo == 'DEBITO' else 'crédito' }}</span>{% endif %}</td>
+            {{ vals(band.fee_by_month, band.fee_total) }}</tr>
           {% endfor %}
-          {% endif %}
+        {% endif %}
+        <tr class="l-tot desp"><td><i class="bi bi-dash-circle-fill"></i> Total despesas</td>{{ vals(grand_despesas_by_month, grand_despesas) }}</tr>
 
-          {# TOTAL DESPESAS #}
-          <tr class="row-desp-total">
-            <td class="col-desc"><i class="bi bi-dash-circle-fill me-1"></i> TOTAL DESPESAS</td>
-            {% for m in months %}
-              <td class="text-end">{{ fmt(grand_despesas_by_month.get(m.key, 0)) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmt(grand_despesas) }}</td>
-          </tr>
-
-          {# ══════════════════════════════════════════════════════
-             LUCRO OPERACIONAL
-          ══════════════════════════════════════════════════════ #}
-          <tr class="row-lucro {% if grand_lucro < 0 %}row-lucro-neg{% endif %}">
-            <td class="col-desc"><i class="bi bi-trophy-fill me-1"></i> LUCRO OPERACIONAL</td>
-            {% for m in months %}
-              {% set v = lucro_by_month.get(m.key, 0) %}
-              <td class="text-end">{{ fmtResult(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmtResult(grand_lucro) }}</td>
-          </tr>
-
-          {# LUCRO ACUMULADO (YTD) #}
-          {% set last_acum = lucro_acumulado_by_month[months[-1].key] if months else 0 %}
-          <tr class="row-lucro {% if last_acum < 0 %}row-lucro-neg{% endif %}" style="font-style:italic; opacity:.85;">
-            <td class="col-desc"><i class="bi bi-graph-up-arrow me-1"></i> LUCRO ACUMULADO</td>
-            {% for m in months %}
-              {% set v = lucro_acumulado_by_month.get(m.key, 0) %}
-              <td class="text-end">{{ fmtResult(v) }}</td>
-            {% endfor %}
-            <td class="text-end col-acum">{{ fmtResult(last_acum) }}</td>
-          </tr>
-
+        {# ── RESULTADO ── #}
+        <tr class="l-res"><td><i class="bi bi-trophy-fill"></i> = {{ 'Prejuízo' if grand_lucro < 0 else 'Lucro' }} operacional</td>
+          {% for m in months %}{% set v = lucro_by_month.get(m.key, 0) %}<td class="{{ 'pos' if v >= 0 else 'neg' }}">{{ brl0(v) }}</td>{% endfor %}
+          <td class="{{ 'pos' if grand_lucro >= 0 else 'neg' }}">{{ brl0(grand_lucro) }}</td><td class="av">{{ pct(grand_lucro, grand_receitas) }}</td></tr>
+        <tr class="l-marg"><td>Margem</td>
+          {% for m in months %}<td>{{ pct(lucro_by_month.get(m.key, 0), receitas_by_month.get(m.key, 0)) }}</td>{% endfor %}
+          <td>{{ pct(grand_lucro, grand_receitas) }}</td><td class="av"></td></tr>
+        <tr class="l-acu"><td><i class="bi bi-graph-up-arrow"></i> Lucro acumulado</td>
+          {% for m in months %}{% set v = lucro_acumulado_by_month.get(m.key, 0) %}<td class="{{ 'pos' if v >= 0 else 'neg' }}">{{ brl0(v) }}</td>{% endfor %}
+          {% set ua = lucro_acumulado_by_month[months[-1].key] %}
+          <td class="{{ 'pos' if ua >= 0 else 'neg' }}">{{ brl0(ua) }}</td><td class="av"></td></tr>
         </tbody>
       </table>
-    </div><!-- card-body -->
-  </div><!-- card -->
-
-  {% else %}
-  <div class="alert alert-info d-flex align-items-center gap-2">
-    <i class="bi bi-info-circle-fill fs-5"></i>
-    <span>Selecione o <strong>período</strong> e ao menos uma <strong>Empresa</strong> e clique em <strong>Filtrar</strong>.</span>
+    </div>
+  </section>
+  <div class="nota">
+    <b>Caminhões:</b> entra só o que o transporte <b>sem cobrança de frete</b> custou à empresa escolhida
+    (linha "Custo dos sem cobrança" da Conf. Transportes: resultado da frota no mês ÷ litros levados sem frete).
+    Mês em que a frota deu lucro aparece negativo — o frete cobrado pagou tudo. Para ver quanto cada caminhão dá, abra a Conf. Transportes.<br>
+    <b>Cartões:</b> só aparecem para a empresa dona da maquininha (mesma conta da Conf. Despesas, pelo arquivo da operadora).
   </div>
   {% endif %}
 
-</div>{# container-fluid #}
+  <div class="dica" id="dreDica"></div>
+</div>
+
+<div class="dre-veu" onclick="dreFecha()"></div>
+<div class="dre-jan" role="dialog" aria-modal="true">
+  <div class="dre-jan__cab"><div><h2 id="djTit"></h2><div class="dre-jan__sub" id="djSub"></div></div>
+    <button class="dre-jan__x" onclick="dreFecha()" aria-label="Fechar">×</button></div>
+  <div class="dre-jan__corpo" id="djCorpo"></div>
+  <div class="dre-jan__rod" id="djRod"></div>
+</div>
 
 <script>
-// ── Dados dos filtros (injetados pelo servidor) ───────────────────────────
-var TITULOS = {{ titulos | tojson }};
-var FORMAS  = {{ formas  | tojson }};
-var EMPRESA_NAMES   = {{ empresas_por_id    | tojson }};
-var EMPRESA_CONFIGS = {{ empresa_configs_for_js | tojson }};
+(function () {
+  var raiz = document.getElementById('dre');
+  var form = document.getElementById('formFiltro');
+  var qs = function (s, el) { return (el || raiz).querySelector(s); };
+  var qsa = function (s, el) { return Array.prototype.slice.call((el || raiz).querySelectorAll(s)); };
 
-// ── Toggle rows de grupo ──────────────────────────────────────────────────
-function toggleGroup(gid) {
-  var rows  = document.querySelectorAll('[data-group="' + gid + '"]');
-  var icon  = document.getElementById('icon-' + gid);
-  var shown = rows.length > 0 && rows[0].style.display !== 'none';
-  rows.forEach(function(r) { r.style.display = shown ? 'none' : ''; });
-  if (icon) icon.textContent = shown ? '▶' : '▼';
-}
-
-// ── Período rápido ────────────────────────────────────────────────────────
-function setPeriodo(tipo) {
-  var hoje = new Date();
-  var ini, fim;
-  if (tipo === 'mes') {
-    ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-    fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-  } else if (tipo === 'mes_ant') {
-    ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
-    fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
-  } else {
-    ini = new Date(hoje.getFullYear(), 0, 1);
-    fim = new Date(hoje.getFullYear(), 11, 31);
-  }
-  document.getElementById('data_inicio').value = _fmtDate(ini);
-  document.getElementById('data_fim').value    = _fmtDate(fim);
-}
-function _fmtDate(d) {
-  return d.getFullYear() + '-' +
-         String(d.getMonth() + 1).padStart(2,'0') + '-' +
-         String(d.getDate()).padStart(2,'0');
-}
-
-// ── Opções multi-select em HTML (helper) ─────────────────────────────────
-function _buildOptions(items, selectedVals) {
-  return items.map(function(item) {
-    var sel = selectedVals.indexOf(String(item.id)) >= 0 ? ' selected' : '';
-    var nome = item.nome.replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    return '<option value="' + item.id + '"' + sel + '>' + nome + '</option>';
-  }).join('');
-}
-
-// ── Card por empresa ──────────────────────────────────────────────────────
-function buildEmpresaCard(eid, eName, cfg) {
-  cfg = cfg || {};
-  var tituloSel = cfg.titulo_ids  || [];
-  var formaSel  = cfg.forma_ids   || [];
-  var incV  = cfg.include_vendas  !== false;
-  var incA  = cfg.include_aluguel !== false;
-  var incP  = cfg.include_prazo   !== false;
-  var incC  = cfg.include_compras !== false;
-
-  var titulosHtml = TITULOS.length
-    ? '<select name="cf_' + eid + '_titulos[]" multiple class="form-select form-select-sm" size="4">' +
-      _buildOptions(TITULOS, tituloSel.map(String)) + '</select>'
-    : '<p class="text-muted small mb-0">Nenhum título.</p>';
-
-  var formasHtml = FORMAS.length
-    ? '<select name="cf_' + eid + '_formas[]" multiple class="form-select form-select-sm" size="4">' +
-      _buildOptions(FORMAS, formaSel.map(String)) + '</select>'
-    : '<p class="text-muted small mb-0">Nenhuma forma.</p>';
-
-  var chkV = incV  ? ' checked' : '';
-  var chkA = incA  ? ' checked' : '';
-  var chkP = incP  ? ' checked' : '';
-  var chkC = incC  ? ' checked' : '';
-
-  return [
-    '<div class="card" style="min-width:320px;max-width:440px;border:1px solid #1D63A5;">',
-    '  <div class="card-header d-flex align-items-center py-1 px-3" style="background:#1D63A5;color:#fff;font-size:.78rem;font-weight:600;">',
-    '    <i class="bi bi-building me-1"></i>', eName,
-    '  </div>',
-    '  <input type="hidden" name="cf_' + eid + '_submitted" value="1">',
-    '  <div class="card-body py-2 px-3">',
-    '    <div class="row g-2">',
-
-    '      <div class="col-5">',
-    '        <label class="form-label form-label-sm mb-0 fw-semibold">Cat. Despesa</label>',
-    '        <div class="form-text mt-0 mb-1" style="font-size:.67rem;">vazio = todas</div>',
-    titulosHtml,
-    '      </div>',
-
-    '      <div class="col-5">',
-    '        <label class="form-label form-label-sm mb-0 fw-semibold">Forma Receb.</label>',
-    '        <div class="form-text mt-0 mb-1" style="font-size:.67rem;">vazio = todas</div>',
-    formasHtml,
-    '      </div>',
-
-    '      <div class="col-2 d-flex flex-column justify-content-start pt-1">',
-    '        <div class="form-text mb-1 fw-semibold" style="font-size:.72rem;">Incluir</div>',
-
-    '        <input type="hidden" name="cf_' + eid + '_vendas" value="0">',
-    '        <div class="form-check form-check-sm mb-1">',
-    '          <input class="form-check-input" type="checkbox"',
-    '                 name="cf_' + eid + '_vendas" value="1"',
-    '                 id="chkV_' + eid + '"' + chkV + '>',
-    '          <label class="form-check-label" for="chkV_' + eid + '" style="font-size:.7rem;">',
-    '            <i class="bi bi-fuel-pump-fill text-success"></i> Vendas</label>',
-    '        </div>',
-
-    '        <input type="hidden" name="cf_' + eid + '_compras" value="0">',
-    '        <div class="form-check form-check-sm mb-1">',
-    '          <input class="form-check-input" type="checkbox"',
-    '                 name="cf_' + eid + '_compras" value="1"',
-    '                 id="chkC_' + eid + '"' + chkC + '>',
-    '          <label class="form-check-label" for="chkC_' + eid + '" style="font-size:.7rem;">',
-    '            <i class="bi bi-cart-fill" style="color:#e65100;"></i> Compras</label>',
-    '        </div>',
-
-    '        <input type="hidden" name="cf_' + eid + '_aluguel" value="0">',
-    '        <div class="form-check form-check-sm mb-1">',
-    '          <input class="form-check-input" type="checkbox"',
-    '                 name="cf_' + eid + '_aluguel" value="1"',
-    '                 id="chkA_' + eid + '"' + chkA + '>',
-    '          <label class="form-check-label" for="chkA_' + eid + '" style="font-size:.7rem;">',
-    '            <i class="bi bi-house-door text-primary"></i> Aluguel</label>',
-    '        </div>',
-
-    '        <input type="hidden" name="cf_' + eid + '_prazo" value="0">',
-    '        <div class="form-check form-check-sm">',
-    '          <input class="form-check-input" type="checkbox"',
-    '                 name="cf_' + eid + '_prazo" value="1"',
-    '                 id="chkP_' + eid + '"' + chkP + '>',
-    '          <label class="form-check-label" for="chkP_' + eid + '" style="font-size:.7rem;">',
-    '            <i class="bi bi-person-lines-fill text-info"></i> Prazo</label>',
-    '        </div>',
-
-    '      </div>',   // col-2
-    '    </div>',     // row
-    '  </div>',       // card-body
-    '</div>',
-  ].join('\n');
-}
-
-// ── Renderiza (ou re-renderiza) todos os cards por empresa ─────────────────
-function renderEmpresaCards() {
-  var container = document.getElementById('empresa-configs');
-  var wrap      = document.getElementById('empresa-configs-wrap');
-  if (!container) return;
-
-  var selectedEids = Array.from(
-    document.getElementById('sel_empresas').selectedOptions
-  ).map(function(o) { return o.value; });
-
-  if (selectedEids.length === 0) {
-    container.innerHTML = '';
-    wrap.style.display = 'none';
-    return;
-  }
-
-  wrap.style.display = '';
-
-  // Preserve existing configs from current cards before re-rendering
-  var preserved = {};
-  selectedEids.forEach(function(eid) {
-    var titEl = document.querySelector('[name="cf_' + eid + '_titulos[]"]');
-    var forEl = document.querySelector('[name="cf_' + eid + '_formas[]"]');
-    if (titEl || forEl) {
-      preserved[eid] = {
-        titulo_ids:      titEl ? Array.from(titEl.selectedOptions).map(o => o.value) : [],
-        forma_ids:       forEl ? Array.from(forEl.selectedOptions).map(o => o.value) : [],
-        include_vendas:  document.getElementById('chkV_' + eid)?.checked === true,
-        include_compras: document.getElementById('chkC_' + eid)?.checked === true,
-        include_aluguel: document.getElementById('chkA_' + eid)?.checked === true,
-        include_prazo:   document.getElementById('chkP_' + eid)?.checked === true,
-      };
-    }
+  /* chips: o visual segue o checkbox */
+  function pinta(lbl) { var i = lbl.querySelector('input'); lbl.classList.toggle('on', !!(i && i.checked)); }
+  qsa('label.chip, label.tg').forEach(function (l) {
+    l.querySelector('input').addEventListener('change', function () { pinta(l); contaAjustes(); });
   });
 
-  container.innerHTML = '';
-  selectedEids.forEach(function(eid) {
-    var cfg = preserved[eid] || EMPRESA_CONFIGS[eid] || {};
-    var name = EMPRESA_NAMES[eid] || ('Empresa ' + eid);
-    container.insertAdjacentHTML('beforeend', buildEmpresaCard(eid, name, cfg));
-  });
-}
-
-// ── Filtros múltiplos (localStorage) ─────────────────────────────────────
-var LS_PRESETS_KEY = 'dre_postos_presets_v1';
-
-function _lerPresets() {
-  try { return JSON.parse(localStorage.getItem(LS_PRESETS_KEY) || '{}'); }
-  catch(e) { return {}; }
-}
-
-function _salvarPresets(presets) {
-  localStorage.setItem(LS_PRESETS_KEY, JSON.stringify(presets));
-}
-
-function _coletarFiltroAtual() {
-  var selectedEids = Array.from(
-    document.getElementById('sel_empresas').selectedOptions
-  ).map(function(o) { return o.value; });
-
-  var cfgs = {};
-  selectedEids.forEach(function(eid) {
-    var titEl = document.querySelector('[name="cf_' + eid + '_titulos[]"]');
-    var forEl = document.querySelector('[name="cf_' + eid + '_formas[]"]');
-    cfgs[eid] = {
-      titulo_ids:      titEl ? Array.from(titEl.selectedOptions).map(function(o){ return o.value; }) : [],
-      forma_ids:       forEl ? Array.from(forEl.selectedOptions).map(function(o){ return o.value; }) : [],
-      include_vendas:  document.getElementById('chkV_' + eid) ? document.getElementById('chkV_' + eid).checked : false,
-      include_compras: document.getElementById('chkC_' + eid) ? document.getElementById('chkC_' + eid).checked : false,
-      include_aluguel: document.getElementById('chkA_' + eid) ? document.getElementById('chkA_' + eid).checked : false,
-      include_prazo:   document.getElementById('chkP_' + eid) ? document.getElementById('chkP_' + eid).checked : false,
-    };
+  /* empresas: mostra/esconde o cartão de ajustes (o escondido não vai no envio) */
+  function syncEmp() {
+    var sel = qsa('#chipsEmp input:checked').map(function (i) { return i.value; });
+    qsa('.emp').forEach(function (c) {
+      var on = sel.indexOf(c.dataset.eid) >= 0;
+      c.hidden = !on;
+      qsa('input', c).forEach(function (i) { i.disabled = !on; });
+    });
+    contaAjustes();
+  }
+  qsa('#chipsEmp input').forEach(function (i) { i.addEventListener('change', syncEmp); });
+  qsa('[data-emp]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var on = b.dataset.emp === 'todas';
+      qsa('#chipsEmp input').forEach(function (i) { i.checked = on; pinta(i.parentNode); });
+      syncEmp();
+    });
   });
 
-  return {
-    empresas:    selectedEids,
-    data_inicio: document.getElementById('data_inicio').value,
-    data_fim:    document.getElementById('data_fim').value,
-    configs:     cfgs,
-  };
-}
-
-function confirmarSalvarFiltro() {
-  var nome = (document.getElementById('inputNomeFiltro').value || '').trim();
-  if (!nome) {
-    document.getElementById('inputNomeFiltro').focus();
-    return;
+  /* quantos ajustes fora do padrão */
+  function contaAjustes() {
+    var n = 0;
+    qsa('.emp:not([hidden])').forEach(function (c) {
+      var t = qsa('input[name$="_titulos[]"]:checked', c).length;
+      var f = qsa('input[name$="_formas[]"]:checked', c).length;
+      var off = qsa('label.tg input:not(:checked)', c).length;
+      qsa('.emp__r .qt', c).forEach(function (q, k) {
+        var x = k === 0 ? t : f;
+        q.textContent = x ? x + ' escolhida(s)' : 'vazio = todas';
+      });
+      n += (t ? 1 : 0) + (f ? 1 : 0) + off;
+    });
+    qs('#qtAjustes').textContent = n ? '(' + n + ' ajuste' + (n > 1 ? 's' : '') + ')' : '';
   }
-  var presets = _lerPresets();
-  if (presets[nome] && !confirm('Já existe um filtro com o nome "' + nome + '". Deseja substituí-lo?')) {
-    return;
-  }
-  presets[nome] = _coletarFiltroAtual();
-  _salvarPresets(presets);
-  bootstrap.Modal.getInstance(document.getElementById('modalSalvarFiltro')).hide();
-  document.getElementById('inputNomeFiltro').value = '';
-  document.getElementById('msg_filtro').textContent = '✔ Filtro "' + nome + '" salvo!';
-  setTimeout(function(){ document.getElementById('msg_filtro').textContent = ''; }, 2500);
-}
+  qs('#btAjustes').addEventListener('click', function () { qs('#ajustes').classList.toggle('on'); });
 
-function _escHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function _renderListaPresets() {
-  var presets = _lerPresets();
-  var names = Object.keys(presets).sort();
-  var container = document.getElementById('listaPresets');
-  if (!container) return;
-  if (!names.length) {
-    container.innerHTML = '<p class="text-muted small mb-0">Nenhum filtro salvo.</p>';
-    return;
-  }
-  var html = '<div class="list-group list-group-flush">';
-  names.forEach(function(nome) {
-    html += '<div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2 px-2">'
-          + '<span class="small fw-semibold text-truncate" style="max-width:260px;" title="' + _escHtml(nome) + '">' + _escHtml(nome) + '</span>'
-          + '<span class="d-flex gap-1">'
-          + '<button type="button" class="btn btn-primary btn-sm py-0 px-2" data-preset-action="carregar" data-preset-name="' + _escHtml(nome) + '"><i class="bi bi-arrow-up-circle"></i> Carregar</button>'
-          + '<button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" data-preset-action="excluir" data-preset-name="' + _escHtml(nome) + '"><i class="bi bi-trash"></i></button>'
-          + '</span>'
-          + '</div>';
+  /* procurar forma de recebimento */
+  qsa('.busca').forEach(function (b) {
+    b.addEventListener('input', function () {
+      var t = b.value.trim().toUpperCase();
+      qsa('label.chip', b.nextElementSibling).forEach(function (l) {
+        l.style.display = !t || l.textContent.toUpperCase().indexOf(t) >= 0 ? '' : 'none';
+      });
+    });
   });
-  html += '</div>';
-  container.innerHTML = html;
-}
 
-function abrirModalCarregar() {
-  _renderListaPresets();
-}
+  /* período: atalhos relativos (o filtro salvo continua "este ano" no ano que vem) */
+  function iso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function periodo(p) {
+    var h = new Date(), y = h.getFullYear(), m = h.getMonth(), a, b;
+    if (p === 'mes') { a = new Date(y, m, 1); b = new Date(y, m + 1, 0); }
+    else if (p === 'mesant') { a = new Date(y, m - 1, 1); b = new Date(y, m, 0); }
+    else if (p === 'tri') { var q = Math.floor(m / 3) * 3; a = new Date(y, q, 1); b = new Date(y, q + 3, 0); }
+    else if (p === 'anoant') { a = new Date(y - 1, 0, 1); b = new Date(y - 1, 11, 31); }
+    else if (p === '12m') { a = new Date(y, m - 11, 1); b = new Date(y, m + 1, 0); }
+    else { a = new Date(y, 0, 1); b = new Date(y, 11, 31); }
+    return [iso(a), iso(b)];
+  }
+  qsa('[data-per]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var d = periodo(b.dataset.per);
+      qs('#data_inicio').value = d[0]; qs('#data_fim').value = d[1];
+      qs('#per').value = b.dataset.per;
+      qsa('[data-per]').forEach(function (x) { x.classList.toggle('on', x === b); });
+    });
+  });
+  ['#data_inicio', '#data_fim'].forEach(function (s) {
+    qs(s).addEventListener('change', function () {
+      qs('#per').value = '';
+      qsa('[data-per]').forEach(function (x) { x.classList.remove('on'); });
+    });
+  });
 
-function aplicarPreset(nome) {
-  var presets = _lerPresets();
-  var data = presets[nome];
-  if (!data) return;
+  /* os parâmetros que o formulário mandaria agora */
+  function paramsAtuais() {
+    var p = new URLSearchParams();
+    new FormData(form).forEach(function (v, k) {
+      if (k === 'per' && !v) return;
+      if ((k === 'data_inicio' || k === 'data_fim') && qs('#per').value) return;   // relativo: as datas saem da regra
+      p.append(k, v);
+    });
+    return p.toString();
+  }
+  function normaliza(s) {
+    var p = new URLSearchParams(s), a = [];
+    p.forEach(function (v, k) { a.push(k + '=' + v); });
+    return a.sort().join('&');
+  }
+  qsa('.volta').forEach(function (i) { i.value = location.pathname + location.search; });
+
+  /* salvar filtro */
+  var cx = qs('#salvarCx');
+  qs('#btSalvar').addEventListener('click', function () {
+    cx.classList.add('on'); this.style.display = 'none'; qs('#svNome').focus();
+  });
+  qs('#svCancela').addEventListener('click', function () {
+    cx.classList.remove('on'); qs('#btSalvar').style.display = '';
+  });
+  function salva() {
+    var nome = qs('#svNome').value.trim();
+    if (!nome) { qs('#svNome').focus(); return; }
+    if (!qsa('#chipsEmp input:checked').length) { alert('Marque ao menos uma empresa antes de salvar.'); return; }
+    var f = document.getElementById('formSalvar');
+    f.nome.value = nome; f.params.value = paramsAtuais(); f.padrao.value = qs('#svPadrao').checked ? '1' : '';
+    var ja = qsa('.sv a').some(function (a) { return a.textContent.trim() === nome; });
+    if (ja && !confirm('Já existe um filtro "' + nome + '". Substituir?')) return;
+    f.submit();
+  }
+  qs('#svOk').addEventListener('click', salva);
+  qs('#svNome').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); salva(); } });
+
+  /* filtro salvo que corresponde à tela atual fica marcado */
+  var atual = normaliza(location.search.replace(/^\?/, ''));
+  qsa('.sv').forEach(function (s) { if (atual && normaliza(s.dataset.params) === atual) s.classList.add('atual'); });
+
+  /* filtros antigos, que estavam só neste navegador */
   try {
-    var sel = document.getElementById('sel_empresas');
-    Array.from(sel.options).forEach(function(o) {
-      o.selected = (data.empresas || []).indexOf(o.value) >= 0;
+    var LS = JSON.parse(localStorage.getItem('dre_postos_presets_v1') || '{}'), lista = [];
+    var nomesSv = qsa('.sv a').map(function (a) { return a.textContent.trim(); });
+    Object.keys(LS).forEach(function (nome) {
+      if (nomesSv.indexOf(nome) >= 0) return;
+      var d = LS[nome] || {}, p = new URLSearchParams();
+      if (d.data_inicio) p.append('data_inicio', d.data_inicio);
+      if (d.data_fim) p.append('data_fim', d.data_fim);
+      (d.empresas || []).forEach(function (e) {
+        p.append('empresa_ids[]', e);
+        var c = (d.configs || {})[e];
+        if (!c) return;
+        p.append('cf_' + e + '_submitted', '1');
+        (c.titulo_ids || []).forEach(function (t) { p.append('cf_' + e + '_titulos[]', t); });
+        (c.forma_ids || []).forEach(function (t) { p.append('cf_' + e + '_formas[]', t); });
+        ['vendas', 'compras', 'aluguel', 'prazo'].forEach(function (k) {
+          p.append('cf_' + e + '_' + k, '0');
+          if (c['include_' + k]) p.append('cf_' + e + '_' + k, '1');
+        });
+      });
+      if ((d.empresas || []).length) lista.push({nome: nome, params: p.toString()});
     });
-    EMPRESA_CONFIGS = data.configs || {};
-    // Limpa cards existentes para que renderEmpresaCards use EMPRESA_CONFIGS
-    // (sem isso, a lógica de "preserved" lê o DOM atual e ignora o preset)
-    var _econt = document.getElementById('empresa-configs');
-    if (_econt) _econt.innerHTML = '';
-    renderEmpresaCards();
-    if (data.data_inicio) document.getElementById('data_inicio').value = data.data_inicio;
-    if (data.data_fim)    document.getElementById('data_fim').value    = data.data_fim;
-    // Submete o formulário para recarregar o relatório com o filtro carregado
-    document.getElementById('formFiltro').submit();
-  } catch(e) {
-    document.getElementById('msg_filtro').textContent = 'Erro ao carregar filtro.';
+    if (lista.length) {
+      qs('#importaDados').value = JSON.stringify(lista);
+      qs('#importaTxt').textContent = lista.length + ' filtro(s) salvos só neste navegador';
+      qs('#importaLS').hidden = false;
+    }
+  } catch (e) {}
+
+  syncEmp();
+  if ({{ 'true' if empresa_ids and (empresa_configs_for_js.values()|selectattr('titulo_ids')|list or empresa_configs_for_js.values()|selectattr('forma_ids')|list) else 'false' }})
+    qs('#ajustes').classList.add('on');
+
+  /* ── tabela ── */
+  var tb = qs('table tbody');
+  if (!tb) return;
+  function fechar(id) {
+    qsa('tr[data-pai="' + id + '"]').forEach(function (f) { f.hidden = true; });
   }
-}
+  qsa('tr[data-abre]').forEach(function (tr) {
+    tr.addEventListener('click', function (e) {
+      if (e.target.closest('td.dr, a')) return;
+      var id = tr.dataset.abre, abrir = !tr.classList.contains('aberto');
+      tr.classList.toggle('aberto', abrir);
+      qsa('tr[data-pai="' + id + '"]').forEach(function (f) { f.hidden = !abrir; });
+    });
+  });
+  qs('#btAbreTudo').addEventListener('click', function () {
+    qsa('tr[data-abre]').forEach(function (tr) { tr.classList.add('aberto'); });
+    qsa('tr[data-pai]').forEach(function (f) { f.hidden = false; });
+  });
+  qs('#btFechaTudo').addEventListener('click', function () {
+    qsa('tr[data-abre]').forEach(function (tr) { tr.classList.remove('aberto'); });
+    qsa('tr[data-pai]').forEach(function (f) { f.hidden = true; });
+  });
+  var avOn = true;
+  try { avOn = localStorage.getItem('dre_av') !== '0'; } catch (e) {}
+  function av() { raiz.classList.toggle('sem-av', !avOn); qs('#btAV').classList.toggle('bt--pri', avOn); }
+  qs('#btAV').addEventListener('click', function () {
+    avOn = !avOn; av();
+    try { localStorage.setItem('dre_av', avOn ? '1' : '0'); } catch (e) {}
+  });
+  av();
 
-function excluirPreset(nome) {
-  if (!confirm('Excluir o filtro "' + nome + '"?')) return;
-  var presets = _lerPresets();
-  delete presets[nome];
-  _salvarPresets(presets);
-  _renderListaPresets();
-}
+  /* ranking -> abre o grupo na tabela */
+  qsa('[data-vai]').forEach(function (r) {
+    r.addEventListener('click', function () {
+      var tr = qs('tr[data-abre="' + r.dataset.vai + '"]');
+      if (!tr) return;
+      if (!tr.classList.contains('aberto')) tr.click();
+      tr.scrollIntoView({behavior: 'smooth', block: 'center'});
+      tr.classList.remove('foco'); void tr.offsetWidth; tr.classList.add('foco');
+    });
+  });
 
-// ── Inicialização ─────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', function() {
-  renderEmpresaCards();
-  document.getElementById('sel_empresas')
-    .addEventListener('change', renderEmpresaCards);
-  // Re-render lista sempre que o modal de carregar for aberto (inclusive via data-bs-toggle)
-  var elModal = document.getElementById('modalCarregarFiltro');
-  if (elModal) {
-    elModal.addEventListener('show.bs.modal', function() { _renderListaPresets(); });
-    // Delegação de eventos para botões Carregar/Excluir gerados dinamicamente
-    elModal.addEventListener('click', function(e) {
-      var btn = e.target.closest('[data-preset-action]');
-      if (!btn) return;
-      var action = btn.getAttribute('data-preset-action');
-      var nome   = btn.getAttribute('data-preset-name');
-      if (action === 'carregar') aplicarPreset(nome);
-      else if (action === 'excluir') excluirPreset(nome);
+  /* zebrado só entre linhas visíveis */
+  var SEM_ZB = ['l-sec', 'l-res', 'l-tot', 'l-acu', 'l-marg'];
+  function zebra() {
+    var n = 0;
+    Array.prototype.forEach.call(tb.rows, function (tr) {
+      var fora = tr.hidden || SEM_ZB.some(function (c) { return tr.classList.contains(c); });
+      if (SEM_ZB.some(function (c) { return tr.classList.contains(c); })) n = 0;
+      tr.classList.toggle('zb', !fora && (n++ % 2 === 1));
     });
   }
-});
+  var pend = false;
+  new MutationObserver(function () {
+    if (pend) return; pend = true;
+    requestAnimationFrame(function () { pend = false; zebra(); });
+  }).observe(tb, {subtree: true, attributes: true, attributeFilter: ['hidden']});
+  zebra();
+
+  /* coluna sob o mouse */
+  var col = [];
+  tb.parentNode.addEventListener('mouseover', function (e) {
+    var td = e.target.closest('td, th');
+    col.forEach(function (c) { c.classList.remove('colh'); }); col = [];
+    if (!td || td.cellIndex < 1 || td.colSpan > 1) return;
+    var k = td.cellIndex;
+    Array.prototype.forEach.call(tb.parentNode.rows, function (tr) {
+      var c = tr.cells[k]; if (c && c.colSpan === 1) { c.classList.add('colh'); col.push(c); }
+    });
+  });
+  tb.parentNode.addEventListener('mouseleave', function () { col.forEach(function (c) { c.classList.remove('colh'); }); col = []; });
+
+  /* dica do gráfico */
+  var dica = qs('#dreDica');
+  qsa('.gm').forEach(function (g) {
+    g.addEventListener('mousemove', function (e) {
+      dica.innerHTML = '<b>' + g.dataset.mes + '</b><br>Receitas ' + g.dataset.rec + '<br>CMV ' + g.dataset.cmv +
+                       '<br>Despesas ' + g.dataset.des + '<br><b>Resultado ' + g.dataset.res + '</b>';
+      dica.style.display = 'block';
+      dica.style.left = Math.min(e.clientX + 14, window.innerWidth - 210) + 'px';
+      dica.style.top = (e.clientY + 14) + 'px';
+    });
+    g.addEventListener('mouseleave', function () { dica.style.display = 'none'; });
+  });
+
+  /* clique num valor de despesa: os lançamentos (só leitura) */
+  var INI = {{ data_inicio|tojson }}, FIM = {{ data_fim|tojson }}, EMPS = {{ empresa_ids|tojson }};
+  var URL_L = '{{ url_for("conf_despesas.conf_despesas_lancamentos") }}', sel = null;
+  function esc(x) { return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function brlJ(v) { return Number(v || 0).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}); }
+  window.dreFecha = function () { document.body.classList.remove('dre-aberta'); if (sel) sel.classList.remove('sel'); };
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') dreFecha(); });
+  qsa('td.dr').forEach(function (td) {
+    td.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (sel) sel.classList.remove('sel'); sel = td; td.classList.add('sel');
+      var v = Number(td.dataset.v);
+      document.getElementById('djTit').textContent = td.dataset.nome;
+      document.getElementById('djSub').textContent = 'carregando…';
+      document.getElementById('djCorpo').innerHTML = '';
+      document.getElementById('djRod').innerHTML = '';
+      document.body.classList.add('dre-aberta');
+      var q = 'data_inicio=' + INI + '&data_fim=' + FIM + '&titulo_id=' + td.dataset.tit + '&categoria_id=' + td.dataset.cat +
+              '&mes=' + td.dataset.mes + EMPS.map(function (e) { return '&empresa_ids[]=' + encodeURIComponent(e); }).join('');
+      fetch(URL_L + '?' + q, {credentials: 'same-origin'})
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d || !d.ok) throw new Error((d && d.erro) || 'falhou');
+          var L = d.lancamentos, h = '';
+          document.getElementById('djSub').textContent = L.length + ' lançamento(s) · para corrigir, use a Conf. Despesas';
+          if (!L.length) h = '<div class="dre-it__m">Nenhum lançamento encontrado.</div>';
+          L.forEach(function (l) {
+            var obs = (l.observacao && l.observacao !== l.fornecedor) ? l.observacao : '';
+            var meta = [l.data, l.subcategoria ? '↳ ' + l.subcategoria : '', l.banco ? '🏦 ' + l.banco : '', l.empresa].filter(Boolean).join(' · ');
+            h += '<div class="dre-it"><div class="dre-it__l1"><b>' + esc(l.fornecedor || '—') + '</b><span class="dre-it__v">' + brlJ(l.valor) + '</span></div>' +
+                 (obs ? '<div class="dre-it__m">' + esc(obs) + '</div>' : '') + '<div class="dre-it__m">' + esc(meta) + '</div></div>';
+          });
+          var dif = Math.round((v - d.total) * 100) / 100;
+          if (Math.abs(dif) >= 0.01)
+            h += '<div class="dre-aviso">' + brlJ(dif) + ' desta célula não vem de lançamento de despesa (pagamento no caixa ou abastecimento da frota) e por isso não aparece na lista.</div>';
+          document.getElementById('djCorpo').innerHTML = h;
+          document.getElementById('djRod').innerHTML = '<span>Total</span><span>' + brlJ(d.total) + '</span>';
+        })
+        .catch(function (e) { document.getElementById('djSub').textContent = 'Não carregou: ' + e.message; });
+    });
+  });
+})();
 </script>
 {% endblock %}
