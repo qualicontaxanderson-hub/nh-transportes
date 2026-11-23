@@ -1,114 +1,101 @@
 {% extends 'base.html' %}
 {% block title %}Formas de Recebimento - NH Transportes{% endblock %}
 
+{#- 24/11/2026: lista virou cards. Cada card tem o botão "No DRE" — liga/desliga
+    a forma no DRE sem abrir o cadastro (rota formas_recebimento.dre_grupo). -#}
+
 {% block styles %}
 <style>
-  .page-hero {
-    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
-    border-radius: .75rem;
-    padding: 1.5rem 2rem;
-    margin-bottom: 1.5rem;
-    color: #fff;
-  }
-  .page-hero .hero-icon {
-    width: 3rem; height: 3rem;
-    background: rgba(255,255,255,.15);
-    border-radius: .6rem;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.5rem;
-    flex-shrink: 0;
-  }
-  .stat-card {
-    border: 0;
-    border-radius: .65rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,.07);
-    transition: box-shadow .2s;
-  }
-  .stat-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.13); }
-  .stat-card .stat-icon {
-    width: 2.6rem; height: 2.6rem;
-    border-radius: .5rem;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.2rem;
-    flex-shrink: 0;
-  }
-  .tbl-fr thead th {
-    background: #f0f4f8;
-    color: #2c3e50;
-    font-size: .72rem;
-    text-transform: uppercase;
-    letter-spacing: .04em;
-    font-weight: 700;
-    border-bottom: 2px solid #c5d5e8;
-    padding: .5rem .75rem;
-    white-space: nowrap;
-  }
-  .tbl-fr tbody td {
-    padding: .42rem .75rem;
-    border-bottom: 1px solid #eef1f4;
-    vertical-align: middle;
-    color: #374151;
-    font-size: .78rem;
-  }
-  .tbl-fr tbody tr:last-child td { border-bottom: 0; }
-  .tbl-fr tbody tr.row-fr { cursor: pointer; transition: background .1s; }
-  .tbl-fr tbody tr.row-fr:hover td { background: #f0f7ff; }
-  .badge-status-ativo {
-    display: inline-flex; align-items: center;
-    background: #e6f9ee; color: #146c43;
-    border-radius: .4rem; padding: .2em .6em;
-    font-size: .72rem; font-weight: 700;
-  }
-  .badge-status-inativo {
-    display: inline-flex; align-items: center;
-    background: #f0f0f0; color: #6c757d;
-    border-radius: .4rem; padding: .2em .6em;
-    font-size: .72rem; font-weight: 700;
-  }
-  .badge-tipo-cartao {
-    display: inline-flex; align-items: center;
-    background: #e0f0ff; color: #0d6efd;
-    border-radius: .4rem; padding: .2em .6em;
-    font-size: .72rem; font-weight: 600;
-  }
-  .btn-acao {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 1.6rem; height: 1.6rem;
-    border-radius: 4px; font-size: .75rem;
-    border: none; cursor: pointer;
-    text-decoration: none; transition: opacity .15s;
-  }
-  .btn-acao:hover { opacity: .8; }
-  .btn-editar  { background: #fff3cd; color: #856404; }
-  .btn-excluir { background: #f8d7da; color: #842029; }
+#fr{ --ink:#151d27; --muted:#6b7785; --line:#e3e8ef; --azul:#1D63A5; color:var(--ink); }
+#fr .hero{ background:linear-gradient(135deg,#1D63A5 0%,#1a4f82 60%,#154070 100%); border-radius:16px;
+  padding:1.15rem 1.4rem; color:#fff; display:flex; align-items:center; gap:.9rem; flex-wrap:wrap; margin-bottom:1rem; }
+#fr .hero__ic{ width:2.8rem; height:2.8rem; background:rgba(255,255,255,.15); border-radius:12px;
+  display:flex; align-items:center; justify-content:center; font-size:1.35rem; }
+#fr .hero h4{ margin:0; font-weight:800; font-size:1.15rem; }
+#fr .hero p{ margin:0; opacity:.8; font-size:.82rem; }
+#fr .hero .novo{ margin-left:auto; background:#fff; color:var(--azul); border-radius:10px; padding:.45rem .9rem;
+  font-weight:700; font-size:.85rem; text-decoration:none; }
+
+#fr .barra{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:.7rem .8rem;
+  display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom:1rem; position:sticky; top:.5rem; z-index:5;
+  box-shadow:0 2px 10px rgba(20,40,70,.05); }
+#fr .busca{ flex:1 1 220px; min-width:180px; border:1px solid #d5dde7; border-radius:10px; padding:.45rem .75rem .45rem 2rem;
+  font-size:.88rem; background:#f8fafc url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='%236b7785' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z'/%3E%3C/svg%3E") no-repeat .7rem center; }
+#fr .fil{ border:1px solid #d5dde7; background:#fff; border-radius:999px; padding:.32rem .75rem; font-size:.8rem;
+  font-weight:600; color:#3d4854; cursor:pointer; display:inline-flex; gap:.35rem; align-items:center; }
+#fr .fil b{ background:#eef2f7; border-radius:999px; padding:0 .45rem; font-size:.72rem; }
+#fr .fil.on{ background:var(--azul); border-color:var(--azul); color:#fff; }
+#fr .fil.on b{ background:rgba(255,255,255,.22); color:#fff; }
+
+#fr .grade{ display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:.75rem; }
+#fr .sec{ font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
+  margin:1.1rem 0 .5rem; display:flex; align-items:center; gap:.5rem; }
+#fr .sec::after{ content:''; flex:1; height:1px; background:var(--line); }
+
+#fr .card-f{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:.8rem .85rem .7rem;
+  display:flex; flex-direction:column; gap:.5rem; position:relative; transition:box-shadow .15s, border-color .15s; }
+#fr .card-f:hover{ box-shadow:0 6px 22px rgba(20,40,70,.09); border-color:#cdd8e5; }
+#fr .card-f.inativa{ background:#fafbfc; }
+#fr .card-f.inativa .nome{ color:#8a95a2; }
+#fr .card-f[data-dre]:not([data-dre=""]){ border-left:4px solid var(--cor-dre,#2f9e5d); }
+#fr .topo{ display:flex; gap:.6rem; align-items:flex-start; }
+#fr .ic{ width:2.2rem; height:2.2rem; border-radius:10px; display:flex; align-items:center; justify-content:center;
+  font-size:1.05rem; flex-shrink:0; background:#eef3f9; color:var(--azul); }
+#fr .nome{ font-weight:800; font-size:.86rem; line-height:1.25; word-break:break-word; }
+#fr .meta{ font-size:.72rem; color:var(--muted); margin-top:.1rem; display:flex; gap:.35rem; flex-wrap:wrap; align-items:center; }
+#fr .selo{ display:inline-flex; align-items:center; gap:.2rem; border-radius:6px; padding:.05rem .4rem; font-size:.68rem; font-weight:700; }
+#fr .selo.cartao{ background:#e0f0ff; color:#0d6efd; }
+#fr .selo.inat{ background:#eef0f3; color:#6c757d; }
+#fr .acoes{ margin-left:auto; display:flex; gap:.25rem; }
+#fr .acoes a, #fr .acoes button{ width:1.8rem; height:1.8rem; border-radius:8px; border:0; display:inline-flex;
+  align-items:center; justify-content:center; font-size:.8rem; text-decoration:none; cursor:pointer; }
+#fr .acoes .ed{ background:#fff3cd; color:#856404; }
+#fr .acoes .ex{ background:#f8d7da; color:#842029; }
+#fr .mov{ font-size:.75rem; color:#3d4854; background:#f6f8fb; border-radius:9px; padding:.35rem .55rem;
+  display:flex; justify-content:space-between; gap:.5rem; }
+#fr .mov b{ font-variant-numeric:tabular-nums; }
+#fr .mov.zero{ color:#98a2ae; }
+#fr .emps{ font-size:.7rem; color:var(--muted); }
+
+#fr .dre{ display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; border-top:1px dashed var(--line); padding-top:.5rem; }
+#fr .dre__r{ font-size:.66rem; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+#fr .seg{ display:inline-flex; background:#eef2f7; border-radius:10px; padding:2px; gap:2px; flex-wrap:wrap; }
+#fr .seg button{ border:0; background:transparent; border-radius:8px; padding:.25rem .55rem; font-size:.72rem;
+  font-weight:700; color:#4b5563; cursor:pointer; display:inline-flex; align-items:center; gap:.25rem; white-space:nowrap; }
+#fr .seg button:hover{ background:#fff; }
+#fr .seg button.on{ background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.12); }
+#fr .seg button.on[data-v="fora"]{ color:#6b7785; }
+#fr .seg button.on[data-v="aluguel"]{ color:#1D63A5; }
+#fr .seg button.on[data-v="cliente_a_prazo"]{ color:#0a8aa5; }
+#fr .seg button.on[data-v="financeira"]{ color:#1f8a4c; }
+#fr .seg button.on[data-v="outras"]{ color:#6b46e5; }
+#fr .seg button[disabled]{ opacity:.5; cursor:wait; }
+#fr .ok{ font-size:.7rem; color:#1f8a4c; font-weight:700; opacity:0; transition:opacity .2s; }
+#fr .ok.vis{ opacity:1; }
+#fr .vazio{ text-align:center; color:var(--muted); padding:2.5rem 1rem; background:#fff; border:1px dashed #c9d3de; border-radius:14px; }
+#fr .ajuda{ font-size:.75rem; color:var(--muted); background:#fff; border:1px solid var(--line); border-radius:12px;
+  padding:.55rem .75rem; margin-bottom:1rem; }
+#fr .ajuda b{ color:var(--ink); }
+#fr .toast{ position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#a32d2d; color:#fff;
+  border-radius:10px; padding:.55rem .9rem; font-size:.85rem; display:none; z-index:2000; }
+@media (max-width:560px){ #fr .grade{ grid-template-columns:1fr; } #fr .hero .novo{ margin-left:0; } }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
+{% macro brl(v) -%}R$ {{ '{:,.2f}'.format(v or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}{%- endmacro %}
+{% set rot_auto = {'aluguel': 'Aluguel', 'cliente_a_prazo': 'Prazo', '': 'Fora'} %}
+<div class="container-fluid" id="fr">
 
-  <!-- Breadcrumb -->
-  <nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb small">
-      <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Dashboard</a></li>
-      <li class="breadcrumb-item active">Formas de Recebimento</li>
-    </ol>
-  </nav>
-
-  <!-- Hero header -->
-  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
-    <div class="hero-icon"><i class="bi bi-wallet-fill"></i></div>
-    <div class="flex-grow-1">
-      <h4 class="mb-0 fw-bold">Formas de Recebimento</h4>
-      <p class="mb-0 opacity-75 small">Gerencie os métodos de pagamento aceitos pelos postos.</p>
+  <div class="hero">
+    <div class="hero__ic"><i class="bi bi-wallet-fill"></i></div>
+    <div>
+      <h4>Formas de Recebimento</h4>
+      <p>{{ formas|length }} formas · {{ formas|selectattr('ativo')|list|length }} ativas · movimento de {{ ano }} no banco</p>
     </div>
-    <a href="{{ url_for('formas_recebimento.novo') }}"
-       class="btn btn-light fw-semibold btn-sm px-3">
-      <i class="bi bi-plus-circle me-1"></i> Nova Forma
-    </a>
+    <a href="{{ url_for('formas_recebimento.novo') }}" class="novo"><i class="bi bi-plus-circle me-1"></i> Nova forma</a>
   </div>
 
-  <!-- Flash messages -->
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in messages %}
     <div class="alert alert-{{ cat }} alert-dismissible fade show py-2" role="alert">
@@ -117,165 +104,161 @@
     {% endfor %}
   {% endwith %}
 
-  <!-- Stat cards -->
-  {% set total    = formas | length %}
-  {% set ativos   = formas | selectattr('ativo') | list | length %}
-  {% set inativos = total - ativos %}
-  {% set cartoes  = formas | selectattr('eh_cartao') | list | length %}
-  <div class="row g-3 mb-4">
-    <div class="col-6 col-md-3">
-      <div class="card stat-card h-100">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div class="stat-icon" style="background:#e8f0fb;">
-            <i class="bi bi-collection-fill" style="color:#1D63A5;"></i>
-          </div>
-          <div>
-            <div class="fs-4 fw-bold" style="color:#1D63A5;">{{ total }}</div>
-            <div class="text-muted small">Total</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="card stat-card h-100">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div class="stat-icon" style="background:#e6f9ee;">
-            <i class="bi bi-check-circle-fill" style="color:#198754;"></i>
-          </div>
-          <div>
-            <div class="fs-4 fw-bold" style="color:#198754;">{{ ativos }}</div>
-            <div class="text-muted small">Ativas</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="card stat-card h-100">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div class="stat-icon" style="background:#f8d7da;">
-            <i class="bi bi-x-circle-fill" style="color:#dc3545;"></i>
-          </div>
-          <div>
-            <div class="fs-4 fw-bold" style="color:#dc3545;">{{ inativos }}</div>
-            <div class="text-muted small">Inativas</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="card stat-card h-100">
-        <div class="card-body d-flex align-items-center gap-3 py-3">
-          <div class="stat-icon" style="background:#e0f0ff;">
-            <i class="bi bi-credit-card-fill" style="color:#0d6efd;"></i>
-          </div>
-          <div>
-            <div class="fs-4 fw-bold" style="color:#0d6efd;">{{ cartoes }}</div>
-            <div class="text-muted small">Cartões</div>
-          </div>
-        </div>
-      </div>
-    </div>
+  <div class="ajuda">
+    <i class="bi bi-info-circle"></i>
+    <b>No DRE</b> — escolha em cada card onde a forma entra no DRE Postos. <b>Aluguel</b> e <b>Prazo</b> são automáticos pelo nome;
+    <b>Financeira</b> vai para "Receitas financeiras" (rendimentos, juros); <b>Outras</b> para "Outras receitas";
+    <b>Fora</b> não entra (resgate de aplicação, transferência, cartão…). Salva na hora.
   </div>
 
-  <!-- Table card -->
-  <div class="card shadow-sm">
-    <div class="card-header d-flex justify-content-between align-items-center py-2"
-         style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-      <span><i class="bi bi-list me-1"></i> Lista de Formas de Recebimento</span>
-      {% if formas %}
-      <span class="badge bg-white text-secondary" style="font-size:0.7rem;font-weight:600;">{{ formas|length }}</span>
-      {% endif %}
-    </div>
-    <div class="card-body p-0">
-      {% if formas %}
-      <div class="table-responsive">
-        <table class="table tbl-fr mb-0">
-          <thead>
-            <tr>
-              <th style="width:4%">#</th>
-              <th>Nome</th>
-              <th>Tipo</th>
-              <th>Status</th>
-              <th class="text-center" style="width:8%">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for f in formas %}
-            <tr class="row-fr" data-url="{{ url_for('formas_recebimento.editar', id=f.id) }}"
-                title="Clique para editar">
-              <td class="text-muted">{{ f.id }}</td>
-              <td class="fw-semibold">{{ f.nome }}</td>
-              <td>
-                {% if f.eh_cartao %}
-                  <span class="badge-tipo-cartao">
-                    <i class="bi bi-credit-card me-1"></i>Cartão{% if f.tipo_cartao %} — {{ f.tipo_cartao }}{% endif %}
-                  </span>
-                {% else %}
-                  <span class="text-muted" style="font-size:0.78rem;">—</span>
-                {% endif %}
-              </td>
-              <td>
-                {% if f.ativo %}
-                <span class="badge-status-ativo"><i class="bi bi-check-circle me-1"></i>Ativo</span>
-                {% else %}
-                <span class="badge-status-inativo"><i class="bi bi-x-circle me-1"></i>Inativo</span>
-                {% endif %}
-              </td>
-              <td class="text-center actions-cell" onclick="event.stopPropagation()">
-                <a href="{{ url_for('formas_recebimento.editar', id=f.id) }}"
-                   class="btn-acao btn-editar" title="Editar">
-                  <i class="bi bi-pencil"></i>
-                </a>
-                <button class="btn-acao btn-excluir btn-excluir-js"
-                        data-id="{{ f.id }}" data-nome="{{ f.nome | e }}"
-                        title="Excluir">
-                  <i class="bi bi-trash"></i>
-                </button>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <div class="text-center text-muted py-5">
-        <i class="bi bi-inbox" style="font-size:2.5rem;opacity:0.3;display:block;margin-bottom:0.75rem;"></i>
-        <div style="font-size:0.85rem;">Nenhuma forma de recebimento cadastrada.</div>
-        <a href="{{ url_for('formas_recebimento.novo') }}" class="btn btn-primary btn-sm mt-3">
-          <i class="bi bi-plus-circle me-1"></i> Cadastrar agora
-        </a>
-      </div>
-      {% endif %}
-    </div>
+  {% set n_dre = formas|rejectattr('dre_efetivo', 'equalto', '')|list|length %}
+  {% set n_cart = formas|selectattr('eh_cartao')|list|length %}
+  {% set n_inat = formas|rejectattr('ativo')|list|length %}
+  <div class="barra">
+    <input type="search" class="busca" id="frBusca" placeholder="procurar forma…" autocomplete="off">
+    <button type="button" class="fil on" data-f="ativas">Ativas <b>{{ formas|length - n_inat }}</b></button>
+    <button type="button" class="fil" data-f="dre"><i class="bi bi-graph-up"></i> No DRE <b id="nDre">{{ n_dre }}</b></button>
+    <button type="button" class="fil" data-f="cartao"><i class="bi bi-credit-card"></i> Cartões <b>{{ n_cart }}</b></button>
+    <button type="button" class="fil" data-f="inativas">Inativas <b>{{ n_inat }}</b></button>
+    <button type="button" class="fil" data-f="todas">Todas <b>{{ formas|length }}</b></button>
   </div>
 
+  {% if formas %}
+  <div class="grade" id="frGrade">
+    {% for f in formas|sort(attribute='ativo', reverse=true) %}
+    {% set g = f.dre_grupo or '' %}
+    <div class="card-f{{ '' if f.ativo else ' inativa' }}" data-id="{{ f.id }}" data-nome="{{ f.nome|lower }}"
+         data-ativo="{{ 1 if f.ativo else 0 }}" data-cartao="{{ 1 if f.eh_cartao else 0 }}" data-dre="{{ f.dre_efetivo }}">
+      <div class="topo">
+        <div class="ic"><i class="bi {{ 'bi-credit-card-2-front' if f.eh_cartao else 'bi-cash-coin' }}"></i></div>
+        <div style="min-width:0">
+          <div class="nome">{{ f.nome }}</div>
+          <div class="meta">
+            <span>#{{ f.id }}</span>
+            {% if f.eh_cartao %}<span class="selo cartao"><i class="bi bi-credit-card"></i> {{ f.tipo_cartao|lower if f.tipo_cartao else 'cartão' }}</span>{% endif %}
+            {% if not f.ativo %}<span class="selo inat">inativa</span>{% endif %}
+          </div>
+        </div>
+        <div class="acoes">
+          <a href="{{ url_for('formas_recebimento.editar', id=f.id) }}" class="ed" title="Editar cadastro"><i class="bi bi-pencil"></i></a>
+          <button type="button" class="ex" data-id="{{ f.id }}" data-nome="{{ f.nome|e }}" title="Excluir"><i class="bi bi-trash"></i></button>
+        </div>
+      </div>
+
+      <div class="mov{{ ' zero' if not f.mov_n }}">
+        {% if f.mov_n %}
+        <span>{{ f.mov_n }} crédito{{ 's' if f.mov_n > 1 }} em {{ ano }}{% if f.mov_ultimo %} · último {{ f.mov_ultimo.strftime('%d/%m') }}{% endif %}</span>
+        <b>{{ brl(f.mov_total) }}</b>
+        {% else %}<span>sem crédito no banco em {{ ano }}</span>{% endif %}
+      </div>
+      {% if f.empresas %}<div class="emps"><i class="bi bi-building"></i> {{ f.empresas|join(' · ') }}</div>{% endif %}
+
+      <div class="dre">
+        <span class="dre__r">No DRE</span>
+        <div class="seg" role="group" aria-label="Onde entra no DRE">
+          {# 1º botão = o automático pelo nome; "Fora" à parte só quando o automático entra #}
+          <button type="button" data-g="" data-v="{{ f.dre_auto or 'fora' }}" class="{{ 'on' if g == '' }}"
+                  title="Automático pelo nome">{% if f.dre_auto == 'aluguel' %}<i class="bi bi-house-door"></i>{% elif f.dre_auto %}<i class="bi bi-person-lines-fill"></i>{% else %}<i class="bi bi-slash-circle"></i>{% endif %} {{ rot_auto[f.dre_auto] }}</button>
+          <button type="button" data-g="financeira" data-v="financeira" class="{{ 'on' if g == 'financeira' }}"><i class="bi bi-graph-up-arrow"></i> Financeira</button>
+          <button type="button" data-g="outras" data-v="outras" class="{{ 'on' if g == 'outras' }}"><i class="bi bi-plus-square"></i> Outras</button>
+          {% if f.dre_auto %}
+          <button type="button" data-g="nao" data-v="fora" class="{{ 'on' if g == 'nao' }}"><i class="bi bi-slash-circle"></i> Fora</button>
+          {% endif %}
+        </div>
+        <span class="ok">salvo ✓</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="vazio" id="frVazio" hidden><i class="bi bi-search"></i> Nenhuma forma com esse filtro.</div>
+  {% else %}
+  <div class="vazio">
+    <i class="bi bi-inbox" style="font-size:2rem;opacity:.4"></i>
+    <div>Nenhuma forma de recebimento cadastrada.</div>
+    <a href="{{ url_for('formas_recebimento.novo') }}" class="btn btn-primary btn-sm mt-3">Cadastrar agora</a>
+  </div>
+  {% endif %}
+
+  <div class="toast" id="frToast"></div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-document.querySelectorAll('.btn-excluir-js').forEach(btn => {
-  btn.addEventListener('click', function() {
-    const id = this.dataset.id;
-    const nome = this.dataset.nome;
-    if (!confirm('Excluir "' + nome + '"?\n\nEsta ação é irreversível.')) return;
-    fetch('{{ url_for("formas_recebimento.excluir", id=0) }}'.replace('/0', '/' + id), {method:'POST'})
-      .then(r => r.json())
-      .then(d => {
-        if (d.success) {
-          location.reload();
-        } else {
-          alert('⚠️ ' + d.message);
-        }
-      });
-  });
-});
+(function () {
+  var raiz = document.getElementById('fr');
+  var cards = Array.prototype.slice.call(raiz.querySelectorAll('.card-f'));
+  var busca = document.getElementById('frBusca');
+  var filtro = 'ativas';
+  try { filtro = localStorage.getItem('fr_filtro') || 'ativas'; } catch (e) {}
+  var CORES = {aluguel: '#1D63A5', cliente_a_prazo: '#0aa2c0', financeira: '#2f9e5d', outras: '#7a5af8'};
 
-document.querySelectorAll('tr.row-fr[data-url]').forEach(function (row) {
-  row.addEventListener('click', function (e) {
-    if (e.target.closest('.actions-cell') || e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) return;
-    window.location.href = row.getAttribute('data-url');
+  function pintaBorda(c) { c.style.setProperty('--cor-dre', CORES[c.dataset.dre] || '#2f9e5d'); }
+  cards.forEach(pintaBorda);
+
+  function aplica() {
+    var q = (busca.value || '').trim().toLowerCase(), n = 0;
+    cards.forEach(function (c) {
+      var ok = !q || c.dataset.nome.indexOf(q) >= 0;
+      if (ok) {
+        if (filtro === 'ativas') ok = c.dataset.ativo === '1';
+        else if (filtro === 'inativas') ok = c.dataset.ativo === '0';
+        else if (filtro === 'cartao') ok = c.dataset.cartao === '1';
+        else if (filtro === 'dre') ok = !!c.dataset.dre;
+      }
+      c.hidden = !ok; if (ok) n++;
+    });
+    raiz.querySelectorAll('.fil').forEach(function (b) { b.classList.toggle('on', b.dataset.f === filtro); });
+    var v = document.getElementById('frVazio'); if (v) v.hidden = n > 0;
+  }
+  raiz.querySelectorAll('.fil').forEach(function (b) {
+    b.addEventListener('click', function () {
+      filtro = b.dataset.f; try { localStorage.setItem('fr_filtro', filtro); } catch (e) {}
+      aplica();
+    });
   });
-});
+  busca.addEventListener('input', aplica);
+  aplica();
+
+  function aviso(t) {
+    var el = document.getElementById('frToast'); el.textContent = t; el.style.display = 'block';
+    setTimeout(function () { el.style.display = 'none'; }, 3500);
+  }
+  function contaDre() {
+    document.getElementById('nDre').textContent = cards.filter(function (c) { return !!c.dataset.dre; }).length;
+  }
+
+  /* No DRE: salva na hora */
+  raiz.querySelectorAll('.seg button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (b.classList.contains('on')) return;
+      var card = b.closest('.card-f'), seg = b.parentNode, ok = card.querySelector('.ok');
+      var antes = seg.querySelector('button.on');
+      seg.querySelectorAll('button').forEach(function (x) { x.disabled = true; });
+      fetch('{{ url_for("formas_recebimento.dre_grupo", id=0) }}'.replace(/0$/, card.dataset.id), {
+        method: 'POST', credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json'}, body: JSON.stringify({grupo: b.dataset.g})
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (!d.ok) throw new Error(d.erro || 'não salvou');
+        if (antes) antes.classList.remove('on');
+        b.classList.add('on');
+        card.dataset.dre = b.dataset.v === 'fora' ? '' : b.dataset.v;
+        pintaBorda(card); contaDre();
+        ok.classList.add('vis'); setTimeout(function () { ok.classList.remove('vis'); }, 1600);
+      }).catch(function (e) { aviso('Não salvou: ' + e.message); })
+        .then(function () { seg.querySelectorAll('button').forEach(function (x) { x.disabled = false; }); });
+    });
+  });
+
+  /* excluir (mesma rota de antes) */
+  raiz.querySelectorAll('.acoes .ex').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (!confirm('Excluir "' + btn.dataset.nome + '"?\n\nEsta ação é irreversível.')) return;
+      fetch('{{ url_for("formas_recebimento.excluir", id=0) }}'.replace(/0$/, btn.dataset.id), {method: 'POST', credentials: 'same-origin'})
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (d.success) location.reload(); else alert('⚠️ ' + d.message); });
+    });
+  });
+})();
 </script>
 {% endblock %}
