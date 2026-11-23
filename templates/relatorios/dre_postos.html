@@ -288,6 +288,16 @@ body.dre-aberta .dre-veu{ display:block; } body.dre-aberta .dre-jan{ display:fle
 .dre-it__v{ font-weight:800; white-space:nowrap; }
 .dre-it__m{ color:#6b7280; font-size:11px; margin-top:2px; }
 .dre-aviso{ background:#fffbeb; color:#92400e; border-radius:8px; padding:7px 10px; font-size:12px; margin-top:8px; }
+.dre-it__a{ text-align:right; margin-top:6px; }
+.dre-it.ed{ border:2px solid #1D63A5; background:#f8fbff; }
+.dre-f{ display:grid; grid-template-columns:1fr 1fr; gap:8px 10px; margin-top:8px; }
+.dre-f label{ display:block; font-size:10px; font-weight:700; color:#6b7280; text-transform:uppercase; margin-bottom:2px; }
+.dre-f input, .dre-f select, .dre-f textarea{ width:100%; border:1px solid #d1d5db; border-radius:7px; padding:6px 8px; font:inherit; background:#fff; text-transform:none; }
+.dre-f .full{ grid-column:1 / -1; }
+@media (max-width:600px){ .dre-f{ grid-template-columns:1fr; } }
+.dre-b{ border:1px solid #d9e0e8; background:#fff; border-radius:8px; padding:5px 11px; font-size:12px; cursor:pointer; }
+.dre-b.pri{ background:#1D63A5; border-color:#1D63A5; color:#fff; font-weight:600; }
+.dre-erro{ background:#fef2f2; color:#991b1b; border-radius:8px; padding:6px 10px; font-size:12px; margin-top:8px; }
 </style>
 {% endblock %}
 
@@ -675,7 +685,7 @@ body.dre-aberta .dre-veu{ display:block; } body.dre-aberta .dre-jan{ display:fle
 </div>
 
 <div class="dre-veu" onclick="dreFecha()"></div>
-<div class="dre-jan" role="dialog" aria-modal="true">
+<div class="dre-jan" role="dialog" aria-modal="true" data-sem-maiuscula>
   <div class="dre-jan__cab"><div><h2 id="djTit"></h2><div class="dre-jan__sub" id="djSub"></div></div>
     <button class="dre-jan__x" onclick="dreFecha()" aria-label="Fechar">×</button></div>
   <div class="dre-jan__corpo" id="djCorpo"></div>
@@ -929,47 +939,154 @@ body.dre-aberta .dre-veu{ display:block; } body.dre-aberta .dre-jan{ display:fle
     g.addEventListener('mouseleave', function () { dica.style.display = 'none'; });
   });
 
-  /* clique num valor de despesa: os lançamentos (só leitura) */
+  /* clique num valor de despesa: os lançamentos, editáveis ali mesmo
+     (mesma edição da Conf. Despesas; salvou, a tela recarrega e reabre aqui) */
   var INI = {{ data_inicio|tojson }}, FIM = {{ data_fim|tojson }}, EMPS = {{ empresa_ids|tojson }};
-  var URL_L = '{{ url_for("conf_despesas.conf_despesas_lancamentos") }}', sel = null;
+  var URL_L = '{{ url_for("conf_despesas.conf_despesas_lancamentos") }}';
+  var URL_OPC = '{{ url_for("conf_despesas.conf_despesas_opcoes") }}';
+  var URL_SALVA = '/relatorios/conf_despesas/lancamento/';
+  var CHAVE = 'dre-reabre', sel = null, OPC = null, LISTA = [], CEL = null;
   function esc(x) { return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function brlJ(v) { return Number(v || 0).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}); }
+  function num2(v) { return Number(v || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+  function $id(i) { return document.getElementById(i); }
   window.dreFecha = function () { document.body.classList.remove('dre-aberta'); if (sel) sel.classList.remove('sel'); };
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') dreFecha(); });
-  qsa('td.dr').forEach(function (td) {
-    td.addEventListener('click', function (e) {
-      e.stopPropagation();
-      if (sel) sel.classList.remove('sel'); sel = td; td.classList.add('sel');
-      var v = Number(td.dataset.v);
-      document.getElementById('djTit').textContent = td.dataset.nome;
-      document.getElementById('djSub').textContent = 'carregando…';
-      document.getElementById('djCorpo').innerHTML = '';
-      document.getElementById('djRod').innerHTML = '';
-      document.body.classList.add('dre-aberta');
-      var q = 'data_inicio=' + INI + '&data_fim=' + FIM + '&titulo_id=' + td.dataset.tit + '&categoria_id=' + td.dataset.cat +
-              '&mes=' + td.dataset.mes + EMPS.map(function (e) { return '&empresa_ids[]=' + encodeURIComponent(e); }).join('');
-      fetch(URL_L + '?' + q, {credentials: 'same-origin'})
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          if (!d || !d.ok) throw new Error((d && d.erro) || 'falhou');
-          var L = d.lancamentos, h = '';
-          document.getElementById('djSub').textContent = L.length + ' lançamento(s) · para corrigir, use a Conf. Despesas';
-          if (!L.length) h = '<div class="dre-it__m">Nenhum lançamento encontrado.</div>';
-          L.forEach(function (l) {
-            var obs = (l.observacao && l.observacao !== l.fornecedor) ? l.observacao : '';
-            var meta = [l.data, l.subcategoria ? '↳ ' + l.subcategoria : '', l.banco ? '🏦 ' + l.banco : '', l.empresa].filter(Boolean).join(' · ');
-            h += '<div class="dre-it"><div class="dre-it__l1"><b>' + esc(l.fornecedor || '—') + '</b><span class="dre-it__v">' + brlJ(l.valor) + '</span></div>' +
-                 (obs ? '<div class="dre-it__m">' + esc(obs) + '</div>' : '') + '<div class="dre-it__m">' + esc(meta) + '</div></div>';
-          });
-          var dif = Math.round((v - d.total) * 100) / 100;
-          if (Math.abs(dif) >= 0.01)
-            h += '<div class="dre-aviso">' + brlJ(dif) + ' desta célula não vem de lançamento de despesa (pagamento no caixa ou abastecimento da frota) e por isso não aparece na lista.</div>';
-          document.getElementById('djCorpo').innerHTML = h;
-          document.getElementById('djRod').innerHTML = '<span>Total</span><span>' + brlJ(d.total) + '</span>';
-        })
-        .catch(function (e) { document.getElementById('djSub').textContent = 'Não carregou: ' + e.message; });
+
+  function opcoes() {
+    if (OPC) return Promise.resolve(OPC);
+    return fetch(URL_OPC, {credentials: 'same-origin'}).then(function (r) { return r.json(); })
+      .then(function (d) { if (!d.ok) throw new Error('opções'); OPC = d; return d; });
+  }
+
+  function desenha(total) {
+    $id('djSub').textContent = LISTA.length + ' lançamento(s) · clique em Editar, altere e salve';
+    var h = '';
+    if (!LISTA.length) h = '<div class="dre-it__m">Nenhum lançamento encontrado.</div>';
+    LISTA.forEach(function (l, i) {
+      var obs = (l.observacao && l.observacao !== l.fornecedor) ? l.observacao : '';
+      var meta = [l.data + (l.hora ? ' ' + l.hora : ''), l.subcategoria ? '↳ ' + l.subcategoria : '', l.banco ? '🏦 ' + l.banco : '', l.empresa].filter(Boolean).join(' · ');
+      var acao = l.abast
+        ? '<span class="dre-it__m"><i class="bi bi-fuel-pump"></i> abastecimento da Frota (cupom) — não se edita aqui</span>'
+        : '<button type="button" class="dre-b" onclick="dreEdita(' + i + ')"><i class="bi bi-pencil"></i> Editar</button>';
+      h += '<div class="dre-it" data-i="' + i + '"><div class="dre-it__l1"><b>' + esc(l.fornecedor || '—') + '</b><span class="dre-it__v">' + brlJ(l.valor) + '</span></div>' +
+           (obs ? '<div class="dre-it__m">' + esc(obs) + '</div>' : '') + '<div class="dre-it__m">' + esc(meta) + '</div>' +
+           '<div class="dre-it__a">' + acao + '</div></div>';
     });
+    var dif = Math.round((CEL.v - total) * 100) / 100;
+    if (Math.abs(dif) >= 0.01)
+      h += '<div class="dre-aviso">' + brlJ(dif) + ' desta célula não vem de lançamento de despesa (pagamento no caixa ou abastecimento da frota) e por isso não aparece na lista.</div>';
+    $id('djCorpo').innerHTML = h;
+    $id('djRod').innerHTML = '<span>Total</span><span>' + brlJ(total) + '</span>';
+  }
+
+  function carrega(td) {
+    if (sel) sel.classList.remove('sel'); sel = td; td.classList.add('sel');
+    CEL = {tit: td.dataset.tit, cat: td.dataset.cat, mes: td.dataset.mes || '', nome: td.dataset.nome, v: Number(td.dataset.v)};
+    $id('djTit').textContent = CEL.nome;
+    $id('djSub').textContent = 'carregando…';
+    $id('djCorpo').innerHTML = '';
+    $id('djRod').innerHTML = '';
+    document.body.classList.add('dre-aberta');
+    var q = 'data_inicio=' + INI + '&data_fim=' + FIM + '&titulo_id=' + CEL.tit + '&categoria_id=' + CEL.cat +
+            '&mes=' + CEL.mes + EMPS.map(function (e) { return '&empresa_ids[]=' + encodeURIComponent(e); }).join('');
+    fetch(URL_L + '?' + q, {credentials: 'same-origin'})
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.ok) throw new Error((d && d.erro) || 'falhou');
+        LISTA = d.lancamentos;
+        desenha(d.total);
+      })
+      .catch(function (e) { $id('djSub').textContent = 'Não carregou: ' + e.message; });
+  }
+
+  function opts(lista, s, vazio) {
+    var h = vazio !== undefined ? '<option value="">' + esc(vazio) + '</option>' : '';
+    lista.forEach(function (o) { h += '<option value="' + o.id + '"' + (String(o.id) === String(s) ? ' selected' : '') + '>' + esc(o.nome) + '</option>'; });
+    return h;
+  }
+
+  window.dreEdita = function (i) {
+    var l = LISTA[i];
+    var box = document.querySelector('.dre-it[data-i="' + i + '"]');
+    box.innerHTML = '<div class="dre-it__m">carregando…</div>';
+    opcoes().then(function (o) {
+      box.classList.add('ed');
+      box.innerHTML = '<div class="dre-it__l1"><b>' + esc(l.fornecedor || '—') + '</b><span class="dre-it__v">' + brlJ(l.valor) + '</span></div>'
+        + '<div class="dre-f">'
+        + '<div><label>Data</label><input type="date" class="e-data" value="' + esc(l.data_iso) + '"></div>'
+        + '<div><label>Valor</label><input type="text" inputmode="decimal" class="e-valor" value="' + num2(l.valor) + '"></div>'
+        + '<div><label>Título</label><select class="e-tit">' + opts(o.titulos, l.titulo_id) + '</select></div>'
+        + '<div><label>Categoria</label><select class="e-cat"></select></div>'
+        + '<div><label>Subcategoria</label><select class="e-sub"></select></div>'
+        + '<div><label>Empresa</label><select class="e-emp">' + opts(o.empresas, l.cliente_id, '—') + '</select></div>'
+        + '<div class="full"><label>Fornecedor</label><input type="text" class="e-forn" value="' + esc(l.fornecedor) + '"></div>'
+        + '<div class="full"><label>Observação</label><textarea rows="2" class="e-obs">' + esc(l.observacao) + '</textarea></div>'
+        + '</div><div class="dre-erro" style="display:none"></div>'
+        + '<div class="dre-it__a"><button type="button" class="dre-b" onclick="dreCancela()">Cancelar</button> '
+        + '<button type="button" class="dre-b pri e-salva"><i class="bi bi-check2"></i> Salvar</button></div>';
+      var selT = box.querySelector('.e-tit'), selC = box.querySelector('.e-cat'), selS = box.querySelector('.e-sub');
+      function subs(subSel) {
+        selS.innerHTML = opts(o.subcategorias.filter(function (x) { return String(x.categoria_id) === selC.value; }), subSel, 'Nenhuma');
+        if (window.NHSub) NHSub.marcaSub(selS);
+      }
+      function cats(catSel) {
+        selC.innerHTML = opts(o.categorias.filter(function (c) { return String(c.titulo_id) === selT.value; }), catSel);
+        if (window.NHSub) Array.prototype.forEach.call(selC.options, function (op) {
+          NHSub.marcaCat(op, o.subcategorias.filter(function (x) { return String(x.categoria_id) === op.value; }).length);
+        });
+        subs(catSel === l.categoria_id ? l.subcategoria_id : '');
+      }
+      selT.onchange = function () { cats(''); };
+      selC.onchange = function () { subs(''); };
+      cats(l.categoria_id);
+      box.querySelector('.e-salva').onclick = function () { salva(l, box); };
+    }).catch(function () { box.innerHTML = '<div class="dre-erro">Não deu para carregar as listas.</div>'; });
+  };
+  window.dreCancela = function () { desenha(LISTA.reduce(function (a, l) { return a + l.valor; }, 0)); };
+
+  function salva(l, box) {
+    var corpo = {
+      data: box.querySelector('.e-data').value, valor: box.querySelector('.e-valor').value,
+      titulo_id: box.querySelector('.e-tit').value, categoria_id: box.querySelector('.e-cat').value,
+      subcategoria_id: box.querySelector('.e-sub').value, cliente_id: box.querySelector('.e-emp').value,
+      fornecedor: box.querySelector('.e-forn').value, observacao: box.querySelector('.e-obs').value
+    };
+    var ef = box.querySelector('.dre-erro');
+    if (window.NHSub && NHSub.falta(box.querySelector('.e-sub'))) {
+      ef.textContent = NHSub.MSG; ef.style.display = 'block'; box.querySelector('.e-sub').focus(); return;
+    }
+    var btn = box.querySelector('.e-salva'); btn.disabled = true; btn.textContent = 'Salvando…';
+    fetch(URL_SALVA + l.id, {method: 'POST', credentials: 'same-origin',
+          headers: {'Content-Type': 'application/json'}, body: JSON.stringify(corpo)})
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { btn.disabled = false; btn.textContent = 'Salvar'; ef.textContent = d.erro || 'Não foi possível salvar.'; ef.style.display = 'block'; return; }
+        // recarrega o DRE no mesmo ponto e reabre a mesma célula
+        try { sessionStorage.setItem(CHAVE, JSON.stringify({cel: CEL, y: window.scrollY, abertos: qsa('tr[data-abre].aberto').map(function (t) { return t.dataset.abre; })})); } catch (e2) {}
+        location.reload();
+      })
+      .catch(function () { btn.disabled = false; btn.textContent = 'Salvar'; alert('Falha de conexão — nada foi salvo.'); });
+  }
+
+  qsa('td.dr').forEach(function (td) {
+    td.addEventListener('click', function (e) { e.stopPropagation(); carrega(td); });
   });
+
+  // depois de salvar: volta à mesma posição e reabre a célula
+  try {
+    var rr = JSON.parse(sessionStorage.getItem(CHAVE) || 'null');
+    if (rr) {
+      sessionStorage.removeItem(CHAVE);
+      (rr.abertos || []).forEach(function (g) {
+        var t = raiz.querySelector('tr[data-abre="' + g + '"]');
+        if (t && !t.classList.contains('aberto')) t.click();
+      });
+      window.scrollTo(0, rr.y || 0);
+      var cand = raiz.querySelector('td.dr[data-tit="' + rr.cel.tit + '"][data-cat="' + rr.cel.cat + '"][data-mes="' + rr.cel.mes + '"]');
+      if (cand) carrega(cand);
+    }
+  } catch (e) {}
 })();
 </script>
 {% endblock %}
