@@ -151,12 +151,16 @@ def _formas_recebimento_aluguel_prazo(conn):
     """
     cur = conn.cursor(dictionary=True)
     try:
-        cur.execute("SELECT id, nome FROM formas_recebimento ORDER BY nome")
+        cur.execute("SELECT id, nome, dre_grupo FROM formas_recebimento ORDER BY nome")
         all_formas = cur.fetchall()
     except Exception:
-        all_formas = []
+        try:
+            cur.execute("SELECT id, nome FROM formas_recebimento ORDER BY nome")
+            all_formas = cur.fetchall()
+        except Exception:
+            all_formas = []
     cur.close()
-    return [f for f in all_formas if _classify_forma(f['nome']) is not None]
+    return [f for f in all_formas if _classify_forma(f['nome'], f.get('dre_grupo')) is not None]
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -511,8 +515,17 @@ def _grand_por_produto(por_produto: dict, months) -> dict:
 # Receitas: Recebimentos (Aluguel + Clientes à Prazo)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _classify_forma(nome):
-    """Retorna 'aluguel', 'cliente_a_prazo' ou None."""
+def _classify_forma(nome, dre_grupo=None):
+    """Retorna 'aluguel', 'cliente_a_prazo', 'financeira', 'outras' ou None.
+
+    24/11/2026: formas_recebimento.dre_grupo (botão no card da forma) manda:
+    'financeira' / 'outras' entram nessas linhas, 'nao' tira do DRE; vazio =
+    automático pelo nome (como sempre foi)."""
+    g = (dre_grupo or '').strip()
+    if g == 'nao':
+        return None
+    if g in ('financeira', 'outras'):
+        return g
     u = _ascii_upper(nome)
     if 'RECEBIMENTO DE ALUGUEL' in u:
         return 'aluguel'
@@ -554,6 +567,7 @@ def _fetch_recebimentos(conn, data_inicio, data_fim, empresa_ids, forma_ids):
                    MONTH(bt.data_transacao) AS mo,
                    fr.id                   AS forma_id,
                    fr.nome                 AS forma_nome,
+                   fr.dre_grupo            AS dre_grupo,
                    SUM(bt.valor)           AS total
             FROM bank_transactions bt
             JOIN bank_accounts ba ON ba.id = bt.account_id
@@ -563,25 +577,51 @@ def _fetch_recebimentos(conn, data_inicio, data_fim, empresa_ids, forma_ids):
               AND bt.data_transacao BETWEEN %s AND %s
               {emp_clause}
               {forma_clause}
-            GROUP BY yr, mo, fr.id, fr.nome
+            GROUP BY yr, mo, fr.id, fr.nome, fr.dre_grupo
             ORDER BY fr.nome, yr, mo
         """, [data_inicio, data_fim] + emp_params + forma_params)
         rows = cur.fetchall()
     except Exception:
+        logging.getLogger(__name__).exception('dre_postos: recebimentos')
         rows = []
+
+    # Sobra da devolução de despesa (resgate de aplicação que voltou com
+    # rendimento): crédito − o que abateu da despesa = receita financeira.
+    try:
+        cur.execute(f"""
+            SELECT YEAR(bt.data_transacao) AS yr, MONTH(bt.data_transacao) AS mo,
+                   0 AS forma_id, 'Rendimento de aplicação (resgate)' AS forma_nome,
+                   'financeira' AS dre_grupo,
+                   bt.valor + COALESCE((SELECT SUM(ld.valor) FROM lancamentos_despesas ld
+                                         WHERE ld.bank_transaction_id = bt.id), 0) AS total
+            FROM bank_transactions bt
+            JOIN bank_accounts ba ON ba.id = bt.account_id
+            WHERE bt.tipo = 'CREDIT' AND bt.status = 'conciliado'
+              AND bt.tipo_conciliacao = 'devolucao_despesa'
+              AND bt.data_transacao BETWEEN %s AND %s
+              {emp_clause}
+            HAVING total >= 0.005
+        """, [data_inicio, data_fim] + emp_params)
+        rows = list(rows) + list(cur.fetchall())
+    except Exception:
+        logging.getLogger(__name__).exception('dre_postos: sobra de devolução')
     cur.close()
 
     aluguel_acc:  dict = {}
     prazo_acc:    dict = {}
+    fin_acc:      dict = {}
+    outras_acc:   dict = {}
+    stores = {'aluguel': aluguel_acc, 'cliente_a_prazo': prazo_acc,
+              'financeira': fin_acc, 'outras': outras_acc}
 
     for row in rows:
-        grupo = _classify_forma(row['forma_nome'])
+        grupo = _classify_forma(row['forma_nome'], row.get('dre_grupo'))
         if grupo is None:
             continue
         mk   = _make_month_key(row['yr'], row['mo'])
         val  = float(row['total'] or 0)
         nome = row['forma_nome']
-        store = aluguel_acc if grupo == 'aluguel' else prazo_acc
+        store = stores[grupo]
 
         if nome not in store:
             store[nome] = {'nome': nome, 'by_month': defaultdict(float), 'total': 0.0}
@@ -610,6 +650,10 @@ def _fetch_recebimentos(conn, data_inicio, data_fim, empresa_ids, forma_ids):
         'aluguel_formas':       _rows(aluguel_acc),
         'cliente_a_prazo':      _agg(prazo_acc),
         'cliente_a_prazo_formas': _rows(prazo_acc),
+        'financeira':           _agg(fin_acc),
+        'financeira_formas':    _rows(fin_acc),
+        'outras':               _agg(outras_acc),
+        'outras_formas':        _rows(outras_acc),
     }
 
 
@@ -1361,6 +1405,8 @@ def dre_postos():
         agg_prazo_mk: dict        = defaultdict(float)
         agg_aluguel_formas: dict  = {}   # nome → {by_month, total}
         agg_prazo_formas: dict    = {}
+        agg_extra = {'financeira': (defaultdict(float), {}),   # (por mês, por forma)
+                     'outras':     (defaultdict(float), {})}
         all_lancamentos: list     = []
 
         # Lookup da categoria ALUGUEL para mapear retiradas de caixa
@@ -1438,6 +1484,18 @@ def dre_postos():
                         for mk, v in f['by_month'].items():
                             agg_prazo_formas[n]['by_month'][mk] += v
                         agg_prazo_formas[n]['total'] += f['total']
+
+                # Receitas financeiras / Outras receitas: entram pela marcação
+                # da forma (Cadastros › Formas de Recebimento), sem chave aqui.
+                for g, (g_mk, g_formas) in agg_extra.items():
+                    for mk, v in receb[g].items():
+                        g_mk[mk] += v
+                    for f in receb[g + '_formas']:
+                        d = g_formas.setdefault(f['nome'], {'nome': f['nome'],
+                                                            'by_month': defaultdict(float), 'total': 0.0})
+                        for mk, v in f['by_month'].items():
+                            d['by_month'][mk] += v
+                        d['total'] += f['total']
 
                 # Despesas (lançamentos bancários)
                 lancamentos = _fetch_despesas_lancamentos(
@@ -1525,6 +1583,10 @@ def dre_postos():
             'aluguel_formas':         _sorted_formas_list(agg_aluguel_formas),
             'cliente_a_prazo':        dict(agg_prazo_mk),
             'cliente_a_prazo_formas': _sorted_formas_list(agg_prazo_formas),
+            'financeira':             dict(agg_extra['financeira'][0]),
+            'financeira_formas':      _sorted_formas_list(agg_extra['financeira'][1]),
+            'outras':                 dict(agg_extra['outras'][0]),
+            'outras_formas':          _sorted_formas_list(agg_extra['outras'][1]),
         }
 
         vendas_reais_by_month  = dict(agg_vendas_reais)
@@ -1620,6 +1682,8 @@ def dre_postos():
             total += agg_lubrif_mk.get(mk, 0.0)
             total += recebimentos['aluguel'].get(mk, 0.0)
             total += recebimentos['cliente_a_prazo'].get(mk, 0.0)
+            total += recebimentos['financeira'].get(mk, 0.0)
+            total += recebimentos['outras'].get(mk, 0.0)
             receitas_by_month[mk] = total
 
         grand_receitas = sum(receitas_by_month.values())
@@ -1651,6 +1715,10 @@ def dre_postos():
             recebimentos['aluguel'].get(m['key'], 0.0) for m in months)
         grand_prazo        = sum(
             recebimentos['cliente_a_prazo'].get(m['key'], 0.0) for m in months)
+        grand_financeira   = sum(
+            recebimentos['financeira'].get(m['key'], 0.0) for m in months)
+        grand_outras       = sum(
+            recebimentos['outras'].get(m['key'], 0.0) for m in months)
 
         grand_vendas_por_produto  = _grand_por_produto(vendas_por_produto,  months)
         grand_compras_por_produto = _grand_por_produto(compras_por_produto, months)
@@ -1693,6 +1761,8 @@ def dre_postos():
         grand_vendas_reais=grand_vendas_reais,
         grand_aluguel=grand_aluguel,
         grand_prazo=grand_prazo,
+        grand_financeira=grand_financeira,
+        grand_outras=grand_outras,
         grand_receitas=grand_receitas,
         # compras (componente do CMV)
         compras_por_produto=compras_por_produto,

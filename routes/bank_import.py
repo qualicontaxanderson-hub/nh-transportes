@@ -2543,6 +2543,11 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                 cred = _dc.fetchone()
             if not orig or not cred:
                 raise ValueError("Despesa original não encontrada.")
+            # 24/11/2026: voltou MAIS do que saiu (resgate de aplicação com
+            # rendimento): a devolução abate só o valor da despesa; a sobra
+            # (crédito − devolvido) aparece no DRE como Receita financeira.
+            _volta = abs(float(cred['valor'] or 0))
+            _devolve = min(_volta, abs(float(orig['valor'] or 0)))
             cursor.execute(
                 """INSERT INTO lancamentos_despesas
                        (data, cliente_id, titulo_id, categoria_id, subcategoria_id,
@@ -2550,8 +2555,10 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (cred['data_transacao'], orig['cliente_id'], orig['titulo_id'],
                  orig['categoria_id'], orig['subcategoria_id'],
-                 -abs(float(cred['valor'] or 0)), orig['fornecedor'],
-                 'DEVOLUÇÃO da despesa #%s: %s' % (orig['id'], cred['descricao'] or ''),
+                 -_devolve, orig['fornecedor'],
+                 'DEVOLUÇÃO da despesa #%s: %s' % (orig['id'], cred['descricao'] or '')
+                 + (' (rendimento R$ %.2f em Receitas financeiras)' % (_volta - _devolve)
+                    if _volta - _devolve >= 0.005 else ''),
                  tx_id),
             )
             cursor.execute(

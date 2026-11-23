@@ -39,6 +39,17 @@ def _ensure_tables():
                 " ADD COLUMN conta_contabil_id INT NULL"
             )
             conn.commit()
+        # Onde a forma entra no DRE (24/11/2026): NULL = automático pelo nome
+        # (aluguel / cliente à prazo), 'financeira', 'outras' ou 'nao'.
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS"
+            " WHERE TABLE_SCHEMA = DATABASE()"
+            " AND TABLE_NAME = 'formas_recebimento'"
+            " AND COLUMN_NAME = 'dre_grupo'"
+        )
+        if cursor.fetchone()[0] == 0:
+            cursor.execute("ALTER TABLE formas_recebimento ADD COLUMN dre_grupo VARCHAR(12) NULL")
+            conn.commit()
         cursor.close()
         _tables_ready = True
     finally:
@@ -87,15 +98,68 @@ def _load_form_data(conn):
 def lista():
     """Lista todas as formas de recebimento."""
     _ensure_tables()
+    from datetime import date
+    from routes.dre_postos import _classify_forma
+    ano = date.today().year
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
-        "SELECT id, nome, eh_cartao, tipo_cartao, ativo FROM formas_recebimento ORDER BY nome"
+        "SELECT id, nome, eh_cartao, tipo_cartao, ativo, dre_grupo FROM formas_recebimento ORDER BY nome"
     )
     formas = cursor.fetchall()
+    # movimento do ano em cada forma (créditos conciliados no banco)
+    cursor.execute(
+        """SELECT forma_recebimento_id AS fid, COUNT(*) AS n, SUM(valor) AS total,
+                  MAX(data_transacao) AS ultimo
+             FROM bank_transactions
+            WHERE forma_recebimento_id IS NOT NULL AND tipo = 'CREDIT'
+              AND status != 'ignorado' AND YEAR(data_transacao) = %s
+            GROUP BY forma_recebimento_id""", (ano,))
+    mov = {r['fid']: r for r in cursor.fetchall()}
+    cursor.execute(
+        """SELECT fre.forma_recebimento_id AS fid,
+                  COALESCE(c.nome_fantasia, c.razao_social) AS nome
+             FROM formas_recebimento_empresas fre
+             JOIN clientes c ON c.id = fre.cliente_id
+            ORDER BY nome""")
+    emps = {}
+    for r in cursor.fetchall():
+        emps.setdefault(r['fid'], []).append(r['nome'])
     cursor.close()
     conn.close()
-    return render_template('formas_recebimento/lista.html', formas=formas)
+    for f in formas:
+        m = mov.get(f['id']) or {}
+        f['mov_n'] = int(m.get('n') or 0)
+        f['mov_total'] = float(m.get('total') or 0)
+        f['mov_ultimo'] = m.get('ultimo')
+        f['empresas'] = emps.get(f['id'], [])
+        f['dre_auto'] = _classify_forma(f['nome']) or ''        # aluguel | cliente_a_prazo | ''
+        f['dre_efetivo'] = _classify_forma(f['nome'], f.get('dre_grupo')) or ''
+    return render_template('formas_recebimento/lista.html', formas=formas, ano=ano)
+
+
+_DRE_GRUPOS = ('', 'financeira', 'outras', 'nao')
+
+
+@bp.route('/dre/<int:id>', methods=['POST'])
+@login_required
+@admin_required
+def dre_grupo(id):
+    """Liga/desliga a forma no DRE direto do card (sem abrir o cadastro)."""
+    _ensure_tables()
+    d = request.get_json(silent=True) or {}
+    g = (d.get('grupo') or '').strip()
+    if g not in _DRE_GRUPOS:
+        return jsonify({'ok': False, 'erro': 'opção inválida'}), 400
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE formas_recebimento SET dre_grupo = %s WHERE id = %s", (g or None, id))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'grupo': g})
 
 
 @bp.route('/api/contas-by-empresa/<int:empresa_id>')

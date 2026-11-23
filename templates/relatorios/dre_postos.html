@@ -427,7 +427,7 @@ body.dre-aberta .dre-veu{ display:block; } body.dre-aberta .dre-jan{ display:fle
             {% if formas %}
             <div>
               {% set fsel = cfg.get('forma_ids', [])|map('string')|list %}
-              <div class="emp__r">Formas de recebimento (aluguel e prazo) <em class="qt" data-vazio="todas"></em></div>
+              <div class="emp__r">Formas de recebimento <em class="qt" data-vazio="todas"></em></div>
               <input type="search" class="busca" placeholder="procurar forma…">
               <div class="chips rolo">
                 {% for f in formas %}
@@ -478,7 +478,7 @@ body.dre-aberta .dre-veu{ display:block; } body.dre-aberta .dre-jan{ display:fle
   <div class="kpis">
     <div class="kpi" style="--c:#2f9e5d">
       <div class="r">Receitas</div><div class="v num">{{ brl(grand_receitas) }}</div>
-      <div class="s">vendas, aluguel e prazo</div></div>
+      <div class="s">vendas, aluguel, prazo e outras</div></div>
     <div class="kpi" style="--c:#e07b00">
       <div class="r">CMV</div><div class="v num">{{ brl(grand_cmv) }}</div>
       <div class="s">{{ pct(grand_cmv, grand_receitas) }} da receita</div></div>
@@ -601,6 +601,17 @@ body.dre-aberta .dre-veu{ display:block; } body.dre-aberta .dre-jan{ display:fle
           <tr class="l-it" data-pai="prazo" hidden><td>{{ f.nome }}</td>{{ vals(f.by_month, f.total) }}</tr>
           {% endfor %}
         {% endif %}
+        {# formas marcadas em Cadastros › Formas de Recebimento (botão "No DRE") #}
+        {% for g, rot, ic, cor, tot in [('financeira', 'Receitas financeiras', 'bi-graph-up-arrow', '#2f9e5d', grand_financeira),
+                                        ('outras', 'Outras receitas', 'bi-plus-square', '#7a5af8', grand_outras)] %}
+        {% if recebimentos[g + '_formas'] %}
+          <tr class="l-grp" data-abre="rec_{{ g }}"><td><span class="seta">›</span><i class="bi {{ ic }} ic" style="color:{{ cor }}"></i>{{ rot }}</td>
+            {{ vals(recebimentos[g], tot) }}</tr>
+          {% for f in recebimentos[g + '_formas'] %}
+          <tr class="l-it" data-pai="rec_{{ g }}" hidden><td>{{ f.nome }}</td>{{ vals(f.by_month, f.total) }}</tr>
+          {% endfor %}
+        {% endif %}
+        {% endfor %}
         <tr class="l-tot rec"><td><i class="bi bi-plus-circle-fill"></i> Total receitas</td>{{ vals(receitas_by_month, grand_receitas) }}</tr>
 
         {# ── CMV ── #}
