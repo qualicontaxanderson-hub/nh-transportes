@@ -372,9 +372,9 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
             <button type="submit" form="fsim{{ sc.cid }}" class="sim-grava"><i class="bi bi-check-lg"></i> Gravar</button>
             <button type="button" class="sim-rep" data-cid="{{ sc.cid }}" title="Copia o 1º valor preenchido para os meses vazios (depois clique em Gravar)">repetir</button></td>
           {% for m in months %}{% set t_ = sc.tarifa[m.key] %}
-            <td class="sim-c"><input type="text" inputmode="decimal" class="sim-in" form="fsim{{ sc.cid }}"
+            <td class="sim-c"><input type="text" inputmode="numeric" class="sim-in" form="fsim{{ sc.cid }}"
                 name="v_{{ m.key }}" placeholder="—" autocomplete="off"
-                value="{{ '' if t_ is none else ('%.4f' % t_).rstrip('0').rstrip('.').replace('.', ',') }}"></td>
+                value="{{ '' if t_ is none else ('%.2f' % t_).replace('.', ',') }}"></td>
           {% endfor %}
           <td class="acum">{% if sc.tarifa_media is none %}—{% else %}R$ {{ ('%.4f' % sc.tarifa_media).replace('.', ',') }}{% endif %}</td></tr>
         {% if sc.tem_sim %}
@@ -682,6 +682,13 @@ body.ct-aberta .ct-veu{ display:block; } body.ct-aberta .ct-jan{ display:flex; }
         if (e.key === 'Escape') fim(false);
       });
       inp.addEventListener('blur', function () { fim(true); });
+    });
+  });
+  /* digita como dinheiro: 13 -> 0,13 ; 100 -> 1,00 (os números entram pelos centavos) */
+  raiz.querySelectorAll('input.sim-in').forEach(function (i) {
+    i.addEventListener('input', function () {
+      var d = i.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 4);
+      i.value = d ? (parseInt(d, 10) / 100).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '';
     });
   });
   raiz.querySelectorAll('.sim-rep').forEach(function (b) {
