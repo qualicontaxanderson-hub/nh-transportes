@@ -30,8 +30,8 @@ from datetime import date, datetime
 
 import mysql.connector
 
-from flask import Blueprint, render_template, request
-from flask_login import login_required
+from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask_login import current_user, login_required
 
 from routes.auth import admin_required
 from routes.conf_despesas import (_fetch_taxas_cartao, _aplicar_taxas_operadora,
@@ -198,6 +198,8 @@ def _parse_empresa_configs(args, empresa_ids):
                 'include_aluguel': '1' in args.getlist(f'cf_{eid}_aluguel'),
                 'include_prazo':   '1' in args.getlist(f'cf_{eid}_prazo'),
                 'include_compras': '1' in args.getlist(f'cf_{eid}_compras'),
+                'include_cartoes': '1' in args.getlist(f'cf_{eid}_cartoes')
+                                   if f'cf_{eid}_cartoes' in args else True,
             }
         else:
             # Fallback para parâmetros globais (compatibilidade com URLs antigas)
@@ -208,6 +210,7 @@ def _parse_empresa_configs(args, empresa_ids):
                 'include_aluguel': global_include_aluguel,
                 'include_prazo':   global_include_prazo,
                 'include_compras': global_include_compras,
+                'include_cartoes': True,
             }
     return configs
 
@@ -1065,6 +1068,208 @@ def _build_despesas_blocks(lancamentos, months):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Caminhões: custo dos transportes sem cobrança (Conf. Transportes)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _sem_cobranca_por_empresa(data_inicio, data_fim):
+    """{cliente_id(str): {'nome', 'custo': {mk: R$}, 'custo_tot', 'litros_tot'}}
+    — a mesma conta da linha "Custo dos sem cobrança" da Conf. Transportes."""
+    from routes.conf_transportes import apurar
+    out = {}
+    try:
+        for sc in apurar(data_inicio, data_fim)['sem_cobranca']:
+            if sc.get('cid'):
+                out[str(sc['cid'])] = {'nome': sc['nome'], 'custo': dict(sc['custo']),
+                                       'custo_tot': sc['custo_tot'], 'litros_tot': sc['litros_tot']}
+    except Exception:
+        logging.getLogger(__name__).exception('dre_postos: custo dos sem cobrança')
+    return out
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Período relativo (o filtro salvo "Ano atual" continua atual no ano que vem)
+# ──────────────────────────────────────────────────────────────────────────────
+
+_PERIODOS = ('mes', 'mesant', 'tri', 'ano', 'anoant', '12m')
+
+
+def _periodo_relativo(per, hoje=None):
+    from calendar import monthrange
+    hoje = hoje or date.today()
+    y, m = hoje.year, hoje.month
+
+    def fim_mes(yy, mm):
+        return date(yy, mm, monthrange(yy, mm)[1])
+
+    if per == 'mes':
+        a, b = date(y, m, 1), fim_mes(y, m)
+    elif per == 'mesant':
+        yy, mm = (y, m - 1) if m > 1 else (y - 1, 12)
+        a, b = date(yy, mm, 1), fim_mes(yy, mm)
+    elif per == 'tri':
+        q = (m - 1) // 3 * 3 + 1
+        a, b = date(y, q, 1), fim_mes(y, q + 2)
+    elif per == 'anoant':
+        a, b = date(y - 1, 1, 1), date(y - 1, 12, 31)
+    elif per == '12m':
+        yy, mm = (y - 1, m + 1) if m < 12 else (y, 1)
+        a, b = date(yy, mm, 1), fim_mes(y, m)
+    else:
+        a, b = date(y, 1, 1), date(y, 12, 31)
+    return a.isoformat(), b.isoformat()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Filtros salvos (no banco, por usuário — antes ficavam só no navegador)
+# ──────────────────────────────────────────────────────────────────────────────
+
+_DDL_FILTROS = """
+CREATE TABLE IF NOT EXISTS dre_filtros (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id  INT          NOT NULL,
+    nome        VARCHAR(80)  NOT NULL,
+    params      TEXT         NOT NULL,
+    padrao      TINYINT(1)   NOT NULL DEFAULT 0,
+    criado_em   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TIMESTAMP  NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_usuario_nome (usuario_id, nome)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"""
+_filtros_tabela_ok = False
+
+
+def _filtros_tabela(conn):
+    """CREATE TABLE faz commit implícito: chamar fora de transação."""
+    global _filtros_tabela_ok
+    if not _filtros_tabela_ok:
+        c = conn.cursor()
+        c.execute(_DDL_FILTROS)
+        c.close()
+        _filtros_tabela_ok = True
+
+
+def _usuario_id():
+    try:
+        return int(current_user.get_id())
+    except (TypeError, ValueError, AttributeError):
+        return 0
+
+
+def _limpa_params(txt):
+    """Só o que o formulário do DRE manda (sem csrf, sem lixo)."""
+    from urllib.parse import parse_qsl, urlencode
+    txt = (txt or '').strip().lstrip('?')
+    ok = []
+    for k, v in parse_qsl(txt, keep_blank_values=True):
+        if k in ('data_inicio', 'data_fim', 'per', 'empresa_ids[]') or k.startswith('cf_'):
+            ok.append((k, v))
+    return urlencode(ok)
+
+
+def _filtros_do_usuario(conn):
+    _filtros_tabela(conn)
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT id, nome, params, padrao FROM dre_filtros WHERE usuario_id = %s"
+                    " ORDER BY padrao DESC, nome", (_usuario_id(),))
+        return cur.fetchall()
+    finally:
+        cur.close()
+
+
+@bp.route('/dre_postos/filtros/salvar', methods=['POST'])
+@login_required
+@admin_required
+def dre_filtro_salvar():
+    nome = (request.form.get('nome') or '').strip()[:80]
+    params = _limpa_params(request.form.get('params'))
+    padrao = request.form.get('padrao') == '1'
+    volta = url_for('dre_postos.dre_postos') + ('?' + params if params else '')
+    if not nome:
+        flash('Dê um nome ao filtro.', 'warning')
+        return redirect(volta)
+    conn = get_db_connection()
+    try:
+        _filtros_tabela(conn)
+        cur = conn.cursor()
+        uid = _usuario_id()
+        if padrao:
+            cur.execute("UPDATE dre_filtros SET padrao = 0 WHERE usuario_id = %s", (uid,))
+        cur.execute("""INSERT INTO dre_filtros (usuario_id, nome, params, padrao) VALUES (%s, %s, %s, %s)
+                       ON DUPLICATE KEY UPDATE params = VALUES(params), padrao = VALUES(padrao)""",
+                    (uid, nome, params, 1 if padrao else 0))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+    flash('Filtro "%s" salvo%s.' % (nome, ' e marcado como padrão' if padrao else ''), 'success')
+    return redirect(volta)
+
+
+@bp.route('/dre_postos/filtros/<int:fid>/<acao>', methods=['POST'])
+@login_required
+@admin_required
+def dre_filtro_acao(fid, acao):
+    volta = request.form.get('volta') or url_for('dre_postos.dre_postos')
+    if not volta.startswith('/') or volta.startswith('//'):
+        volta = url_for('dre_postos.dre_postos')
+    conn = get_db_connection()
+    try:
+        _filtros_tabela(conn)
+        cur = conn.cursor()
+        uid = _usuario_id()
+        if acao == 'excluir':
+            cur.execute("DELETE FROM dre_filtros WHERE id = %s AND usuario_id = %s", (fid, uid))
+            flash('Filtro excluído.', 'success')
+        elif acao == 'padrao':
+            cur.execute("SELECT padrao FROM dre_filtros WHERE id = %s AND usuario_id = %s", (fid, uid))
+            r = cur.fetchone()
+            cur.execute("UPDATE dre_filtros SET padrao = 0 WHERE usuario_id = %s", (uid,))
+            if r and not r[0]:
+                cur.execute("UPDATE dre_filtros SET padrao = 1 WHERE id = %s AND usuario_id = %s", (fid, uid))
+                flash('Este filtro abre sozinho quando você entra no DRE.', 'success')
+            else:
+                flash('Nenhum filtro padrão agora.', 'success')
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+    return redirect(volta)
+
+
+@bp.route('/dre_postos/filtros/importar', methods=['POST'])
+@login_required
+@admin_required
+def dre_filtro_importar():
+    """Traz para o banco os filtros que estavam só no navegador (localStorage)."""
+    import json
+    try:
+        lista = json.loads(request.form.get('dados') or '[]')
+    except ValueError:
+        lista = []
+    n = 0
+    conn = get_db_connection()
+    try:
+        _filtros_tabela(conn)
+        cur = conn.cursor()
+        for it in lista[:50]:
+            nome = str(it.get('nome') or '').strip()[:80]
+            params = _limpa_params(it.get('params'))
+            if nome and params:
+                cur.execute("""INSERT IGNORE INTO dre_filtros (usuario_id, nome, params)
+                               VALUES (%s, %s, %s)""", (_usuario_id(), nome, params))
+                n += cur.rowcount
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+    flash('%d filtro(s) do navegador agora estão salvos no sistema.' % n, 'success')
+    volta = request.form.get('volta') or ''
+    if not volta.startswith('/') or volta.startswith('//'):
+        volta = url_for('dre_postos.dre_postos')
+    return redirect(volta)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Rota principal
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -1075,15 +1280,32 @@ def dre_postos():
     """DRE Postos — Demonstração do Resultado do Exercício."""
     args = request.args
 
+    # Sem nada na URL: abre o filtro marcado como padrão (se houver)
+    if not args:
+        try:
+            _c = get_db_connection()
+            try:
+                padrao = next((f for f in _filtros_do_usuario(_c) if f['padrao']), None)
+            finally:
+                _c.close()
+            if padrao and padrao['params']:
+                return redirect(url_for('dre_postos.dre_postos') + '?' + padrao['params'])
+        except Exception:
+            logging.getLogger(__name__).exception('dre_postos: filtro padrão')
+
     data_inicio = args.get('data_inicio', '').strip()
     data_fim    = args.get('data_fim',    '').strip()
-    if not data_inicio and not data_fim:
+    per = args.get('per', '').strip()
+    if per in _PERIODOS:
+        data_inicio, data_fim = _periodo_relativo(per)
+    elif not data_inicio and not data_fim:
         data_inicio, data_fim = _default_period()
 
     empresa_ids = [e for e in args.getlist('empresa_ids[]') if e]
 
     conn = get_db_connection()
     try:
+        filtros_salvos = _filtros_do_usuario(conn)
         empresas = _empresas_list(conn)
         titulos  = _titulos_list(conn)
         formas   = _formas_recebimento_aluguel_prazo(conn)
@@ -1103,6 +1325,7 @@ def dre_postos():
                 'include_aluguel': cfg['include_aluguel'],
                 'include_prazo':   cfg['include_prazo'],
                 'include_compras': cfg['include_compras'],
+                'include_cartoes': cfg['include_cartoes'],
             }
             for eid, cfg in empresa_configs.items()
         }
@@ -1145,6 +1368,8 @@ def dre_postos():
         # Usa lookup direto sem filtro ativo=1 — o título pode estar inativo no
         # filtro do relatório mas ainda ter lançamentos que precisam do ajuste.
         _caminhoes_tit = _lookup_caminhoes_titulo(conn)
+        sem_cob_cache = None          # Conf. Transportes, calculado só se precisar
+        caminhoes_sc: list = []       # empresas com custo de transporte sem cobrança
 
         if months and empresa_configs:
             for eid, cfg in empresa_configs.items():
@@ -1212,6 +1437,12 @@ def dre_postos():
                 # Despesas (lançamentos bancários)
                 lancamentos = _fetch_despesas_lancamentos(
                     conn, data_inicio, data_fim, eid_list, cfg['titulo_ids'])
+                # 23/11/2026: os lançamentos do título CAMINHÕES são a frota
+                # inteira; no DRE da empresa entra só o que o transporte sem
+                # cobrança custou a ela (Conf. Transportes), logo abaixo.
+                if _caminhoes_tit is not None:
+                    lancamentos = [r for r in lancamentos
+                                   if str(r.get('titulo_id')) != str(_caminhoes_tit['id'])]
                 all_lancamentos.extend(lancamentos)
 
                 # Despesas de caixa: RETIRADA ALUGUEL
@@ -1241,69 +1472,40 @@ def dre_postos():
                         for tid in titulo_ids_set
                     )
                 )
-                func_salary_mk: dict = {}
                 if include_func:
-                    func_rows, func_salary_mk = _fetch_func_lancamentos_dre(
-                        conn, months, eid_list)
+                    func_rows, _ = _fetch_func_lancamentos_dre(conn, months, eid_list)
                     all_lancamentos.extend(func_rows)
-                else:
-                    # Mesmo sem incluir o bloco FUNCIONÁRIOS, ainda precisamos
-                    # dos salários de motoristas para o bloco CAMINHÕES.
-                    _, func_salary_mk = _fetch_func_lancamentos_dre(
-                        conn, months, eid_list)
 
-                # Custo de motoristas + receita de frete → injeta no bloco CAMINHÕES
-                # salary_mk vem do resultado de _fetch_func_lancamentos_dre acima
-                # (mesma fonte de dados do bloco FRENTISTAS — sem risco de falha silenciosa).
-                # O título CAMINHÕES pode estar ativo=0 no filtro; usamos
-                # _lookup_caminhoes_titulo para encontrá-lo independente do ativo.
-                caminhoes_lancamentos_present = (
-                    _caminhoes_tit is not None
-                    and any(
-                        str(row.get('titulo_id')) == str(_caminhoes_tit['id'])
-                        for row in lancamentos
-                    )
-                )
+                # CAMINHÕES = custo dos transportes sem cobrança desta empresa
+                # (o mesmo número da linha "Custo dos sem cobrança" da Conf.
+                # Transportes). Motoristas e receita de frete já estão nessa conta.
                 caminhoes_ok = (
                     _caminhoes_tit is not None
                     and (not titulo_ids_set
-                         or str(_caminhoes_tit['id']) in titulo_ids_set
-                         or caminhoes_lancamentos_present)
+                         or str(_caminhoes_tit['id']) in titulo_ids_set)
                 )
                 if caminhoes_ok:
-                    ct        = _caminhoes_tit
-                    salary_mk = func_salary_mk   # já calculado acima
-                    frete_mk  = _fetch_frete_receita_empresa_dre(
-                        conn, data_inicio, data_fim, eid_list)
-
-                    for m in months:
-                        mk = m['key']
-                        d  = date(m['year'], m['month'], 1)
-
-                        sal = salary_mk.get(mk, 0.0)
-                        if sal:
+                    if sem_cob_cache is None:
+                        sem_cob_cache = _sem_cobranca_por_empresa(data_inicio, data_fim)
+                    sc = sem_cob_cache.get(str(eid))
+                    if sc:
+                        ct = _caminhoes_tit
+                        caminhoes_sc.append({'eid': str(eid), 'nome': empresas_por_id.get(str(eid), sc['nome']),
+                                             'litros_tot': sc['litros_tot'], 'custo_tot': sc['custo_tot']})
+                        for m in months:
+                            v = sc['custo'].get(m['key'], 0.0)
+                            if abs(v) < 0.005:
+                                continue
                             all_lancamentos.append({
-                                'data':            d,
-                                'valor':           sal,
+                                'data':            date(m['year'], m['month'], 1),
+                                'valor':           v,
                                 'titulo_id':       ct['id'],
                                 'titulo_ordem':    int(ct['ordem']),
                                 'titulo_nome':     ct['nome'],
-                                'categoria_id':    'caminhoes_motoristas',
-                                'categoria_ordem': 9998,
-                                'categoria_nome':  'MOTORISTAS',
-                            })
-
-                        rec = frete_mk.get(mk, 0.0)
-                        if rec:
-                            all_lancamentos.append({
-                                'data':            d,
-                                'valor':           -rec,   # negativo — reduz custo líquido
-                                'titulo_id':       ct['id'],
-                                'titulo_ordem':    int(ct['ordem']),
-                                'titulo_nome':     ct['nome'],
-                                'categoria_id':    'caminhoes_receita',
-                                'categoria_ordem': 9999,
-                                'categoria_nome':  'RECEITA',
+                                'categoria_id':    'cam_sc_%s' % eid,
+                                'categoria_ordem': 0,
+                                'categoria_nome':  'Transportes sem cobrança — %s'
+                                                   % empresas_por_id.get(str(eid), sc['nome']),
                             })
 
         def _sorted_formas_list(acc):
@@ -1338,12 +1540,20 @@ def dre_postos():
         # maquininha é do Posto NH), corrigida pelo arquivo da operadora
         # (SIPAG/X7/Baratão) e pelo Sicredi até jul/2026. Só entra se alguma
         # empresa do filtro é dona das vendas de cartão.
+        # 23/11/2026: sem empresa escolhida não há cartão (antes aparecia sozinho
+        # com o resto vazio); Fresh/Prest não têm maquininha e não veem; com
+        # todas as donas no filtro é a conta da Conf. Despesas, com só uma
+        # delas, apenas as vendas dela.
         _taxas_list = []
-        if months:
+        if months and empresa_ids:
             _emp_cartao, _ = _empresas_donas(conn, data_inicio, data_fim)
-            if not empresa_ids or (_emp_cartao & {str(e) for e in empresa_ids}):
-                _taxas_list = _fetch_taxas_cartao(conn, data_inicio, data_fim, [], months)
-                if _taxas_list:
+            _sel_cartao = {str(e) for e in empresa_ids
+                           if empresa_configs.get(e, {}).get('include_cartoes', True)}
+            _donas_sel = _emp_cartao & _sel_cartao
+            if _donas_sel:
+                _escopo = [] if _emp_cartao <= _sel_cartao else sorted(_donas_sel)
+                _taxas_list = _fetch_taxas_cartao(conn, data_inicio, data_fim, _escopo, months)
+                if _taxas_list and not _escopo:
                     _taxas_list = _aplicar_taxas_operadora(
                         conn, _taxas_list, data_inicio, data_fim, months)
         cartoes_by_month: dict = {m['key']: 0.0 for m in months}
@@ -1454,6 +1664,10 @@ def dre_postos():
         empresa_ids=empresa_ids,
         empresa_configs_for_js=empresa_configs_for_js,
         empresas_por_id=empresas_por_id,
+        per=per if per in _PERIODOS else '',
+        filtros_salvos=filtros_salvos,
+        caminhoes_sc=caminhoes_sc,
+        caminhoes_titulo_id=str(_caminhoes_tit['id']) if _caminhoes_tit else '',
         # flags agregadas para controle de exibição das linhas
         any_include_vendas=any_include_vendas,
         any_include_aluguel=any_include_aluguel,

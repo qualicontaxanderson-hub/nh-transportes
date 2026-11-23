@@ -202,7 +202,13 @@ def conf_transportes():
     data_fim = request.args.get('data_fim', '').strip()
     if not data_inicio or not data_fim:
         data_inicio, data_fim = _default_period()
+    return render_template('relatorios/conf_transportes.html', **apurar(data_inicio, data_fim))
 
+
+def apurar(data_inicio, data_fim):
+    """A conta inteira da tela (também usada pelo DRE: custo dos sem cobrança
+    por empresa). Devolve o contexto do template + months_all (todos os meses
+    do período, inclusive os sem movimento)."""
     conn = get_db_connection()
     try:
         titulo_ids = _titulos_caminhoes(conn)
@@ -339,9 +345,8 @@ def conf_transportes():
     ativos = [m for m in months
               if any(abs(frota[x][m['key']]) >= 0.005 for x in ('receita', 'custos', 'mot'))]
 
-    return render_template(
-        'relatorios/conf_transportes.html',
-        data_inicio=data_inicio, data_fim=data_fim,
+    return dict(
+        data_inicio=data_inicio, data_fim=data_fim, months_all=months,
         months=ativos, trucks=trucks, outros=outros,
         frota=frota, frota_tot=frota_tot,
         frota_cpl=frota_cpl, frota_cpl_tot=frota_cpl_tot,
