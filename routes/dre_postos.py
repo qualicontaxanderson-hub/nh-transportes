@@ -577,6 +577,12 @@ def _fetch_recebimentos(conn, data_inicio, data_fim, empresa_ids, forma_ids):
               AND bt.data_transacao BETWEEN %s AND %s
               {emp_clause}
               {forma_clause}
+              -- 24/11/2026: frete marcado no DRE entra só o recebido à mão
+              -- (PIX/TED do extrato); o boleto é do sistema de frete.
+              AND NOT (fr.nome LIKE '%%FRETE%%'
+                       AND COALESCE(fr.dre_grupo, '') IN ('financeira', 'outras')
+                       AND (bt.descricao LIKE 'Pagamento recebido%%'
+                            OR bt.descricao LIKE 'Recebimento de cobran%%'))
             GROUP BY yr, mo, fr.id, fr.nome, fr.dre_grupo
             ORDER BY fr.nome, yr, mo
         """, [data_inicio, data_fim] + emp_params + forma_params)
