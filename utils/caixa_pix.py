@@ -37,6 +37,7 @@ _NOMES_GRUPO = ('POSTO NOVO HORIZONTE', 'PREST SERVICE', 'MESMA TIT')
 #   Cora     'Transf Pix recebida - ...' / 'Transferência recebida - ...'
 #   Santander 'PIX RECEBIDO ...' / 'TRANSFERENCIA RECEBIDA - PAGAMENTO PIX...'
 _FILTRO = """(bt.memo LIKE 'PIX RECEBIDO%%' OR bt.memo LIKE 'CRED.TRANSF%%'
+              OR bt.memo LIKE 'TRANSF.RECEBIDA%%'
               OR UPPER(bt.descricao) LIKE '%%PIX%%'
               OR bt.descricao LIKE 'Transf%%recebida%%')"""
 

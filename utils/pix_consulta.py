@@ -36,7 +36,9 @@ CONTA_ROTULO = 'Sicoob · NH GTBA'
 CREDENCIADORA = '02038232000164'
 # Os créditos que são PIX recebido no extrato do Sicoob: PIX de outro banco e
 # a transferência de outra cooperativa Sicoob (sai do app como PIX).
-_FILTRO_PIX = "(bt.memo LIKE 'PIX RECEBIDO%%' OR bt.memo LIKE 'CRED.TRANSF%%')"
+# 24/11/2026: PIX de conta Sicoob para conta Sicoob vem 'TRANSF.RECEBIDA - PIX SICOOB'.
+_FILTRO_PIX = ("(bt.memo LIKE 'PIX RECEBIDO%%' OR bt.memo LIKE 'CRED.TRANSF%%'"
+               " OR bt.memo LIKE 'TRANSF.RECEBIDA%%')")
 # Sem as letras/números que se confundem (O/0, I/1)
 _ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -129,7 +131,7 @@ def anotar(conn, account_id, api_txs):
         row = cur.fetchone()
         anterior = row[0] if row else None
         txs = [t for t in api_txs if t.get('id_banco') and t.get('tipo') == 'CREDIT'
-               and re.match(r'(PIX RECEBIDO|CRED\.TRANSF)', (t.get('descricao') or '').upper())]
+               and re.match(r'(PIX RECEBIDO|CRED\.TRANSF|TRANSF\.RECEBIDA)', (t.get('descricao') or '').upper())]
         novos = 0
         if txs:
             ids = [t['id_banco'] for t in txs]
@@ -231,6 +233,8 @@ def _digitos(s):
 
 def _nome_do_extrato(descricao):
     n = re.sub(r'^(Recebimento Pix|REM\.?:)\s*', '', (descricao or '').strip(), flags=re.I)
+    # Sicoob→Sicoob: 'REM.: NOME Transf' cortado em 32 letras ('... Tra')
+    n = re.sub(r'\s+T(r(a(n(s(f)?)?)?)?)?$', '', n)
     return n.strip()
 
 
