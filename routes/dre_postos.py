@@ -577,12 +577,21 @@ def _fetch_recebimentos(conn, data_inicio, data_fim, empresa_ids, forma_ids):
               AND bt.data_transacao BETWEEN %s AND %s
               {emp_clause}
               {forma_clause}
-              -- 24/11/2026: frete marcado no DRE entra só o recebido à mão
-              -- (PIX/TED do extrato); o boleto é do sistema de frete.
+              -- 24/11/2026: frete marcado no DRE não conta o boleto que tem
+              -- frete vinculado (já entra no transporte). Casa pelo CNPJ do
+              -- cliente + valor + data (±7 dias); boleto avulso fica.
               AND NOT (fr.nome LIKE '%%FRETE%%'
                        AND COALESCE(fr.dre_grupo, '') IN ('financeira', 'outras')
-                       AND (bt.descricao LIKE 'Pagamento recebido%%'
-                            OR bt.descricao LIKE 'Recebimento de cobran%%'))
+                       AND EXISTS (
+                           SELECT 1 FROM cobrancas c
+                           JOIN clientes cl ON cl.id = c.id_cliente
+                           WHERE CONVERT(REPLACE(REPLACE(REPLACE(cl.cnpj, '.', ''), '/', ''), '-', '') USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                                 = CONVERT(bt.cnpj_cpf USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                             AND ABS(c.valor - bt.valor) < 1
+                             AND ABS(DATEDIFF(COALESCE(c.data_pagamento, c.data_vencimento), bt.data_transacao)) <= 7
+                             AND (c.frete_id IS NOT NULL
+                                  OR EXISTS (SELECT 1 FROM cobrancas_freites cf
+                                             WHERE cf.cobranca_id = c.id))))
             GROUP BY yr, mo, fr.id, fr.nome, fr.dre_grupo
             ORDER BY fr.nome, yr, mo
         """, [data_inicio, data_fim] + emp_params + forma_params)
