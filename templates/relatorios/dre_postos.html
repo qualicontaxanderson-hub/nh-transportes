@@ -1051,12 +1051,12 @@ body.dre-aberta .dre-veu{ display:block; } body.dre-aberta .dre-jan{ display:fle
       selT.onchange = function () { cats(''); };
       selC.onchange = function () { subs(''); };
       cats(l.categoria_id);
-      box.querySelector('.e-salva').onclick = function () { salva(l, box); };
+      box.querySelector('.e-salva').onclick = function () { salvaLanc(l, box); };
     }).catch(function () { box.innerHTML = '<div class="dre-erro">Não deu para carregar as listas.</div>'; });
   };
   window.dreCancela = function () { desenha(LISTA.reduce(function (a, l) { return a + l.valor; }, 0)); };
 
-  function salva(l, box) {
+  function salvaLanc(l, box) {
     var corpo = {
       data: box.querySelector('.e-data').value, valor: box.querySelector('.e-valor').value,
       titulo_id: box.querySelector('.e-tit').value, categoria_id: box.querySelector('.e-cat').value,
