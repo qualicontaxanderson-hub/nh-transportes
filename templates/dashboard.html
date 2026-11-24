@@ -727,7 +727,8 @@
         operadora chegam por fetch. ===== #}
     <div class="carousel-onda1" id="nv" data-onda1
          data-vivo="{{ url_for('api.vendas_ultimas') }}?n=20"
-         data-cartoes="{{ url_for('api.dashboard_cartoes') }}">
+         data-cartoes="{{ url_for('api.dashboard_cartoes') }}"
+         data-lucro="{{ url_for('api.dashboard_lucro') }}">
       <button type="button" class="onda1-arrow onda1-prev" aria-label="Anterior"><i class="bi bi-chevron-left"></i></button>
       <div class="onda1-track" data-onda1-track>
   <section class="onda1-card nvc"><div class="hd h-vendas" id="v-hd">
@@ -1207,16 +1208,28 @@ const filaL = (k, ic, nome, sub, valor, pct, barra) =>
 const bar = (w, cls = '', marca = null) => `<div class="barra"><i class="${cls}" style="width:${Math.min(100, w)}%"></i>${marca != null ? `<span class="marca" style="--m:${marca}%"></span>` : ''}</div>`;
 
 // ---------- 1 VENDAS ----------
+// Lucro bruto: a conta do relatório Lucro dos postos (migrados), chega depois
+let LUC = null, vPer = 'dia';
+function vLucro(){
+  fetch(root.dataset.lucro, {headers: {'Accept': 'application/json'}}).then(r => r.ok ? r.json() : null)
+    .then(j => { LUC = (j && j.ok) ? j : false; vendas(vPer); }).catch(() => { LUC = false; vendas(vPer); });
+}
 function vendas(per){
+  vPer = per;
   const d = D.onda1[per], f = D.formas[per];
+  const lu = LUC ? LUC[per] : null;
+  const lucTile = LUC === false ? '' : !lu
+    ? `<div class="tile" style="grid-column:1/-1"><div class="r">Lucro bruto</div><div class="v">…</div><div class="s">calculando como no relatório Lucro dos postos</div></div>`
+    : `<div class="tile ${lu.lucro >= 0 ? 'ok' : 'neg'}" style="grid-column:1/-1"><div class="r">Lucro bruto</div><div class="v">${lu.lucro < 0 ? '− ' : ''}${R(Math.abs(lu.lucro))}</div><div class="s">${lu.venda ? P1(lu.lucro / lu.venda * 100) : '0,0'}% da venda · ${lu.litros ? 'R$ ' + PU(lu.lucro / lu.litros) : '—'}/L · combustíveis de tanque</div></div>`;
+  const lucP = nome => (lu && lu.produtos[nome] != null) ? ` · lucro <b>${R(lu.produtos[nome])}</b>` : '';
   document.getElementById('v-hd').classList.toggle('mes', per == 'mes');
   document.getElementById('v-big').textContent = R(d.total);
   document.getElementById('v-sub').innerHTML = `<b>${I(d.notas)}</b> notas · <b>${L(d.litros_comb)} L</b> · ticket ${R(d.ticket)} · ${periodoTxt(per)}`;
   const na = Object.values(f).reduce((s, x) => s + x.na, 0), nd = Object.values(f).reduce((s, x) => s + x.nd, 0);
-  let h = d.linhas.map(l => fila(PCOR[l.label], `<i class="bi ${PICO[l.label]}"></i>`, l.label, `<b>${L(l.litros)} L</b>`,
+  let h = d.linhas.map(l => fila(PCOR[l.label], `<i class="bi ${PICO[l.label]}"></i>`, l.label, `<b>${L(l.litros)} L</b>${lucP(l.label)}`,
       R(l.total), `<span>${Math.round(l.total / d.total * 100)}%</span>`, bar(l.total / d.total * 100))).join('');
   if (d.sub_outros > 0) h += fila('#94a3b8', '<i class="bi bi-bag"></i>', 'Outros produtos', `${d.qt_outros} itens`, R(d.sub_outros), '', '');
-  h += `<div class="rod"><div class="tiles">
+  h += `<div class="rod"><div class="tiles">${lucTile}
     <div class="tile ok"><div class="r">+ Acréscimo</div><div class="v">${R(d.acrescimo)}</div><div class="s">${I(na)} notas · ${P1(d.acrescimo / (d.total - d.acrescimo) * 100)}% da venda</div></div>
     <div class="tile ${d.desconto > 0 ? 'neg' : ''}"><div class="r">− Desconto</div><div class="v">${d.desconto > 0 ? '− ' : ''}${R(d.desconto)}</div><div class="s">${nd ? I(nd) + ' nota' + (nd == 1 ? '' : 's') : 'nenhum desconto'}</div></div></div>
     <div class="tot"><span>Total ${per == 'dia' ? 'do dia' : 'do mês'}</span><span>${R(d.total)}</span></div></div>`;
@@ -1423,7 +1436,7 @@ root.querySelectorAll('.chave button').forEach(b => b.onclick = () => {
   b.closest('.chave').querySelectorAll('button').forEach(x => x.classList.toggle('on', x == b));
   ({v: vendas, p: prazo, r: receb, d: descargas, k: compras, x: perdas})[card](b.dataset.p);
 });
-vendas('dia'); prazo('dia'); cartoes(); estoque(); vivo(); receb(); descargas('dia'); compras('dia'); perdas('dia');
+vendas('dia'); vLucro(); prazo('dia'); cartoes(); estoque(); vivo(); receb(); descargas('dia'); compras('dia'); perdas('dia');
   setInterval(vivo, 30000);
 
 })();

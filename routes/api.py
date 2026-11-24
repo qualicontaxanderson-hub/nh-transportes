@@ -70,3 +70,16 @@ def dashboard_cartoes():
     except Exception:
         current_app.logger.exception('[api/dashboard/cartoes] falha')
         return jsonify({'ok': False}), 500
+
+
+@api_bp.route('/dashboard/lucro', methods=['GET'])
+@login_required
+def dashboard_lucro():
+    """Lucro bruto do card Vendas (hoje e mes): a conta do relatorio Lucro
+    dos postos (migrados), base nota. Cache de 5 min."""
+    try:
+        from utils.dashboard_cards import lucro_bruto
+        return jsonify({'ok': True, **lucro_bruto()})
+    except Exception:
+        current_app.logger.exception('[api/dashboard/lucro] falha')
+        return jsonify({'ok': False}), 500

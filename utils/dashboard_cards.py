@@ -479,3 +479,52 @@ def cartoes_operadora(hoje=None):
     with _CACHE_LOCK:
         _CACHE.update(quando=time.time(), chave=chave, dados=dados)
     return dados
+
+
+# ------------------------------------------------ lucro bruto (card Vendas)
+# 24/11/2026: a mesma conta do relatorio "Lucro dos postos" (migrados), base
+# nota. Async + cache de 5 min: o custo medio corre 60 dias para tras.
+_LUCRO_CACHE = {'quando': 0.0, 'chave': None, 'dados': None}
+_LUCRO_LOCK = threading.Lock()
+_LUCRO_TTL = 5 * 60
+# nome do produto no tanque -> rotulo da linha do card
+_LUCRO_ROTULO = {'GASOLINA': 'Gasolina C', 'ETANOL': 'Etanol',
+                 'S-500': 'Diesel S-500', 'S-10': 'Diesel S-10'}
+
+
+def lucro_bruto(hoje=None):
+    from utils import lucro_migrado
+    hoje = hoje or hoje_brasilia()
+    with _LUCRO_LOCK:
+        if _LUCRO_CACHE['dados'] is not None and _LUCRO_CACHE['chave'] == hoje \
+                and time.time() - _LUCRO_CACHE['quando'] < _LUCRO_TTL:
+            return _LUCRO_CACHE['dados']
+    vazio = lambda: {'lucro': 0.0, 'venda': 0.0, 'litros': 0.0, 'produtos': {}}
+    saida = {'dia': vazio(), 'mes': vazio()}
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("""SELECT DISTINCT l.cliente_id, l.produto_id, p.nome
+                         FROM leitura_tanque_diaria l JOIN produto p ON p.id = l.produto_id""")
+        rows = cur.fetchall()
+        nomes = {r['produto_id']: (r['nome'] or '').strip().upper() for r in rows}
+        for cid in sorted({r['cliente_id'] for r in rows}):
+            pids = [r['produto_id'] for r in rows if r['cliente_id'] == cid]
+            ap = lucro_migrado.apurar(cur, cid, pids, hoje.replace(day=1), hoje, 'nota')
+            for pid, x in ap.items():
+                rot = _LUCRO_ROTULO.get(nomes.get(pid), nomes.get(pid) or str(pid))
+                dia = next((d for d in x['dias'] if d['data'] == hoje), None)
+                for per, src in (('mes', x['total']), ('dia', dia)):
+                    if not src:
+                        continue
+                    s = saida[per]
+                    s['lucro'] += _f(src['lucro_rs'])
+                    s['venda'] += _f(src['venda_rs'])
+                    s['litros'] += _f(src['venda_l'])
+                    s['produtos'][rot] = s['produtos'].get(rot, 0.0) + _f(src['lucro_rs'])
+        cur.close()
+    finally:
+        conn.close()
+    with _LUCRO_LOCK:
+        _LUCRO_CACHE.update(quando=time.time(), chave=hoje, dados=saida)
+    return saida
