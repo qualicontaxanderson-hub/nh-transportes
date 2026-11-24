@@ -599,6 +599,21 @@
   #nv .tile.ok{ background:var(--okb); border-color:#d1fae5; } #nv .tile.ok .v{ color:var(--ok); }
   #nv .tile.neg{ background:var(--negb); border-color:#fee2e2; } #nv .tile.neg .v{ color:var(--neg); }
   #nv .tile.amb{ background:var(--ambb); border-color:#fde68a; } #nv .tile.amb .v{ color:var(--amb); }
+  /* lucro bruto: faixa verde forte e as pilulas por produto */
+  #nv .tile.luc{ background:linear-gradient(120deg,#047857,#10b981 60%,#34d399); border:0; color:#fff;
+    display:flex; align-items:center; gap:10px; padding:10px 12px; box-shadow:0 6px 16px -8px rgba(4,120,87,.6); }
+  #nv .tile.luc.neg{ background:linear-gradient(120deg,#991b1b,#dc2626 60%,#f87171); box-shadow:0 6px 16px -8px rgba(153,27,27,.6); }
+  #nv .tile.luc .lic{ width:34px; height:34px; border-radius:10px; background:rgba(255,255,255,.22);
+    display:grid; place-items:center; font-size:1.1rem; flex:none; }
+  #nv .tile.luc .r, #nv .tile.luc .s{ color:rgba(255,255,255,.88); }
+  #nv .tile.luc .v{ color:#fff; font-size:1.2rem; }
+  #nv .tile.luc .chs{ margin-left:auto; display:flex; flex-direction:column; gap:4px; align-items:flex-end; }
+  #nv .tile.luc .ch{ background:rgba(255,255,255,.2); border-radius:99px; padding:2px 8px; font-size:.66rem; font-weight:800; white-space:nowrap; }
+  #nv .tile.luc.calc{ background:linear-gradient(120deg,#e2e8f0,#f1f5f9); color:#475569; box-shadow:none; }
+  #nv .tile.luc.calc .r, #nv .tile.luc.calc .s, #nv .tile.luc.calc .v{ color:#475569; }
+  #nv .lucp{ display:inline-flex; align-items:center; gap:3px; margin-left:4px; padding:1px 7px; border-radius:99px;
+    background:#d1fae5; color:#047857; font-weight:800; font-size:.92em; }
+  #nv .lucp.neg{ background:#fee2e2; color:#b91c1c; }
   #nv .tot{ display:flex; justify-content:space-between; font-size:.86rem; font-weight:800; margin-top:10px; padding-top:8px; border-top:2px solid var(--lin); }
   #nv .alerta{ display:flex; gap:8px; align-items:flex-start; border-radius:10px; padding:8px 10px; font-size:.7rem; font-weight:600; line-height:1.35; }
   #nv .alerta.amb{ background:var(--ambb); color:var(--amb); } #nv .alerta.ok{ background:var(--okb); color:var(--ok); }
@@ -1219,9 +1234,12 @@ function vendas(per){
   const d = D.onda1[per], f = D.formas[per];
   const lu = LUC ? LUC[per] : null;
   const lucTile = LUC === false ? '' : !lu
-    ? `<div class="tile" style="grid-column:1/-1"><div class="r">Lucro bruto</div><div class="v">…</div><div class="s">calculando como no relatório Lucro dos postos</div></div>`
-    : `<div class="tile ${lu.lucro >= 0 ? 'ok' : 'neg'}" style="grid-column:1/-1"><div class="r">Lucro bruto</div><div class="v">${lu.lucro < 0 ? '− ' : ''}${R(Math.abs(lu.lucro))}</div><div class="s">${lu.venda ? P1(lu.lucro / lu.venda * 100) : '0,0'}% da venda · ${lu.litros ? 'R$ ' + PU(lu.lucro / lu.litros) : '—'}/L · combustíveis de tanque</div></div>`;
-  const lucP = nome => (lu && lu.produtos[nome] != null) ? ` · lucro <b>${R(lu.produtos[nome])}</b>` : '';
+    ? `<div class="tile luc calc" style="grid-column:1/-1"><span class="lic"><i class="bi bi-hourglass-split"></i></span><div><div class="r">Lucro bruto</div><div class="v">…</div><div class="s">calculando como no relatório Lucro dos postos</div></div></div>`
+    : `<div class="tile luc ${lu.lucro >= 0 ? '' : 'neg'}" style="grid-column:1/-1"><span class="lic"><i class="bi ${lu.lucro >= 0 ? 'bi-graph-up-arrow' : 'bi-graph-down-arrow'}"></i></span>
+        <div><div class="r">Lucro bruto</div><div class="v">${lu.lucro < 0 ? '− ' : ''}${R(Math.abs(lu.lucro))}</div><div class="s">combustíveis de tanque</div></div>
+        <div class="chs"><span class="ch">${lu.venda ? P1(lu.lucro / lu.venda * 100) : '0,0'}% da venda</span><span class="ch">${lu.litros ? 'R$ ' + PU(lu.lucro / lu.litros) : '—'}/L</span></div></div>`;
+  const lucP = nome => (lu && lu.produtos[nome] != null)
+    ? ` <span class="lucp ${lu.produtos[nome] < 0 ? 'neg' : ''}"><i class="bi ${lu.produtos[nome] < 0 ? 'bi-arrow-down-right' : 'bi-arrow-up-right'}"></i>${R(lu.produtos[nome])}</span>` : '';
   document.getElementById('v-hd').classList.toggle('mes', per == 'mes');
   document.getElementById('v-big').textContent = R(d.total);
   document.getElementById('v-sub').innerHTML = `<b>${I(d.notas)}</b> notas · <b>${L(d.litros_comb)} L</b> · ticket ${R(d.ticket)} · ${periodoTxt(per)}`;
