@@ -2484,7 +2484,7 @@ def vincular_banco(troco_pix_id):
     cursor = conn.cursor(dictionary=True)
     try:
         agora = datetime.now()
-        usuario = current_user.email if hasattr(current_user, 'email') else str(current_user.id)
+        usuario = getattr(current_user, 'username', None) or str(current_user.id)
 
         # Vincula o registro de troco_pix à transação bancária
         cursor.execute(

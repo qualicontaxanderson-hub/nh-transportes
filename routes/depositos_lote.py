@@ -513,7 +513,7 @@ def conciliar_lote_executar():
     cur = conn.cursor(dictionary=True)
     try:
         agora = datetime.now()
-        usuario = current_user.email if hasattr(current_user, 'email') else str(current_user.id)
+        usuario = getattr(current_user, 'username', None) or str(current_user.id)
         has_tipo_concil = _col_exists(cur, 'bank_transactions', 'tipo_conciliacao')
 
         conciliados = []
@@ -616,7 +616,7 @@ def conciliar_lote_vincular_divergente():
     cur = conn.cursor(dictionary=True)
     try:
         agora = datetime.now()
-        usuario = current_user.email if hasattr(current_user, 'email') else str(current_user.id)
+        usuario = getattr(current_user, 'username', None) or str(current_user.id)
         has_tipo_concil = _col_exists(cur, 'bank_transactions', 'tipo_conciliacao')
 
         cur.execute(
@@ -798,7 +798,7 @@ def conciliar_lote_vincular_multiplo():
     cur = conn.cursor(dictionary=True)
     try:
         agora = datetime.now()
-        usuario = current_user.email if hasattr(current_user, 'email') else str(current_user.id)
+        usuario = getattr(current_user, 'username', None) or str(current_user.id)
         has_tipo_concil = _col_exists(cur, 'bank_transactions', 'tipo_conciliacao')
 
         cur.execute(
@@ -926,7 +926,7 @@ def conciliar_lote_vincular_agrupado():
     cur = conn.cursor(dictionary=True)
     try:
         agora = datetime.now()
-        usuario = current_user.email if hasattr(current_user, 'email') else str(current_user.id)
+        usuario = getattr(current_user, 'username', None) or str(current_user.id)
         has_tipo_concil = _col_exists(cur, 'bank_transactions', 'tipo_conciliacao')
 
         # ── crédito: existe, é CREDIT, não ignorado, e ainda LIVRE ──

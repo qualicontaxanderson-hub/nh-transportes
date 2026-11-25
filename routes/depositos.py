@@ -594,7 +594,7 @@ def vincular():
             return _redirect_listar_with_filters()
 
         agora   = datetime.now()
-        usuario = current_user.email if hasattr(current_user, 'email') else str(current_user.id)
+        usuario = getattr(current_user, 'username', None) or str(current_user.id)
 
         primary_btx_id = int(bank_tx_ids[0])
         extra_btx_ids  = [int(x) for x in bank_tx_ids[1:]]

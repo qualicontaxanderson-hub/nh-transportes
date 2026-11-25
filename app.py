@@ -558,6 +558,14 @@ def create_app():
     except Exception:
         app.logger.warning("[vendas_pag] nao foi possivel iniciar o scheduler.", exc_info=True)
 
+    # Quem fez o que: toda acao que muda algo (POST/PUT/PATCH/DELETE) de
+    # usuario logado vai para auditoria_acoes. Falha aqui NAO derruba o app.
+    try:
+        from utils.auditoria import iniciar as iniciar_auditoria
+        iniciar_auditoria(app)
+    except Exception:
+        app.logger.warning("[auditoria] nao foi possivel ligar o registro.", exc_info=True)
+
     return app
 
 

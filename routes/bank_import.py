@@ -2838,7 +2838,7 @@ def conciliar():
             except Exception:
                 pass
 
-    usuario = current_user.email if hasattr(current_user, 'email') else 'manual'
+    usuario = getattr(current_user, 'username', None) or 'manual'
 
     # ------------------------------------------------------------------
     # POST: processa conciliação (individual ou em lote)
