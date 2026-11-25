@@ -292,6 +292,23 @@ def reconciliar(begin_date=None, end_date=None, config=None, logger=None):
                 " WHERE charge_id = %s",
                 (charge_id,),
             )
+            # Libera os fretes para nova emissao, como o cancelamento feito
+            # pela tela (_persist_cancel_to_db): so o frete sem OUTRA cobranca
+            # viva. Sem isto o boleto cancelado no painel da Efi deixava o
+            # frete travado em "ja com boleto emitido" (frete 3491, 25/11/2026).
+            cur.execute("""
+                UPDATE fretes f SET f.boleto_emitido = FALSE
+                 WHERE f.id IN (SELECT frete_id FROM cobrancas
+                                 WHERE id = %s AND frete_id IS NOT NULL
+                                UNION SELECT frete_id FROM cobrancas_freites
+                                 WHERE cobranca_id = %s)
+                   AND NOT EXISTS (SELECT 1 FROM cobrancas cb WHERE cb.frete_id = f.id
+                                     AND (cb.status IS NULL OR cb.status <> 'cancelado'))
+                   AND NOT EXISTS (SELECT 1 FROM cobrancas_freites cf
+                                     JOIN cobrancas cb ON cb.id = cf.cobranca_id
+                                    WHERE cf.frete_id = f.id
+                                      AND (cb.status IS NULL OR cb.status <> 'cancelado'))
+            """, (row["id"], row["id"]))
             conn.commit()
             atual_cancelados.append(charge_id)
             if logger:
