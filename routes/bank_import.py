@@ -2574,8 +2574,19 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
             # Crédito → Forma de Recebimento
             if not forma_recebimento_id:
                 raise ValueError("Selecione uma forma de recebimento para conciliar este crédito.")
-            cursor.execute("SELECT data_transacao, valor, descricao, memo FROM bank_transactions WHERE id=%s", (tx_id,))
+            cursor.execute("SELECT data_transacao, valor, descricao, memo, tipo FROM bank_transactions WHERE id=%s", (tx_id,))
             _cr = cursor.fetchone() or {}
+            # Trava (25/11/2026): o tipo vem do FORMULARIO; no lote, uma SAIDA
+            # marcada junto com as entradas ganhava forma de recebimento e
+            # ficava "conciliado, sem vinculo" (4 PIX enviados, R$ 124 mil,
+            # em 19/11). Saida nunca recebe forma de recebimento.
+            # TransferenciaSemPar: esta fica de fora com aviso e as outras
+            # do lote seguem.
+            if (_cr.get('tipo') or '').upper() == 'DEBIT':
+                raise TransferenciaSemPar(
+                    f"Saída de R$ {float(_cr['valor']):,.2f} em {_cr['data_transacao']:%d/%m/%Y} "
+                    f"({(_cr.get('descricao') or '')[:40]}) não é recebimento: "
+                    "concilie como pagamento (fornecedor, despesa ou transferência).")
             if _mesma_tit(_cr):
                 raise TransferenciaSemPar(
                     f"Entrada de R$ {float(_cr['valor']):,.2f} em {_cr['data_transacao']:%d/%m/%Y} "
