@@ -399,12 +399,33 @@ def x7_vendas_pelo_cupom(cur, operadora, arquivo, lotes, gravar=True):
                         (operadora, prev))
         n, soma = cur.fetchone()
         if n:
-            # o dia ja tem as vendas (do .xls ou de uma lista anterior);
-            # parte delas e ambiguo demais para completar
-            motivo = ('ja tem venda' if abs(float(soma) - sum(l['bruto'] for l in ls)) < _TOL
-                      else 'dia com parte das vendas')
-            out.extend((l, None, motivo) for l in ls)
-            continue
+            if abs(float(soma) - sum(l['bruto'] for l in ls)) < _TOL:
+                out.extend((l, None, 'ja tem venda') for l in ls)
+                continue
+            # O dia tem PARTE das vendas: tira os pagamentos que ja tem a
+            # sua (mesmo bruto) e segue so com os que ficaram sem. Sobrou
+            # venda sem pagamento, e ambiguo demais para completar.
+            if liq:
+                cur.execute("SELECT bruto FROM cartao_arquivo_vendas "
+                            "WHERE operadora=%s AND dt_liquidacao=%s", (operadora, liq))
+            else:
+                cur.execute("SELECT bruto FROM cartao_arquivo_vendas WHERE operadora=%s "
+                            "AND dt_liquidacao IS NULL AND dt_previsao=%s", (operadora, prev))
+            soltas = [float(b) for (b,) in cur.fetchall()]
+            faltam = []
+            for l in ls:
+                comb = next((c for c in combinations(range(len(soltas)), l['qtd'])
+                             if abs(sum(soltas[i] for i in c) - l['bruto']) < _TOL), None)
+                if comb is None:
+                    faltam.append(l)
+                    continue
+                for i in sorted(comb, reverse=True):
+                    soltas.pop(i)
+                out.append((l, None, 'ja tem venda'))
+            if soltas:
+                out.extend((l, None, 'dia com parte das vendas') for l in faltam)
+                continue
+            ls = faltam
         dia = liq or prev
         cur.execute("""
             SELECT x.id, x.numero, x.dh_emissao, x.valor_total, x.cliente_nome
@@ -420,14 +441,36 @@ def x7_vendas_pelo_cupom(cur, operadora, arquivo, lotes, gravar=True):
         for l in ls:
             alvo = round(l['bruto'] - l['descontos'], 2)
             achou = []
+            # 1 centavo por cupom de folga: a X7 arredonda venda a venda
             for comb in combinations([c for c in cupons if c[0] not in usados], l['qtd']):
-                if abs(sum(float(c[3]) for c in comb) - alvo) < 0.005:
+                if abs(sum(float(c[3]) for c in comb) - alvo) < 0.005 + 0.01 * (l['qtd'] - 1):
                     achou.append(comb)
                     if len(achou) > 1:
                         break
+            # a taxa do pagamento, em % do que o cliente pagou (X7: 1,75)
+            pct = round(l['taxas'] / alvo * 100, 3) if alvo else 0.0
             if len(achou) != 1:
-                out.append((l, None, 'nenhum cupom com %.2f' % alvo if not achou
-                            else 'mais de um cupom com %.2f' % alvo))
+                motivo = ('nenhum cupom com %.2f' % alvo if not achou
+                          else 'mais de um cupom com %.2f' % alvo)
+                # Sem cupom que feche, a venda e a da PROPRIA LISTA: uma
+                # linha pelo pagamento, com o bruto, o desconto e a taxa
+                # dele. A lista nao diz o dia da venda -- fica o da previsao
+                # do pagamento. Sem ela o pagamento some da aba Operadora.
+                if gravar and l.get('_id'):
+                    cur.execute("""
+                        INSERT IGNORE INTO cartao_arquivo_vendas
+                            (operadora, cod_transacao, parcela, estabelecimento, dt_previsao,
+                             nfe, dt_operacao, dt_liquidacao, cliente, bruto, desconto,
+                             taxa_pct, liquido_est, desconto_lote, forma_pagamento, status, arquivo)
+                        VALUES (%s,%s,'',%s,%s,NULL,%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s)""",
+                        (operadora, 'LOTE-%s' % l['_id'], l['estabelecimento'][:120],
+                         l['dt_previsao'], l['dt_previsao'], l['dt_liquidacao'],
+                         '%d venda%s — lista de pagamentos (sem o dia da venda)'
+                         % (l['qtd'], 's' if l['qtd'] > 1 else ''),
+                         l['bruto'], pct, l['liquido'], l['descontos'],
+                         'pela lista de pagamentos', l['status'][:80], arquivo[:200]))
+                    motivo += ' - gravada pela lista'
+                out.append((l, None, motivo))
                 continue
             comb = achou[0]
             usados.update(c[0] for c in comb)
@@ -439,6 +482,9 @@ def x7_vendas_pelo_cupom(cur, operadora, arquivo, lotes, gravar=True):
             for k, (cid, num, dh, val, cli) in enumerate(comb):
                 ult = k == len(comb) - 1
                 parte = resto_d if ult else round(l['descontos'] * float(val) / alvo, 2)
+                if ult:     # o centavo de folga fecha na ultima: a soma e o bruto do lote
+                    val = round(l['bruto'] - l['descontos']
+                                - sum(float(c[3]) for c in comb[:-1]), 2)
                 liq_v = resto_l if ult else round(l['liquido'] * float(val) / alvo, 2)
                 resto_d, resto_l = round(resto_d - parte, 2), round(resto_l - liq_v, 2)
                 cur.execute("""
@@ -446,10 +492,10 @@ def x7_vendas_pelo_cupom(cur, operadora, arquivo, lotes, gravar=True):
                         (operadora, cod_transacao, parcela, estabelecimento, dt_previsao,
                          nfe, dt_operacao, dt_liquidacao, cliente, bruto, desconto,
                          taxa_pct, liquido_est, desconto_lote, forma_pagamento, status, arquivo)
-                    VALUES (%s,%s,'',%s,%s,%s,%s,%s,%s,%s,0,0,%s,%s,%s,%s,%s)""",
+                    VALUES (%s,%s,'',%s,%s,%s,%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s)""",
                     (operadora, 'CUPOM-%s' % num, l['estabelecimento'][:120], l['dt_previsao'],
                      str(num), dh, l['dt_liquidacao'], (cli or '')[:160],
-                     round(float(val) + parte, 2), liq_v, parte, 'pelo cupom fiscal',
+                     round(float(val) + parte, 2), pct, liq_v, parte, 'pelo cupom fiscal',
                      l['status'][:80], arquivo[:200]))
             _log.info('[cartao_arq] %s: pagamento X7 %s de %.2f casado com o(s) cupom(ns) %s',
                       arquivo, dia, l['bruto'], ', '.join(str(c[1]) for c in comb))
